@@ -280,6 +280,9 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                 # Task cancellation
                 elif method == "tasks.cancel" or method == "tasks.running.cancel":
                     result = await self._handle_task_cancel_logic(params, request, request_id)
+                # Task copy
+                elif method == "tasks.copy":
+                    result = await self._handle_task_copy_logic(params, request, request_id)
                 else:
                     return JSONResponse(
                         status_code=400,
@@ -1163,5 +1166,51 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             
         except Exception as e:
             logger.error(f"Error deleting task: {str(e)}", exc_info=True)
+            raise
+
+    async def _handle_task_copy_logic(
+        self, 
+        params: dict, 
+        request: Request, 
+        request_id: str
+    ) -> dict:
+        """Handle task copy (create_task_copy)"""
+        try:
+            task_id = params.get("task_id")
+            if not task_id:
+                raise ValueError("Task ID is required")
+            
+            # Get database session and create repository with custom TaskModel
+            db_session = get_default_session()
+            task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+            
+            # Get original task
+            original_task = await task_repository.get_task_by_id(task_id)
+            if not original_task:
+                raise ValueError(f"Task {task_id} not found")
+            
+            # Check permission to copy this task
+            self._check_permission(request, original_task.user_id, "copy")
+            
+            # Create TaskCreator and copy task
+            task_creator = TaskCreator(db_session)
+            
+            new_tree = await task_creator.create_task_copy(original_task)
+            
+            # Convert task tree to dictionary format for response
+            def tree_node_to_dict(node):
+                """Convert TaskTreeNode to dictionary"""
+                task_dict = node.task.to_dict()
+                if node.children:
+                    task_dict["children"] = [tree_node_to_dict(child) for child in node.children]
+                return task_dict
+            
+            result = tree_node_to_dict(new_tree)
+            
+            logger.info(f"Copied task {task_id} to new task {new_tree.task.id}")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error copying task: {str(e)}", exc_info=True)
             raise
 

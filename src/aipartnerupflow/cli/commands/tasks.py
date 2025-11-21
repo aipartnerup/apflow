@@ -5,6 +5,7 @@ import typer
 import json
 import time
 import asyncio
+from pathlib import Path
 from typing import Optional, List, Coroutine, Any
 from aipartnerupflow.core.execution.task_executor import TaskExecutor
 from aipartnerupflow.core.utils.logger import get_logger
@@ -362,6 +363,78 @@ def cancel(
     except Exception as e:
         typer.echo(f"Error: {str(e)}", err=True)
         logger.exception("Error cancelling tasks")
+        raise typer.Exit(1)
+
+
+@app.command()
+def copy(
+    task_id: str = typer.Argument(..., help="Task ID to copy"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path for copied task tree"),
+):
+    """
+    Create a copy of a task tree for re-execution
+    
+    This command creates a new copy of an existing task tree, including:
+    - The original task and all its children
+    - All tasks that depend on the original task (including transitive dependencies)
+    - Automatically handles failed leaf nodes (filters out pending dependents)
+    
+    The copied tasks are linked to the original task via original_task_id field.
+    All execution-specific fields (status, result, progress, etc.) are reset to initial values.
+    
+    Args:
+        task_id: ID of the task to copy (can be root or any task in tree)
+        output: Optional output file path to save the copied task tree JSON
+    """
+    try:
+        from aipartnerupflow.core.storage import get_default_session
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from aipartnerupflow.core.config import get_task_model_class
+        from aipartnerupflow.core.execution.task_creator import TaskCreator
+        
+        db_session = get_default_session()
+        task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+        
+        # Get original task
+        async def get_original_task():
+            task = await task_repository.get_task_by_id(task_id)
+            if not task:
+                raise ValueError(f"Task {task_id} not found")
+            return task
+        
+        original_task = run_async_safe(get_original_task())
+        
+        # Create TaskCreator and copy task
+        task_creator = TaskCreator(db_session)
+        
+        async def copy_task():
+            return await task_creator.create_task_copy(original_task)
+        
+        new_tree = run_async_safe(copy_task())
+        
+        # Convert task tree to dictionary format
+        def tree_node_to_dict(node):
+            """Convert TaskTreeNode to dictionary"""
+            task_dict = node.task.to_dict()
+            if node.children:
+                task_dict["children"] = [tree_node_to_dict(child) for child in node.children]
+            return task_dict
+        
+        result = tree_node_to_dict(new_tree)
+        
+        # Output result
+        if output:
+            with open(output, 'w') as f:
+                json.dump(result, f, indent=2)
+            typer.echo(f"Copied task tree saved to {output}")
+        else:
+            typer.echo(json.dumps(result, indent=2))
+        
+        typer.echo(f"\n✅ Successfully copied task {task_id} to new task {new_tree.task.id}")
+        
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error copying task")
         raise typer.Exit(1)
 
 

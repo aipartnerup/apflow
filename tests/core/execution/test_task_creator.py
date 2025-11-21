@@ -2,6 +2,8 @@
 Test TaskCreator functionality
 """
 import pytest
+from typing import List, Dict, Any, Optional
+from sqlalchemy.ext.asyncio import AsyncSession
 from aipartnerupflow.core.execution.task_creator import TaskCreator
 from aipartnerupflow.core.types import TaskTreeNode
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
@@ -903,6 +905,603 @@ class TestTaskCreator:
         # Should be caught by "Multiple root tasks found" since task_e is also a root
         with pytest.raises(ValueError, match="Multiple root tasks found"):
             await creator.create_task_tree_from_array(tasks)
+
+
+class TestTaskCreatorCopy:
+    """Test task copy functionality with dependencies"""
+    
+    async def create_task(
+        self,
+        db_session,
+        task_repository,
+        task_id: str,
+        name: str,
+        user_id: str = "user_123",
+        parent_id: Optional[str] = None,
+        dependencies: Optional[List[Dict[str, Any]]] = None,
+        status: str = "completed",
+        result: Optional[Dict[str, Any]] = None,
+        progress: float = 1.0
+    ) -> TaskModel:
+        """Helper to create a task"""
+        task = await task_repository.create_task(
+            name=name,
+            user_id=user_id,
+            parent_id=parent_id,
+            priority=1,
+            dependencies=dependencies,
+            inputs={"test": "data"},
+            id=task_id
+        )
+        
+        # Update status and result
+        await task_repository.update_task_status(
+            task.id,
+            status=status,
+            result=result or {"result": f"Result for {name}"} if status == "completed" else None,
+            progress=progress
+        )
+        
+        # Commit and refresh based on session type
+        if isinstance(db_session, AsyncSession):
+            await db_session.commit()
+            await db_session.refresh(task)
+        else:
+            db_session.commit()
+            db_session.refresh(task)
+        
+        return task
+    
+    def get_task_names_from_tree(self, tree: TaskTreeNode) -> set:
+        """Helper to extract all task names from a tree"""
+        names = {tree.task.name}
+        for child in tree.children:
+            names.update(self.get_task_names_from_tree(child))
+        return names
+    
+    def get_task_ids_from_tree(self, tree: TaskTreeNode) -> set:
+        """Helper to extract all task IDs from a tree"""
+        ids = {str(tree.task.id)}
+        for child in tree.children:
+            ids.update(self.get_task_ids_from_tree(child))
+        return ids
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_basic(self, sync_db_session):
+        """Test basic task copy without dependencies"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create a simple task tree: root -> child1 -> child2
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-task-1", "Root Task"
+        )
+        child1 = await self.create_task(
+            sync_db_session, task_repository,
+            "child-task-1", "Child 1",
+            parent_id=root_task.id
+        )
+        child2 = await self.create_task(
+            sync_db_session, task_repository,
+            "child-task-2", "Child 2",
+            parent_id=child1.id
+        )
+        
+        # Create task copy
+        new_tree = await creator.create_task_copy(root_task)
+        
+        # Verify new tree structure
+        assert new_tree is not None
+        assert new_tree.task.id != root_task.id
+        assert new_tree.task.original_task_id == root_task.id
+        assert new_tree.task.name == root_task.name
+        assert new_tree.task.status == "pending"
+        assert new_tree.task.result is None
+        assert new_tree.task.progress == 0.0
+        
+        # Verify has_copy flag is set on original
+        sync_db_session.refresh(root_task)
+        assert root_task.has_copy is True
+        
+        # Verify child tasks are copied
+        assert len(new_tree.children) == 1
+        child1_copy = new_tree.children[0]
+        assert isinstance(child1_copy, TaskTreeNode)
+        assert child1_copy.task.id != child1.id
+        assert child1_copy.task.original_task_id == root_task.id
+        assert child1_copy.task.name == child1.name
+        
+        # Verify grandchild is copied
+        assert len(child1_copy.children) == 1
+        child2_copy = child1_copy.children[0]
+        assert isinstance(child2_copy, TaskTreeNode)
+        assert child2_copy.task.id != child2.id
+        assert child2_copy.task.original_task_id == root_task.id
+        assert child2_copy.task.name == child2.name
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_with_direct_dependency(self, sync_db_session):
+        """Test task copy with direct dependency"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create task tree:
+        # root -> task_a (name: "Task A")
+        # root -> task_b (name: "Task B", depends on "Task A")
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-task-2", "Root Task"
+        )
+        task_a = await self.create_task(
+            sync_db_session, task_repository,
+            "task-a-1", "Task A",
+            parent_id=root_task.id
+        )
+        task_b = await self.create_task(
+            sync_db_session, task_repository,
+            "task-b-1", "Task B",
+            parent_id=root_task.id,
+            dependencies=[{"id": task_a.id, "required": True}]
+        )
+        
+        # Create task copy starting from task_a
+        new_tree = await creator.create_task_copy(task_a)
+        
+        # Verify task_a and its subtree are copied
+        # Verify task_b (dependent) is also copied
+        copied_names = self.get_task_names_from_tree(new_tree)
+        
+        assert "Task A" in copied_names
+        assert "Task B" in copied_names, "Dependent task should be copied"
+        
+        # Verify original_task_id points to root
+        root_original_id = new_tree.task.original_task_id
+        all_copied_tasks = creator.tree_to_flat_list(new_tree)
+        for task in all_copied_tasks:
+            assert task.original_task_id == root_original_id
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_with_transitive_dependency(self, sync_db_session):
+        """Test task copy with transitive dependency (A -> B -> C)"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create task tree:
+        # root -> task_a (name: "Task A")
+        # root -> task_b (name: "Task B", depends on "Task A")
+        # root -> task_c (name: "Task C", depends on "Task B")
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-task-3", "Root Task"
+        )
+        task_a = await self.create_task(
+            sync_db_session, task_repository,
+            "task-a-2", "Task A",
+            parent_id=root_task.id
+        )
+        task_b = await self.create_task(
+            sync_db_session, task_repository,
+            "task-b-2", "Task B",
+            parent_id=root_task.id,
+            dependencies=[{"id": task_a.id, "required": True}]
+        )
+        task_c = await self.create_task(
+            sync_db_session, task_repository,
+            "task-c-1", "Task C",
+            parent_id=root_task.id,
+            dependencies=[{"id": task_b.id, "required": True}]
+        )
+        
+        # Create task copy starting from task_a
+        new_tree = await creator.create_task_copy(task_a)
+        
+        # Verify all dependent tasks are copied (transitive)
+        copied_names = self.get_task_names_from_tree(new_tree)
+        
+        assert "Task A" in copied_names
+        assert "Task B" in copied_names, "Direct dependent should be copied"
+        assert "Task C" in copied_names, "Transitive dependent should be copied"
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_with_subtree_dependencies(self, sync_db_session):
+        """Test task copy when original_task has children with dependencies"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create task tree:
+        # root -> parent_task -> child_task (name: "Child Task")
+        # root -> dependent_task (depends on "Child Task")
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-task-4", "Root Task"
+        )
+        parent_task = await self.create_task(
+            sync_db_session, task_repository,
+            "parent-task-1", "Parent Task",
+            parent_id=root_task.id
+        )
+        child_task = await self.create_task(
+            sync_db_session, task_repository,
+            "child-task-3", "Child Task",
+            parent_id=parent_task.id
+        )
+        dependent_task = await self.create_task(
+            sync_db_session, task_repository,
+            "dependent-task-1", "Dependent Task",
+            parent_id=root_task.id,
+            dependencies=[{"id": child_task.id, "required": True}]
+        )
+        
+        # Create task copy starting from parent_task
+        new_tree = await creator.create_task_copy(parent_task)
+        
+        # Verify parent_task and child_task are copied
+        # Verify dependent_task (depends on child_task) is also copied
+        copied_names = self.get_task_names_from_tree(new_tree)
+        
+        assert "Parent Task" in copied_names
+        assert "Child Task" in copied_names
+        assert "Dependent Task" in copied_names, "Task depending on child should be copied"
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_preserves_structure(self, sync_db_session):
+        """Test that copied tree preserves original structure"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create complex tree structure
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-task-6", "Root Task"
+        )
+        child1 = await self.create_task(
+            sync_db_session, task_repository,
+            "child-1-1", "Child 1",
+            parent_id=root_task.id
+        )
+        child2 = await self.create_task(
+            sync_db_session, task_repository,
+            "child-2-1", "Child 2",
+            parent_id=root_task.id
+        )
+        grandchild1 = await self.create_task(
+            sync_db_session, task_repository,
+            "grandchild-1-1", "Grandchild 1",
+            parent_id=child1.id
+        )
+        
+        # Create task copy
+        new_tree = await creator.create_task_copy(root_task)
+        
+        # Verify tree structure is preserved
+        assert len(new_tree.children) == 2
+        
+        # Find child1 and child2 in new tree
+        child1_copy = None
+        child2_copy = None
+        for child in new_tree.children:
+            if isinstance(child, TaskTreeNode):
+                if child.task.name == "Child 1":
+                    child1_copy = child
+                elif child.task.name == "Child 2":
+                    child2_copy = child
+        
+        assert child1_copy is not None
+        assert child2_copy is not None
+        assert len(child1_copy.children) == 1
+        assert len(child2_copy.children) == 0
+        
+        # Verify grandchild is in correct position
+        assert child1_copy.children[0].task.name == "Grandchild 1"
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_marks_has_copy_flag(self, sync_db_session):
+        """Test that has_copy flag is set on all original tasks"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create task tree with multiple levels
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-task-7", "Root Task"
+        )
+        child1 = await self.create_task(
+            sync_db_session, task_repository,
+            "child-1-2", "Child 1",
+            parent_id=root_task.id
+        )
+        child2 = await self.create_task(
+            sync_db_session, task_repository,
+            "child-2-2", "Child 2",
+            parent_id=root_task.id
+        )
+        grandchild = await self.create_task(
+            sync_db_session, task_repository,
+            "grandchild-1-2", "Grandchild 1",
+            parent_id=child1.id
+        )
+        
+        # Create task copy
+        new_tree = await creator.create_task_copy(root_task)
+        
+        # Refresh all original tasks
+        sync_db_session.refresh(root_task)
+        sync_db_session.refresh(child1)
+        sync_db_session.refresh(child2)
+        sync_db_session.refresh(grandchild)
+        
+        # Verify has_copy is set on all original tasks
+        assert root_task.has_copy is True
+        assert child1.has_copy is True
+        assert child2.has_copy is True
+        assert grandchild.has_copy is True
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_resets_execution_fields(self, sync_db_session):
+        """Test that execution-specific fields are reset in copy"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create completed task with results
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-task-8", "Root Task",
+            status="completed",
+            result={"output": "test result"},
+            progress=1.0
+        )
+        
+        # Create task copy
+        new_tree = await creator.create_task_copy(root_task)
+        
+        # Verify execution fields are reset
+        assert new_tree.task.status == "pending"
+        assert new_tree.task.result is None
+        assert new_tree.task.progress == 0.0
+        
+        # Verify non-execution fields are preserved
+        assert new_tree.task.name == root_task.name
+        assert new_tree.task.user_id == root_task.user_id
+        assert new_tree.task.priority == root_task.priority
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_no_dependents(self, sync_db_session):
+        """
+        Test Scenario: No dependents → Only copy original_task subtree
+        
+        This test verifies that when there are no dependent tasks,
+        only the original_task and its children are copied, not the entire root tree.
+        """
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create task tree:
+        # root -> original_task (name: "Original Task") -> child_task
+        # root -> unrelated_task (no dependency on original_task)
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-task-scenario-6", "Root Task"
+        )
+        
+        # Original task with children (this is what we want to copy)
+        original_task = await self.create_task(
+            sync_db_session, task_repository,
+            "original-task-6", "Original Task",
+            parent_id=root_task.id
+        )
+        child_task = await self.create_task(
+            sync_db_session, task_repository,
+            "child-task-6", "Child Task",
+            parent_id=original_task.id
+        )
+        
+        # Unrelated task that doesn't depend on original_task
+        unrelated_task = await self.create_task(
+            sync_db_session, task_repository,
+            "unrelated-task-6", "Unrelated Task",
+            parent_id=root_task.id
+        )
+        
+        # Another unrelated branch
+        another_branch = await self.create_task(
+            sync_db_session, task_repository,
+            "another-branch-6", "Another Branch",
+            parent_id=root_task.id
+        )
+        another_child = await self.create_task(
+            sync_db_session, task_repository,
+            "another-child-6", "Another Child",
+            parent_id=another_branch.id
+        )
+        
+        # Create task copy starting from original_task
+        new_tree = await creator.create_task_copy(original_task)
+        
+        # Verify: Only original_task subtree is copied
+        copied_names = self.get_task_names_from_tree(new_tree)
+        copied_ids = self.get_task_ids_from_tree(new_tree)
+        
+        # Should include original_task and its children
+        assert "Original Task" in copied_names, "Original task should be copied"
+        assert "Child Task" in copied_names, "Child of original task should be copied"
+        
+        # Should NOT include unrelated tasks
+        assert "Unrelated Task" not in copied_names, "Unrelated task should NOT be copied"
+        assert "Another Branch" not in copied_names, "Unrelated branch should NOT be copied"
+        assert "Another Child" not in copied_names, "Unrelated child should NOT be copied"
+        
+        # When there are no dependents, the copied tree root should be original_task (not root_task)
+        assert new_tree.task.name == "Original Task", "Copied tree root should be original_task (not root_task)"
+        assert "Root Task" not in copied_names, "Root task should NOT be copied when there are no dependents"
+        assert str(unrelated_task.id) not in copied_ids, "Unrelated task ID should NOT be in copied tree"
+        assert str(another_branch.id) not in copied_ids, "Unrelated branch ID should NOT be in copied tree"
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_with_dependents(self, sync_db_session):
+        """
+        Test Scenario: With dependents → Copy original_task subtree + all dependents (including transitive)
+        
+        This test verifies that when there are dependent tasks,
+        we copy original_task subtree + all dependent tasks (including transitive dependencies),
+        but NOT the entire root task tree (excluding unrelated tasks).
+        """
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create task tree:
+        # root -> original_task (name: "Original Task") -> child_task (name: "Child Task")
+        # root -> direct_dependent (depends on "Original Task")
+        # root -> transitive_dependent (depends on "Direct Dependent")
+        # root -> unrelated_task (no dependency)
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-task-scenario-5", "Root Task"
+        )
+        
+        # Original task with children (this is what we want to copy)
+        original_task = await self.create_task(
+            sync_db_session, task_repository,
+            "original-task-5", "Original Task",
+            parent_id=root_task.id
+        )
+        child_task = await self.create_task(
+            sync_db_session, task_repository,
+            "child-task-5", "Child Task",
+            parent_id=original_task.id
+        )
+        
+        # Direct dependent (depends on original_task)
+        direct_dependent = await self.create_task(
+            sync_db_session, task_repository,
+            "direct-dependent-5", "Direct Dependent",
+            parent_id=root_task.id,
+            dependencies=[{"id": original_task.id, "required": True}]
+        )
+        
+        # Transitive dependent (depends on direct_dependent)
+        transitive_dependent = await self.create_task(
+            sync_db_session, task_repository,
+            "transitive-dependent-5", "Transitive Dependent",
+            parent_id=root_task.id,
+            dependencies=[{"id": direct_dependent.id, "required": True}]
+        )
+        
+        # Unrelated task (no dependency on original_task or its dependents)
+        unrelated_task = await self.create_task(
+            sync_db_session, task_repository,
+            "unrelated-task-5", "Unrelated Task",
+            parent_id=root_task.id
+        )
+        
+        # Another unrelated branch
+        another_branch = await self.create_task(
+            sync_db_session, task_repository,
+            "another-branch-5", "Another Branch",
+            parent_id=root_task.id
+        )
+        
+        # Create task copy starting from original_task
+        new_tree = await creator.create_task_copy(original_task)
+        
+        # Verify: original_task subtree + all dependents are copied
+        copied_names = self.get_task_names_from_tree(new_tree)
+        copied_ids = self.get_task_ids_from_tree(new_tree)
+        
+        # Should include original_task and its children
+        assert "Original Task" in copied_names, "Original task should be copied"
+        assert "Child Task" in copied_names, "Child of original task should be copied"
+        
+        # Should include direct dependent
+        assert "Direct Dependent" in copied_names, "Direct dependent should be copied"
+        
+        # Should include transitive dependent
+        assert "Transitive Dependent" in copied_names, "Transitive dependent should be copied"
+        
+        # Should NOT include unrelated tasks
+        assert "Unrelated Task" not in copied_names, "Unrelated task should NOT be copied"
+        assert "Another Branch" not in copied_names, "Unrelated branch should NOT be copied"
+        
+        assert str(unrelated_task.id) not in copied_ids, "Unrelated task ID should NOT be in copied tree"
+        assert str(another_branch.id) not in copied_ids, "Unrelated branch ID should NOT be in copied tree"
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_minimal_subtree(self, sync_db_session):
+        """Test that minimal subtree is built correctly"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create task tree:
+        # root -> branch1 -> task_a (name: "Task A")
+        # root -> branch2 -> task_b (name: "Task B", depends on "Task A")
+        # root -> branch3 -> task_c (name: "Task C", no dependencies)
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-task-10", "Root Task"
+        )
+        branch1 = await self.create_task(
+            sync_db_session, task_repository,
+            "branch-1-1", "Branch 1",
+            parent_id=root_task.id
+        )
+        task_a = await self.create_task(
+            sync_db_session, task_repository,
+            "task-a-3", "Task A",
+            parent_id=branch1.id
+        )
+        branch2 = await self.create_task(
+            sync_db_session, task_repository,
+            "branch-2-1", "Branch 2",
+            parent_id=root_task.id
+        )
+        task_b = await self.create_task(
+            sync_db_session, task_repository,
+            "task-b-3", "Task B",
+            parent_id=branch2.id,
+            dependencies=[{"id": task_a.id, "required": True}]
+        )
+        branch3 = await self.create_task(
+            sync_db_session, task_repository,
+            "branch-3-1", "Branch 3",
+            parent_id=root_task.id
+        )
+        task_c = await self.create_task(
+            sync_db_session, task_repository,
+            "task-c-2", "Task C",
+            parent_id=branch3.id
+        )
+        
+        # Create task copy starting from task_a
+        new_tree = await creator.create_task_copy(task_a)
+        
+        # Verify minimal subtree: should include task_a, task_b, and their branches
+        # but not branch3/task_c
+        copied_names = self.get_task_names_from_tree(new_tree)
+        
+        assert "Task A" in copied_names
+        assert "Task B" in copied_names, "Dependent task should be copied"
+        assert "Branch 1" in copied_names, "Parent branch should be included"
+        assert "Branch 2" in copied_names, "Dependent task's branch should be included"
     
     @pytest.mark.asyncio
     async def test_error_missing_dependent_task(self, sync_db_session):

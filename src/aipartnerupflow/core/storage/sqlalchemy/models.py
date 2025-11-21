@@ -83,6 +83,10 @@ class TaskModel(Base):
     # === Auxiliary Fields ===
     has_children = Column(Boolean, default=False)  # UI/performance optimization flag
     
+    # === Task Copy Fields ===
+    original_task_id = Column(String(255), nullable=True, index=True)  # Original task ID (if this is a copy for re-execution)
+    has_copy = Column(Boolean, default=False, index=True)  # Whether this task has copies (for efficient querying)
+    
     def to_dict(self) -> Dict[str, Any]:
         """Convert model to dictionary"""
         return {
@@ -113,6 +117,9 @@ class TaskModel(Base):
             "completed_at": self.completed_at.isoformat() if self.completed_at else None,
             # Auxiliary fields
             "has_children": self.has_children,
+            # Task copy fields
+            "original_task_id": self.original_task_id,
+            "has_copy": self.has_copy,
         }
     
     def __repr__(self):

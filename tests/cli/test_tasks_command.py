@@ -337,3 +337,114 @@ class TestTasksCancelCommand:
         output = result.stdout
         assert "not_found" in output.lower() or "error" in output.lower()
 
+
+class TestTasksCopyCommand:
+    """Test cases for tasks copy command"""
+    
+    @pytest.mark.asyncio
+    async def test_tasks_copy_basic(self, use_test_db_session):
+        """Test copying a basic task"""
+        from aipartnerupflow.core.execution.task_creator import TaskCreator
+        
+        task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
+        
+        # Create a simple task tree: root -> child
+        root_task_id = f"copy-root-{uuid.uuid4()}"
+        root_task = await task_repository.create_task(
+            id=root_task_id,
+            name="Root Task to Copy",
+            user_id="test_user",
+            status="completed",
+            priority=1,
+            has_children=True,
+            progress=1.0,
+            result={"output": "test result"}
+        )
+        
+        child_task_id = f"copy-child-{uuid.uuid4()}"
+        await task_repository.create_task(
+            id=child_task_id,
+            name="Child Task to Copy",
+            user_id="test_user",
+            parent_id=root_task_id,
+            status="completed",
+            priority=1,
+            has_children=False,
+            progress=1.0
+        )
+        
+        # Copy task
+        result = runner.invoke(app, [
+            "tasks", "copy", root_task_id
+        ])
+        
+        assert result.exit_code == 0
+        output = result.stdout
+        
+        # Verify output contains copied task info
+        assert "Successfully copied" in output or root_task_id in output
+        assert "new task" in output.lower() or "id" in output.lower()
+        
+        # Parse JSON output to verify structure
+        try:
+            # Try to find JSON in output
+            import re
+            json_match = re.search(r'\{.*\}', output, re.DOTALL)
+            if json_match:
+                copied_data = json.loads(json_match.group())
+                assert "id" in copied_data
+                assert copied_data["id"] != root_task_id
+                assert copied_data["name"] == root_task.name
+                assert copied_data["original_task_id"] == root_task_id
+                assert copied_data["status"] == "pending"
+        except (json.JSONDecodeError, AttributeError):
+            # If JSON parsing fails, just verify basic output
+            assert root_task_id in output
+    
+    @pytest.mark.asyncio
+    async def test_tasks_copy_with_output_file(self, use_test_db_session, tmp_path):
+        """Test copying a task with output file"""
+        task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
+        
+        # Create a task
+        task_id = f"copy-output-{uuid.uuid4()}"
+        await task_repository.create_task(
+            id=task_id,
+            name="Task for Output Test",
+            user_id="test_user",
+            status="completed",
+            priority=1,
+            has_children=False,
+            progress=1.0
+        )
+        
+        # Copy task with output file
+        output_file = tmp_path / "copied_task.json"
+        result = runner.invoke(app, [
+            "tasks", "copy", task_id,
+            "--output", str(output_file)
+        ])
+        
+        assert result.exit_code == 0
+        assert output_file.exists()
+        
+        # Verify output file content
+        with open(output_file) as f:
+            copied_data = json.load(f)
+            assert "id" in copied_data
+            assert copied_data["id"] != task_id
+            assert copied_data["name"] == "Task for Output Test"
+            assert copied_data["original_task_id"] == task_id
+    
+    @pytest.mark.asyncio
+    async def test_tasks_copy_not_found(self, use_test_db_session):
+        """Test copying a non-existent task"""
+        result = runner.invoke(app, [
+            "tasks", "copy", "non-existent-task-id"
+        ])
+        
+        assert result.exit_code == 1
+        # Error message can be in stdout or stderr
+        output = result.stdout + result.stderr
+        assert "not found" in output.lower() or "error" in output.lower() or "Task" in output
+
