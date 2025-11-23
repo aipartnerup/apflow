@@ -27,6 +27,38 @@ from aipartnerupflow.core.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+class LLMAPIKeyMiddleware(BaseHTTPMiddleware):
+    """Middleware to extract LLM API key from request headers"""
+    
+    async def dispatch(self, request: Request, call_next):
+        """Extract LLM API key from X-LLM-API-KEY header and set it in context"""
+        # Extract LLM API key from request header
+        # Format: provider:key (e.g., "openai:sk-xxx...") or just key (backward compatible)
+        llm_key_header = request.headers.get("X-LLM-API-KEY") or request.headers.get("x-llm-api-key")
+        if llm_key_header:
+            from aipartnerupflow.core.utils.llm_key_context import set_llm_key_from_header
+            
+            # Parse format: provider:key or just key
+            provider = None
+            api_key = llm_key_header
+            
+            if ':' in llm_key_header:
+                # Format: provider:key
+                parts = llm_key_header.split(':', 1)  # Split only on first colon
+                if len(parts) == 2:
+                    provider = parts[0].strip()
+                    api_key = parts[1].strip()
+                    if not provider or not api_key:
+                        # Invalid format, treat as plain key
+                        provider = None
+                        api_key = llm_key_header
+            
+            set_llm_key_from_header(api_key, provider=provider)
+            logger.debug(f"Received LLM key from request header (provider: {provider or 'auto'})")
+        
+        return await call_next(request)
+
+
 class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
     """Middleware to verify JWT tokens for authenticated requests (optional)"""
     
@@ -214,6 +246,11 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             allow_headers=["*"],
         )
         
+        # Add LLM API key middleware (extracts X-LLM-API-KEY header for all routes including /)
+        # This should be added before JWT middleware so it works for all requests
+        app.add_middleware(LLMAPIKeyMiddleware)
+        logger.info("LLM API key middleware enabled (X-LLM-API-KEY header support)")
+        
         if self.verify_token_func:
             # Add JWT authentication middleware
             logger.info("JWT authentication is enabled")
@@ -262,30 +299,8 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         start_time = time.time()
         request_id = str(uuid.uuid4())
         
-        # Extract LLM API key from request header
-        # Format: provider:key (e.g., "openai:sk-xxx...") or just key (backward compatible)
-        # This allows demo/one-time usage without storing keys
-        llm_key_header = request.headers.get("X-LLM-API-KEY") or request.headers.get("x-llm-api-key")
-        if llm_key_header:
-            from aipartnerupflow.core.utils.llm_key_context import set_llm_key_from_header
-            
-            # Parse format: provider:key or just key
-            provider = None
-            api_key = llm_key_header
-            
-            if ':' in llm_key_header:
-                # Format: provider:key
-                parts = llm_key_header.split(':', 1)  # Split only on first colon
-                if len(parts) == 2:
-                    provider = parts[0].strip()
-                    api_key = parts[1].strip()
-                    if not provider or not api_key:
-                        # Invalid format, treat as plain key
-                        provider = None
-                        api_key = llm_key_header
-            
-            set_llm_key_from_header(api_key, provider=provider)
-            logger.debug(f"Received LLM key from request header for request {request_id} (provider: {provider or 'auto'})")
+        # Note: LLM API key extraction is now handled by LLMAPIKeyMiddleware
+        # for all routes including /tasks and / (A2A protocol)
         
         try:
             # Parse JSON request
