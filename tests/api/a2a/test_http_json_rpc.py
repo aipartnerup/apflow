@@ -1111,20 +1111,19 @@ def test_a2a_execute_task_tree_simple(json_rpc_client):
     if "result" in result:
         # Verify execution result structure
         execution_result = result["result"]
-        # Result can be a Task, Message, or dict with execution status
-        assert isinstance(execution_result, (dict, list))
-        # If it's a dict, check for expected fields
-        if isinstance(execution_result, dict):
-            # Result may be a Message with parts, or a Task, or execution status
-            if "parts" in execution_result:
-                # It's a Message object
-                assert "message_id" in execution_result
-            elif "status" in execution_result or "root_task_id" in execution_result or "progress" in execution_result:
-                # It's an execution result
-                pass
-            elif "id" in execution_result and "name" in execution_result:
-                # It's a Task object
-                pass
+        # Result is a Task object (serialized as dict in JSON response)
+        assert isinstance(execution_result, dict)
+        # Task object has required fields
+        assert "id" in execution_result
+        assert "kind" in execution_result
+        assert execution_result["kind"] == "task"
+        assert "status" in execution_result
+        # Check status from Task.status.state
+        if isinstance(execution_result["status"], dict):
+            status_state = execution_result["status"].get("state")
+            if status_state:
+                # A2A TaskState enum values: submitted, working, input-required, completed, canceled, failed, rejected, auth-required, unknown
+                assert status_state in ["submitted", "working", "input-required", "completed", "canceled", "failed", "rejected", "auth-required", "unknown"]
     elif "error" in result:
         # If there's an error, raise it
         error = result["error"]
@@ -1196,7 +1195,11 @@ def test_a2a_execute_task_tree_with_dependencies(json_rpc_client):
     assert "jsonrpc" in result
     if "result" in result:
         execution_result = result["result"]
-        assert isinstance(execution_result, (dict, list))
+        # Result is a Task object (serialized as dict in JSON response)
+        assert isinstance(execution_result, dict)
+        assert "id" in execution_result
+        assert "kind" in execution_result
+        assert execution_result["kind"] == "task"
     elif "error" in result:
         error = result["error"]
         raise AssertionError(f"A2A protocol error: {error}")
@@ -1251,7 +1254,18 @@ def test_a2a_execute_task_tree_with_streaming(json_rpc_client):
     assert "jsonrpc" in result
     if "result" in result:
         execution_result = result["result"]
-        assert isinstance(execution_result, (dict, list))
+        # Result is a Task object (serialized as dict in JSON response)
+        assert isinstance(execution_result, dict)
+        # Task object has id, context_id, kind, status, artifacts fields
+        assert "id" in execution_result
+        assert "kind" in execution_result
+        assert execution_result["kind"] == "task"
+        # Check status from Task.status.state
+        # A2A TaskState enum values: submitted, working, input-required, completed, canceled, failed, rejected, auth-required, unknown
+        if "status" in execution_result and isinstance(execution_result["status"], dict):
+            status_state = execution_result["status"].get("state")
+            if status_state:
+                assert status_state in ["submitted", "working", "input-required", "completed", "canceled", "failed", "rejected", "auth-required", "unknown"]
     elif "error" in result:
         error = result["error"]
         raise AssertionError(f"A2A protocol error: {error}")
@@ -1312,10 +1326,17 @@ def test_a2a_execute_task_tree_with_push_notifications(json_rpc_client):
     assert "jsonrpc" in result
     if "result" in result:
         execution_result = result["result"]
+        # Result is a Task object (serialized as dict in JSON response)
         assert isinstance(execution_result, dict)
-        # With push notifications, execution is async, so status might be "in_progress"
-        if isinstance(execution_result, dict) and "status" in execution_result:
-            assert execution_result["status"] in ["in_progress", "completed", "pending"]
+        assert "id" in execution_result
+        assert "kind" in execution_result
+        assert execution_result["kind"] == "task"
+        # With push notifications, execution is async, check status from Task.status.state
+        if "status" in execution_result and isinstance(execution_result["status"], dict):
+            status_state = execution_result["status"].get("state")
+            if status_state:
+                # A2A TaskState enum values: submitted, working, input-required, completed, canceled, failed, rejected, auth-required, unknown
+                assert status_state in ["submitted", "working", "input-required", "completed", "canceled", "failed", "rejected", "auth-required", "unknown"]
     elif "error" in result:
         error = result["error"]
         raise AssertionError(f"A2A protocol error: {error}")
@@ -1415,11 +1436,25 @@ def test_a2a_execute_task_tree_complex_tree(json_rpc_client):
     assert "jsonrpc" in result
     if "result" in result:
         execution_result = result["result"]
+        # Result is a Task object (serialized as dict in JSON response)
         assert isinstance(execution_result, dict)
-        if "root_task_id" in execution_result:
-            assert execution_result["root_task_id"] == root_id
-        if isinstance(execution_result, dict) and "task_count" in execution_result:
-            assert execution_result["task_count"] == 4  # root + 2 children + 1 grandchild
+        assert "id" in execution_result
+        assert "kind" in execution_result
+        assert execution_result["kind"] == "task"
+        # Extract data from artifacts if available
+        if "artifacts" in execution_result and execution_result["artifacts"]:
+            artifacts = execution_result["artifacts"]
+            if len(artifacts) > 0 and "parts" in artifacts[0] and artifacts[0]["parts"]:
+                part = artifacts[0]["parts"][0]
+                if "root" in part and "data" in part["root"]:
+                    artifact_data = part["root"]["data"]
+                    if "root_task_id" in artifact_data:
+                        assert artifact_data["root_task_id"] == root_id
+                    if "task_count" in artifact_data:
+                        assert artifact_data["task_count"] == 4  # root + 2 children + 1 grandchild
+        # Also check metadata
+        if "metadata" in execution_result and "root_task_id" in execution_result["metadata"]:
+            assert execution_result["metadata"]["root_task_id"] == root_id
     elif "error" in result:
         error = result["error"]
         raise AssertionError(f"A2A protocol error: {error}")

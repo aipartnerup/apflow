@@ -73,34 +73,51 @@ class EventQueueBridge:
         Returns:
             TaskStatusUpdateEvent
         """
-        task_id = update_data.get("task_id") or self.context.task_id
+        # Always use context.task_id for A2A protocol compliance
+        # The actual task_id from update_data is stored in metadata for reference
+        task_id = self.context.task_id
+        if not task_id:
+            raise ValueError("context.task_id is required for A2A protocol")
+        
         update_type = update_data.get("type", "progress")
         status = update_data.get("status", "in_progress")
         
         # Map status to TaskState
+        # TaskState enum values: submitted, working, input_required, completed, canceled, failed, rejected, auth_required, unknown
         state_map = {
             "completed": TaskState.completed,
             "failed": TaskState.failed,
-            "in_progress": TaskState.in_progress,
-            "pending": TaskState.pending,
+            "in_progress": TaskState.working,  # Map in_progress to working
+            "pending": TaskState.submitted,    # Map pending to submitted
+            "cancelled": TaskState.canceled,
+            "canceled": TaskState.canceled,
         }
-        task_state = state_map.get(status, TaskState.in_progress)
+        task_state = state_map.get(status, TaskState.working)  # Default to working for unknown statuses
         
         # Create message based on update type
+        # Include actual task_id from update_data in the event data for reference
+        actual_task_id = update_data.get("task_id")
+        event_data = update_data.copy()
+        if actual_task_id and actual_task_id != task_id:
+            # Store actual task_id in metadata for reference
+            if "metadata" not in event_data:
+                event_data["metadata"] = {}
+            event_data["metadata"]["actual_task_id"] = actual_task_id
+        
         if update_type == "final":
             message = new_agent_parts_message([
-                DataPart(data=update_data.get("result") or update_data)
+                DataPart(data=event_data.get("result") or event_data)
             ])
         elif update_type == "task_failed":
             message = new_agent_text_message(update_data.get("error", "Task failed"))
         else:
             # Progress or other updates
             message = new_agent_parts_message([
-                DataPart(data=update_data)
+                DataPart(data=event_data)
             ])
         
         return TaskStatusUpdateEvent(
-            task_id=task_id,
+            task_id=task_id,  # Always use context.task_id for A2A protocol
             context_id=self.context.context_id or "unknown",
             status=TaskStatus(state=task_state, message=message),
             final=update_data.get("final", False)

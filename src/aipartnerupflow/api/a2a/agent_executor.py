@@ -147,7 +147,6 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             return True
         
         return False
-
     async def _execute_simple_mode(
         self,
         context: RequestContext,

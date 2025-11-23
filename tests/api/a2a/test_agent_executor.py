@@ -257,8 +257,16 @@ class TestAgentExecutor:
             # Should have executed
             assert mock_execute_tasks.called
             assert result is not None
-            assert result["status"] == "completed"
-            assert result["root_task_id"] == "task-1"
+            # Result is now a Task object, not a dict
+            from a2a.types import Task
+            assert isinstance(result, Task)
+            assert result.id is not None
+            # Extract data from artifacts if needed
+            if result.artifacts and len(result.artifacts) > 0:
+                artifact_data = result.artifacts[0].parts[0].root.data if result.artifacts[0].parts else None
+                if artifact_data:
+                    assert artifact_data.get("status") == "completed"
+                    assert artifact_data.get("root_task_id") == "task-1"
     
     # ============================================================================
     # Integration Tests (Real Database)
@@ -409,13 +417,24 @@ class TestAgentExecutor:
             
             # Execute using executor
             result = await executor.execute(context, mock_event_queue)
-            logger.info(f"==result (executor)==\n {json.dumps(result, indent=4)}")
+            # Result is now a Task object, convert to dict for logging
+            from a2a.types import Task
+            if isinstance(result, Task):
+                result_dict = result.model_dump(mode='json', exclude_none=True)
+                logger.info(f"==result (executor)==\n {json.dumps(result_dict, indent=4)}")
+            else:
+                logger.info(f"==result (executor)==\n {json.dumps(result, indent=4)}")
             
-            # Verify result structure
+            # Verify result structure - result is now a Task object
             assert result is not None
-            assert "status" in result
-            assert result["status"] == "completed"
-            assert "root_task_id" in result
+            assert isinstance(result, Task)
+            assert result.id is not None
+            # Extract execution status from artifacts
+            if result.artifacts and len(result.artifacts) > 0:
+                artifact_data = result.artifacts[0].parts[0].root.data if result.artifacts[0].parts else None
+                if artifact_data:
+                    assert artifact_data.get("status") == "completed"
+                    assert "root_task_id" in artifact_data
             
             # Verify all tasks were created and executed
             repo = TaskRepository(sync_db_session)
@@ -614,12 +633,23 @@ class TestAgentExecutor:
             
             # Execute using executor with hooks
             result = await executor.execute(context, mock_event_queue)
-            logger.info(f"==result==\n {json.dumps(result, indent=4)}")
-            # Verify result structure - result should contain task tree execution status
+            # Result is now a Task object, convert to dict for logging
+            from a2a.types import Task
+            if isinstance(result, Task):
+                result_dict = result.model_dump(mode='json', exclude_none=True)
+                logger.info(f"==result==\n {json.dumps(result_dict, indent=4)}")
+            else:
+                logger.info(f"==result==\n {json.dumps(result, indent=4)}")
+            # Verify result structure - result is now a Task object
             assert result is not None
-            assert "status" in result
-            assert result["status"] == "completed"
-            assert "root_task_id" in result
+            assert isinstance(result, Task)
+            assert result.id is not None
+            # Extract execution status from artifacts
+            if result.artifacts and len(result.artifacts) > 0:
+                artifact_data = result.artifacts[0].parts[0].root.data if result.artifacts[0].parts else None
+                if artifact_data:
+                    assert artifact_data.get("status") == "completed"
+                    assert "root_task_id" in artifact_data
 
             
             # Verify all tasks were created and executed
