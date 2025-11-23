@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Examples Module**
+  - New `examples` module for initializing example task data to help beginners get started
+  - CLI command `examples init` for initializing example tasks in the database
+  - `--force` flag to re-initialize examples even if they already exist
+  - Example tasks demonstrate various features:
+    - Tasks with different statuses (completed, failed, pending, in_progress)
+    - Task trees with parent-child relationships
+    - Tasks with different priorities
+    - Tasks with dependencies
+    - CrewAI task example (requires LLM key)
+  - Auto-initialization: API server automatically initializes examples if database is empty on startup
+  - Example user ID: `example_user` for demo tasks
+
+- **LLM API Key Management**
+  - Request header support: `X-LLM-API-KEY` header for demo/one-time usage
+    - Simple format: `X-LLM-API-KEY: <api-key>` (provider auto-detected from model name)
+    - Provider-specific format: `X-LLM-API-KEY: <provider>:<api-key>` (e.g., `openai:sk-xxx`, `anthropic:sk-ant-xxx`)
+  - User configuration support via `llm-key-config` extension for multi-user scenarios
+    - In-memory storage of user-specific LLM keys (never stored in database)
+    - Support for multiple providers per user (provider-specific keys)
+    - `LLMKeyConfigManager` singleton for managing user keys
+  - LLM Key Context Manager: Thread-local context for LLM keys during task execution
+  - LLM Key Injector: Automatic provider detection from model names and works configuration
+  - Priority order: Request header > User config > Environment variables
+  - Supported providers: OpenAI, Anthropic, Google/Gemini, Mistral, Groq, Cohere, Together, and more
+  - Automatic environment variable injection for CrewAI/LiteLLM compatibility
+  - Keys are never stored in database, only used during task execution
+
+- **Documentation Updates**
+  - Added `examples` command documentation in CLI guide
+  - Added LLM API key management documentation in API server guide
+  - Added LLM key header documentation in HTTP API reference
+  - Updated examples documentation with quick start guide and example task structure
+  - Comprehensive examples for using LLM keys with CrewAI tasks
+
 ### Changed
 - **CLI Command Improvements**
   - `serve` command now accepts options directly (e.g., `apflow serve --port 8000`) without requiring `start` subcommand

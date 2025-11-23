@@ -178,6 +178,76 @@ def _load_custom_task_model():
             logger.warning(f"Failed to load custom TaskModel from {task_model_class_path}: {e}")
 
 
+def _auto_init_examples_if_needed():
+    """Auto-initialize examples data if database is empty and examples are available"""
+    try:
+        # Check if examples module is available (requires [examples] or [all] extra)
+        try:
+            from aipartnerupflow.examples.init import init_examples_data_sync
+            from aipartnerupflow.core.storage import get_default_session
+            from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+            from aipartnerupflow.core.config import get_task_model_class
+            from sqlalchemy import select, func
+        except ImportError:
+            # Examples module not available (not installed with [examples] or [all])
+            logger.debug("Examples module not available (requires [examples] or [all] extra)")
+            return
+        
+        # Check if database is empty
+        try:
+            db_session = get_default_session()
+            task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+            
+            # Count total tasks in database (use sync query for simplicity)
+            if task_repository.is_async:
+                # For async sessions, we'll use a simple approach
+                import asyncio
+                async def check_and_init():
+                    stmt = select(func.count()).select_from(task_repository.task_model_class)
+                    result = await db_session.execute(stmt)
+                    count = result.scalar() or 0
+                    
+                    if count == 0:
+                        logger.info("Database is empty, initializing examples data...")
+                        from aipartnerupflow.examples.init import init_examples_data
+                        await init_examples_data(force=False)
+                        logger.info("Examples data initialized successfully")
+                    else:
+                        logger.debug(f"Database has {count} tasks, skipping examples initialization")
+                
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Event loop already running, skip auto-init to avoid issues
+                        logger.debug("Event loop already running, skipping auto-init")
+                        return
+                    else:
+                        loop.run_until_complete(check_and_init())
+                except RuntimeError:
+                    asyncio.run(check_and_init())
+            else:
+                count = db_session.query(task_repository.task_model_class).count()
+                
+                if count == 0:
+                    logger.info("Database is empty, initializing examples data...")
+                    try:
+                        created_count = init_examples_data_sync(force=False)
+                        if created_count > 0:
+                            logger.info(f"Examples data initialized successfully: {created_count} tasks created")
+                        else:
+                            logger.info("Examples data already exists or initialization skipped")
+                    except Exception as init_error:
+                        logger.error(f"Failed to initialize examples data: {init_error}", exc_info=True)
+                else:
+                    logger.debug(f"Database has {count} tasks, skipping examples initialization")
+        except Exception as e:
+            logger.warning(f"Failed to auto-initialize examples data: {e}", exc_info=True)
+            # Don't fail startup if examples initialization fails
+    except Exception as e:
+        logger.warning(f"Examples auto-initialization check failed: {e}", exc_info=True)
+        # Don't fail startup if examples are not available
+
+
 def _create_a2a_server(
     jwt_secret_key: Optional[str],
     jwt_algorithm: str,
@@ -288,6 +358,9 @@ def main():
     
     # Load custom TaskModel if specified
     _load_custom_task_model()
+    
+    # Auto-initialize examples data if database is empty
+    _auto_init_examples_if_needed()
     
     # Determine protocol (default to A2A for backward compatibility)
     protocol = get_protocol_from_env()

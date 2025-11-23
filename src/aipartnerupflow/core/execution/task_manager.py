@@ -1101,6 +1101,47 @@ class TaskManager:
         if input_schema:
             init_params["inputs_schema"] = input_schema
         
+        # Inject LLM API key if needed (for CrewAI executors)
+        # Priority: request header > user config
+        # Note: CrewAI/LiteLLM automatically reads provider-specific API keys from environment,
+        # so we set the appropriate env var here if we have a dynamic key from header/config
+        # LLM key is never stored in database (task.params)
+        if executor_id == "crewai_executor":
+            from aipartnerupflow.core.utils.llm_key_context import get_llm_key, get_llm_provider_from_header
+            from aipartnerupflow.core.utils.llm_key_injector import inject_llm_key, detect_provider_from_model
+            
+            # Priority for provider detection:
+            # 1. Provider from request header (parsed from X-LLM-API-KEY format: provider:key)
+            # 2. Provider from works configuration (model name)
+            # 3. Auto-detect from model name
+            works = params.get("works", {})
+            detected_provider = get_llm_provider_from_header()  # First check header (parsed from provider:key format)
+            
+            if not detected_provider:
+                # Detect provider from works configuration
+                if works:
+                    # Try to extract model from agents
+                    agents = works.get("agents", {})
+                    for agent_config in agents.values():
+                        agent_llm = agent_config.get("llm")
+                        if isinstance(agent_llm, str):
+                            detected_provider = detect_provider_from_model(agent_llm)
+                            break
+            
+            # Get LLM key (may be provider-specific)
+            # get_llm_key will use provider from header if available
+            llm_key = get_llm_key(user_id=task.user_id, provider=detected_provider)
+            if llm_key:
+                # Inject LLM key with provider detection
+                # This supports multiple LLM providers (OpenAI, Anthropic, Google, etc.)
+                inject_llm_key(
+                    api_key=llm_key,
+                    provider=detected_provider,
+                    works=works,
+                    model_name=None  # Will be extracted from works if available
+                )
+                logger.debug(f"Injected LLM key for task {task.id} (user: {task.user_id}, provider: {detected_provider or 'auto'})")
+        
         # ============================================================
         # 3. create executor instance
         # ============================================================

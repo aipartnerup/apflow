@@ -209,6 +209,120 @@ curl -X POST http://localhost:8000/ \
   -d '{...}'
 ```
 
+## LLM API Key Management
+
+The API server supports dynamic LLM API key injection for CrewAI tasks. Keys can be provided via request headers or user configuration.
+
+### Request Header (Demo/One-time Usage)
+
+For demo or one-time usage, you can provide LLM API keys via the `X-LLM-API-KEY` header:
+
+```bash
+# Simple format (auto-detects provider from model)
+curl -X POST http://localhost:8000/tasks \
+  -H "Content-Type: application/json" \
+  -H "X-LLM-API-KEY: sk-your-openai-key" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tasks.create",
+    "params": {
+      "tasks": [{
+        "id": "task1",
+        "name": "CrewAI Task",
+        "schemas": {"method": "crewai_executor"},
+        "params": {
+          "works": {
+            "agents": {
+              "researcher": {
+                "role": "Research Analyst",
+                "llm": "openai/gpt-4"
+              }
+            }
+          }
+        }
+      }]
+    }
+  }'
+
+# Provider-specific format (explicit provider)
+curl -X POST http://localhost:8000/tasks \
+  -H "Content-Type: application/json" \
+  -H "X-LLM-API-KEY: openai:sk-your-openai-key" \
+  -d '{...}'
+
+# Anthropic example
+curl -X POST http://localhost:8000/tasks \
+  -H "Content-Type: application/json" \
+  -H "X-LLM-API-KEY: anthropic:sk-ant-your-key" \
+  -d '{...}'
+```
+
+**Header Format:**
+- Simple: `X-LLM-API-KEY: <api-key>` (provider auto-detected from model name)
+- Provider-specific: `X-LLM-API-KEY: <provider>:<api-key>` (e.g., `openai:sk-xxx`, `anthropic:sk-ant-xxx`)
+
+**Supported Providers:**
+- `openai` - OpenAI (GPT models)
+- `anthropic` - Anthropic (Claude models)
+- `google` / `gemini` - Google (Gemini models)
+- `mistral` - Mistral AI
+- `groq` - Groq
+- And more (see LLM Key Injector documentation)
+
+**Priority:**
+1. Request header (`X-LLM-API-KEY`) - highest priority
+2. User config (if `llm-key-config` extension is installed)
+3. Environment variables (automatically read by CrewAI/LiteLLM)
+
+### User Configuration (Multi-user Scenarios)
+
+For production multi-user scenarios, use the `llm-key-config` extension:
+
+```bash
+# Install extension
+pip install aipartnerupflow[llm-key-config]
+```
+
+Then configure keys programmatically:
+
+```python
+from aipartnerupflow.extensions.llm_key_config import LLMKeyConfigManager
+
+# Set user's LLM key
+config_manager = LLMKeyConfigManager()
+config_manager.set_key(user_id="user123", api_key="sk-xxx", provider="openai")
+
+# Set provider-specific keys
+config_manager.set_key(user_id="user123", api_key="sk-xxx", provider="openai")
+config_manager.set_key(user_id="user123", api_key="sk-ant-xxx", provider="anthropic")
+```
+
+**Note:** Keys are stored in memory (not in database). For production multi-server scenarios, consider using Redis.
+
+### Environment Variables (Fallback)
+
+If no header or user config is provided, CrewAI/LiteLLM will automatically use provider-specific environment variables:
+
+```bash
+export OPENAI_API_KEY="sk-xxx"
+export ANTHROPIC_API_KEY="sk-ant-xxx"
+export GOOGLE_API_KEY="xxx"
+```
+
+### Examples Auto-initialization
+
+When the API server starts, it automatically initializes example tasks if the database is empty. This helps beginners get started quickly.
+
+To manually initialize examples:
+
+```bash
+# Via CLI
+aipartnerupflow examples init
+
+# Or force re-initialization
+aipartnerupflow examples init --force
+```
+
 ## Configuration
 
 ### Environment Variables

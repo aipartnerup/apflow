@@ -262,6 +262,31 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         start_time = time.time()
         request_id = str(uuid.uuid4())
         
+        # Extract LLM API key from request header
+        # Format: provider:key (e.g., "openai:sk-xxx...") or just key (backward compatible)
+        # This allows demo/one-time usage without storing keys
+        llm_key_header = request.headers.get("X-LLM-API-KEY") or request.headers.get("x-llm-api-key")
+        if llm_key_header:
+            from aipartnerupflow.core.utils.llm_key_context import set_llm_key_from_header
+            
+            # Parse format: provider:key or just key
+            provider = None
+            api_key = llm_key_header
+            
+            if ':' in llm_key_header:
+                # Format: provider:key
+                parts = llm_key_header.split(':', 1)  # Split only on first colon
+                if len(parts) == 2:
+                    provider = parts[0].strip()
+                    api_key = parts[1].strip()
+                    if not provider or not api_key:
+                        # Invalid format, treat as plain key
+                        provider = None
+                        api_key = llm_key_header
+            
+            set_llm_key_from_header(api_key, provider=provider)
+            logger.debug(f"Received LLM key from request header for request {request_id} (provider: {provider or 'auto'})")
+        
         try:
             # Parse JSON request
             body = await request.json()
@@ -297,6 +322,8 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                     result = await self._handle_task_detail_logic(params, request, request_id)
                 elif method == "tasks.tree":
                     result = await self._handle_task_tree_logic(params, request, request_id)
+                elif method == "tasks.list":
+                    result = await self._handle_tasks_list_logic(params, request, request_id)
                 # Running task monitoring
                 elif method == "tasks.running.list":
                     result = await self._handle_running_tasks_list_logic(params, request, request_id)
@@ -310,6 +337,9 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                 # Task copy
                 elif method == "tasks.copy":
                     result = await self._handle_task_copy_logic(params, request, request_id)
+                # Task execution
+                elif method == "tasks.execute":
+                    result = await self._handle_task_execute_logic(params, request, request_id)
                 else:
                     return JSONResponse(
                         status_code=400,
@@ -368,6 +398,16 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             # Route to specific handler based on method
             if method == "system.health":
                 result = await self._handle_health(params, request_id)
+            elif method == "config.llm_key.set":
+                result = await self._handle_llm_key_set(params, request, request_id)
+            elif method == "config.llm_key.get":
+                result = await self._handle_llm_key_get(params, request, request_id)
+            elif method == "config.llm_key.delete":
+                result = await self._handle_llm_key_delete(params, request, request_id)
+            elif method == "examples.init":
+                result = await self._handle_examples_init(params, request, request_id)
+            elif method == "examples.status":
+                result = await self._handle_examples_status(params, request, request_id)
             else:
                 return JSONResponse(
                     status_code=400,
@@ -396,11 +436,17 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             
         except Exception as e:
             logger.error(f"Error handling system request: {str(e)}", exc_info=True)
+            # Get request ID safely (body might not be defined if JSON parsing failed)
+            try:
+                request_id_from_body = body.get("id") if 'body' in locals() else None
+            except:
+                request_id_from_body = None
+            
             return JSONResponse(
                 status_code=500,
                 content={
                     "jsonrpc": "2.0",
-                    "id": body.get("id", str(uuid.uuid4())),
+                    "id": request_id_from_body or str(uuid.uuid4()),
                     "error": {
                         "code": -32603,
                         "message": "Internal error",
@@ -500,6 +546,287 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             logger.error(f"Error getting task tree: {str(e)}", exc_info=True)
             raise
 
+    async def _handle_llm_key_set(
+        self,
+        params: dict,
+        request: Request,
+        request_id: str
+    ) -> dict:
+        """
+        Handle LLM key configuration - set LLM API key for user
+        
+        Params:
+            api_key: LLM API key to store
+            user_id: Optional user ID (defaults to authenticated user)
+            provider: Optional provider name (e.g., "openai", "anthropic", "google")
+        
+        Returns:
+            {"success": True, "user_id": str, "provider": str}
+        """
+        try:
+            # Check if llm-key-config extension is available
+            try:
+                from aipartnerupflow.extensions.llm_key_config import LLMKeyConfigManager
+            except ImportError:
+                raise ValueError(
+                    "LLM key configuration extension not available. "
+                    "Install with: pip install aipartnerupflow[llm-key-config]"
+                )
+            
+            api_key = params.get("api_key")
+            if not api_key:
+                raise ValueError("api_key is required")
+            
+            provider = params.get("provider")  # Optional provider name
+            
+            # Get user_id from params or authenticated user
+            user_id = params.get("user_id")
+            if not user_id:
+                authenticated_user_id, _ = self._get_user_info(request)
+                if not authenticated_user_id:
+                    raise ValueError("user_id is required (not authenticated)")
+                user_id = authenticated_user_id
+            
+            # Check permission
+            self._check_permission(request, user_id, "set LLM key for")
+            
+            # Set key
+            config_manager = LLMKeyConfigManager()
+            config_manager.set_key(user_id, api_key, provider=provider)
+            
+            provider_str = provider or "default"
+            logger.info(f"Set LLM key for user {user_id}, provider {provider_str}")
+            return {"success": True, "user_id": user_id, "provider": provider_str}
+            
+        except Exception as e:
+            logger.error(f"Error setting LLM key: {str(e)}", exc_info=True)
+            raise
+
+    async def _handle_llm_key_get(
+        self,
+        params: dict,
+        request: Request,
+        request_id: str
+    ) -> dict:
+        """
+        Handle LLM key configuration - get LLM API key status for user
+        
+        Params:
+            user_id: Optional user ID (defaults to authenticated user or "default")
+            provider: Optional provider name to check
+        
+        Returns:
+            {"has_key": bool, "user_id": str, "providers": dict}
+        """
+        # Default response for graceful degradation
+        default_user_id = params.get("user_id") or "default"
+        default_response = {
+            "has_key": False,
+            "user_id": default_user_id,
+            "provider": params.get("provider"),
+            "providers": {}
+        }
+        
+        try:
+            # Check if llm-key-config extension is available
+            try:
+                from aipartnerupflow.extensions.llm_key_config import LLMKeyConfigManager
+            except ImportError:
+                # Extension not available, return empty status (graceful degradation)
+                logger.debug("LLM key configuration extension not available, returning empty status")
+                return default_response
+            
+            provider = params.get("provider")
+            
+            # Get user_id from params, authenticated user, or default to "default"
+            user_id = params.get("user_id")
+            if not user_id:
+                try:
+                    authenticated_user_id, _ = self._get_user_info(request)
+                    user_id = authenticated_user_id or "default"  # Default user for single-user scenarios
+                except Exception as e:
+                    logger.debug(f"Error getting user info: {e}, using default user_id")
+                    user_id = "default"
+            
+            # Check permission (only if JWT is enabled) - catch all exceptions
+            try:
+                self._check_permission(request, user_id, "get LLM key for")
+            except Exception as e:
+                # Permission check failed, but in non-JWT mode we allow it
+                # Just log and continue
+                logger.debug(f"Permission check skipped for user {user_id}: {e}")
+            
+            # Check if key exists (don't return the actual key for security)
+            try:
+                config_manager = LLMKeyConfigManager()
+                has_key = config_manager.has_key(user_id, provider=provider)
+                all_providers = config_manager.get_all_providers(user_id)
+                
+                return {
+                    "has_key": has_key,
+                    "user_id": user_id,
+                    "provider": provider,
+                    "providers": all_providers
+                }
+            except Exception as e:
+                logger.warning(f"Error accessing LLM key config manager: {e}, returning empty status")
+                return default_response
+            
+        except Exception as e:
+            # Catch all exceptions and return graceful response
+            logger.error(f"Error getting LLM key status: {str(e)}", exc_info=True)
+            # Return empty status instead of raising exception
+            return default_response
+
+    async def _handle_llm_key_delete(
+        self,
+        params: dict,
+        request: Request,
+        request_id: str
+    ) -> dict:
+        """
+        Handle LLM key configuration - delete LLM API key for user
+        
+        Params:
+            user_id: Optional user ID (defaults to authenticated user)
+            provider: Optional provider name (if None, deletes all keys for user)
+        
+        Returns:
+            {"success": True, "user_id": str, "deleted": bool, "provider": str}
+        """
+        try:
+            # Check if llm-key-config extension is available
+            try:
+                from aipartnerupflow.extensions.llm_key_config import LLMKeyConfigManager
+            except ImportError:
+                raise ValueError(
+                    "LLM key configuration extension not available. "
+                    "Install with: pip install aipartnerupflow[llm-key-config]"
+                )
+            
+            provider = params.get("provider")
+            
+            # Get user_id from params or authenticated user
+            user_id = params.get("user_id")
+            if not user_id:
+                authenticated_user_id, _ = self._get_user_info(request)
+                if not authenticated_user_id:
+                    raise ValueError("user_id is required (not authenticated)")
+                user_id = authenticated_user_id
+            
+            # Check permission
+            self._check_permission(request, user_id, "delete LLM key for")
+            
+            # Delete key
+            config_manager = LLMKeyConfigManager()
+            deleted = config_manager.delete_key(user_id, provider=provider)
+            
+            provider_str = provider or "all"
+            if not deleted:
+                logger.warning(f"LLM key not found for user {user_id}, provider {provider_str}")
+            
+            logger.info(f"Deleted LLM key for user {user_id}, provider {provider_str}")
+            return {"success": True, "user_id": user_id, "deleted": deleted, "provider": provider_str}
+            
+        except Exception as e:
+            logger.error(f"Error deleting LLM key: {str(e)}", exc_info=True)
+            raise
+
+    async def _handle_examples_init(
+        self,
+        params: dict,
+        request: Request,
+        request_id: str
+    ) -> dict:
+        """
+        Handle examples initialization - initialize example data
+        
+        Params:
+            force: Optional, if True, re-initialize even if examples already exist
+        
+        Returns:
+            {"success": True, "created_count": int, "message": str}
+        """
+        try:
+            # Check if examples module is available
+            try:
+                from aipartnerupflow.examples.init import init_examples_data
+            except ImportError:
+                raise ValueError(
+                    "Examples module not available. "
+                    "Install with: pip install aipartnerupflow[examples] or pip install aipartnerupflow[all]"
+                )
+            
+            force = params.get("force", False)
+            
+            # Initialize examples data
+            created_count = await init_examples_data(force=force)
+            
+            if created_count > 0:
+                message = f"Successfully initialized {created_count} example tasks"
+            else:
+                message = "Examples data already exists or initialization skipped"
+            
+            logger.info(f"Examples initialization requested: {message}")
+            return {
+                "success": True,
+                "created_count": created_count,
+                "message": message
+            }
+            
+        except Exception as e:
+            logger.error(f"Error initializing examples: {str(e)}", exc_info=True)
+            raise
+
+    async def _handle_examples_status(
+        self,
+        params: dict,
+        request: Request,
+        request_id: str
+    ) -> dict:
+        """
+        Handle examples status check - check if examples are initialized
+        
+        Returns:
+            {"initialized": bool, "available": bool, "message": str}
+        """
+        try:
+            # Check if examples module is available
+            try:
+                from aipartnerupflow.examples.init import check_if_examples_initialized
+                examples_available = True
+            except ImportError:
+                examples_available = False
+            
+            if not examples_available:
+                return {
+                    "initialized": False,
+                    "available": False,
+                    "message": "Examples module not available. Install with: pip install aipartnerupflow[examples]"
+                }
+            
+            # Check if examples are initialized
+            initialized = await check_if_examples_initialized()
+            
+            if initialized:
+                message = "Examples data is initialized"
+            else:
+                message = "Examples data is not initialized. Call examples.init to initialize."
+            
+            return {
+                "initialized": initialized,
+                "available": True,
+                "message": message
+            }
+            
+        except Exception as e:
+            logger.error(f"Error checking examples status: {str(e)}", exc_info=True)
+            return {
+                "initialized": False,
+                "available": False,
+                "message": f"Error checking status: {str(e)}"
+            }
+
     async def _handle_running_tasks_list_logic(
         self, 
         params: dict, 
@@ -566,6 +893,72 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             
         except Exception as e:
             logger.error(f"Error getting running tasks list: {str(e)}", exc_info=True)
+            raise
+
+    async def _handle_tasks_list_logic(
+        self,
+        params: dict,
+        request: Request,
+        request_id: str
+    ) -> list:
+        """
+        Handle tasks list - returns list of all tasks from database (not just running ones)
+        
+        Params:
+            user_id: Optional user ID filter (will be checked for permission)
+            status: Optional status filter (e.g., "completed", "pending", "in_progress", "failed")
+            limit: Optional limit (default: 100)
+            offset: Optional offset for pagination (default: 0)
+        
+        Returns:
+            List of tasks
+        """
+        try:
+            user_id = params.get("user_id")
+            status = params.get("status")
+            limit = params.get("limit", 100)
+            offset = params.get("offset", 0)
+            
+            # Check permission if user_id is specified
+            if user_id:
+                self._check_permission(request, user_id, "list tasks for")
+            else:
+                # No user_id specified, use authenticated user_id or None
+                authenticated_user_id, _ = self._get_user_info(request)
+                if authenticated_user_id:
+                    user_id = authenticated_user_id
+                # If no JWT and no user_id, user_id remains None (list all tasks)
+            
+            # Get database session and create repository
+            db_session = get_default_session()
+            task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+            
+            # Query tasks with filters
+            tasks = await task_repository.query_tasks(
+                user_id=user_id,
+                status=status,
+                limit=limit,
+                offset=offset,
+                order_by="created_at",
+                order_desc=True
+            )
+            
+            # Convert to dictionaries and check permissions
+            task_dicts = []
+            for task in tasks:
+                # Check permission to access this task
+                try:
+                    if task.user_id:
+                        self._check_permission(request, task.user_id, "access")
+                    task_dicts.append(task.to_dict())
+                except ValueError:
+                    # Permission denied, skip this task
+                    logger.warning(f"Permission denied for task {task.id}")
+            
+            return task_dicts
+            
+        except Exception as e:
+            logger.error(f"Error getting tasks list: {str(e)}", exc_info=True)
             raise
 
     async def _handle_running_tasks_status_logic(
@@ -1078,9 +1471,9 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
     ) -> Optional[dict]:
         """Handle task retrieval by ID"""
         try:
-            task_id = params.get("task_id")
+            task_id = params.get("task_id") or params.get("id")
             if not task_id:
-                raise ValueError("Task ID is required")
+                raise ValueError("Task ID is required. Please provide 'task_id' or 'id' parameter.")
             
             # Get database session and create repository with custom TaskModel
             db_session = get_default_session()
@@ -1239,5 +1632,86 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             
         except Exception as e:
             logger.error(f"Error copying task: {str(e)}", exc_info=True)
+            raise
+
+    async def _handle_task_execute_logic(
+        self,
+        params: dict,
+        request: Request,
+        request_id: str
+    ) -> dict:
+        """
+        Handle task execution - execute a task by ID
+        
+        Params:
+            task_id: Task ID to execute
+            use_streaming: Optional, if True, use streaming mode (default: False)
+        
+        Returns:
+            {"success": True, "root_task_id": str, "status": str, "message": str}
+        """
+        try:
+            task_id = params.get("task_id") or params.get("id")
+            if not task_id:
+                raise ValueError("Task ID is required")
+            
+            use_streaming = params.get("use_streaming", False)
+            
+            # Get database session and create repository
+            db_session = get_default_session()
+            task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+            
+            # Get task
+            task = await task_repository.get_task_by_id(task_id)
+            if not task:
+                raise ValueError(f"Task {task_id} not found")
+            
+            # Check permission
+            self._check_permission(request, task.user_id, "execute")
+            
+            # Check if task is already running
+            from aipartnerupflow.core.execution.task_tracker import TaskTracker
+            task_tracker = TaskTracker()
+            if task_tracker.is_task_running(task_id):
+                return {
+                    "success": False,
+                    "root_task_id": task_id,
+                    "status": "already_running",
+                    "message": f"Task {task_id} is already running"
+                }
+            
+            # Build task tree starting from this task
+            task_tree = await task_repository.build_task_tree(task)
+            
+            # Get root task ID (traverse up to find root)
+            root_task = await task_repository.get_root_task(task)
+            root_task_id = root_task.id
+            
+            # Execute task tree using TaskExecutor
+            from aipartnerupflow.core.execution.task_executor import TaskExecutor
+            task_executor = TaskExecutor()
+            
+            # Execute the task tree
+            execution_result = await task_executor.execute_task_tree(
+                task_tree=task_tree,
+                root_task_id=root_task_id,
+                use_streaming=use_streaming,
+                streaming_callbacks_context=None,  # No streaming context for simple execution
+                db_session=db_session
+            )
+            
+            logger.info(f"Task {task_id} execution started (root: {root_task_id})")
+            
+            return {
+                "success": True,
+                "root_task_id": root_task_id,
+                "task_id": task_id,
+                "status": "started",
+                "message": f"Task {task_id} execution started",
+                "execution_result": execution_result
+            }
+            
+        except Exception as e:
+            logger.error(f"Error executing task: {str(e)}", exc_info=True)
             raise
 

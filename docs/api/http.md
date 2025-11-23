@@ -608,6 +608,54 @@ Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 - Otherwise, user can only access tasks with matching `user_id`
 - If no `user_id` in token, permission checking is skipped
 
+## LLM API Key Headers
+
+For tasks that require LLM API keys (e.g., CrewAI tasks), you can provide keys via request headers.
+
+### X-LLM-API-KEY Header
+
+**Format:**
+- Simple: `X-LLM-API-KEY: <api-key>` (provider auto-detected from model name)
+- Provider-specific: `X-LLM-API-KEY: <provider>:<api-key>`
+
+**Examples:**
+```bash
+# OpenAI (auto-detected from model name)
+curl -X POST http://localhost:8000/tasks \
+  -H "X-LLM-API-KEY: sk-your-openai-key" \
+  -H "Content-Type: application/json" \
+  -d '{...}'
+
+# OpenAI (explicit provider)
+curl -X POST http://localhost:8000/tasks \
+  -H "X-LLM-API-KEY: openai:sk-your-openai-key" \
+  -H "Content-Type: application/json" \
+  -d '{...}'
+
+# Anthropic
+curl -X POST http://localhost:8000/tasks \
+  -H "X-LLM-API-KEY: anthropic:sk-ant-your-key" \
+  -H "Content-Type: application/json" \
+  -d '{...}'
+```
+
+**Supported Providers:**
+- `openai` - OpenAI (GPT models)
+- `anthropic` - Anthropic (Claude models)
+- `google` / `gemini` - Google (Gemini models)
+- `mistral` - Mistral AI
+- `groq` - Groq
+- `cohere` - Cohere
+- `together` - Together AI
+- And more (see provider list in LLM Key Injector)
+
+**Priority Order:**
+1. Request header (`X-LLM-API-KEY`) - highest priority
+2. User config (if `llm-key-config` extension is installed)
+3. Environment variables (automatically read by CrewAI/LiteLLM)
+
+**Note:** LLM keys are never stored in the database. They are only used during task execution and cleared after completion.
+
 ## Error Responses
 
 All endpoints return JSON-RPC 2.0 error format on failure:

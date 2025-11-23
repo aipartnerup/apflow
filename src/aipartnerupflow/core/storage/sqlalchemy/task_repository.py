@@ -409,6 +409,80 @@ class TaskRepository:
             logger.error(f"Error getting completed tasks by IDs: {str(e)}")
             return {}
     
+    async def query_tasks(
+        self,
+        user_id: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+        order_by: str = "created_at",
+        order_desc: bool = True,
+    ) -> List[TaskModelType]:
+        """
+        Query tasks with filters and pagination
+        
+        Args:
+            user_id: Optional user ID filter
+            status: Optional status filter (e.g., "completed", "pending", "in_progress", "failed")
+            limit: Maximum number of tasks to return (default: 100)
+            offset: Number of tasks to skip (default: 0)
+            order_by: Field to order by (default: "created_at")
+            order_desc: If True, order descending; if False, order ascending (default: True)
+            
+        Returns:
+            List of TaskModel instances (or custom TaskModel subclass) matching the criteria
+        """
+        try:
+            # Build query
+            if self.is_async:
+                stmt = select(self.task_model_class)
+                
+                # Apply filters
+                if user_id is not None:
+                    stmt = stmt.filter(self.task_model_class.user_id == user_id)
+                
+                if status is not None:
+                    stmt = stmt.filter(self.task_model_class.status == status)
+                
+                # Apply ordering
+                order_column = getattr(self.task_model_class, order_by, None)
+                if order_column is not None:
+                    if order_desc:
+                        stmt = stmt.order_by(order_column.desc())
+                    else:
+                        stmt = stmt.order_by(order_column.asc())
+                
+                # Apply pagination
+                stmt = stmt.offset(offset).limit(limit)
+                result = await self.db.execute(stmt)
+                tasks = result.scalars().all()
+            else:
+                stmt = self.db.query(self.task_model_class)
+                
+                # Apply filters
+                if user_id is not None:
+                    stmt = stmt.filter(self.task_model_class.user_id == user_id)
+                
+                if status is not None:
+                    stmt = stmt.filter(self.task_model_class.status == status)
+                
+                # Apply ordering
+                order_column = getattr(self.task_model_class, order_by, None)
+                if order_column is not None:
+                    if order_desc:
+                        stmt = stmt.order_by(order_column.desc())
+                    else:
+                        stmt = stmt.order_by(order_column.asc())
+                
+                # Apply pagination
+                tasks = stmt.offset(offset).limit(limit).all()
+            
+            return list(tasks)
+            
+        except Exception as e:
+            logger.error(f"Error querying tasks: {str(e)}")
+            return []
+    
     async def save_task_hierarchy_to_database(self, task_tree: "TaskTreeNode") -> bool:
         """
         Save complete task hierarchy to database from TaskTreeNode
