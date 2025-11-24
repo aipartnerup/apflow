@@ -413,7 +413,7 @@ CLI uses DuckDB by default - no configuration needed:
 aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"data": "test"}}]'
 ```
 
-Database file location: `~/.aipartnerupflow/data.duckdb` (or configured path)
+Database file location: `~/.aipartnerup/data/aipartnerupflow.duckdb` (or configured path)
 
 ### Optional: PostgreSQL
 
@@ -650,7 +650,7 @@ aipartnerupflow run flow <batch_id> --inputs '...'
 **Solution**: Ensure database is accessible:
 ```bash
 # Check if database file exists (DuckDB)
-ls ~/.aipartnerupflow/data.duckdb
+ls ~/.aipartnerup/data/aipartnerupflow.duckdb
 
 # Or check PostgreSQL connection
 psql $DATABASE_URL -c "SELECT COUNT(*) FROM apflow_tasks;"

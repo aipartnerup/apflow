@@ -36,9 +36,9 @@ def _get_default_db_path() -> str:
     try:
         import aipartnerupflow.examples
         # Examples module is available, use persistent database
-        # Default location: ~/.aipartnerupflow/data/aipartnerupflow.duckdb
+        # Default location: ~/.aipartnerup/data/aipartnerupflow.duckdb
         home_dir = Path.home()
-        data_dir = home_dir / ".aipartnerupflow" / "data"
+        data_dir = home_dir / ".aipartnerup" / "data"
         data_dir.mkdir(parents=True, exist_ok=True)
         db_path = str(data_dir / "aipartnerupflow.duckdb")
         logger.info(f"Examples module detected, using persistent database: {db_path}")
@@ -153,7 +153,7 @@ def get_default_session(
     Args:
         path: DuckDB database path. If None:
               - Uses AIPARTNERUPFLOW_DB_PATH environment variable if set
-              - If examples module is available, uses persistent database at ~/.aipartnerupflow/data/aipartnerupflow.duckdb
+              - If examples module is available, uses persistent database at ~/.aipartnerup/data/aipartnerupflow.duckdb
               - Otherwise, uses ":memory:" (in-memory database)
         async_mode: Whether to use async mode. If None, defaults to False for DuckDB (sync mode)
                    since DuckDB doesn't support async drivers
