@@ -37,7 +37,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from aipartnerupflow.core.storage.sqlalchemy.models import Base, TaskModel, TASK_TABLE_NAME
-from aipartnerupflow.core.storage.factory import create_session, get_default_session, reset_default_session
+from aipartnerupflow.core.storage.factory import create_session, get_default_session, reset_default_session, set_default_session
 # Backward compatibility aliases
 create_storage = create_session
 get_default_storage = get_default_session
@@ -287,6 +287,30 @@ def reset_storage_singleton():
     """Reset storage singleton before each test"""
     reset_default_session()
     yield
+    reset_default_session()
+
+
+@pytest.fixture(scope="function")
+def use_test_db_session(sync_db_session):
+    """
+    Fixture to set and reset default session for tests - uses in-memory database
+    
+    This fixture ensures that all tests use a temporary in-memory database
+    instead of the persistent database file, preventing data pollution.
+    
+    Usage:
+        - Add `use_test_db_session` parameter to your test function
+        - The fixture will automatically set the default session to the test database
+        - After the test, it will reset the default session
+    
+    Example:
+        async def test_something(self, use_test_db_session):
+            # get_default_session() will return the test database session
+            session = get_default_session()
+            ...
+    """
+    set_default_session(sync_db_session)
+    yield sync_db_session
     reset_default_session()
 
 

@@ -14,14 +14,6 @@ from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskReposito
 from aipartnerupflow.core.config import get_task_model_class
 
 
-@pytest.fixture
-def use_test_db_session(sync_db_session):
-    """Fixture to set and reset default session for tests"""
-    set_default_session(sync_db_session)
-    yield sync_db_session
-    reset_default_session()
-
-
 class TestAggregateResultsIntegration:
     """Integration tests for aggregate_results_executor in real scenarios"""
     

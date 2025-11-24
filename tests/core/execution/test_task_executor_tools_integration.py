@@ -37,7 +37,7 @@ class TestTaskExecutorToolsIntegration:
         not os.getenv("OPENAI_API_KEY"),
         reason="OPENAI_API_KEY is not set - skipping integration test"
     )
-    async def test_task_executor_with_limited_scrape_website_tool(self):
+    async def test_task_executor_with_limited_scrape_website_tool(self, use_test_db_session):
         """
         Test TaskExecutor execution with LimitedScrapeWebsiteTool
         
@@ -68,9 +68,12 @@ class TestTaskExecutorToolsIntegration:
         # This simulates how users would actually use the system
         # Note: method="crewai_executor" (CrewManager's id) is sufficient, type is optional
         # works should be in params, not inputs
+        # Use unique task ID to avoid conflicts with other tests
+        import uuid
+        task_id = f"test_scrape_{uuid.uuid4().hex[:8]}"
         tasks = [
             {
-                "id": "root_task",
+                "id": task_id,
                 "name": "Website Scraper Task",
                 "user_id": "test_user",  # Required field
                 "schemas": {
@@ -143,7 +146,7 @@ class TestTaskExecutorToolsIntegration:
         not os.getenv("OPENAI_API_KEY"),
         reason="OPENAI_API_KEY is not set - skipping integration test"
     )
-    async def test_task_executor_with_custom_tool(self):
+    async def test_task_executor_with_custom_tool(self, use_test_db_session):
         """
         Test TaskExecutor execution with a custom tool registered using @tool_register decorator
         
@@ -196,9 +199,12 @@ class TestTaskExecutorToolsIntegration:
         # Create task tree that uses CrewManager with TextProcessorTool
         # Note: method="crewai_executor" (CrewManager's id) is sufficient, type is optional
         # works should be in params, not inputs
+        # Use unique task ID to avoid conflicts with other tests
+        import uuid
+        task_id = f"test_text_{uuid.uuid4().hex[:8]}"
         tasks = [
             {
-                "id": "root_task",
+                "id": task_id,
                 "name": "Text Processor Task",
                 "user_id": "test_user",  # Required field
                 "schemas": {

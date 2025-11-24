@@ -3,6 +3,7 @@ Custom Starlette Application that supports system-level methods and optional JWT
 """
 import os
 import uuid
+import asyncio
 from starlette.routing import Route
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -25,6 +26,10 @@ from aipartnerupflow.core.execution.task_creator import TaskCreator
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Global event storage for task streaming (keyed by root_task_id)
+_task_streaming_events: Dict[str, List[Dict[str, Any]]] = {}
+_task_streaming_events_lock = asyncio.Lock()
 
 
 class LLMAPIKeyMiddleware(BaseHTTPMiddleware):
@@ -153,6 +158,78 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
                 }
             )
         
+
+
+class TaskStreamingContext:
+    """
+    Streaming context for JSON-RPC tasks.execute endpoint
+    Similar to EventQueueBridge but stores updates in memory for SSE consumption
+    """
+    
+    def __init__(self, root_task_id: str):
+        """
+        Initialize streaming context
+        
+        Args:
+            root_task_id: Root task ID for this execution
+        """
+        self.root_task_id = root_task_id
+        self._update_queue = asyncio.Queue()
+        self._bridge_task = None
+        
+        # Start background task to process updates
+        self._start_bridge_task()
+    
+    def _start_bridge_task(self):
+        """Start background task to store updates"""
+        async def bridge_worker():
+            while True:
+                try:
+                    update_data = await self._update_queue.get()
+                    
+                    if update_data is None:  # Sentinel to stop
+                        break
+                    
+                    # Store update in global event store
+                    async with _task_streaming_events_lock:
+                        if self.root_task_id not in _task_streaming_events:
+                            _task_streaming_events[self.root_task_id] = []
+                        _task_streaming_events[self.root_task_id].append(update_data)
+                    
+                    self._update_queue.task_done()
+                except Exception as e:
+                    logger.error(f"Error in streaming bridge worker: {str(e)}")
+        
+        self._bridge_task = asyncio.create_task(bridge_worker())
+    
+    async def put(self, update_data: Dict[str, Any]):
+        """
+        Put progress update to bridge
+        
+        Args:
+            update_data: Progress update data from TaskManager
+        """
+        await self._update_queue.put(update_data)
+    
+    async def close(self):
+        """Close bridge and stop background task"""
+        await self._update_queue.put(None)  # Sentinel to stop worker
+        if self._bridge_task:
+            await self._bridge_task
+
+
+async def get_task_streaming_events(root_task_id: str) -> List[Dict[str, Any]]:
+    """
+    Get streaming events for a task
+    
+    Args:
+        root_task_id: Root task ID
+        
+    Returns:
+        List of streaming events
+    """
+    async with _task_streaming_events_lock:
+        return _task_streaming_events.get(root_task_id, []).copy()
 
 
 class CustomA2AStarletteApplication(A2AStarletteApplication):
@@ -1735,6 +1812,7 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         
         Returns:
             {"success": True, "root_task_id": str, "status": str, "message": str}
+            If use_streaming=True, updates are available via /events?task_id={root_task_id}
         """
         try:
             task_id = params.get("task_id") or params.get("id")
@@ -1777,25 +1855,57 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
             from aipartnerupflow.core.execution.task_executor import TaskExecutor
             task_executor = TaskExecutor()
             
-            # Execute the task tree
-            execution_result = await task_executor.execute_task_tree(
-                task_tree=task_tree,
-                root_task_id=root_task_id,
-                use_streaming=use_streaming,
-                streaming_callbacks_context=None,  # No streaming context for simple execution
-                db_session=db_session
-            )
-            
-            logger.info(f"Task {task_id} execution started (root: {root_task_id})")
-            
-            return {
-                "success": True,
-                "root_task_id": root_task_id,
-                "task_id": task_id,
-                "status": "started",
-                "message": f"Task {task_id} execution started",
-                "execution_result": execution_result
-            }
+            if use_streaming:
+                # Streaming mode: create streaming context and execute with streaming
+                streaming_context = TaskStreamingContext(root_task_id)
+                
+                try:
+                    # Execute with streaming
+                    execution_result = await task_executor.execute_task_tree(
+                        task_tree=task_tree,
+                        root_task_id=root_task_id,
+                        use_streaming=True,
+                        streaming_callbacks_context=streaming_context,
+                        db_session=db_session
+                    )
+                    
+                    logger.info(f"Task {task_id} execution started with streaming (root: {root_task_id})")
+                    
+                    return {
+                        "success": True,
+                        "root_task_id": root_task_id,
+                        "task_id": task_id,
+                        "status": "started",
+                        "streaming": True,
+                        "message": f"Task {task_id} execution started with streaming. Listen to /events?task_id={root_task_id} for updates.",
+                        "events_url": f"/events?task_id={root_task_id}"
+                    }
+                finally:
+                    # Close streaming context after execution completes
+                    await streaming_context.close()
+            else:
+                # Non-streaming mode: execute in background and return immediately
+                # Task execution happens asynchronously, similar to streaming mode
+                import asyncio
+                asyncio.create_task(
+                    task_executor.execute_task_tree(
+                        task_tree=task_tree,
+                        root_task_id=root_task_id,
+                        use_streaming=False,
+                        streaming_callbacks_context=None,
+                        db_session=db_session
+                    )
+                )
+                
+                logger.info(f"Task {task_id} execution started (root: {root_task_id})")
+                
+                return {
+                    "success": True,
+                    "root_task_id": root_task_id,
+                    "task_id": task_id,
+                    "status": "started",
+                    "message": f"Task {task_id} execution started",
+                }
             
         except Exception as e:
             logger.error(f"Error executing task: {str(e)}", exc_info=True)

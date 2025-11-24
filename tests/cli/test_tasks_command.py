@@ -19,14 +19,6 @@ from aipartnerupflow.core.config import get_task_model_class
 runner = CliRunner()
 
 
-@pytest.fixture
-def use_test_db_session(sync_db_session):
-    """Fixture to set and reset default session for CLI tests"""
-    set_default_session(sync_db_session)
-    yield sync_db_session
-    reset_default_session()
-
-
 @pytest_asyncio.fixture
 async def sample_task(use_test_db_session):
     """Create a sample task in database for testing"""

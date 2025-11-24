@@ -23,14 +23,6 @@ import json
 
 
 @pytest.fixture(scope="function")
-def use_test_db_session(sync_db_session):
-    """Fixture to set and reset default session for tests"""
-    set_default_session(sync_db_session)
-    yield sync_db_session
-    reset_default_session()
-
-
-@pytest.fixture(scope="function")
 def a2a_server_app(use_test_db_session):
     """Create A2A server app for testing"""
     # Create A2A server instance

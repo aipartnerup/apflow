@@ -15,14 +15,6 @@ from tests.conftest import sync_db_session
 
 
 @pytest.fixture(scope="function")
-def use_test_db_session(sync_db_session):
-    """Fixture to set and reset default session for tests"""
-    set_default_session(sync_db_session)
-    yield sync_db_session
-    reset_default_session()
-
-
-@pytest.fixture(scope="function")
 def json_rpc_client(use_test_db_session):
     """Create HTTP JSON-RPC test client"""
     # Create A2A server instance

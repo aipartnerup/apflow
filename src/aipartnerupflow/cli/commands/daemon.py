@@ -122,8 +122,8 @@ def start(
             # Write PID
             write_pid(process.pid)
             
-            # Give it a moment to start
-            time.sleep(1)
+            # Give it a moment to start (check if it crashes immediately)
+            time.sleep(0.3)
             
             # Check if process is still running
             if process.poll() is None:
@@ -166,15 +166,22 @@ def stop():
             os.kill(pid, signal.SIGTERM)
             
             # Wait for process to terminate (max 10 seconds)
-            for _ in range(10):
-                time.sleep(1)
-                if not is_process_running(pid):
-                    break
+            # First check quickly (many processes respond immediately)
+            time.sleep(0.2)
+            if not is_process_running(pid):
+                # Process terminated quickly
+                pass
             else:
-                # Process didn't terminate, force kill
-                typer.echo("Process didn't terminate, sending SIGKILL...")
-                os.kill(pid, signal.SIGKILL)
-                time.sleep(1)
+                # Wait longer for graceful shutdown (up to 9.8 more seconds)
+                for _ in range(49):  # 49 * 0.2 = 9.8 seconds
+                    time.sleep(0.2)
+                    if not is_process_running(pid):
+                        break
+                else:
+                    # Process didn't terminate, force kill
+                    typer.echo("Process didn't terminate, sending SIGKILL...")
+                    os.kill(pid, signal.SIGKILL)
+                    time.sleep(0.2)  # SIGKILL is immediate, short wait is enough
             
             if not is_process_running(pid):
                 typer.echo("Daemon stopped successfully")
@@ -233,7 +240,8 @@ def restart(
         if pid and is_process_running(pid):
             typer.echo("Stopping existing daemon...")
             stop()
-            time.sleep(1)
+            # Brief wait to ensure resources are released
+            time.sleep(0.3)
         
         # Start
         typer.echo("Starting daemon...")

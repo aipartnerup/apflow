@@ -274,7 +274,7 @@ class TestAgentExecutor:
     
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_execute_system_resource_monitoring_with_executor(self, sync_db_session, mock_event_queue):
+    async def test_execute_system_resource_monitoring_with_executor(self, use_test_db_session, sync_db_session, mock_event_queue):
         """
         Integration test: Real task tree execution using aggregate_results_executor
         
@@ -480,7 +480,7 @@ class TestAgentExecutor:
     
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_execute_system_resource_monitoring(self, sync_db_session, mock_event_queue):
+    async def test_execute_system_resource_monitoring(self, use_test_db_session, sync_db_session, mock_event_queue):
         """
         Integration test: Real task tree execution for system resource monitoring
         
@@ -774,7 +774,7 @@ class TestAgentExecutor:
     
     @pytest.mark.asyncio
     @pytest.mark.integration
-    async def test_execute_with_custom_task_model_and_hooks(self, sync_db_session, mock_event_queue):
+    async def test_execute_with_custom_task_model_and_hooks(self, use_test_db_session, sync_db_session, mock_event_queue):
         """
         Integration test: Real task execution with custom TaskModel and decorator-based hooks
         
