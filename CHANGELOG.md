@@ -8,6 +8,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Webhook Support for Task Execution**
+  - Webhook callbacks for `tasks.execute` JSON-RPC endpoint (similar to A2A Protocol push notifications)
+  - `WebhookStreamingContext` class for sending HTTP callbacks during task execution
+  - Real-time progress updates sent to configured webhook URL
+  - Configurable webhook settings:
+    - `url` (required): Webhook callback URL
+    - `headers` (optional): Custom HTTP headers (e.g., Authorization)
+    - `method` (optional): HTTP method (default: POST)
+    - `timeout` (optional): Request timeout in seconds (default: 30.0)
+    - `max_retries` (optional): Maximum retry attempts (default: 3)
+  - Automatic retry mechanism with exponential backoff for failed requests
+  - Error handling: Client errors (4xx) are not retried, server errors (5xx) and network errors are retried
+  - Webhook payload includes: protocol identifier, task status, progress, result, error, and timestamp
+  - Update types: `task_start`, `progress`, `task_completed`, `task_failed`, `final`
+  - Comprehensive test coverage for webhook functionality
+
+- **Protocol Identification**
+  - Added `protocol` field to all API responses to distinguish between execution modes
+    - JSON-RPC endpoints return `"protocol": "jsonrpc"` in response
+    - A2A Protocol endpoints include `"protocol": "a2a"` in metadata and event data
+  - Enables clients to identify which protocol was used for task execution
+  - Consistent protocol identification across streaming updates and webhook callbacks
+
+- **Streaming Mode for JSON-RPC**
+  - Streaming mode support for `tasks.execute` endpoint via `use_streaming` parameter
+  - Real-time progress updates via Server-Sent Events (SSE) at `/events?task_id={root_task_id}`
+  - `TaskStreamingContext` class for in-memory event storage
+  - Consistent behavior with A2A Protocol streaming mode
+  - Asynchronous task execution with immediate response
+
 - **Examples Module**
   - New `examples` module for initializing example task data to help beginners get started
   - CLI command `examples init` for initializing example tasks in the database
@@ -42,6 +72,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added LLM key header documentation in HTTP API reference
   - Updated examples documentation with quick start guide and example task structure
   - Comprehensive examples for using LLM keys with CrewAI tasks
+  - Added webhook configuration documentation in HTTP API reference
+  - Added protocol identification documentation
 
 ### Changed
 - **CLI Command Improvements**
@@ -57,6 +89,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Supports credentials, all HTTP methods, and all headers
 
 ### Fixed
+- **Test Infrastructure**
+  - Consolidated database session management in `conftest.py` with global `use_test_db_session` fixture
+  - All tests now use isolated in-memory DuckDB databases to prevent data pollution
+  - Removed dependency on persistent database files for testing
+  - Improved test isolation and reliability
+
+- **Documentation Corrections**
 - **Documentation Corrections**
   - Fixed incorrect command examples in README.md and docs:
     - Corrected `run my_batch` to proper `run flow --tasks` or `run flow executor_id` format
