@@ -839,6 +839,15 @@ Executes a task by its ID with automatic dependency handling. This method suppor
 - **Root task execution**: If the specified task is a root task (no parent), the entire task tree is executed.
 - **Child task execution**: If the specified task is a child task, the method automatically collects all dependencies (including transitive dependencies) and executes the task along with all required dependencies.
 
+**Task Status Handling:**
+- **Pending tasks**: Execute normally (newly created tasks)
+- **Failed tasks**: Can be re-executed by calling this method with the failed task's ID
+- **Completed tasks**: Skipped unless they are dependencies of a task being re-executed (in which case they are also re-executed)
+- **In-progress tasks**: Skipped to avoid conflicts
+
+**Re-execution Behavior:**
+When re-executing a failed task, all its dependency tasks are also re-executed (even if they are completed) to ensure consistency. This ensures that the entire execution context is refreshed and results are up-to-date.
+
 The task must exist in the database and must not already be running. Execution follows dependency order and priority scheduling. This unified execution behavior ensures consistent task execution across both A2A Protocol and JSON-RPC endpoints.
 
 **Method:** `tasks.execute`
@@ -1019,8 +1028,10 @@ The server sends different types of updates during task execution:
 **Notes:**
 - **Root task execution**: If `task_id` refers to a root task, the entire task tree is executed.
 - **Child task execution**: If `task_id` refers to a child task, the method automatically collects all dependencies (including transitive dependencies) and executes only the required subtree containing the task and its dependencies.
+- **Re-execution support**: Failed tasks can be re-executed by calling this method with the failed task's ID. When re-executing, all dependency tasks are also re-executed to ensure consistency.
 - Task execution is asynchronous - the method returns immediately after starting execution
 - The unified execution logic ensures consistent behavior across A2A Protocol and JSON-RPC endpoints
+- Only `pending` and `failed` status tasks are executed; `completed` and `in_progress` tasks are skipped unless they are dependencies of a task being re-executed
 - Use `tasks.running.status` to check execution progress
 - Use `use_streaming=true` to receive real-time progress updates via Server-Sent Events (SSE) - the response will be a streaming response instead of JSON
 - The SSE stream includes the initial JSON-RPC response as the first event, followed by real-time progress updates

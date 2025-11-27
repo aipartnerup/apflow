@@ -81,6 +81,9 @@ class TaskManager:
         # Use shared executor_instances dict from TaskExecutor if provided, otherwise create new one
         # This allows cancel_task() to access executors created during execution
         self._executor_instances: Dict[str, Any] = executor_instances if executor_instances is not None else {}
+        # Track tasks that should be re-executed (even if they are completed or failed)
+        # This allows re-executing failed tasks and ensures dependencies are also re-executed
+        self._tasks_to_reexecute: set[str] = set()
     
     async def cancel_task(
         self,
@@ -304,16 +307,36 @@ class TaskManager:
             if self.streaming_final:
                 logger.info(f"Streaming marked as final, stopping task tree execution for {node.task.id}")
                 return
-                
-            if node.task.status in ["completed", "failed", "in_progress"]:
-                logger.info(f"Task {node.task.id} already {node.task.status}, skipping distribution")
-                return
+            
+            # Allow re-execution of failed tasks and pending tasks
+            # Skip only completed and in_progress tasks (unless marked for re-execution)
+            task_id = str(node.task.id)
+            if node.task.status in ["completed", "in_progress"]:
+                # Check if task is marked for re-execution
+                if task_id not in self._tasks_to_reexecute:
+                    logger.info(f"Task {node.task.id} already {node.task.status}, skipping distribution")
+                    return
+                else:
+                    logger.info(f"Task {node.task.id} is {node.task.status} but marked for re-execution, will re-execute")
+            elif node.task.status == "failed":
+                # Failed tasks can always be re-executed
+                logger.info(f"Task {node.task.id} is failed, will re-execute")
             
             # Execute tasks in proper hierarchical order
             has_completed_children = True
             if node.children:
                 for child in node.children:
+                    child_id = str(child.task.id)
+                    # Check if child should be executed (pending, failed, or marked for re-execution)
                     if child.task.status not in ["completed", "failed"]:
+                        has_completed_children = False
+                        break
+                    elif child.task.status == "failed":
+                        # Failed children should be re-executed
+                        has_completed_children = False
+                        break
+                    elif child.task.status == "completed" and child_id in self._tasks_to_reexecute:
+                        # Completed children marked for re-execution should be re-executed
                         has_completed_children = False
                         break
             
@@ -328,7 +351,17 @@ class TaskManager:
                 priority = child_node.task.priority or 999
                 if priority not in priority_groups:
                     priority_groups[priority] = []
+                child_id = str(child_node.task.id)
+                # Include pending tasks, failed tasks, and completed tasks marked for re-execution
                 if child_node.task.status not in ["completed", "failed"]:
+                    priority_groups[priority].append(child_node)
+                    self._add_children_to_priority_groups(child_node, priority_groups)
+                elif child_node.task.status == "failed":
+                    # Failed tasks should be re-executed
+                    priority_groups[priority].append(child_node)
+                    self._add_children_to_priority_groups(child_node, priority_groups)
+                elif child_node.task.status == "completed" and child_id in self._tasks_to_reexecute:
+                    # Completed tasks marked for re-execution should be re-executed
                     priority_groups[priority].append(child_node)
                     self._add_children_to_priority_groups(child_node, priority_groups)
             
@@ -408,7 +441,17 @@ class TaskManager:
             priority = child_node.task.priority or 999
             if priority not in priority_groups:
                 priority_groups[priority] = []
+            child_id = str(child_node.task.id)
+            # Include pending tasks, failed tasks, and completed tasks marked for re-execution
             if child_node.task.status not in ["completed", "failed"]:
+                priority_groups[priority].append(child_node)
+                self._add_children_to_priority_groups(child_node, priority_groups)
+            elif child_node.task.status == "failed":
+                # Failed tasks should be re-executed
+                priority_groups[priority].append(child_node)
+                self._add_children_to_priority_groups(child_node, priority_groups)
+            elif child_node.task.status == "completed" and child_id in self._tasks_to_reexecute:
+                # Completed tasks marked for re-execution should be re-executed
                 priority_groups[priority].append(child_node)
                 self._add_children_to_priority_groups(child_node, priority_groups)
     
@@ -445,10 +488,22 @@ class TaskManager:
                 elif dep_required and dep_id in completed_tasks_by_id:
                     # Check if the dependency task is actually completed
                     dep_task = completed_tasks_by_id[dep_id]
-                    if dep_task.status != "completed":
+                    dep_task_id = str(dep_task.id)
+                    # If dependency is marked for re-execution and is still in progress or pending, it's not satisfied yet
+                    # But if it's already completed, we can consider it satisfied (it will be re-executed but result is available)
+                    if dep_task_id in self._tasks_to_reexecute:
+                        # Check current status from database to see if it's actually completed
+                        # If it's completed, we can use the result even if marked for re-execution
+                        if dep_task.status == "completed":
+                            logger.info(f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed, marked for re-execution but result available)")
+                        else:
+                            logger.info(f"❌ Task {task.id} dependency {dep_id} is marked for re-execution and not completed yet (status: {dep_task.status})")
+                            return False
+                    elif dep_task.status != "completed":
                         logger.info(f"❌ Task {task.id} dependency {dep_id} found but not completed (status: {dep_task.status})")
                         return False
-                    logger.info(f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed)")
+                    else:
+                        logger.info(f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed)")
             elif isinstance(dep, str):
                 # Simple string dependency (just the id) - backward compatibility
                 dep_id = dep
@@ -456,9 +511,20 @@ class TaskManager:
                     logger.info(f"❌ Task {task.id} dependency {dep_id} not satisfied")
                     return False
                 dep_task = completed_tasks_by_id[dep_id]
-                if dep_task.status != "completed":
+                dep_task_id = str(dep_task.id)
+                # If dependency is marked for re-execution, check if it's actually completed
+                if dep_task_id in self._tasks_to_reexecute:
+                    # If it's completed, we can use the result even if marked for re-execution
+                    if dep_task.status == "completed":
+                        logger.info(f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed, marked for re-execution but result available)")
+                    else:
+                        logger.info(f"❌ Task {task.id} dependency {dep_id} is marked for re-execution and not completed yet (status: {dep_task.status})")
+                        return False
+                elif dep_task.status != "completed":
                     logger.info(f"❌ Task {task.id} dependency {dep_id} found but not completed (status: {dep_task.status})")
                     return False
+                else:
+                    logger.info(f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed)")
         
         logger.info(f"✅ All dependencies satisfied for task {task.id}")
         return True

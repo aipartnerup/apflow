@@ -87,6 +87,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Protocol handlers are now thin wrappers around core execution logic, making the system more library-friendly
   - Improved code reusability and maintainability by centralizing execution logic in `TaskExecutor`
 
+- **Task Re-execution Support**
+  - Added support for re-executing failed tasks via `tasks.execute` endpoint
+  - Failed tasks can now be re-executed by calling `tasks.execute` with the failed task's ID
+  - When re-executing a task, all its dependency tasks are also re-executed (even if they are completed) to ensure consistency
+  - Only `pending` and `failed` status tasks are executed; `completed` and `in_progress` tasks are skipped unless marked for re-execution
+  - Dependency satisfaction logic updated to allow completed tasks marked for re-execution to satisfy dependencies (results are available)
+  - Newly created tasks (status: `pending`) are not marked for re-execution and execute normally
+
 - **CLI Command Improvements**
   - `serve` command now accepts options directly (e.g., `apflow serve --port 8000`) without requiring `start` subcommand
   - `serve start` subcommand still works for backward compatibility

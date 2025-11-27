@@ -121,12 +121,17 @@ class TaskRepository:
         # Add custom fields from kwargs if they exist as columns in the TaskModel
         # This allows users to pass custom fields like project_id, department, etc.
         # Note: 'id' should not be passed via kwargs, use the id parameter instead
+        # Note: 'status' should not be overridden from kwargs for new tasks (always starts as 'pending')
         for key, value in kwargs.items():
             if key == "id":
                 logger.warning(
                     "id should be passed as a named parameter, not via kwargs. "
                     "Ignoring id from kwargs."
                 )
+                continue
+            elif key == "status":
+                # Status is always set to 'pending' for new tasks, ignore status from kwargs
+                logger.debug(f"Ignoring status '{value}' from kwargs - new tasks always start as 'pending'")
                 continue
             elif hasattr(self.task_model_class, key) or key in self.task_model_class.__table__.columns:
                 task_data[key] = value

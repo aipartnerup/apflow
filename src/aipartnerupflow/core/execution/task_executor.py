@@ -97,6 +97,57 @@ class TaskExecutor:
             f"post_hooks: {len(self.post_hooks)})"
         )
 
+    def _mark_tasks_for_reexecution(self, task_tree: TaskTreeNode) -> set[str]:
+        """
+        Mark tasks in the task tree that need re-execution
+        
+        Only marks tasks that are:
+        - failed: Always need re-execution
+        - completed: Need re-execution when their dependent tasks are re-executed
+        
+        Does NOT mark pending tasks (newly created tasks should execute normally).
+        
+        Args:
+            task_tree: Root TaskTreeNode to mark
+            
+        Returns:
+            Set of task IDs marked for re-execution
+        """
+        tasks_to_reexecute = set()
+        
+        def collect_task_ids(node: TaskTreeNode):
+            """Recursively collect task IDs that need re-execution"""
+            task_status = node.task.status
+            task_id = str(node.task.id)
+            task_name = getattr(node.task, 'name', 'unknown')
+            
+            # Only mark failed or completed tasks for re-execution
+            # Pending tasks should execute normally without re-execution marker
+            if task_status == "failed":
+                tasks_to_reexecute.add(task_id)
+                logger.debug(f"Marked failed task {task_id} ({task_name}) for re-execution")
+            elif task_status == "completed":
+                # Mark completed tasks for re-execution to ensure dependencies are re-executed
+                # when a dependent task is re-executed
+                tasks_to_reexecute.add(task_id)
+                logger.debug(f"Marked completed task {task_id} ({task_name}) for re-execution")
+            elif task_status == "pending":
+                # Pending tasks should NOT be marked for re-execution
+                logger.debug(f"Skipping pending task {task_id} ({task_name}) - will execute normally")
+            else:
+                # in_progress or other statuses
+                logger.debug(f"Skipping task {task_id} ({task_name}) with status {task_status} - will execute normally")
+            
+            for child in node.children:
+                collect_task_ids(child)
+        
+        collect_task_ids(task_tree)
+        if tasks_to_reexecute:
+            logger.info(f"Marked {len(tasks_to_reexecute)} tasks for re-execution: {list(tasks_to_reexecute)}")
+        else:
+            logger.debug("No tasks marked for re-execution (all tasks are pending or in_progress)")
+        return tasks_to_reexecute
+    
     async def execute_task_tree(
         self,
         task_tree: TaskTreeNode,
@@ -125,6 +176,10 @@ class TaskExecutor:
         await self.start_task_tracking(root_task_id)
         
         try:
+            # Mark all tasks in the tree for re-execution
+            # This ensures failed tasks and their dependencies are re-executed
+            tasks_to_reexecute = self._mark_tasks_for_reexecution(task_tree)
+            
             # Create TaskManager with hooks (cached at initialization)
             # In production, hooks are registered at application startup before TaskExecutor creation
             # Pass shared executor_instances so TaskManager can store executors for cancellation
@@ -135,6 +190,9 @@ class TaskExecutor:
                 post_hooks=self.post_hooks,
                 executor_instances=self._executor_instances  # Pass shared executor instances
             )
+            
+            # Set tasks to re-execute in TaskManager
+            task_manager._tasks_to_reexecute = tasks_to_reexecute
             
             if use_streaming and streaming_callbacks_context:
                 task_manager.stream = True
