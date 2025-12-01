@@ -88,7 +88,19 @@ pip install aipartnerupflow[postgres]
 pip install aipartnerupflow[all]
 ```
 
-## Quick Start
+## 🚀 Quick Start
+
+Get started with aipartnerupflow in minutes!
+
+### Installation
+
+```bash
+# Minimal installation (core only)
+pip install aipartnerupflow
+
+# With all features
+pip install aipartnerupflow[all]
+```
 
 ### As a Library (Pure Core)
 
@@ -292,25 +304,50 @@ See [docs/architecture/DIRECTORY_STRUCTURE.md](docs/architecture/DIRECTORY_STRUC
 
 **Note**: For examples and learning templates, see the test cases in `tests/integration/` and `tests/extensions/`.
 
-## Documentation
+## 📚 Documentation
 
-Full documentation is available at [docs.aipartnerup.com](https://docs.aipartnerup.com).
+**Quick Links:**
+- **[📖 Full Documentation](docs/index.md)** - Complete documentation index
+- **[🚀 Quick Start](docs/getting-started/quick-start.md)** - Get running in 10 minutes
+- **[📘 Tutorials](docs/tutorials/)** - Step-by-step tutorials
+- **[📝 Guides](docs/guides/)** - Comprehensive guides
+- **[💡 Examples](docs/examples/)** - Practical examples
+- **[🔧 API Reference](docs/api/)** - Complete API documentation
 
-## License
+**For New Users:**
+- Start with [Getting Started](docs/getting-started/index.md)
+- Follow the [Quick Start Guide](docs/getting-started/quick-start.md)
+- Try the [First Steps Tutorial](docs/tutorials/tutorial-01-first-steps.md)
+
+**For Developers:**
+- [Task Orchestration Guide](docs/guides/task-orchestration.md)
+- [Custom Tasks Guide](docs/guides/custom-tasks.md)
+- [Best Practices](docs/guides/best-practices.md)
+- [API Reference](docs/api/python.md)
+
+**For Contributors:**
+- [Development Setup](docs/development/setup.md)
+- [Contributing Guide](docs/development/contributing.md)
+- [Architecture Overview](docs/architecture/overview.md)
+
+Full documentation is also available at [docs.aipartnerup.com](https://docs.aipartnerup.com).
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see our [Contributing Guide](docs/development/contributing.md) for setup instructions and contribution guidelines.
+
+## 📄 License
 
 Apache-2.0
 
-## Contributing
+## 🔗 Links
 
-Contributions are welcome! Please see our [development guide](docs/development/DEVELOPMENT.md) for setup instructions and contribution guidelines.
-
-## Documentation
-
-- **User Guide**: This README
-- **Architecture Guide**: [docs/architecture/ARCHITECTURE.md](docs/architecture/ARCHITECTURE.md) - Detailed architecture documentation
-- **Development Guide**: [docs/development/DEVELOPMENT.md](docs/development/DEVELOPMENT.md) - For developers working on the project
-
-See [docs/index.md](docs/index.md) for complete documentation index.
+- **Documentation**: [docs/index.md](docs/index.md) - Complete documentation
+- **Website**: [aipartnerup.com](https://aipartnerup.com)
+- **GitHub**: [aipartnerup/aipartnerupflow](https://github.com/aipartnerup/aipartnerupflow)
+- **PyPI**: [aipartnerupflow](https://pypi.org/project/aipartnerupflow/)
+- **Issues**: [GitHub Issues](https://github.com/aipartnerup/aipartnerupflow/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/aipartnerup/aipartnerupflow/discussions)
 
 ## Links
 

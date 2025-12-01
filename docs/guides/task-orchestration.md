@@ -1,99 +1,238 @@
 # Task Orchestration Guide
 
-This guide explains how to use aipartnerupflow's task orchestration features to create and manage complex task trees with dependencies and priorities.
+Master task orchestration in aipartnerupflow. Learn how to create complex workflows, manage dependencies, and optimize execution.
 
-## Overview
+## What You'll Learn
 
-Task orchestration in aipartnerupflow allows you to:
-- Create hierarchical task trees
-- Manage task dependencies
-- Control execution order with priorities
-- Track task lifecycle and status
-- Handle task failures and retries
+- ✅ How to build task trees and hierarchies
+- ✅ How dependencies control execution order
+- ✅ How priorities affect scheduling
+- ✅ Common patterns and best practices
+- ✅ Advanced orchestration techniques
+
+## Table of Contents
+
+1. [Core Concepts](#core-concepts)
+2. [Creating Task Trees](#creating-task-trees)
+3. [Dependencies](#dependencies)
+4. [Priorities](#priorities)
+5. [Common Patterns](#common-patterns)
+6. [Best Practices](#best-practices)
+7. [Advanced Topics](#advanced-topics)
 
 ## Core Concepts
 
+### What is Task Orchestration?
+
+Task orchestration is the process of coordinating multiple tasks to work together. Think of it like conducting an orchestra - each musician (task) plays their part, but the conductor (TaskManager) ensures they play in harmony.
+
+### Key Components
+
+**TaskManager**: The orchestrator that coordinates everything
+- Manages task execution
+- Resolves dependencies
+- Handles priorities
+- Tracks status
+
+**Task**: A unit of work
+- Has an executor (the code that runs)
+- Has inputs (parameters)
+- Has a status (pending → in_progress → completed)
+
+**Task Tree**: The structure that organizes tasks
+- Hierarchical (parent-child relationships)
+- Can have dependencies (execution order)
+- Can have priorities (scheduling)
+
 ### Task Tree Structure
 
-A task tree is a hierarchical structure where:
-- **Root Task**: The top-level task (no parent)
-- **Child Tasks**: Tasks that have a parent task
-- **Dependencies**: Tasks that must complete before another task can execute
-- **Priority**: Controls execution order (lower numbers execute first)
+```
+Root Task
+│
+├── Child Task 1 (depends on nothing)
+│   │
+│   └── Grandchild Task 1.1 (depends on Child Task 1)
+│
+├── Child Task 2 (depends on nothing, runs in parallel with Child Task 1)
+│
+└── Child Task 3 (depends on Child Task 1 and Child Task 2)
+```
 
-**Important: Parent-Child vs Dependencies**
+### Critical Distinction: Parent-Child vs Dependencies
 
-- **Parent-Child Relationship (`parent_id`)**: Used only for **organizing** the task tree structure. It does NOT affect execution order. Parent-child relationships are purely organizational and help visualize the task hierarchy.
+**⚠️ This is the most important concept to understand!**
 
-- **Dependencies (`dependencies`)**: These **determine execution order**. A task will only execute when all its required dependencies are satisfied (completed). Dependencies are the mechanism that controls when tasks run, not parent-child relationships.
+#### Parent-Child Relationship (`parent_id`)
+
+**Purpose**: Organization only - like folders in a file system
+
+- Used to **organize** the task tree structure
+- Helps visualize the hierarchy
+- **Does NOT affect execution order**
+- Purely organizational
 
 **Example:**
 ```python
 # Task B is a child of Task A (organizational)
-# But Task B depends on Task C (execution order)
 task_a = create_task(name="task_a")
 task_b = create_task(name="task_b", parent_id=task_a.id)  # Child of A
+```
+
+#### Dependencies (`dependencies`)
+
+**Purpose**: Execution control - determines when tasks run
+
+- **Determines execution order**
+- A task waits for its dependencies to complete
+- Controls the actual execution sequence
+- **This is what makes tasks wait for each other**
+
+**Example:**
+```python
+# Task B depends on Task C (execution order)
+task_c = create_task(name="task_c")
+task_b = create_task(
+    name="task_b",
+    dependencies=[{"id": task_c.id, "required": True}]  # Waits for C
+)
+# Execution order: C runs first, then B
+```
+
+#### Combined Example
+
+```python
+# Task B is a child of Task A (organizational)
+# But Task B depends on Task C (execution order)
+task_a = create_task(name="task_a")
 task_c = create_task(name="task_c")
 task_b = create_task(
     name="task_b",
     parent_id=task_a.id,  # Organizational: B is child of A
     dependencies=[{"id": task_c.id, "required": True}]  # Execution: B waits for C
 )
-# Execution order: C executes first, then B (regardless of parent-child relationship)
+# Execution order: C executes first, then B (regardless of parent-child)
 ```
+
+**Visual Representation:**
+```
+Task A (root)
+│
+└── Task B (child of A, but depends on C)
+    │
+    └── (depends on) Task C (not a child, but must run first!)
+```
+
+**Key Takeaway**: 
+- Use `parent_id` for **organization** (like folders)
+- Use `dependencies` for **execution order** (when tasks run)
 
 ### Task Lifecycle
 
-Tasks go through the following states:
-1. **pending**: Task is created but not yet executed
-2. **in_progress**: Task is currently executing
-3. **completed**: Task finished successfully
-4. **failed**: Task execution failed
-5. **cancelled**: Task was cancelled
+Tasks go through these states:
+
+```
+pending → in_progress → completed
+                ↓
+            failed
+                ↓
+            cancelled
+```
+
+**Status Meanings:**
+- **pending**: Created but not executed yet
+- **in_progress**: Currently executing
+- **completed**: Finished successfully
+- **failed**: Execution failed (check `task.error`)
+- **cancelled**: Was cancelled (check `task.error`)
 
 ## Creating Task Trees
 
 ### Basic Task Tree
 
+The simplest possible tree - a single task:
+
 ```python
+import asyncio
 from aipartnerupflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
     task_manager = TaskManager(db)
     
-    # Create root task
-    root_task = await task_manager.task_repository.create_task(
-        name="root_task",
+    # Create a task
+    task = await task_manager.task_repository.create_task(
+        name="system_info_executor",  # Executor ID
         user_id="user123",
-        priority=1
-    )
-    
-    # Create child task
-    child_task = await task_manager.task_repository.create_task(
-        name="child_task",
-        user_id="user123",
-        parent_id=root_task.id,
         priority=2,
-        inputs={"data": "example"}
+        inputs={"resource": "cpu"}
     )
     
-    # Build task tree
-    task_tree = TaskTreeNode(root_task)
-    task_tree.add_child(TaskTreeNode(child_task))
+    # Build task tree (even single tasks need a tree)
+    task_tree = TaskTreeNode(task)
     
     # Execute
-    result = await task_manager.distribute_task_tree(task_tree)
-    print(f"Result: {result}")
+    await task_manager.distribute_task_tree(task_tree)
+    
+    # Get result
+    result = await task_manager.task_repository.get_task_by_id(task.id)
+    print(f"Status: {result.status}")
+    print(f"Result: {result.result}")
 
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
 ```
 
-### Task Dependencies
+### Hierarchical Task Tree
 
-Dependencies ensure tasks execute in the correct order:
+Create a tree with parent-child relationships:
+
+```python
+# Create root task
+root_task = await task_manager.task_repository.create_task(
+    name="root_task",
+    user_id="user123",
+    priority=1
+)
+
+# Create child tasks
+child1 = await task_manager.task_repository.create_task(
+    name="child_task_1",
+    user_id="user123",
+    parent_id=root_task.id,  # Child of root
+    priority=2,
+    inputs={"step": 1}
+)
+
+child2 = await task_manager.task_repository.create_task(
+    name="child_task_2",
+    user_id="user123",
+    parent_id=root_task.id,  # Also child of root
+    priority=2,
+    inputs={"step": 2}
+)
+
+# Build tree
+root = TaskTreeNode(root_task)
+root.add_child(TaskTreeNode(child1))
+root.add_child(TaskTreeNode(child2))
+
+# Execute
+await task_manager.distribute_task_tree(root)
+```
+
+**Visual Structure:**
+```
+Root Task
+│
+├── Child Task 1
+└── Child Task 2
+```
+
+## Dependencies
+
+Dependencies are the mechanism that controls execution order. They ensure tasks run in the correct sequence.
+
+### Basic Dependency
 
 ```python
 # Task 1: Fetch data
@@ -109,155 +248,92 @@ process_task = await task_manager.task_repository.create_task(
     name="process_data",
     user_id="user123",
     parent_id=fetch_task.id,
-    dependencies=[{"id": fetch_task.id, "required": True}],
+    dependencies=[{"id": fetch_task.id, "required": True}],  # Waits for fetch_task
     priority=2,
     inputs={"operation": "analyze"}
-)
-
-# Task 3: Save results (depends on Task 2)
-save_task = await task_manager.task_repository.create_task(
-    name="save_results",
-    user_id="user123",
-    parent_id=process_task.id,
-    dependencies=[{"id": process_task.id, "required": True}],
-    priority=3,
-    inputs={"destination": "database"}
 )
 
 # Build tree
 task_tree = TaskTreeNode(fetch_task)
 task_tree.add_child(TaskTreeNode(process_task))
-task_tree.children[0].add_child(TaskTreeNode(save_task))
 
-# Execute (tasks will execute in order: fetch -> process -> save)
-result = await task_manager.distribute_task_tree(task_tree)
+# Execute
+# Execution order: fetch_task → process_task (automatic!)
+await task_manager.distribute_task_tree(task_tree)
 ```
 
-### Dependency Types
-
-#### Required Dependencies
-
-Required dependencies must complete successfully before the dependent task can execute:
-
-```python
-dependencies=[
-    {"id": "task_1", "required": True}  # Task must complete successfully
-]
+**Execution Flow:**
+```
+Fetch Task (runs first)
+    ↓
+Process Task (waits for Fetch, then runs)
 ```
 
-If a required dependency fails, the dependent task will not execute.
+### Sequential Pipeline
 
-#### Optional Dependencies
-
-Optional dependencies allow execution even if the dependency fails:
+Create a pipeline where each task depends on the previous:
 
 ```python
-dependencies=[
-    {"id": "task_1", "required": False}  # Task can execute even if dependency fails
-]
-```
-
-### Priority Scheduling
-
-Priority controls execution order. Lower numbers execute first:
-
-```python
-# Priority levels:
-# 0 = urgent (highest priority)
-# 1 = high
-# 2 = normal (default)
-# 3 = low (lowest priority)
-
-task1 = await task_manager.task_repository.create_task(
-    name="urgent_task",
+# Step 1: Fetch
+fetch = await task_manager.task_repository.create_task(
+    name="fetch_data",
     user_id="user123",
-    priority=0  # Executes first
+    priority=1
 )
 
-task2 = await task_manager.task_repository.create_task(
-    name="normal_task",
+# Step 2: Process (depends on fetch)
+process = await task_manager.task_repository.create_task(
+    name="process_data",
     user_id="user123",
-    priority=2  # Executes after urgent tasks
+    parent_id=fetch.id,
+    dependencies=[{"id": fetch.id, "required": True}],
+    priority=2
 )
-```
 
-Tasks with the same priority execute in the order they are added to the tree.
-
-## Task Manager API
-
-### Creating Tasks
-
-```python
-task = await task_manager.task_repository.create_task(
-    name="task_name",           # Required: Task name (executor identifier)
-    user_id="user123",          # Required: User ID
-    parent_id=None,             # Optional: Parent task ID
-    priority=2,                 # Optional: Priority (default: 2)
-    dependencies=[],            # Optional: List of dependencies
-    inputs={},                  # Optional: Input parameters
-    schemas={},                 # Optional: Task schemas
-    status="pending"            # Optional: Initial status (default: "pending")
+# Step 3: Save (depends on process)
+save = await task_manager.task_repository.create_task(
+    name="save_results",
+    user_id="user123",
+    parent_id=fetch.id,
+    dependencies=[{"id": process.id, "required": True}],
+    priority=3
 )
+
+# Build pipeline
+root = TaskTreeNode(fetch)
+root.add_child(TaskTreeNode(process))
+root.add_child(TaskTreeNode(save))
+
+# Execute
+# Order: Fetch → Process → Save (automatic!)
+await task_manager.distribute_task_tree(root)
 ```
 
-### Building Task Trees
-
-```python
-# Create TaskTreeNode from TaskModel
-root_node = TaskTreeNode(root_task)
-
-# Add child nodes
-root_node.add_child(TaskTreeNode(child_task))
-
-# Access children
-for child in root_node.children:
-    print(f"Child: {child.task.name}")
+**Execution Flow:**
+```
+Fetch → Process → Save
 ```
 
-### Executing Task Trees
+### Multiple Dependencies
+
+A task can depend on multiple other tasks:
 
 ```python
-# Execute without streaming
-result = await task_manager.distribute_task_tree(task_tree)
-
-# Execute with streaming (for real-time updates)
-await task_manager.distribute_task_tree_with_streaming(task_tree)
-```
-
-### Task Status and Results
-
-```python
-# Get task by ID
-task = await task_manager.task_repository.get_task_by_id(task_id)
-
-# Check status
-print(f"Status: {task.status}")
-print(f"Progress: {task.progress}")
-print(f"Result: {task.result}")
-print(f"Error: {task.error}")
-```
-
-## Advanced Patterns
-
-### Parallel Execution
-
-Tasks without dependencies can execute in parallel:
-
-```python
-# Task 1 and Task 2 can execute in parallel
+# Task 1
 task1 = await task_manager.task_repository.create_task(
     name="task1",
     user_id="user123",
     priority=1
 )
 
+# Task 2
 task2 = await task_manager.task_repository.create_task(
     name="task2",
     user_id="user123",
     priority=1
 )
 
-# Task 3 depends on both
+# Task 3 depends on BOTH Task 1 and Task 2
 task3 = await task_manager.task_repository.create_task(
     name="task3",
     user_id="user123",
@@ -270,19 +346,400 @@ task3 = await task_manager.task_repository.create_task(
 )
 ```
 
-### Conditional Execution
+**Execution Flow:**
+```
+Task 1 ──┐
+         ├──→ Task 3 (waits for both)
+Task 2 ──┘
+```
 
-Use optional dependencies for conditional execution:
+Task 3 will only execute after **both** Task 1 and Task 2 complete.
+
+### Dependency Types
+
+#### Required Dependencies
+
+Required dependencies must complete successfully:
 
 ```python
-# Task 2 can execute even if Task 1 fails
-task2 = await task_manager.task_repository.create_task(
+dependencies=[
+    {"id": task1.id, "required": True}  # Must complete successfully
+]
+```
+
+**Behavior:**
+- Task waits for dependency to complete
+- If dependency fails, dependent task does NOT execute
+- This is the default behavior
+
+#### Optional Dependencies
+
+Optional dependencies allow execution even if dependency fails:
+
+```python
+dependencies=[
+    {"id": task1.id, "required": False}  # Can execute even if task1 fails
+]
+```
+
+**Behavior:**
+- Task waits for dependency to complete (or fail)
+- If dependency fails, dependent task still executes
+- Useful for fallback scenarios
+
+**Example:**
+```python
+# Primary task
+primary = await task_manager.task_repository.create_task(
+    name="primary_task",
+    user_id="user123",
+    priority=1
+)
+
+# Fallback task (runs even if primary fails)
+fallback = await task_manager.task_repository.create_task(
     name="fallback_task",
     user_id="user123",
-    dependencies=[{"id": task1.id, "required": False}],
+    dependencies=[{"id": primary.id, "required": False}],  # Optional
     priority=2
 )
 ```
+
+## Priorities
+
+Priorities control execution order when multiple tasks are ready to run.
+
+### Priority Levels
+
+```
+0 = Urgent (highest priority)
+1 = High
+2 = Normal (default)
+3 = Low (lowest priority)
+```
+
+**Rule**: Lower numbers = higher priority = execute first
+
+### Basic Priority
+
+```python
+# Urgent task (executes first)
+urgent = await task_manager.task_repository.create_task(
+    name="urgent_task",
+    user_id="user123",
+    priority=0  # Highest priority
+)
+
+# Normal task (executes after urgent)
+normal = await task_manager.task_repository.create_task(
+    name="normal_task",
+    user_id="user123",
+    priority=2  # Normal priority
+)
+```
+
+**Execution Order:**
+1. Urgent task (priority 0)
+2. Normal task (priority 2)
+
+### Priority with Dependencies
+
+**Important**: Dependencies take precedence over priorities!
+
+```python
+# Task 1 (priority 2, no dependencies)
+task1 = await task_manager.task_repository.create_task(
+    name="task1",
+    user_id="user123",
+    priority=2
+)
+
+# Task 2 (priority 0, depends on Task 1)
+task2 = await task_manager.task_repository.create_task(
+    name="task2",
+    user_id="user123",
+    dependencies=[{"id": task1.id, "required": True}],
+    priority=0  # Higher priority, but still waits for Task 1!
+)
+```
+
+**Execution Order:**
+1. Task 1 (priority 2, but no dependencies - runs first)
+2. Task 2 (priority 0, but waits for Task 1 - runs second)
+
+**Key Point**: Even though Task 2 has higher priority, it waits for Task 1 because of the dependency!
+
+### Priority Best Practices
+
+1. **Use consistently**: Establish priority conventions in your project
+2. **Don't overuse**: Most tasks should use priority 2 (normal)
+3. **Reserve 0 for emergencies**: Only use priority 0 for critical tasks
+4. **Remember dependencies**: Priorities only matter when tasks are ready to run
+
+## Common Patterns
+
+### Pattern 1: Sequential Pipeline
+
+**Use Case**: Steps that must happen in order
+
+```
+Task 1 → Task 2 → Task 3
+```
+
+**Implementation:**
+```python
+task1 = create_task(name="step1")
+task2 = create_task(
+    name="step2",
+    dependencies=[{"id": task1.id, "required": True}]
+)
+task3 = create_task(
+    name="step3",
+    dependencies=[{"id": task2.id, "required": True}]
+)
+```
+
+**Examples:**
+- Data pipeline: Fetch → Process → Save
+- Build process: Compile → Test → Deploy
+- ETL: Extract → Transform → Load
+
+### Pattern 2: Fan-Out (Parallel)
+
+**Use Case**: One task spawns multiple independent tasks
+
+```
+Root Task
+│
+├── Task 1 (parallel)
+├── Task 2 (parallel)
+└── Task 3 (parallel)
+```
+
+**Implementation:**
+```python
+root = create_task(name="root")
+task1 = create_task(name="task1", parent_id=root.id)  # No dependencies
+task2 = create_task(name="task2", parent_id=root.id)  # No dependencies
+task3 = create_task(name="task3", parent_id=root.id)  # No dependencies
+```
+
+**Examples:**
+- Process multiple files in parallel
+- Call multiple APIs simultaneously
+- Run independent analyses
+
+### Pattern 3: Fan-In (Converge)
+
+**Use Case**: Multiple tasks converge to one final task
+
+```
+Task 1 ──┐
+Task 2 ──├──→ Final Task
+Task 3 ──┘
+```
+
+**Implementation:**
+```python
+task1 = create_task(name="task1")
+task2 = create_task(name="task2")
+task3 = create_task(name="task3")
+
+final = create_task(
+    name="final",
+    dependencies=[
+        {"id": task1.id, "required": True},
+        {"id": task2.id, "required": True},
+        {"id": task3.id, "required": True}
+    ]
+)
+```
+
+**Examples:**
+- Aggregate results from multiple sources
+- Combine data from parallel processing
+- Merge multiple analyses
+
+### Pattern 4: Complex Workflow
+
+**Use Case**: Combination of patterns
+
+```
+Root
+│
+├── Task 1 ──┐
+│           │
+├── Task 2 ─┼──→ Task 4 ──┐
+│           │              │
+└── Task 3 ─┘              ├──→ Final
+                            │
+                            └──→ Task 5
+```
+
+**Implementation:**
+```python
+root = create_task(name="root")
+task1 = create_task(name="task1", parent_id=root.id)
+task2 = create_task(name="task2", parent_id=root.id)
+task3 = create_task(name="task3", parent_id=root.id)
+
+task4 = create_task(
+    name="task4",
+    parent_id=root.id,
+    dependencies=[
+        {"id": task1.id, "required": True},
+        {"id": task2.id, "required": True},
+        {"id": task3.id, "required": True}
+    ]
+)
+
+task5 = create_task(name="task5", parent_id=root.id)
+
+final = create_task(
+    name="final",
+    parent_id=root.id,
+    dependencies=[
+        {"id": task4.id, "required": True},
+        {"id": task5.id, "required": True}
+    ]
+)
+```
+
+### Pattern 5: Conditional Execution
+
+**Use Case**: Fallback or alternative paths
+
+```
+Primary Task ──┐
+               ├──→ Success Task
+               │
+Fallback Task ─┘
+```
+
+**Implementation:**
+```python
+primary = create_task(name="primary")
+fallback = create_task(name="fallback")
+
+success = create_task(
+    name="success",
+    dependencies=[
+        {"id": primary.id, "required": False},  # Optional
+        {"id": fallback.id, "required": False}  # Optional
+    ]
+)
+```
+
+## Best Practices
+
+### 1. Use Meaningful Task Names
+
+**Good:**
+```python
+name="fetch_user_data"
+name="process_payment"
+name="send_notification_email"
+```
+
+**Bad:**
+```python
+name="task1"
+name="do_stuff"
+name="x"
+```
+
+### 2. Set Appropriate Priorities
+
+**Convention:**
+- `0`: Critical/emergency tasks only
+- `1`: High priority business tasks
+- `2`: Normal tasks (default)
+- `3`: Low priority/background tasks
+
+**Example:**
+```python
+# Critical payment processing
+payment = create_task(name="process_payment", priority=0)
+
+# Normal data processing
+data = create_task(name="process_data", priority=2)
+
+# Background cleanup
+cleanup = create_task(name="cleanup", priority=3)
+```
+
+### 3. Handle Dependencies Explicitly
+
+**Always specify dependencies explicitly:**
+
+**Good:**
+```python
+task2 = create_task(
+    name="task2",
+    dependencies=[{"id": task1.id, "required": True}]  # Explicit
+)
+```
+
+**Bad:**
+```python
+# Relying on implicit order - don't do this!
+task1 = create_task(...)
+task2 = create_task(...)  # No dependency, but hoping task1 runs first
+```
+
+### 4. Use Parent-Child for Organization, Dependencies for Execution
+
+**Remember:**
+- `parent_id`: Organization (like folders)
+- `dependencies`: Execution order (when tasks run)
+
+**Good:**
+```python
+root = create_task(name="root")
+child = create_task(
+    name="child",
+    parent_id=root.id,  # Organizational
+    dependencies=[{"id": "other_task", "required": True}]  # Execution
+)
+```
+
+**Bad:**
+```python
+# Don't rely on parent-child for execution order!
+child = create_task(
+    name="child",
+    parent_id=root.id  # This doesn't guarantee execution order!
+)
+```
+
+### 5. Handle Errors Gracefully
+
+**Always check task status:**
+
+```python
+await task_manager.distribute_task_tree(task_tree)
+
+# Check all tasks
+for task in tasks:
+    result = await task_manager.task_repository.get_task_by_id(task.id)
+    if result.status == "failed":
+        print(f"Task {task.id} failed: {result.error}")
+        # Handle failure appropriately
+```
+
+### 6. Keep Task Trees Manageable
+
+**Good:**
+- Break complex workflows into smaller trees
+- Use clear naming conventions
+- Document complex dependencies
+
+**Bad:**
+- Creating massive trees with hundreds of tasks
+- Unclear dependency chains
+- No documentation
+
+## Advanced Topics
 
 ### Task Cancellation
 
@@ -295,110 +752,43 @@ result = await task_manager.cancel_task(
 )
 ```
 
-## Best Practices
+**Note**: Not all executors support cancellation. Check `executor.cancelable` property.
 
-### 1. Use Meaningful Task Names
+### Task Re-execution
 
-Task names should clearly indicate what the task does:
+Tasks can be marked for re-execution if dependencies fail:
 
 ```python
-# Good
-name="fetch_user_data"
-name="process_payment"
-name="send_notification"
-
-# Bad
-name="task1"
-name="do_stuff"
-name="x"
+# If a dependency fails, dependent tasks are marked for re-execution
+# This allows retrying failed workflows
 ```
 
-### 2. Set Appropriate Priorities
+### Streaming Execution
 
-Use priority levels consistently:
-- `0`: Critical tasks that must execute first
-- `1`: High priority tasks
-- `2`: Normal tasks (default)
-- `3`: Low priority tasks
-
-### 3. Handle Dependencies Explicitly
-
-Always specify dependencies explicitly:
+Get real-time updates during execution:
 
 ```python
-# Good: Explicit dependency
-dependencies=[{"id": task1.id, "required": True}]
-
-# Bad: Implicit dependency (relying on execution order)
-# No dependency specified
-```
-
-### 4. Use Parent-Child Relationships for Organization, Dependencies for Execution
-
-**Parent-child relationships (`parent_id`)** are for organizing the task tree structure:
-- Use them to group related tasks visually
-- They help understand the task hierarchy
-- They do NOT affect execution order
-
-**Dependencies (`dependencies`)** control execution order:
-- Use them to specify which tasks must complete before another task runs
-- They determine the actual execution sequence
-- A task executes when its dependencies are satisfied, regardless of parent-child relationships
-
-```python
-# Good: Clear organization with explicit dependencies
-root_task = create_task(name="root")
-child_task = create_task(
-    name="child",
-    parent_id=root_task.id,  # Organizational: child of root
-    dependencies=[{"id": "other_task", "required": True}]  # Execution: waits for other_task
+# Execute with streaming
+await task_manager.distribute_task_tree_with_streaming(
+    task_tree,
+    use_callback=True
 )
-
-# Bad: Relying on parent-child for execution order
-# Parent-child does NOT guarantee execution order
 ```
 
-### 5. Handle Errors Gracefully
+### Dependency Resolution
 
-Check task status and handle failures:
-
-```python
-result = await task_manager.distribute_task_tree(task_tree)
-
-# Check if any tasks failed
-if task.status == "failed":
-    print(f"Task {task.id} failed: {task.error}")
-    # Handle failure appropriately
-```
-
-## Common Patterns
-
-### Pattern 1: Sequential Pipeline
+Dependency results are automatically merged into task inputs:
 
 ```python
-# Tasks execute one after another
-task1 -> task2 -> task3
-```
+# Task 1 result
+task1_result = {"data": [1, 2, 3]}
 
-### Pattern 2: Fan-Out
-
-```python
-# One task spawns multiple parallel tasks
-root_task -> [task1, task2, task3]
-```
-
-### Pattern 3: Fan-In
-
-```python
-# Multiple tasks converge to one task
-[task1, task2, task3] -> final_task
-```
-
-### Pattern 4: Complex Workflow
-
-```python
-# Combination of patterns
-root -> [task1, task2] -> task3 -> [task4, task5] -> final
+# Task 2 automatically receives task1_result in its inputs
+task2 = create_task(
+    name="task2",
+    dependencies=[{"id": task1.id, "required": True}],
+    inputs={"additional": "value"}  # Merged with task1_result
+)
 ```
 
 ## Troubleshooting
@@ -408,31 +798,48 @@ root -> [task1, task2] -> task3 -> [task4, task5] -> final
 **Problem**: Task remains in "pending" status
 
 **Solutions**:
-- Check if dependencies are completed
-- Verify task name matches registered executor
-- Check for errors in parent tasks
+1. Check if dependencies are completed
+2. Verify task name matches registered executor
+3. Check for errors in parent tasks
+4. Verify task is in the tree being executed
 
 ### Dependency Not Satisfied
 
 **Problem**: Task waiting for dependency that never completes
 
 **Solutions**:
-- Verify dependency task ID is correct
-- Check if dependency task failed
-- Ensure dependency task is in the same tree
+1. Verify dependency task ID is correct
+2. Check if dependency task failed
+3. Ensure dependency task is in the same tree
+4. Check dependency task status
 
 ### Priority Not Working
 
 **Problem**: Tasks not executing in expected order
 
 **Solutions**:
-- Verify priority values (lower = higher priority)
-- Check if dependencies override priority
-- Ensure tasks are at the same level in the tree
+1. Verify priority values (lower = higher priority)
+2. Check if dependencies override priority
+3. Ensure tasks are at the same level in the tree
+4. Remember: dependencies take precedence over priorities!
+
+### Task Stuck in "in_progress"
+
+**Problem**: Task never completes
+
+**Solutions**:
+1. Check if executor is hanging
+2. Verify executor supports cancellation
+3. Check for deadlocks in dependencies
+4. Review executor implementation
 
 ## Next Steps
 
-- Learn about [Custom Tasks](custom-tasks.md)
-- See [API Reference](api-reference.md) for detailed API documentation
-- Check [Examples](../examples/basic_task.md) for more patterns
+- **[Custom Tasks Guide](custom-tasks.md)** - Create your own executors
+- **[Basic Examples](../examples/basic_task.md)** - More practical examples
+- **[Best Practices Guide](best-practices.md)** - Advanced techniques
+- **[API Reference](../api/python.md)** - Complete API documentation
 
+---
+
+**Need help?** Check the [FAQ](faq.md) or [Quick Start Guide](../getting-started/quick-start.md)

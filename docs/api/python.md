@@ -1,15 +1,69 @@
-# Core API Reference
+# Python API Reference
 
-This document provides a complete reference for aipartnerupflow's core APIs.
+Complete reference for aipartnerupflow's Python API. This document lists all available APIs and how to use them.
+
+**For detailed implementation details, see:**
+- Source code: `src/aipartnerupflow/` (well-documented with docstrings)
+- Test cases: `tests/` (comprehensive examples of all features)
+
+## Table of Contents
+
+1. [Overview](#overview)
+2. [TaskManager](#taskmanager)
+3. [ExecutableTask](#executabletask)
+4. [BaseTask](#basetask)
+5. [TaskTreeNode](#tasktreenode)
+6. [TaskRepository](#taskrepository)
+7. [TaskExecutor](#taskexecutor)
+8. [TaskCreator](#taskcreator)
+9. [Extension Registry](#extension-registry)
+10. [Hooks](#hooks)
+11. [Common Patterns](#common-patterns)
 
 ## Overview
 
 The core API consists of:
-- **TaskManager**: Task orchestration and execution
+
+- **TaskManager**: Task orchestration and execution engine
 - **ExecutableTask**: Interface for all task executors
-- **TaskTreeNode**: Task tree structure
-- **TaskRepository**: Database operations
+- **BaseTask**: Recommended base class for custom executors
+- **TaskTreeNode**: Task tree structure representation
+- **TaskRepository**: Database operations for tasks
+- **TaskExecutor**: Singleton for task execution management
 - **TaskCreator**: Task tree creation from arrays
+- **ExtensionRegistry**: Extension discovery and management
+
+## Quick Start Example
+
+```python
+import asyncio
+from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+
+async def main():
+    # Create database session
+    db = create_session()
+    
+    # Create task manager
+    task_manager = TaskManager(db)
+    
+    # Create a task
+    task = await task_manager.task_repository.create_task(
+        name="system_info_executor",
+        user_id="user123",
+        inputs={"resource": "cpu"}
+    )
+    
+    # Build and execute task tree
+    task_tree = TaskTreeNode(task)
+    await task_manager.distribute_task_tree(task_tree)
+    
+    # Get result
+    result = await task_manager.task_repository.get_task_by_id(task.id)
+    print(f"Result: {result.result}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
 
 ## TaskManager
 
@@ -30,18 +84,13 @@ task_manager = TaskManager(
 )
 ```
 
-**Parameters**:
-- `db` (Session | AsyncSession): Database session
-- `root_task_id` (str, optional): Root task ID for streaming callbacks
-- `pre_hooks` (List[TaskPreHook], optional): Pre-execution hook functions
-- `post_hooks` (List[TaskPostHook], optional): Post-execution hook functions
-- `executor_instances` (Dict[str, Any], optional): Shared executor instances for cancellation
+**See**: `src/aipartnerupflow/core/execution/task_manager.py` for full implementation details.
 
-### Methods
+### Main Methods
 
 #### `distribute_task_tree(task_tree, use_callback=True)`
 
-Execute a task tree with proper dependency management and priority scheduling.
+Execute a task tree with dependency management and priority scheduling.
 
 ```python
 result = await task_manager.distribute_task_tree(
@@ -50,18 +99,7 @@ result = await task_manager.distribute_task_tree(
 ) -> TaskTreeNode
 ```
 
-**Parameters**:
-- `task_tree` (TaskTreeNode): Root task tree node
-- `use_callback` (bool): Whether to use callbacks (default: True)
-
-**Returns**: TaskTreeNode with execution results
-
-**Example**:
-```python
-task_tree = TaskTreeNode(root_task)
-task_tree.add_child(TaskTreeNode(child_task))
-result = await task_manager.distribute_task_tree(task_tree)
-```
+**See**: `tests/core/execution/test_task_manager.py` for comprehensive examples.
 
 #### `distribute_task_tree_with_streaming(task_tree, use_callback=True)`
 
@@ -74,12 +112,6 @@ await task_manager.distribute_task_tree_with_streaming(
 ) -> None
 ```
 
-**Parameters**:
-- `task_tree` (TaskTreeNode): Root task tree node
-- `use_callback` (bool): Whether to use callbacks (default: True)
-
-**Note**: Requires streaming callbacks to be configured.
-
 #### `cancel_task(task_id, error_message=None)`
 
 Cancel a running task execution.
@@ -91,511 +123,161 @@ result = await task_manager.cancel_task(
 ) -> Dict[str, Any]
 ```
 
-**Parameters**:
-- `task_id` (str): Task ID to cancel
-- `error_message` (str, optional): Optional error message
-
-**Returns**: Dictionary with cancellation result
-
-**Example**:
-```python
-result = await task_manager.cancel_task("task_123", "User requested cancellation")
-```
-
 ### Properties
 
 - `task_repository` (TaskRepository): Access to task repository for database operations
 - `streaming_callbacks` (StreamingCallbacks): Streaming callbacks instance
 
-## ExecutableTask
+**See**: Source code in `src/aipartnerupflow/core/execution/task_manager.py` for all available methods and detailed documentation.
 
-Abstract base class for all task executors.
+## BaseTask
 
-### Interface
+Recommended base class for creating custom executors. Provides automatic registration via decorator.
+
+### Usage
 
 ```python
-from aipartnerupflow import ExecutableTask
+from aipartnerupflow import BaseTask, executor_register
 from typing import Dict, Any
 
-class MyTask(ExecutableTask):
-    @property
-    def id(self) -> str:
-        """Unique identifier"""
-        return "my_task"
-    
-    @property
-    def name(self) -> str:
-        """Display name"""
-        return "My Task"
-    
-    @property
-    def description(self) -> str:
-        """Description"""
-        return "Task description"
+@executor_register()
+class MyExecutor(BaseTask):
+    id = "my_executor"
+    name = "My Executor"
+    description = "Does something useful"
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute task logic"""
         return {"status": "completed", "result": "..."}
     
     def get_input_schema(self) -> Dict[str, Any]:
-        """Return JSON Schema for inputs"""
         return {
             "type": "object",
-            "properties": {...}
+            "properties": {
+                "param": {"type": "string", "description": "Parameter"}
+            },
+            "required": ["param"]
         }
-    
-    async def cancel(self) -> Dict[str, Any]:
-        """Optional: Cancel execution"""
-        return {"status": "cancelled"}
 ```
 
-### Required Methods
+**See**: `tests/extensions/tools/test_tools_decorator.py` and `docs/guides/custom-tasks.md` for examples.
 
-#### `id` (property)
+## ExecutableTask
 
-Unique identifier for the task. Used for registration and references.
+Abstract base class for all task executors. Use `BaseTask` for simplicity, or `ExecutableTask` for more control.
 
-#### `name` (property)
+### Required Interface
 
-Human-readable name for the task.
-
-#### `description` (property)
-
-Description of what the task does.
-
-#### `execute(inputs)`
-
-Main execution logic. Must be async.
-
-**Parameters**:
-- `inputs` (Dict[str, Any]): Input parameters
-
-**Returns**: Dict[str, Any] with execution result
-
-#### `get_input_schema()`
-
-Return JSON Schema defining input parameters.
-
-**Returns**: Dict[str, Any] with JSON Schema
+- `id` (property): Unique identifier
+- `name` (property): Display name
+- `description` (property): Description
+- `execute(inputs)`: Main execution logic (async)
+- `get_input_schema()`: Return JSON Schema for inputs
 
 ### Optional Methods
 
-#### `cancel()`
+- `cancel()`: Cancel task execution (optional)
 
-Cancel task execution (optional). Implement if task supports cancellation.
-
-**Returns**: Dict[str, Any] with cancellation result
+**See**: `src/aipartnerupflow/core/interfaces/executable_task.py` for full interface definition.
 
 ## TaskTreeNode
 
 Represents a node in a task tree structure.
 
-### Initialization
+### Main Methods
 
-```python
-from aipartnerupflow.core.types import TaskTreeNode
-
-node = TaskTreeNode(task: TaskModel)
-```
-
-**Parameters**:
-- `task` (TaskModel): The task model instance
-
-### Methods
-
-#### `add_child(child)`
-
-Add a child node to this node.
-
-```python
-node.add_child(child: TaskTreeNode) -> None
-```
-
-**Parameters**:
-- `child` (TaskTreeNode): Child node to add
-
-**Example**:
-```python
-root = TaskTreeNode(root_task)
-child = TaskTreeNode(child_task)
-root.add_child(child)
-```
-
-#### `calculate_progress()`
-
-Calculate progress of the task tree.
-
-```python
-progress = node.calculate_progress() -> float
-```
-
-**Returns**: Average progress (0.0 to 1.0)
-
-#### `calculate_status()`
-
-Calculate overall status of the task tree.
-
-```python
-status = node.calculate_status() -> str
-```
-
-**Returns**: Status string ("completed", "failed", "in_progress", or "pending")
+- `add_child(child)`: Add a child node
+- `calculate_progress()`: Calculate progress (0.0 to 1.0)
+- `calculate_status()`: Calculate overall status
 
 ### Properties
 
 - `task` (TaskModel): The task model instance
 - `children` (List[TaskTreeNode]): List of child nodes
 
+**See**: `src/aipartnerupflow/core/types.py` for full implementation and `tests/core/execution/test_task_manager.py` for usage examples.
+
 ## TaskRepository
 
 Database operations for tasks.
 
-### Initialization
+### Main Methods
 
-```python
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+- `create_task(...)`: Create a new task
+- `get_task_by_id(task_id)`: Get task by ID
+- `get_root_task(task)`: Get root task
+- `build_task_tree(task)`: Build task tree from task
+- `update_task(task_id, ...)`: Update task
+- `delete_task(task_id)`: Delete task
+- `list_tasks(...)`: List tasks with filters
 
-repository = TaskRepository(
-    db: Session | AsyncSession,
-    task_model_class: Type[TaskModel] = TaskModel
-)
-```
-
-### Methods
-
-#### `create_task(...)`
-
-Create a new task in the database.
-
-```python
-task = await repository.create_task(
-    name: str,
-    user_id: str,
-    parent_id: str | None = None,
-    priority: int = 2,
-    dependencies: List[Dict[str, Any]] | None = None,
-    inputs: Dict[str, Any] | None = None,
-    schemas: Dict[str, Any] | None = None,
-    status: str = "pending",
-    **kwargs
-) -> TaskModel
-```
-
-**Parameters**:
-- `name` (str): Task name (executor identifier)
-- `user_id` (str): User ID
-- `parent_id` (str, optional): Parent task ID
-- `priority` (int): Priority level (default: 2)
-- `dependencies` (List[Dict], optional): Task dependencies
-- `inputs` (Dict, optional): Input parameters
-- `schemas` (Dict, optional): Task schemas
-- `status` (str): Initial status (default: "pending")
-
-**Returns**: Created TaskModel instance
-
-#### `get_task_by_id(task_id)`
-
-Get a task by its ID.
-
-```python
-task = await repository.get_task_by_id(task_id: str) -> TaskModel | None
-```
-
-#### `get_root_task(task)`
-
-Get the root task for a given task.
-
-```python
-root = await repository.get_root_task(task: TaskModel) -> TaskModel
-```
-
-#### `build_task_tree(task)`
-
-Build a task tree starting from a task.
-
-```python
-tree = await repository.build_task_tree(task: TaskModel) -> TaskTreeNode
-```
+**See**: `src/aipartnerupflow/core/storage/sqlalchemy/task_repository.py` for all methods and `tests/core/storage/sqlalchemy/test_task_repository.py` for examples.
 
 ## TaskCreator
 
 Create task trees from task arrays.
 
-### Initialization
+### Main Methods
 
-```python
-from aipartnerupflow.core.execution.task_creator import TaskCreator
+- `create_task_tree_from_array(tasks)`: Create task tree from array of task dictionaries
+- `create_task_copy(original_task)`: Create a copy of an existing task tree for re-execution
 
-creator = TaskCreator(db: Session | AsyncSession)
-```
-
-### Methods
-
-#### `create_task_tree_from_array(tasks)`
-
-Create a task tree from an array of task dictionaries.
-
-```python
-tree = await creator.create_task_tree_from_array(
-    tasks: List[Dict[str, Any]]
-) -> TaskTreeNode
-```
-
-**Parameters**:
-- `tasks` (List[Dict]): Array of task dictionaries
-
-**Task Dictionary Format**:
-```python
-{
-    "id": "task_1",                    # Optional: Task ID
-    "name": "Task 1",                  # Required: Task name
-    "user_id": "user_123",             # Required: User ID
-    "parent_id": "parent_task_id",     # Optional: Parent task ID
-    "priority": 1,                     # Optional: Priority (default: 2)
-    "dependencies": [                 # Optional: Dependencies
-        {"id": "task_0", "required": True}
-    ],
-    "inputs": {"key": "value"},        # Optional: Input parameters
-    "schemas": {...}                   # Optional: Task schemas
-}
-```
-
-**Returns**: TaskTreeNode root node
-
-**Example**:
-```python
-tasks = [
-    {
-        "id": "task_1",
-        "name": "task1",
-        "user_id": "user123",
-        "priority": 1
-    },
-    {
-        "id": "task_2",
-        "name": "task2",
-        "user_id": "user123",
-        "parent_id": "task_1",
-        "dependencies": [{"id": "task_1", "required": True}]
-    }
-]
-tree = await creator.create_task_tree_from_array(tasks)
-```
-
-**Validation**:
-- Detects circular dependencies using DFS algorithm
-- Ensures all tasks form a single task tree (exactly one root task)
-- Verifies all tasks are reachable from root task via parent_id chain
-- Validates that all dependent tasks are included in the input array
-
-#### `create_task_copy(original_task)`
-
-Create a copy of an existing task tree for re-execution.
-
-This method creates a new executable copy of a task tree, including:
-- The original task and all its children
-- All tasks that depend on the original task (including transitive dependencies)
-- Automatically handles failed leaf nodes (filters out pending dependents)
-
-**Parameters**:
-- `original_task` (TaskModel): The task to copy (can be root or any task in tree)
-
-**Returns**: `TaskTreeNode` - New task tree with copied tasks
-
-**Example**:
-```python
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
-
-# Get original task
-original_task = await task_repository.get_task_by_id("task-123")
-
-# Create copy
-task_creator = TaskCreator(db_session)
-new_tree = await task_creator.create_task_copy(original_task)
-
-# Execute the copied task tree
-result = await task_manager.distribute_task_tree(new_tree)
-```
-
-**What gets copied**:
-- Task structure (parent-child relationships)
-- Task definitions (name, code, inputs, schemas, params, dependencies)
-- All dependent tasks (direct and transitive)
-- Minimal subtree containing only required tasks
-
-**What gets reset**:
-- Task IDs (new IDs generated)
-- Status (reset to "pending")
-- Progress (reset to 0.0)
-- Result (reset to None)
-- Error (reset to None)
-- Execution timestamps (started_at, completed_at)
-- Token usage counters (token_success, token_failed)
-
-**What gets preserved**:
-- Task definitions (name, code, inputs, schemas, params)
-- User and product associations (user_id, product_id)
-- Priority settings
-- Dependencies structure
-
-**Metadata**:
-- `original_task_id`: Links copied task to original task's root ID
-- `has_copy`: Set to `true` on all original tasks that were copied
+**See**: `src/aipartnerupflow/core/execution/task_creator.py` for implementation and `tests/core/execution/test_task_creator.py` for examples.
 
 ## TaskModel
 
 Database model for tasks.
 
-### Fields
+### Main Fields
 
-- `id` (str): Task ID (primary key)
-- `parent_id` (str, optional): Parent task ID
-- `user_id` (str, optional): User ID
-- `name` (str): Task name
-- `status` (str): Task status
-- `priority` (int): Priority level
-- `dependencies` (JSON): Task dependencies
-- `inputs` (JSON): Input parameters
-- `params` (JSON): Executor parameters
-- `result` (JSON): Execution result
-- `error` (str, optional): Error message
-- `schemas` (JSON): Task schemas
-- `progress` (Decimal): Progress (0.0 to 1.0)
-- `has_children` (bool): Whether task has children
-- `created_at` (DateTime): Creation timestamp
-- `started_at` (DateTime, optional): Start timestamp
-- `updated_at` (DateTime): Update timestamp
-- `completed_at` (DateTime, optional): Completion timestamp
-- `original_task_id` (str, optional): ID of original task (for copied tasks)
-- `has_copy` (bool): Whether this task has been copied (default: False)
+- `id`, `parent_id`, `user_id`, `name`, `status`, `priority`
+- `dependencies`, `inputs`, `params`, `result`, `error`, `schemas`
+- `progress`, `has_children`
+- `created_at`, `started_at`, `updated_at`, `completed_at`
+- `original_task_id`, `has_copy`
 
 ### Methods
 
-#### `to_dict()`
+- `to_dict()`: Convert model to dictionary
 
-Convert model to dictionary.
-
-```python
-data = task.to_dict() -> Dict[str, Any]
-```
+**See**: `src/aipartnerupflow/core/storage/sqlalchemy/models.py` for full model definition.
 
 ## TaskStatus
 
-Task status constants.
+Task status constants and utilities.
 
 ### Constants
 
-- `TaskStatus.PENDING = "pending"`
-- `TaskStatus.IN_PROGRESS = "in_progress"`
-- `TaskStatus.COMPLETED = "completed"`
-- `TaskStatus.FAILED = "failed"`
-- `TaskStatus.CANCELLED = "cancelled"`
+- `PENDING`, `IN_PROGRESS`, `COMPLETED`, `FAILED`, `CANCELLED`
 
 ### Methods
 
-#### `is_terminal(status)`
+- `is_terminal(status)`: Check if status is terminal
+- `is_active(status)`: Check if status is active
 
-Check if status is terminal.
-
-```python
-is_terminal = TaskStatus.is_terminal(status: str) -> bool
-```
-
-#### `is_active(status)`
-
-Check if status is active.
-
-```python
-is_active = TaskStatus.is_active(status: str) -> bool
-```
+**See**: `src/aipartnerupflow/core/storage/sqlalchemy/models.py` for implementation.
 
 ## Utility Functions
 
 ### Session Management
 
-#### `create_session()`
-
-Create a new database session.
-
-```python
-from aipartnerupflow import create_session
-
-db = create_session() -> Session
-```
-
-#### `get_default_session()`
-
-Get the default database session.
-
-```python
-from aipartnerupflow import get_default_session
-
-db = get_default_session() -> Session
-```
+- `create_session()`: Create a new database session
+- `get_default_session()`: Get the default database session
 
 ### Extension Registry
 
-#### Registering Executors
+- `executor_register()`: Decorator to register executors (recommended)
+- `register_pre_hook(hook)`: Register pre-execution hook
+- `register_post_hook(hook)`: Register post-execution hook
+- `get_registry()`: Get extension registry instance
 
-Register an executor with the extension registry.
+**See**: `src/aipartnerupflow/core/decorators.py` and `src/aipartnerupflow/core/extensions/registry.py` for implementation.
 
-**Using decorator (recommended):**
-```python
-from aipartnerupflow import executor_register, BaseTask
+### Type Definitions
 
-@executor_register()
-class MyExecutor(BaseTask):
-    id = "my_executor"
-    # ...
-```
+- `TaskPreHook`: Type alias for pre-execution hook functions
+- `TaskPostHook`: Type alias for post-execution hook functions
 
-The decorator automatically registers the executor when the class is defined. Simply import the class to make it available.
-
-**Note:** For executors that need runtime configuration, you can register instances directly using `get_registry().register(instance)`, but using the decorator is the recommended approach.
-
-#### `register_pre_hook(hook)`
-
-Register a pre-execution hook.
-
-```python
-from aipartnerupflow import register_pre_hook
-
-@register_pre_hook
-async def my_pre_hook(task: TaskModel):
-    # Modify task.inputs if needed
-    pass
-```
-
-#### `register_post_hook(hook)`
-
-Register a post-execution hook.
-
-```python
-from aipartnerupflow import register_post_hook
-
-@register_post_hook
-async def my_post_hook(task: TaskModel, inputs: Dict[str, Any], result: Any):
-    # Process result
-    pass
-```
-
-## Type Definitions
-
-### TaskPreHook
-
-Type alias for pre-execution hook functions.
-
-```python
-TaskPreHook = Callable[[TaskModel], Union[None, Awaitable[None]]]
-```
-
-### TaskPostHook
-
-Type alias for post-execution hook functions.
-
-```python
-TaskPostHook = Callable[[TaskModel, Dict[str, Any], Any], Union[None, Awaitable[None]]]
-```
+**See**: `src/aipartnerupflow/core/extensions/types.py` for type definitions.
 
 ## Error Handling
 
@@ -617,52 +299,233 @@ Tasks that fail return:
 }
 ```
 
-## Examples
+## Common Patterns
 
-### Basic Usage
+### Pattern 1: Simple Task Execution
 
 ```python
+import asyncio
 from aipartnerupflow import TaskManager, TaskTreeNode, create_session
 
-db = create_session()
-task_manager = TaskManager(db)
+async def main():
+    db = create_session()
+    task_manager = TaskManager(db)
+    
+    # Create task
+    task = await task_manager.task_repository.create_task(
+        name="system_info_executor",
+        user_id="user123",
+        inputs={"resource": "cpu"}
+    )
+    
+    # Build tree
+    tree = TaskTreeNode(task)
+    
+    # Execute
+    await task_manager.distribute_task_tree(tree)
+    
+    # Get result
+    result = await task_manager.task_repository.get_task_by_id(task.id)
+    print(f"Status: {result.status}")
+    print(f"Result: {result.result}")
 
-# Create task
-task = await task_manager.task_repository.create_task(
-    name="my_task",
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Pattern 2: Sequential Tasks (Dependencies)
+
+```python
+# Create tasks with dependencies
+task1 = await task_manager.task_repository.create_task(
+    name="fetch_data",
     user_id="user123",
-    inputs={"key": "value"}
+    priority=1
+)
+
+task2 = await task_manager.task_repository.create_task(
+    name="process_data",
+    user_id="user123",
+    parent_id=task1.id,
+    dependencies=[{"id": task1.id, "required": True}],  # Waits for task1
+    priority=2,
+    inputs={"data": []}  # Will be populated from task1 result
+)
+
+task3 = await task_manager.task_repository.create_task(
+    name="save_results",
+    user_id="user123",
+    parent_id=task1.id,
+    dependencies=[{"id": task2.id, "required": True}],  # Waits for task2
+    priority=3
 )
 
 # Build tree
-tree = TaskTreeNode(task)
+root = TaskTreeNode(task1)
+root.add_child(TaskTreeNode(task2))
+root.add_child(TaskTreeNode(task3))
 
-# Execute
-result = await task_manager.distribute_task_tree(tree)
+# Execute (order: task1 → task2 → task3)
+await task_manager.distribute_task_tree(root)
 ```
 
-### With Dependencies
+### Pattern 3: Parallel Tasks
 
 ```python
-# Create tasks
+# Create root
+root_task = await task_manager.task_repository.create_task(
+    name="root",
+    user_id="user123",
+    priority=1
+)
+
+# Create parallel tasks (no dependencies between them)
 task1 = await task_manager.task_repository.create_task(
     name="task1",
-    user_id="user123"
+    user_id="user123",
+    parent_id=root_task.id,
+    priority=2
 )
 
 task2 = await task_manager.task_repository.create_task(
     name="task2",
     user_id="user123",
-    parent_id=task1.id,
-    dependencies=[{"id": task1.id, "required": True}]
+    parent_id=root_task.id,
+    priority=2  # Same priority, no dependencies = parallel
+)
+
+task3 = await task_manager.task_repository.create_task(
+    name="task3",
+    user_id="user123",
+    parent_id=root_task.id,
+    priority=2
 )
 
 # Build tree
-tree = TaskTreeNode(task1)
-tree.add_child(TaskTreeNode(task2))
+root = TaskTreeNode(root_task)
+root.add_child(TaskTreeNode(task1))
+root.add_child(TaskTreeNode(task2))
+root.add_child(TaskTreeNode(task3))
+
+# Execute (all three run in parallel)
+await task_manager.distribute_task_tree(root)
+```
+
+### Pattern 4: Error Handling
+
+```python
+# Execute task tree
+await task_manager.distribute_task_tree(task_tree)
+
+# Check all tasks for errors
+def check_task_status(task_id):
+    task = await task_manager.task_repository.get_task_by_id(task_id)
+    if task.status == "failed":
+        print(f"Task {task_id} failed: {task.error}")
+        return False
+    elif task.status == "completed":
+        print(f"Task {task_id} completed: {task.result}")
+        return True
+    return None
+
+# Check root task
+root_status = check_task_status(root_task.id)
+
+# Check all children
+for child in task_tree.children:
+    check_task_status(child.task.id)
+```
+
+### Pattern 5: Using TaskExecutor
+
+```python
+from aipartnerupflow.core.execution.task_executor import TaskExecutor
+
+# Get singleton instance
+executor = TaskExecutor()
+
+# Execute tasks from definitions
+tasks = [
+    {
+        "id": "task1",
+        "name": "my_executor",
+        "user_id": "user123",
+        "inputs": {"key": "value"}
+    },
+    {
+        "id": "task2",
+        "name": "my_executor",
+        "user_id": "user123",
+        "parent_id": "task1",
+        "dependencies": [{"id": "task1", "required": True}],
+        "inputs": {"key": "value2"}
+    }
+]
 
 # Execute
-await task_manager.distribute_task_tree(tree)
+result = await executor.execute_tasks(
+    tasks=tasks,
+    root_task_id="root_123",
+    use_streaming=False
+)
+
+print(f"Execution result: {result}")
+```
+
+### Pattern 6: Custom Executor with Error Handling
+
+```python
+from aipartnerupflow import BaseTask, executor_register
+from typing import Dict, Any
+
+@executor_register()
+class RobustExecutor(BaseTask):
+    id = "robust_executor"
+    name = "Robust Executor"
+    description = "Executor with comprehensive error handling"
+    
+    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            # Validate inputs
+            if not inputs.get("data"):
+                return {
+                    "status": "failed",
+                    "error": "data is required",
+                    "error_type": "validation_error"
+                }
+            
+            # Process
+            result = self._process(inputs["data"])
+            
+            return {
+                "status": "completed",
+                "result": result
+            }
+        except ValueError as e:
+            return {
+                "status": "failed",
+                "error": str(e),
+                "error_type": "ValueError"
+            }
+        except Exception as e:
+            return {
+                "status": "failed",
+                "error": str(e),
+                "error_type": type(e).__name__
+            }
+    
+    def _process(self, data):
+        # Your processing logic
+        return {"processed": data}
+    
+    def get_input_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "data": {"type": "string", "description": "Data to process"}
+            },
+            "required": ["data"]
+        }
 ```
 
 ## A2A Protocol Integration

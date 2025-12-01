@@ -1,92 +1,266 @@
 # Custom Tasks Guide
 
-This guide explains how to create custom tasks by implementing the `ExecutableTask` interface.
+Learn how to create your own custom executors (tasks) in aipartnerupflow. This guide will walk you through everything from simple tasks to advanced patterns.
 
-## Overview
+## What You'll Learn
 
-Custom tasks allow you to:
-- Implement any type of task logic (API calls, data processing, file operations, etc.)
-- Integrate with external services
-- Create reusable task components
-- Extend aipartnerupflow with domain-specific functionality
+- ✅ How to create custom executors
+- ✅ How to register and use them
+- ✅ Input validation with JSON Schema
+- ✅ Error handling best practices
+- ✅ Common patterns and examples
+- ✅ Testing your custom tasks
 
-## ExecutableTask Interface
+## Table of Contents
 
-All custom tasks must implement the `ExecutableTask` interface:
+1. [Quick Start](#quick-start)
+2. [Understanding Executors](#understanding-executors)
+3. [Creating Your First Executor](#creating-your-first-executor)
+4. [Required Components](#required-components)
+5. [Input Schema](#input-schema)
+6. [Error Handling](#error-handling)
+7. [Common Patterns](#common-patterns)
+8. [Advanced Features](#advanced-features)
+9. [Best Practices](#best-practices)
+10. [Testing](#testing)
+
+## Quick Start
+
+The fastest way to create a custom executor:
 
 ```python
-from aipartnerupflow import ExecutableTask
+from aipartnerupflow import BaseTask, executor_register
 from typing import Dict, Any
 
-class MyCustomTask(ExecutableTask):
-    """Your custom task implementation"""
+@executor_register()
+class MyFirstExecutor(BaseTask):
+    """A simple custom executor"""
     
-    @property
-    def id(self) -> str:
-        """Unique identifier for this task"""
-        return "my_custom_task"
-    
-    @property
-    def name(self) -> str:
-        """Display name for this task"""
-        return "My Custom Task"
-    
-    @property
-    def description(self) -> str:
-        """Description of what this task does"""
-        return "Performs custom operations"
+    id = "my_first_executor"
+    name = "My First Executor"
+    description = "Does something useful"
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute the task logic"""
-        # Your implementation here
-        return {"status": "completed", "result": "..."}
+        """Execute the task"""
+        result = f"Processed: {inputs.get('data', 'no data')}"
+        return {"status": "completed", "result": result}
     
     def get_input_schema(self) -> Dict[str, Any]:
-        """Return JSON Schema for input parameters"""
+        """Define input parameters"""
         return {
             "type": "object",
             "properties": {
-                "param1": {"type": "string", "description": "Parameter 1"}
+                "data": {"type": "string", "description": "Input data"}
             },
-            "required": ["param1"]
+            "required": ["data"]
         }
 ```
 
-## Required Methods
-
-### 1. `id` Property
-
-Unique identifier for the task. Used for task registration and references.
+**That's it!** Just import it and use it:
 
 ```python
-@property
-def id(self) -> str:
-    return "my_task_id"  # Must be unique
+# Import to register
+from my_module import MyFirstExecutor
+
+# Use it
+task = await task_manager.task_repository.create_task(
+    name="my_first_executor",  # Must match id
+    user_id="user123",
+    inputs={"data": "Hello!"}
+)
 ```
 
-### 2. `name` Property
+## Understanding Executors
 
-Human-readable name for the task.
+### What is an Executor?
+
+An **executor** is a piece of code that performs a specific task. Think of it as a function that:
+- Takes inputs (parameters)
+- Does some work
+- Returns a result
+
+**Example:**
+- An executor that fetches data from an API
+- An executor that processes files
+- An executor that sends emails
+- An executor that runs AI models
+
+### Executor vs Task
+
+**Executor**: The code that does the work (reusable)
+**Task**: An instance of work to be done (specific execution)
+
+**Analogy:**
+- **Executor** = A recipe (reusable template)
+- **Task** = A specific meal made from the recipe (one-time execution)
+
+### BaseTask vs ExecutableTask
+
+**BaseTask**: Recommended base class (simpler, includes registration)
+```python
+from aipartnerupflow import BaseTask, executor_register
+
+@executor_register()
+class MyTask(BaseTask):
+    id = "my_task"
+    # ...
+```
+
+**ExecutableTask**: Lower-level interface (more control)
+```python
+from aipartnerupflow import ExecutableTask
+
+class MyTask(ExecutableTask):
+    @property
+    def id(self) -> str:
+        return "my_task"
+    # ...
+```
+
+**Recommendation**: Use `BaseTask` with `@executor_register()` - it's simpler!
+
+## Creating Your First Executor
+
+Let's create a complete, working example step by step.
+
+### Step 1: Create the Executor Class
+
+Create a file `greeting_executor.py`:
 
 ```python
-@property
-def name(self) -> str:
-    return "My Task Name"
+from aipartnerupflow import BaseTask, executor_register
+from typing import Dict, Any
+
+@executor_register()
+class GreetingExecutor(BaseTask):
+    """Creates personalized greetings"""
+    
+    id = "greeting_executor"
+    name = "Greeting Executor"
+    description = "Creates personalized greeting messages"
+    
+    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute greeting creation"""
+        name = inputs.get("name", "Guest")
+        language = inputs.get("language", "en")
+        
+        greetings = {
+            "en": f"Hello, {name}!",
+            "es": f"¡Hola, {name}!",
+            "fr": f"Bonjour, {name}!"
+        }
+        
+        return {
+            "greeting": greetings.get(language, greetings["en"]),
+            "name": name,
+            "language": language
+        }
+    
+    def get_input_schema(self) -> Dict[str, Any]:
+        """Define input parameters"""
+        return {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Name of the person to greet"
+                },
+                "language": {
+                    "type": "string",
+                    "enum": ["en", "es", "fr", "zh"],
+                    "description": "Language for the greeting",
+                    "default": "en"
+                }
+            },
+            "required": ["name"]
+        }
 ```
 
-### 3. `description` Property
+### Step 2: Use Your Executor
 
-Description of what the task does.
+Create a file `use_greeting.py`:
 
 ```python
-@property
-def description(self) -> str:
-    return "This task performs specific operations"
+import asyncio
+from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+# Import to register the executor
+from greeting_executor import GreetingExecutor
+
+async def main():
+    db = create_session()
+    task_manager = TaskManager(db)
+    
+    # Create task using your executor
+    task = await task_manager.task_repository.create_task(
+        name="greeting_executor",  # Must match executor id
+        user_id="user123",
+        inputs={
+            "name": "Alice",
+            "language": "en"
+        }
+    )
+    
+    # Execute
+    task_tree = TaskTreeNode(task)
+    await task_manager.distribute_task_tree(task_tree)
+    
+    # Get result
+    result = await task_manager.task_repository.get_task_by_id(task.id)
+    print(f"Greeting: {result.result['greeting']}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
 ```
 
-### 4. `execute()` Method
+### Step 3: Run It
 
-Main execution logic. Must be async.
+```bash
+python use_greeting.py
+```
+
+**Expected Output:**
+```
+Greeting: Hello, Alice!
+```
+
+**Congratulations!** You just created and used your first custom executor! 🎉
+
+## Required Components
+
+Every executor must have these components:
+
+### 1. Unique ID
+
+**Purpose**: Identifies the executor (used when creating tasks)
+
+```python
+id = "my_executor_id"  # Must be unique across all executors
+```
+
+**Best Practices:**
+- Use lowercase with underscores
+- Be descriptive: `fetch_user_data` not `task1`
+- Keep it consistent: don't change after deployment
+
+### 2. Display Name
+
+**Purpose**: Human-readable name
+
+```python
+name = "My Executor"  # What users see
+```
+
+### 3. Description
+
+**Purpose**: Explains what the executor does
+
+```python
+description = "Fetches user data from the API"
+```
+
+### 4. Execute Method
+
+**Purpose**: The actual work happens here
 
 ```python
 async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
@@ -94,19 +268,24 @@ async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
     Execute the task
     
     Args:
-        inputs: Input parameters from task.inputs
+        inputs: Input parameters (from task.inputs)
         
     Returns:
         Execution result dictionary
     """
     # Your logic here
-    result = perform_operation(inputs)
-    return {"status": "completed", "result": result}
+    return {"status": "completed", "result": "..."}
 ```
 
-### 5. `get_input_schema()` Method
+**Key Points:**
+- Must be `async`
+- Receives `inputs` dictionary
+- Returns a dictionary
+- Can raise exceptions (will be caught by TaskManager)
 
-Returns JSON Schema defining input parameters.
+### 5. Input Schema
+
+**Purpose**: Defines what inputs are expected (for validation)
 
 ```python
 def get_input_schema(self) -> Dict[str, Any]:
@@ -119,211 +298,172 @@ def get_input_schema(self) -> Dict[str, Any]:
     return {
         "type": "object",
         "properties": {
-            "url": {
+            "param1": {
                 "type": "string",
-                "description": "URL to process"
-            },
-            "timeout": {
-                "type": "integer",
-                "description": "Timeout in seconds",
-                "default": 30
+                "description": "Parameter description"
             }
         },
-        "required": ["url"]
+        "required": ["param1"]
     }
 ```
 
-## Complete Example: HTTP API Call Task
+## Input Schema
 
-```python
-from aipartnerupflow import ExecutableTask
-from typing import Dict, Any
-import aiohttp
-import asyncio
+Input schemas use JSON Schema format to define and validate inputs.
 
-class APICallTask(ExecutableTask):
-    """Task that calls an external HTTP API"""
-    
-    @property
-    def id(self) -> str:
-        return "api_call_task"
-    
-    @property
-    def name(self) -> str:
-        return "API Call Task"
-    
-    @property
-    def description(self) -> str:
-        return "Calls an external HTTP API and returns the response"
-    
-    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute API call"""
-        url = inputs.get("url")
-        method = inputs.get("method", "GET")
-        headers = inputs.get("headers", {})
-        data = inputs.get("data")
-        timeout = inputs.get("timeout", 30)
-        
-        if not url:
-            raise ValueError("URL is required")
-        
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.request(
-                    method,
-                    url,
-                    headers=headers,
-                    json=data if method != "GET" else None,
-                    timeout=aiohttp.ClientTimeout(total=timeout)
-                ) as response:
-                    result = await response.json() if response.content_type == "application/json" else await response.text()
-                    
-                    return {
-                        "status": "completed",
-                        "status_code": response.status,
-                        "data": result,
-                        "headers": dict(response.headers)
-                    }
-        except asyncio.TimeoutError:
-            return {
-                "status": "failed",
-                "error": f"Request timeout after {timeout} seconds"
-            }
-        except Exception as e:
-            return {
-                "status": "failed",
-                "error": str(e)
-            }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        """Define input parameters"""
-        return {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "API endpoint URL"
-                },
-                "method": {
-                    "type": "string",
-                    "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
-                    "description": "HTTP method",
-                    "default": "GET"
-                },
-                "headers": {
-                    "type": "object",
-                    "description": "HTTP headers"
-                },
-                "data": {
-                    "type": "object",
-                    "description": "Request body data"
-                },
-                "timeout": {
-                    "type": "integer",
-                    "description": "Request timeout in seconds",
-                    "default": 30
-                }
-            },
-            "required": ["url"]
-        }
-```
-
-## Registering Custom Tasks
-
-The recommended way to register custom tasks is using the `@executor_register()` decorator:
-
-```python
-from aipartnerupflow import BaseTask, executor_register
-
-@executor_register()
-class MyCustomTask(BaseTask):
-    id = "my_custom_task"
-    # ... rest of implementation
-```
-
-The decorator automatically registers the task when the class is defined. Simply import the class to make it available:
-
-```python
-# Import the executor (automatically registered via @executor_register())
-from my_module import MyCustomTask
-```
-
-**Note:** For executors that need runtime configuration (like CrewManager), you can register instances directly using `get_registry().register(instance)`, but this is a special case.
-
-### Using Registered Tasks
-
-Once registered, use the task by its `id` in task creation:
-
-```python
-task = await task_manager.task_repository.create_task(
-    name="my_custom_task",  # Use the task's id
-    user_id="user123",
-    inputs={
-        "param1": "value1",
-        "param2": "value2"
-    }
-)
-```
-
-## Input Schema Best Practices
-
-### 1. Use JSON Schema Format
-
-Follow JSON Schema specification for input validation:
+### Basic Schema
 
 ```python
 def get_input_schema(self) -> Dict[str, Any]:
     return {
         "type": "object",
         "properties": {
-            "field_name": {
-                "type": "string",  # or "integer", "boolean", "array", "object"
-                "description": "Field description",
-                "default": "default_value"  # Optional default
-            }
+            "name": {"type": "string"},
+            "age": {"type": "integer"}
         },
-        "required": ["field_name"]  # List required fields
+        "required": ["name"]
     }
 ```
 
-### 2. Provide Default Values
+### Common Field Types
 
-Use defaults for optional parameters:
+#### String
+
+```python
+"name": {
+    "type": "string",
+    "description": "Person's name",
+    "minLength": 1,
+    "maxLength": 100
+}
+```
+
+#### Integer
+
+```python
+"age": {
+    "type": "integer",
+    "description": "Person's age",
+    "minimum": 0,
+    "maximum": 150
+}
+```
+
+#### Boolean
+
+```python
+"enabled": {
+    "type": "boolean",
+    "description": "Whether feature is enabled",
+    "default": false
+}
+```
+
+#### Array
+
+```python
+"items": {
+    "type": "array",
+    "items": {"type": "string"},
+    "description": "List of items",
+    "minItems": 1
+}
+```
+
+#### Object
+
+```python
+"config": {
+    "type": "object",
+    "properties": {
+        "key": {"type": "string"},
+        "value": {"type": "string"}
+    },
+    "description": "Configuration object"
+}
+```
+
+#### Enum (Limited Choices)
+
+```python
+"status": {
+    "type": "string",
+    "enum": ["pending", "active", "completed"],
+    "description": "Task status",
+    "default": "pending"
+}
+```
+
+### Default Values
+
+Provide defaults for optional parameters:
 
 ```python
 "timeout": {
     "type": "integer",
-    "default": 30,
-    "description": "Timeout in seconds"
+    "description": "Timeout in seconds",
+    "default": 30  # Used if not provided
 }
 ```
 
-### 3. Add Descriptions
+### Required Fields
 
-Always include descriptions for clarity:
+Specify which fields are required:
 
 ```python
-"url": {
-    "type": "string",
-    "description": "The URL to fetch data from"
+{
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "email": {"type": "string"}
+    },
+    "required": ["name", "email"]  # Both required
 }
 ```
 
-### 4. Use Enums for Limited Choices
-
-Use enum for fields with limited valid values:
+### Complete Schema Example
 
 ```python
-"method": {
-    "type": "string",
-    "enum": ["GET", "POST", "PUT", "DELETE"],
-    "description": "HTTP method"
-}
+def get_input_schema(self) -> Dict[str, Any]:
+    return {
+        "type": "object",
+        "properties": {
+            "url": {
+                "type": "string",
+                "description": "API endpoint URL",
+                "format": "uri"
+            },
+            "method": {
+                "type": "string",
+                "enum": ["GET", "POST", "PUT", "DELETE"],
+                "description": "HTTP method",
+                "default": "GET"
+            },
+            "headers": {
+                "type": "object",
+                "description": "HTTP headers",
+                "additionalProperties": {"type": "string"}
+            },
+            "timeout": {
+                "type": "integer",
+                "description": "Timeout in seconds",
+                "minimum": 1,
+                "maximum": 300,
+                "default": 30
+            },
+            "retry": {
+                "type": "boolean",
+                "description": "Whether to retry on failure",
+                "default": false
+            }
+        },
+        "required": ["url"]
+    }
 ```
 
 ## Error Handling
 
-### Returning Errors
+### Returning Errors (Recommended)
 
 Return error information in the result:
 
@@ -336,15 +476,20 @@ async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         return {
             "status": "failed",
             "error": str(e),
-            "error_type": "ValueError"
+            "error_type": "validation_error"
         }
     except Exception as e:
         return {
             "status": "failed",
             "error": str(e),
-            "error_type": type(e).__name__
+            "error_type": "execution_error"
         }
 ```
+
+**Benefits:**
+- More control over error format
+- Can include additional context
+- Task status will be "failed"
 
 ### Raising Exceptions
 
@@ -359,232 +504,503 @@ async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
     return {"status": "completed", "result": "..."}
 ```
 
-## Advanced Features
+**Note**: TaskManager will catch exceptions and mark the task as "failed".
 
-### Optional: Cancellation Support
+### Best Practices
 
-Implement `cancel()` method for cancellation support:
+1. **Validate early**: Check inputs at the start
+2. **Return meaningful errors**: Include error type and message
+3. **Handle specific exceptions**: Catch specific errors, not just `Exception`
+4. **Include context**: Add relevant information to error messages
 
-```python
-async def cancel(self) -> Dict[str, Any]:
-    """
-    Cancel task execution
-    
-    Returns:
-        Cancellation result dictionary
-    """
-    # Stop any ongoing operations
-    self._cancelled = True
-    
-    return {
-        "status": "cancelled",
-        "message": "Task cancelled by user",
-        "partial_result": self._partial_result if hasattr(self, "_partial_result") else None
-    }
-```
-
-### Accessing Task Context
-
-Access task information in execute method:
-
+**Example:**
 ```python
 async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-    # Note: Task context is available through TaskManager
-    # You can access it via hooks or by storing task reference
+    url = inputs.get("url")
+    if not url:
+        return {
+            "status": "failed",
+            "error": "URL is required",
+            "error_type": "validation_error",
+            "field": "url"
+        }
     
-    # Your implementation
-    return {"status": "completed"}
+    if not isinstance(url, str):
+        return {
+            "status": "failed",
+            "error": "URL must be a string",
+            "error_type": "type_error",
+            "field": "url",
+            "received_type": type(url).__name__
+        }
+    
+    # Continue with execution
+    try:
+        result = await fetch_url(url)
+        return {"status": "completed", "result": result}
+    except TimeoutError:
+        return {
+            "status": "failed",
+            "error": f"Request to {url} timed out",
+            "error_type": "timeout_error"
+        }
 ```
 
 ## Common Patterns
 
-### Pattern 1: Simple Data Processing
+### Pattern 1: HTTP API Call
 
 ```python
-class DataProcessingTask(ExecutableTask):
+import aiohttp
+from aipartnerupflow import BaseTask, executor_register
+from typing import Dict, Any
+
+@executor_register()
+class APICallExecutor(BaseTask):
+    """Calls an external HTTP API"""
+    
+    id = "api_call_executor"
+    name = "API Call Executor"
+    description = "Calls an external HTTP API"
+    
+    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        url = inputs.get("url")
+        method = inputs.get("method", "GET")
+        headers = inputs.get("headers", {})
+        timeout = inputs.get("timeout", 30)
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.request(
+                    method,
+                    url,
+                    headers=headers,
+                    timeout=aiohttp.ClientTimeout(total=timeout)
+                ) as response:
+                    data = await response.json() if response.content_type == "application/json" else await response.text()
+                    
+                    return {
+                        "status": "completed",
+                        "status_code": response.status,
+                        "data": data
+                    }
+        except Exception as e:
+            return {
+                "status": "failed",
+                "error": str(e),
+                "error_type": type(e).__name__
+            }
+    
+    def get_input_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "API URL"},
+                "method": {"type": "string", "enum": ["GET", "POST"], "default": "GET"},
+                "headers": {"type": "object"},
+                "timeout": {"type": "integer", "default": 30}
+            },
+            "required": ["url"]
+        }
+```
+
+### Pattern 2: Data Processing
+
+```python
+from aipartnerupflow import BaseTask, executor_register
+from typing import Dict, Any
+
+@executor_register()
+class DataProcessor(BaseTask):
+    """Processes data"""
+    
+    id = "data_processor"
+    name = "Data Processor"
+    description = "Processes data with various operations"
+    
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         data = inputs.get("data", [])
         operation = inputs.get("operation", "sum")
+        
+        if not isinstance(data, list):
+            return {
+                "status": "failed",
+                "error": "Data must be a list",
+                "error_type": "validation_error"
+            }
         
         if operation == "sum":
             result = sum(data)
         elif operation == "average":
             result = sum(data) / len(data) if data else 0
+        elif operation == "max":
+            result = max(data) if data else None
+        elif operation == "min":
+            result = min(data) if data else None
         else:
-            raise ValueError(f"Unknown operation: {operation}")
+            return {
+                "status": "failed",
+                "error": f"Unknown operation: {operation}",
+                "error_type": "validation_error"
+            }
         
-        return {"status": "completed", "result": result}
+        return {
+            "status": "completed",
+            "operation": operation,
+            "result": result,
+            "input_count": len(data)
+        }
+    
+    def get_input_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {"type": "number"},
+                    "description": "Array of numbers"
+                },
+                "operation": {
+                    "type": "string",
+                    "enum": ["sum", "average", "max", "min"],
+                    "default": "sum"
+                }
+            },
+            "required": ["data"]
+        }
 ```
 
-### Pattern 2: File Operations
+### Pattern 3: File Operations
 
 ```python
 import aiofiles
+from aipartnerupflow import BaseTask, executor_register
+from typing import Dict, Any
 
-class FileReadTask(ExecutableTask):
+@executor_register()
+class FileReader(BaseTask):
+    """Reads files"""
+    
+    id = "file_reader"
+    name = "File Reader"
+    description = "Reads content from files"
+    
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         file_path = inputs.get("file_path")
         
-        async with aiofiles.open(file_path, 'r') as f:
-            content = await f.read()
+        if not file_path:
+            return {
+                "status": "failed",
+                "error": "file_path is required",
+                "error_type": "validation_error"
+            }
         
-        return {"status": "completed", "content": content}
+        try:
+            async with aiofiles.open(file_path, 'r') as f:
+                content = await f.read()
+            
+            return {
+                "status": "completed",
+                "file_path": file_path,
+                "content": content,
+                "size": len(content)
+            }
+        except FileNotFoundError:
+            return {
+                "status": "failed",
+                "error": f"File not found: {file_path}",
+                "error_type": "file_not_found"
+            }
+        except Exception as e:
+            return {
+                "status": "failed",
+                "error": str(e),
+                "error_type": type(e).__name__
+            }
+    
+    def get_input_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "file_path": {
+                    "type": "string",
+                    "description": "Path to file"
+                }
+            },
+            "required": ["file_path"]
+        }
 ```
 
-### Pattern 3: Database Operations
+### Pattern 4: Database Query
 
 ```python
-class DatabaseQueryTask(ExecutableTask):
-    def __init__(self, db_connection):
-        self.db = db_connection
+from aipartnerupflow import BaseTask, executor_register
+from typing import Dict, Any
+
+@executor_register()
+class DatabaseQuery(BaseTask):
+    """Executes database queries"""
+    
+    id = "db_query"
+    name = "Database Query"
+    description = "Executes database queries"
+    
+    def __init__(self):
+        super().__init__()
+        # Initialize database connection
+        # self.db = create_db_connection()
     
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         query = inputs.get("query")
         params = inputs.get("params", {})
         
-        result = await self.db.fetch(query, params)
+        if not query:
+            return {
+                "status": "failed",
+                "error": "query is required",
+                "error_type": "validation_error"
+            }
         
-        return {"status": "completed", "rows": result}
+        try:
+            # Execute query
+            # result = await self.db.fetch(query, params)
+            result = []  # Placeholder
+            
+            return {
+                "status": "completed",
+                "rows": result,
+                "count": len(result)
+            }
+        except Exception as e:
+            return {
+                "status": "failed",
+                "error": str(e),
+                "error_type": "database_error"
+            }
+    
+    def get_input_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "SQL query"},
+                "params": {"type": "object", "description": "Query parameters"}
+            },
+            "required": ["query"]
+        }
 ```
 
-## Testing Custom Tasks
+## Advanced Features
 
-### Unit Testing
+### Cancellation Support
+
+Implement cancellation for long-running tasks:
 
 ```python
-import pytest
-from my_tasks import MyCustomTask
-
-@pytest.mark.asyncio
-async def test_my_custom_task():
-    task = MyCustomTask()
+class CancellableTask(BaseTask):
+    cancelable: bool = True  # Mark as cancellable
     
-    inputs = {
-        "param1": "value1",
-        "param2": "value2"
-    }
+    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        self._cancelled = False
+        
+        for i in range(100):
+            # Check for cancellation
+            if self._cancelled:
+                return {
+                    "status": "cancelled",
+                    "message": "Task was cancelled",
+                    "progress": i
+                }
+            
+            # Do work
+            await asyncio.sleep(0.1)
+        
+        return {"status": "completed", "result": "done"}
     
-    result = await task.execute(inputs)
-    
-    assert result["status"] == "completed"
-    assert "result" in result
+    async def cancel(self) -> Dict[str, Any]:
+        """Cancel task execution"""
+        self._cancelled = True
+        return {
+            "status": "cancelled",
+            "message": "Cancellation requested"
+        }
 ```
 
-### Integration Testing
+**Note**: Not all executors need cancellation. Only implement if your task can be safely cancelled.
+
+### Accessing Task Context
+
+Access task information through the executor:
 
 ```python
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
-# Import the executor (automatically registered via @executor_register())
-from my_module import MyCustomTask
-
-async def test_task_integration():
-    
-    # Create and execute
-    db = create_session()
-    task_manager = TaskManager(db)
-    
-    task = await task_manager.task_repository.create_task(
-        name="my_custom_task",
-        user_id="test_user",
-        inputs={"param1": "value1"}
-    )
-    
-    task_tree = TaskTreeNode(task)
-    result = await task_manager.distribute_task_tree(task_tree)
-    
-    assert result is not None
+class ContextAwareTask(BaseTask):
+    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        # Task context is available through TaskManager
+        # You can access it via hooks or by storing task reference
+        
+        # Example: Access task ID (if available)
+        # task_id = getattr(self, '_task_id', None)
+        
+        return {"status": "completed"}
 ```
 
 ## Best Practices
 
 ### 1. Keep Tasks Focused
 
-Each task should do one thing well:
-
+**Good:**
 ```python
-# Good: Focused task
-class FetchUserDataTask(ExecutableTask):
+class FetchUserData(BaseTask):
     # Only fetches user data
+```
 
-# Bad: Does too much
-class ProcessEverythingTask(ExecutableTask):
+**Bad:**
+```python
+class DoEverything(BaseTask):
     # Fetches, processes, saves, sends notifications, etc.
 ```
 
-### 2. Validate Inputs
-
-Always validate inputs:
+### 2. Validate Inputs Early
 
 ```python
 async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+    # Validate at the start
     url = inputs.get("url")
     if not url:
-        raise ValueError("URL is required")
+        return {"status": "failed", "error": "URL is required"}
     
     if not isinstance(url, str):
-        raise TypeError("URL must be a string")
+        return {"status": "failed", "error": "URL must be a string"}
     
     # Continue with execution
 ```
 
-### 3. Handle Errors Gracefully
+### 3. Use Async Properly
 
-Return meaningful error messages:
-
+**Good:**
 ```python
-async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-    try:
-        result = perform_operation(inputs)
-        return {"status": "completed", "result": result}
-    except SpecificError as e:
-        return {
-            "status": "failed",
-            "error": f"Operation failed: {str(e)}",
-            "error_code": "SPECIFIC_ERROR"
-        }
-```
-
-### 4. Use Async Properly
-
-Use async/await for I/O operations:
-
-```python
-# Good: Async I/O
 async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as response:
             data = await response.json()
     return {"status": "completed", "data": data}
+```
 
-# Bad: Blocking I/O
+**Bad:**
+```python
 async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
     import requests
     response = requests.get(url)  # Blocking!
     return {"status": "completed", "data": response.json()}
 ```
 
-### 5. Document Your Tasks
-
-Add clear documentation:
+### 4. Document Your Tasks
 
 ```python
-class MyCustomTask(ExecutableTask):
+class MyCustomTask(BaseTask):
     """
     Custom task that performs specific operations.
     
     This task processes input data and returns processed results.
     It supports various processing modes and configurations.
-    """
     
-    @property
-    def description(self) -> str:
-        return "Processes input data using configured processing mode"
+    Example:
+        task = create_task(
+            name="my_custom_task",
+            inputs={"data": [1, 2, 3], "mode": "sum"}
+        )
+    """
+```
+
+### 5. Return Consistent Results
+
+```python
+# Good: Consistent format
+return {
+    "status": "completed",
+    "result": result,
+    "metadata": {...}
+}
+
+# Bad: Inconsistent format
+return result  # Sometimes just the result
+return {"data": result}  # Sometimes wrapped
+```
+
+## Testing
+
+### Unit Testing
+
+Test your executor in isolation:
+
+```python
+import pytest
+from my_executors import GreetingExecutor
+
+@pytest.mark.asyncio
+async def test_greeting_executor():
+    executor = GreetingExecutor()
+    
+    # Test with valid inputs
+    result = await executor.execute({
+        "name": "Alice",
+        "language": "en"
+    })
+    
+    assert result["status"] == "completed"
+    assert "Hello, Alice!" in result["greeting"]
+    
+    # Test with default language
+    result = await executor.execute({"name": "Bob"})
+    assert result["language"] == "en"
+    
+    # Test with invalid language
+    result = await executor.execute({
+        "name": "Charlie",
+        "language": "invalid"
+    })
+    # Should handle gracefully
+```
+
+### Integration Testing
+
+Test with TaskManager:
+
+```python
+import pytest
+from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from my_executors import GreetingExecutor
+
+@pytest.mark.asyncio
+async def test_executor_integration():
+    # Import to register
+    from my_executors import GreetingExecutor
+    
+    db = create_session()
+    task_manager = TaskManager(db)
+    
+    # Create and execute task
+    task = await task_manager.task_repository.create_task(
+        name="greeting_executor",
+        user_id="test_user",
+        inputs={"name": "Test User", "language": "en"}
+    )
+    
+    task_tree = TaskTreeNode(task)
+    await task_manager.distribute_task_tree(task_tree)
+    
+    # Verify result
+    result = await task_manager.task_repository.get_task_by_id(task.id)
+    assert result.status == "completed"
+    assert "Test User" in result.result["greeting"]
 ```
 
 ## Next Steps
 
-- Learn about [Task Orchestration](task-orchestration.md)
-- See [API Reference](api-reference.md) for detailed API documentation
-- Check [Examples](../examples/basic_task.md) for more examples
-- Read [Extending the Framework](../development/extending.md) for advanced topics
+- **[Task Orchestration Guide](task-orchestration.md)** - Learn how to orchestrate multiple tasks
+- **[Basic Examples](../examples/basic_task.md)** - More practical examples
+- **[Best Practices Guide](best-practices.md)** - Advanced techniques
+- **[API Reference](../api/python.md)** - Complete API documentation
 
+---
+
+**Need help?** Check the [FAQ](faq.md) or [Quick Start Guide](../getting-started/quick-start.md)
