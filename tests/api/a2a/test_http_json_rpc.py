@@ -636,6 +636,104 @@ def test_jsonrpc_tasks_copy(json_rpc_client):
     assert original_task.get("has_copy") is True
 
 
+def test_jsonrpc_tasks_copy_with_children(json_rpc_client):
+    """Test copying a task with children=True via JSON-RPC"""
+    # First create a task tree with children
+    root_task_data = {
+        "id": f"copy-children-root-{uuid.uuid4().hex[:8]}",
+        "name": "Root Task",
+        "user_id": "test-user",
+        "status": "pending",
+        "priority": 1,
+        "has_children": False,
+        "dependencies": [],
+        "schemas": {
+            "method": "system_info",
+            "type": "stdio"
+        },
+        "inputs": {}
+    }
+    
+    child1_data = {
+        "id": f"copy-children-child1-{uuid.uuid4().hex[:8]}",
+        "name": "Child 1",
+        "user_id": "test-user",
+        "parent_id": root_task_data["id"],
+        "status": "pending",
+        "priority": 1,
+        "has_children": False,
+        "dependencies": [],
+        "schemas": {
+            "method": "system_info",
+            "type": "stdio"
+        },
+        "inputs": {}
+    }
+    
+    child2_data = {
+        "id": f"copy-children-child2-{uuid.uuid4().hex[:8]}",
+        "name": "Child 2",
+        "user_id": "test-user",
+        "parent_id": root_task_data["id"],
+        "status": "pending",
+        "priority": 1,
+        "has_children": False,
+        "dependencies": [],
+        "schemas": {
+            "method": "system_info",
+            "type": "stdio"
+        },
+        "inputs": {}
+    }
+    
+    # Create task tree
+    create_request = {
+        "jsonrpc": "2.0",
+        "id": 300,
+        "method": "tasks.create",
+        "params": [root_task_data, child1_data, child2_data]
+    }
+    
+    create_response = json_rpc_client.post("/tasks", json=create_request)
+    assert create_response.status_code == 200
+    created_result = create_response.json()
+    root_task_id = created_result["result"]["id"]
+    
+    # Copy task with children=True
+    copy_request = {
+        "jsonrpc": "2.0",
+        "id": 301,
+        "method": "tasks.copy",
+        "params": {
+            "task_id": root_task_id,
+            "children": True
+        }
+    }
+    
+    response = json_rpc_client.post(
+        "/tasks",
+        json=copy_request,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    assert response.status_code == 200
+    result = response.json()
+    
+    # Verify JSON-RPC response structure
+    assert "jsonrpc" in result
+    assert result["jsonrpc"] == "2.0"
+    assert "result" in result
+    
+    # Verify copied task
+    copied_task = result["result"]
+    assert "id" in copied_task
+    assert copied_task["id"] != root_task_id
+    assert copied_task["name"] == root_task_data["name"]
+    assert copied_task["original_task_id"] == root_task_id
+    assert "children" in copied_task
+    assert len(copied_task["children"]) == 2  # Should have both children
+
+
 def test_jsonrpc_tasks_execute(json_rpc_client):
     """Test executing a task via JSON-RPC"""
     # First create a task
@@ -1013,6 +1111,174 @@ def test_jsonrpc_tasks_execute_not_found(json_rpc_client):
     assert "jsonrpc" in result
     assert "error" in result
     assert result["error"]["code"] in [-32602, -32603]  # Invalid params or internal error
+
+
+def test_jsonrpc_tasks_execute_with_copy_execution(json_rpc_client):
+    """Test executing a task with copy_execution=True via JSON-RPC"""
+    # First create a task
+    task_data = {
+        "id": f"execute-copy-{uuid.uuid4().hex[:8]}",
+        "name": "Task to Copy and Execute",
+        "user_id": "test-user",
+        "status": "pending",
+        "priority": 1,
+        "has_children": False,
+        "dependencies": [],
+        "schemas": {
+            "method": "system_info",
+            "type": "stdio"
+        },
+        "inputs": {}
+    }
+    
+    # Create task
+    create_request = {
+        "jsonrpc": "2.0",
+        "id": 400,
+        "method": "tasks.create",
+        "params": [task_data]
+    }
+    
+    create_response = json_rpc_client.post("/tasks", json=create_request)
+    assert create_response.status_code == 200
+    created_result = create_response.json()
+    original_task_id = created_result["result"]["id"]
+    
+    # Execute task with copy_execution=True
+    execute_request = {
+        "jsonrpc": "2.0",
+        "id": 401,
+        "method": "tasks.execute",
+        "params": {
+            "task_id": original_task_id,
+            "copy_execution": True,
+            "use_streaming": False
+        }
+    }
+    
+    response = json_rpc_client.post(
+        "/tasks",
+        json=execute_request,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    assert response.status_code == 200
+    result = response.json()
+    
+    # Verify JSON-RPC response structure
+    assert "jsonrpc" in result
+    assert result["jsonrpc"] == "2.0"
+    assert "result" in result
+    
+    # Verify execution result
+    execution_result = result["result"]
+    assert "success" in execution_result
+    assert execution_result["success"] is True
+    assert "protocol" in execution_result
+    assert execution_result["protocol"] == "jsonrpc"
+    assert "root_task_id" in execution_result
+    assert "task_id" in execution_result
+    assert "original_task_id" in execution_result
+    assert execution_result["original_task_id"] == original_task_id
+    # The task_id should be different from original_task_id (it's a copy)
+    assert execution_result["task_id"] != original_task_id
+    assert execution_result["root_task_id"] != original_task_id
+    
+    # Verify original task still exists and has_copy flag is set
+    get_request = {
+        "jsonrpc": "2.0",
+        "id": 402,
+        "method": "tasks.get",
+        "params": {"task_id": original_task_id}
+    }
+    get_response = json_rpc_client.post("/tasks", json=get_request)
+    assert get_response.status_code == 200
+    original_task = get_response.json()["result"]
+    assert original_task.get("has_copy") is True
+
+
+def test_jsonrpc_tasks_execute_with_copy_execution_and_children(json_rpc_client):
+    """Test executing a task with copy_execution=True and copy_children=True via JSON-RPC"""
+    # First create a task tree with children
+    root_task_data = {
+        "id": f"execute-copy-children-root-{uuid.uuid4().hex[:8]}",
+        "name": "Root Task",
+        "user_id": "test-user",
+        "status": "pending",
+        "priority": 1,
+        "has_children": False,
+        "dependencies": [],
+        "schemas": {
+            "method": "system_info",
+            "type": "stdio"
+        },
+        "inputs": {}
+    }
+    
+    child_task_data = {
+        "id": f"execute-copy-children-child-{uuid.uuid4().hex[:8]}",
+        "name": "Child Task",
+        "user_id": "test-user",
+        "parent_id": root_task_data["id"],
+        "status": "pending",
+        "priority": 1,
+        "has_children": False,
+        "dependencies": [],
+        "schemas": {
+            "method": "system_info",
+            "type": "stdio"
+        },
+        "inputs": {}
+    }
+    
+    # Create task tree
+    create_request = {
+        "jsonrpc": "2.0",
+        "id": 410,
+        "method": "tasks.create",
+        "params": [root_task_data, child_task_data]
+    }
+    
+    create_response = json_rpc_client.post("/tasks", json=create_request)
+    assert create_response.status_code == 200
+    created_result = create_response.json()
+    original_task_id = created_result["result"]["id"]
+    
+    # Execute task with copy_execution=True and copy_children=True
+    execute_request = {
+        "jsonrpc": "2.0",
+        "id": 411,
+        "method": "tasks.execute",
+        "params": {
+            "task_id": original_task_id,
+            "copy_execution": True,
+            "copy_children": True,
+            "use_streaming": False
+        }
+    }
+    
+    response = json_rpc_client.post(
+        "/tasks",
+        json=execute_request,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    assert response.status_code == 200
+    result = response.json()
+    
+    # Verify JSON-RPC response structure
+    assert "jsonrpc" in result
+    assert result["jsonrpc"] == "2.0"
+    assert "result" in result
+    
+    # Verify execution result
+    execution_result = result["result"]
+    assert "success" in execution_result
+    assert execution_result["success"] is True
+    assert "original_task_id" in execution_result
+    assert execution_result["original_task_id"] == original_task_id
+    # The task_id should be different from original_task_id (it's a copy)
+    assert execution_result["task_id"] != original_task_id
 
 
 def test_jsonrpc_tasks_children(json_rpc_client):

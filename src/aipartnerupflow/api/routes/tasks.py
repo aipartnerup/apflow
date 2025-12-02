@@ -1237,11 +1237,19 @@ class TaskRoutes(BaseRouteHandler):
         request: Request,
         request_id: str
     ) -> dict:
-        """Handle task copy (create_task_copy)"""
+        """
+        Handle task copy (create_task_copy)
+        
+        Params:
+            task_id: Task ID to copy (required)
+            children: If True, also copy each direct child task with its dependencies (default: False)
+        """
         try:
             task_id = params.get("task_id")
             if not task_id:
                 raise ValueError("Task ID is required")
+            
+            children = params.get("children", False)
             
             # Get database session and create repository with custom TaskModel
             db_session = get_default_session()
@@ -1258,12 +1266,12 @@ class TaskRoutes(BaseRouteHandler):
             # Create TaskCreator and copy task
             task_creator = TaskCreator(db_session)
             
-            new_tree = await task_creator.create_task_copy(original_task)
+            new_tree = await task_creator.create_task_copy(original_task, children=children)
             
             # Convert task tree to dictionary format for response
             result = tree_node_to_dict(new_tree)
             
-            logger.info(f"Copied task {task_id} to new task {new_tree.task.id}")
+            logger.info(f"Copied task {task_id} to new task {new_tree.task.id} (children={children})")
             return result
             
         except Exception as e:
@@ -1299,6 +1307,10 @@ class TaskRoutes(BaseRouteHandler):
             task_id: Optional, Task ID to execute (if provided, uses execute_task_by_id)
             tasks: Optional, Array of task dictionaries to execute (if provided, uses execute_tasks)
             use_streaming: Optional, if True, use SSE mode (default: False, regular POST mode)
+            copy_execution: Optional, if True, copy the task before execution to preserve original task history (default: False)
+                          Only applies to task_id mode. When True, creates a copy of the task tree and executes the copy.
+            copy_children: Optional, if True and copy_execution=True, also copy each direct child task with its dependencies (default: False)
+                          This parameter is only used when copy_execution=True.
             webhook_config: Optional webhook configuration for push notifications (independent of use_streaming):
                 {
                     "url": str,  # Required: Webhook callback URL
@@ -1335,6 +1347,8 @@ class TaskRoutes(BaseRouteHandler):
             task_id = params.get("task_id") or params.get("id")
             tasks = params.get("tasks")
             use_streaming = params.get("use_streaming", False)
+            copy_execution = params.get("copy_execution", False)
+            copy_children = params.get("copy_children", False)
             webhook_config = params.get("webhook_config")
             
             # Determine execution mode
@@ -1371,6 +1385,20 @@ class TaskRoutes(BaseRouteHandler):
                 # Check permission
                 self._check_permission(request, task.user_id, "execute")
                 
+                # If copy_execution is True, create a copy first
+                original_task_id = task_id
+                if copy_execution:
+                    logger.info(f"Copying task {task_id} before execution (copy_children={copy_children})")
+                    task_creator = TaskCreator(db_session)
+                    copied_tree = await task_creator.create_task_copy(task, children=copy_children)
+                    task_id = copied_tree.task.id
+                    logger.info(f"Task copied: original={original_task_id}, copy={task_id}")
+                    
+                    # Get the copied task from database
+                    task = await task_repository.get_task_by_id(task_id)
+                    if not task:
+                        raise ValueError(f"Copied task {task_id} not found")
+                
                 # Check if task is already running
                 from aipartnerupflow.core.execution.task_tracker import TaskTracker
                 task_tracker = TaskTracker()
@@ -1380,7 +1408,8 @@ class TaskRoutes(BaseRouteHandler):
                         "protocol": "jsonrpc",
                         "root_task_id": task_id,
                         "status": "already_running",
-                        "message": f"Task {task_id} is already running"
+                        "message": f"Task {task_id} is already running",
+                        **({"original_task_id": original_task_id} if copy_execution else {})
                     }
                 
                 # Get root task ID for streaming context
@@ -1458,19 +1487,24 @@ class TaskRoutes(BaseRouteHandler):
                     """Generate SSE events from task execution"""
                     try:
                         # Send initial response as JSON-RPC result
+                        response_data = {
+                            "success": True,
+                            "protocol": "jsonrpc",
+                            "root_task_id": root_task_id,
+                            "task_id": task_id or root_task_id,
+                            "status": "started",
+                            "streaming": True,
+                            "message": f"Task execution started with streaming",
+                            **({"webhook_url": webhook_config.get("url")} if webhook_config else {})
+                        }
+                        # Add original_task_id if copy_execution was used
+                        if execution_mode == "task_id" and copy_execution:
+                            response_data["original_task_id"] = original_task_id
+                        
                         initial_response = {
                             "jsonrpc": "2.0",
                             "id": request_id,
-                            "result": {
-                                "success": True,
-                                "protocol": "jsonrpc",
-                                "root_task_id": root_task_id,
-                                "task_id": task_id or root_task_id,
-                                "status": "started",
-                                "streaming": True,
-                                "message": f"Task execution started with streaming",
-                                **({"webhook_url": webhook_config.get("url")} if webhook_config else {})
-                            }
+                            "result": response_data
                         }
                         yield f"data: {json.dumps(initial_response, ensure_ascii=False)}\n\n"
                         
@@ -1550,7 +1584,7 @@ class TaskRoutes(BaseRouteHandler):
                 # Execution already started above with streaming_context, return JSON response immediately
                 logger.info(f"Task execution started with webhook callbacks (root: {root_task_id})")
                 
-                return {
+                response = {
                     "success": True,
                     "protocol": "jsonrpc",
                     "root_task_id": root_task_id,
@@ -1563,13 +1597,17 @@ class TaskRoutes(BaseRouteHandler):
                     ),
                     "webhook_url": webhook_config.get("url")
                 }
+                # Add original_task_id if copy_execution was used
+                if execution_mode == "task_id" and copy_execution:
+                    response["original_task_id"] = original_task_id
+                return response
             
             else:
                 # Response mode 3: Regular POST without webhook (use_streaming=False, no webhook_config)
                 # Execution already started above, return JSON response immediately
                 logger.info(f"Task execution started (root: {root_task_id})")
                 
-                return {
+                response = {
                     "success": True,
                     "protocol": "jsonrpc",
                     "root_task_id": root_task_id,
@@ -1577,6 +1615,10 @@ class TaskRoutes(BaseRouteHandler):
                     "status": execution_result.get("status", "started") if execution_result else "started",
                     "message": f"Task execution started",
                 }
+                # Add original_task_id if copy_execution was used
+                if execution_mode == "task_id" and copy_execution:
+                    response["original_task_id"] = original_task_id
+                return response
             
         except Exception as e:
             logger.error(f"Error executing task: {str(e)}", exc_info=True)

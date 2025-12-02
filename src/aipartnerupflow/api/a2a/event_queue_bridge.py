@@ -30,6 +30,7 @@ class EventQueueBridge:
         self.context = context
         self._update_queue = asyncio.Queue()
         self._bridge_task = None
+        self.original_task_id = None  # Store original_task_id if copy_execution was used
         
         # Start background task to process updates
         self._start_bridge_task()
@@ -105,6 +106,12 @@ class EventQueueBridge:
             if "metadata" not in event_data:
                 event_data["metadata"] = {}
             event_data["metadata"]["actual_task_id"] = actual_task_id
+        
+        # Add original_task_id if copy_execution was used
+        if self.original_task_id:
+            if "metadata" not in event_data:
+                event_data["metadata"] = {}
+            event_data["metadata"]["original_task_id"] = self.original_task_id
         
         if update_type == "final":
             message = new_agent_parts_message([

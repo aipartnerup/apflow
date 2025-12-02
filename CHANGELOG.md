@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Enhanced Task Copy Functionality**
+  - `children` parameter for `create_task_copy()`: When `True`, also copy each direct child task with its dependencies
+  - Deduplication ensures tasks depending on multiple copied tasks are only copied once
+  - `children` parameter for `tasks.copy` API endpoint
+  - `--children` flag for CLI `tasks copy` command
+
+- **Copy Before Execution**
+  - `copy_execution` parameter for `tasks.execute` API: Copy task before execution to preserve original task history
+  - `copy_children` parameter: When `True` with `copy_execution=True`, also copy each direct child task with its dependencies
+  - Response includes both `task_id` (copied task) and `original_task_id` (original task) when `copy_execution=True`
+  - Combines `tasks.copy` and `tasks.execute` into a single API call for better user experience
+
+
 ## [0.3.0] - 2025-11-30
 
 ### Added

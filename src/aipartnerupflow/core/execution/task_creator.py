@@ -779,7 +779,7 @@ class TaskCreator:
         collect_children(root_node)
         return tasks
     
-    async def create_task_copy(self, original_task: TaskModel) -> TaskTreeNode:
+    async def create_task_copy(self, original_task: TaskModel, children: bool = False) -> TaskTreeNode:
         """
         Create a copy of a task tree for re-execution.
         
@@ -790,27 +790,32 @@ class TaskCreator:
         Process:
         1. Get root task and all tasks in the tree for dependency lookup
         2. Build original_task's subtree (original_task + all its children)
-        3. Collect all task identifiers (id or name) from the subtree
-        4. Find all tasks that depend on these identifiers (including transitive dependencies)
+        3. If children=True, also collect identifiers from each direct child's subtree
+        4. Collect all task identifiers (id or name) from the subtree(s)
+        5. Find all tasks that depend on these identifiers (including transitive dependencies)
            - Special handling for failed leaf nodes:
              * Check if original_subtree contains any failed leaf nodes
              * If failed leaf nodes exist: filter out pending dependent tasks
              * If no failed leaf nodes: copy all dependent tasks
-        5. Collect all required task IDs (original_task subtree + filtered dependent tasks)
-        6. Build minimal subtree containing all required tasks
-        7. Copy entire tree structure
-        8. Save copied tree to database
-        9. Mark all original tasks as having copies
+        6. Collect all required task IDs (original_task subtree + filtered dependent tasks)
+        7. Build minimal subtree containing all required tasks
+        8. Copy entire tree structure
+        9. Save copied tree to database
+        10. Mark all original tasks as having copies
         
         Args:
             original_task: Original task to copy (can be root or any task in tree)
+            children: If True, also copy each direct child task with its dependencies.
+                     When copying children, tasks that depend on multiple copied tasks are
+                     only copied once (deduplication by task ID).
             
         Returns:
             TaskTreeNode with copied task tree, all tasks linked to original via original_task_id
         """
-        logger.info(f"Creating task copy for original task {original_task.id}")
+        logger.info(f"Creating task copy for original task {original_task.id}, children={children}")
         
         # Step 1: Get root task and all tasks in the tree for dependency lookup
+        # Note: children=True only supports dependencies within the same root tree
         root_task = await self.task_manager.task_repository.get_root_task(original_task)
         all_tasks = await self.task_manager.task_repository.get_all_tasks_in_tree(root_task)
         
@@ -819,7 +824,15 @@ class TaskCreator:
         
         # Step 3: Collect all task identifiers (id or name) from the subtree
         task_identifiers = self._collect_task_identifiers_from_tree(original_subtree)
-        logger.info(f"Collected {len(task_identifiers)} task identifiers from original_task subtree: {task_identifiers}")
+        
+        # If children=True, also collect identifiers from each direct child's subtree
+        if children:
+            for child_node in original_subtree.children:
+                child_identifiers = self._collect_task_identifiers_from_tree(child_node)
+                task_identifiers.update(child_identifiers)
+                logger.info(f"Collected {len(child_identifiers)} task identifiers from child {child_node.task.id} subtree")
+        
+        logger.info(f"Collected {len(task_identifiers)} total task identifiers (original_task + {'children' if children else 'no children'}): {task_identifiers}")
         
         # Step 4: Find all tasks that depend on these identifiers (including transitive dependencies)
         dependent_tasks = []
@@ -880,18 +893,20 @@ class TaskCreator:
         logger.info(f"Total {len(required_task_ids)} tasks to copy: {len(self.tree_to_flat_list(original_subtree))} from original_task subtree + {len(dependent_tasks)} dependent tasks")
         
         # Step 6: Build minimal subtree containing all required tasks
+        # Note: children=True only supports dependencies within the same root tree
         if not dependent_tasks:
             # No dependents: use original_task subtree directly
             minimal_tree = original_subtree
             logger.info(f"No dependents found, using original_task subtree directly")
         else:
             # Has dependents: find minimal subtree that includes original_task + all dependents
+            # All dependents should be in the same root tree (children=True only supports same root tree)
             root_tree = await self.task_manager.task_repository.build_task_tree(root_task)
             minimal_tree = await self._find_minimal_subtree(root_tree, required_task_ids)
             
             if not minimal_tree:
-                # Fallback: if minimal tree not found, use original_task subtree
-                logger.warning(f"Could not build minimal subtree, falling back to original_task subtree")
+                # Fallback: use original_subtree
+                logger.warning(f"Could not build minimal subtree with dependents, falling back to original_task subtree")
                 minimal_tree = original_subtree
         
         root_original_task_id = minimal_tree.task.id

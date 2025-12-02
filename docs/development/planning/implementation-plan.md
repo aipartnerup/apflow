@@ -143,7 +143,13 @@ def scheduled_task():
    ```python
    # Use create_task_copy for failed tasks
    if task.status == "failed":
-       new_tree = await task_creator.create_task_copy(task)
+       # Copy task with its dependencies
+       new_tree = await task_creator.create_task_copy(task, children=False)
+       await task_manager.distribute_task_tree(new_tree)
+       
+   # Or copy with children if needed
+   if task.status == "failed":
+       new_tree = await task_creator.create_task_copy(task, children=True)
        await task_manager.distribute_task_tree(new_tree)
    ```
 

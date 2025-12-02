@@ -332,6 +332,9 @@ aipartnerupflow tasks copy task-123
 
 # Copy and save to file
 aipartnerupflow tasks copy task-123 --output /path/to/copied_task.json
+
+# Copy with children (also copy each direct child task with its dependencies)
+aipartnerupflow tasks copy task-123 --children
 ```
 
 **What gets copied:**

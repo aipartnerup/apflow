@@ -156,6 +156,9 @@ JSON-RPC 2.0 format:
     - `method` (string, optional): HTTP method for callbacks (default: "POST")
 - `metadata` (object, optional): Additional metadata
   - `stream` (boolean, optional): Enable streaming mode for real-time updates
+  - `task_id` (string, optional): Existing task ID to execute. When provided with `copy_execution=true`, the task will be copied before execution.
+  - `copy_execution` (boolean, optional): If `true`, copy the task specified by `metadata.task_id` before execution to preserve the original task's execution history. When `true`, creates a copy of the task tree and executes the copy, leaving the original task unchanged. Default: `false`.
+  - `copy_children` (boolean, optional): If `true` and `copy_execution=true`, also copy each direct child task of the original task with its dependencies. When copying children, tasks that depend on multiple copied tasks are only copied once (deduplication by task ID). Default: `false`.
 
 **Response Format:**  
 JSON-RPC 2.0 response with A2A Protocol Task object:
@@ -714,6 +717,7 @@ Creates a new executable copy of an existing task tree for re-execution. This me
 
 **Parameters:**
 - `task_id` (string, required): ID of the task to copy. Can be root task or any task in the tree. The method will copy the minimal subtree containing the task and all its dependencies.
+- `children` (boolean, optional): If `true`, also copy each direct child task of the original task with its dependencies. When copying children, tasks that depend on multiple copied tasks are only copied once (deduplication by task ID). Default: `false`.
 
 **Example Request:**
 ```json
@@ -721,9 +725,23 @@ Creates a new executable copy of an existing task tree for re-execution. This me
   "jsonrpc": "2.0",
   "method": "tasks.copy",
   "params": {
-    "task_id": "task-abc-123"
+    "task_id": "task-abc-123",
+    "children": false
   },
   "id": "copy-request-1"
+}
+```
+
+**Example Request with children:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tasks.copy",
+  "params": {
+    "task_id": "task-abc-123",
+    "children": true
+  },
+  "id": "copy-request-2"
 }
 ```
 
@@ -859,6 +877,8 @@ The task must exist in the database and must not already be running. Execution f
   - If the task is a root task, the entire task tree will be executed.
   - If the task is a child task, the task and all its dependencies (including transitive) will be executed.
 - `use_streaming` (boolean, optional): Whether to use streaming mode for real-time progress updates (default: false). If true, the endpoint returns a `StreamingResponse` with Server-Sent Events (SSE) instead of a JSON response.
+- `copy_execution` (boolean, optional): If `true`, copy the task before execution to preserve the original task's execution history. Only applies to `task_id` mode. When `true`, creates a copy of the task tree and executes the copy, leaving the original task unchanged. Default: `false`.
+- `copy_children` (boolean, optional): If `true` and `copy_execution=true`, also copy each direct child task of the original task with its dependencies. When copying children, tasks that depend on multiple copied tasks are only copied once (deduplication by task ID). Default: `false`.
 - `webhook_config` (object, optional): Webhook configuration for push notifications. If provided, task execution updates will be sent to the specified webhook URL via HTTP callbacks. This is similar to A2A Protocol's push notification feature.
   - `url` (string, required): Webhook callback URL where updates will be sent
   - `headers` (object, optional): HTTP headers to include in webhook requests (e.g., `{"Authorization": "Bearer token"}`)
@@ -914,6 +934,34 @@ The task must exist in the database and must not already be running. Execution f
 }
 ```
 
+**Example Request (Copy before execution):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tasks.execute",
+  "params": {
+    "task_id": "task-abc-123",
+    "copy_execution": true,
+    "copy_children": false
+  },
+  "id": "execute-request-2"
+}
+```
+
+**Example Request (Copy with children before execution):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tasks.execute",
+  "params": {
+    "task_id": "task-abc-123",
+    "copy_execution": true,
+    "copy_children": true
+  },
+  "id": "execute-request-3"
+}
+```
+
 **Example Response (Non-streaming):**
 ```json
 {
@@ -926,6 +974,23 @@ The task must exist in the database and must not already be running. Execution f
     "task_id": "task-abc-123",
     "status": "started",
     "message": "Task task-abc-123 execution started"
+  }
+}
+```
+
+**Example Response (Copy before execution):**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "execute-request-2",
+  "result": {
+    "success": true,
+    "protocol": "jsonrpc",
+    "root_task_id": "task-copy-xyz-789",
+    "task_id": "task-copy-xyz-789",
+    "original_task_id": "task-abc-123",
+    "status": "started",
+    "message": "Task execution started"
   }
 }
 ```
@@ -974,8 +1039,9 @@ data: {"type": "stream_end", "task_id": "task-abc-123"}
 **Response Fields:**
 - `success` (boolean): Whether execution was started successfully
 - `protocol` (string): Protocol identifier, always `"jsonrpc"` for this endpoint. Used to distinguish from A2A protocol responses.
-- `root_task_id` (string): ID of the root task in the tree
-- `task_id` (string): ID of the task that was executed
+- `root_task_id` (string): ID of the root task in the tree (copied task ID if `copy_execution=true`)
+- `task_id` (string): ID of the task that was executed (copied task ID if `copy_execution=true`)
+- `original_task_id` (string, optional): Present only when `copy_execution=true`. The ID of the original task that was copied before execution.
 - `status` (string): Execution status ("started", "already_running", "failed")
 - `message` (string): Status message
 - `streaming` (boolean, optional): Present when `use_streaming=true` or `webhook_config` is provided. Indicates that streaming/webhook mode is enabled.
@@ -985,6 +1051,13 @@ data: {"type": "stream_end", "task_id": "task-abc-123"}
 - Task not found: Returns error with code -32602
 - Permission denied: Returns error with code -32001
 - Task already running: Returns success=false with status "already_running"
+
+**Notes:**
+- When `copy_execution=true`, the original task is copied before execution, preserving its execution history. The copied task is then executed, and the response includes both `task_id` (the copied task) and `original_task_id` (the original task).
+- The `copy_execution` parameter only applies to `task_id` mode (executing existing tasks), not `tasks_array` mode (creating new tasks).
+- When `copy_children=true` and `copy_execution=true`, each direct child task of the original task is also copied with its dependencies. Tasks that depend on multiple copied tasks are only copied once (deduplication by task ID).
+- The copied task tree has new task IDs but preserves the original structure. All execution fields are reset (status="pending", progress=0.0, result=null).
+- The original task's `has_copy` flag is set to `true` after copying.
 
 **Webhook Callback Format:**
 
@@ -2362,6 +2435,185 @@ The A2A protocol also supports streaming mode via `metadata.stream`. When enable
   "id": "request-123"
 }
 ```
+
+### Copy Before Execution
+
+The A2A protocol supports copying existing tasks before execution via `metadata.copy_execution` and `metadata.copy_children`. This feature allows you to preserve the original task's execution history while creating a new execution instance.
+
+#### When to Use Copy Execution
+
+- **Preserve Execution History**: When you want to re-execute a task without losing the original task's results and status
+- **A/B Testing**: Compare different execution strategies on the same task definition
+- **Retry Failed Tasks**: Create a fresh copy of a failed task for retry without modifying the original
+- **Task Templates**: Use completed tasks as templates for new executions
+
+#### Basic Copy Execution
+
+To copy a task before execution, provide the task ID in `metadata.task_id` and set `metadata.copy_execution=true`:
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "execute_task_tree",
+  "params": {},
+  "metadata": {
+    "task_id": "existing-task-id",
+    "copy_execution": true
+  },
+  "id": "request-123"
+}
+```
+
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "request-123",
+  "result": {
+    "id": "task-execution-id",
+    "context_id": "copied-task-id",
+    "kind": "task",
+    "status": {
+      "state": "completed",
+      "message": {
+        "kind": "message",
+        "parts": [
+          {
+            "kind": "data",
+            "data": {
+              "protocol": "a2a",
+              "status": "completed",
+              "progress": 1.0,
+              "root_task_id": "copied-task-id",
+              "task_count": 1
+            }
+          }
+        ]
+      }
+    },
+    "metadata": {
+      "protocol": "a2a",
+      "root_task_id": "copied-task-id",
+      "original_task_id": "existing-task-id",
+      "user_id": "user123"
+    }
+  }
+}
+```
+
+**Key Points:**
+- The original task (`existing-task-id`) remains unchanged
+- A new task (`copied-task-id`) is created and executed
+- The response includes both `root_task_id` (the copied task) and `original_task_id` (the original task) in metadata
+- All execution-specific fields (status, result, progress) are reset in the copy
+
+#### Copy with Children
+
+To also copy child tasks and their dependencies, set `metadata.copy_children=true`:
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "execute_task_tree",
+  "params": {},
+  "metadata": {
+    "task_id": "parent-task-id",
+    "copy_execution": true,
+    "copy_children": true
+  },
+  "id": "request-123"
+}
+```
+
+**Behavior:**
+- The parent task is copied
+- Each direct child task of the parent is also copied
+- All dependencies of the copied children are included
+- Tasks that depend on multiple copied children are only copied once (automatic deduplication)
+
+**Example Scenario:**
+```
+Original Task Tree:
+- Parent Task (id: parent-1)
+  - Child 1 (id: child-1, depends on: dep-1)
+  - Child 2 (id: child-2, depends on: dep-1, dep-2)
+  - Dependency 1 (id: dep-1)
+  - Dependency 2 (id: dep-2)
+
+After copy_execution=true, copy_children=true:
+- Copied Parent Task (id: parent-1-copy)
+  - Copied Child 1 (id: child-1-copy, depends on: dep-1-copy)
+  - Copied Child 2 (id: child-2-copy, depends on: dep-1-copy, dep-2-copy)
+  - Copied Dependency 1 (id: dep-1-copy) - copied only once, shared by both children
+  - Copied Dependency 2 (id: dep-2-copy)
+```
+
+#### Copy Execution with Streaming
+
+Copy execution works with streaming mode:
+
+**Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "execute_task_tree",
+  "params": {},
+  "metadata": {
+    "task_id": "existing-task-id",
+    "copy_execution": true,
+    "copy_children": true,
+    "stream": true
+  },
+  "id": "request-123"
+}
+```
+
+The streaming events will include `original_task_id` in the metadata:
+
+```json
+{
+  "task_id": "task-execution-id",
+  "context_id": "copied-task-id",
+  "status": {
+    "state": "working",
+    "message": {
+      "parts": [
+        {
+          "kind": "data",
+          "data": {
+            "protocol": "a2a",
+            "status": "in_progress",
+            "progress": 0.5,
+            "root_task_id": "copied-task-id",
+            "metadata": {
+              "original_task_id": "existing-task-id"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "final": false
+}
+```
+
+#### Important Notes
+
+1. **Task ID Required**: When `copy_execution=true`, `metadata.task_id` must be provided. The task must exist in the database.
+
+2. **Only for Existing Tasks**: Copy execution only works with existing tasks. It cannot be used with `params.tasks` array (creating new tasks).
+
+3. **Dependency Handling**: When `copy_children=true`, all dependencies are automatically included. The system ensures no duplicate copies of shared dependencies.
+
+4. **Execution State Reset**: Copied tasks have their execution state reset:
+   - `status`: Set to `"pending"`
+   - `result`: Set to `None`
+   - `progress`: Set to `0.0`
+   - `original_task_id`: Links to the original task
+
+5. **Original Task Unchanged**: The original task and its execution history remain completely unchanged.
 
 ## A2A Client SDK Usage
 

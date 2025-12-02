@@ -120,6 +120,26 @@ curl -N -H "Content-Type: application/json" \
 
 The response will be a Server-Sent Events stream with real-time progress updates.
 
+### Copy Before Execution
+
+Use `tasks.execute` with `copy_execution=true` to copy the task before execution, preserving the original task's execution history:
+
+```bash
+curl -X POST http://localhost:8000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "tasks.execute", "params": {"task_id": "task-123", "copy_execution": true}, "id": 1}'
+```
+
+To also copy child tasks with their dependencies:
+
+```bash
+curl -X POST http://localhost:8000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "tasks.execute", "params": {"task_id": "task-123", "copy_execution": true, "copy_children": true}, "id": 1}'
+```
+
+The response will include both `task_id` (the copied task) and `original_task_id` (the original task).
+
 ### WebSocket
 
 Connect via WebSocket for bidirectional communication:

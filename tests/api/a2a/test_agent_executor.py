@@ -242,6 +242,320 @@ class TestAgentExecutor:
                     assert artifact_data.get("status") == "completed"
                     assert artifact_data.get("root_task_id") == "task-1"
     
+    @pytest.mark.asyncio
+    async def test_execute_simple_mode_with_copy_execution(self, executor, mock_event_queue):
+        """Test simple mode execution with copy_execution=True"""
+        from aipartnerupflow.core.types import TaskTreeNode
+        from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+        
+        original_task_id = "original-task-id"
+        copied_task_id = "copied-task-id"
+        
+        # Create metadata with copy_execution
+        metadata = {
+            "task_id": original_task_id,
+            "copy_execution": True,
+            "copy_children": False
+        }
+        
+        # Create context without tasks (since we're copying from existing task)
+        context = self._create_request_context([], metadata=metadata)
+        
+        # Mock original task
+        original_task = Mock(spec=TaskModel)
+        original_task.id = original_task_id
+        original_task.user_id = "test-user"
+        original_task.name = "Original Task"
+        original_task.status = "completed"
+        original_task.result = {"output": "test result"}
+        
+        # Mock copied task
+        copied_task = Mock(spec=TaskModel)
+        copied_task.id = copied_task_id
+        copied_task.user_id = "test-user"
+        copied_task.name = "Original Task"
+        copied_task.status = "pending"
+        copied_task.result = None
+        copied_task.to_dict.return_value = {
+            "id": copied_task_id,
+            "user_id": "test-user",
+            "name": "Original Task",
+            "status": "pending"
+        }
+        
+        # Mock copied tree
+        copied_tree = Mock(spec=TaskTreeNode)
+        copied_tree.task = copied_task
+        copied_tree.children = []
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch('aipartnerupflow.api.a2a.agent_executor.TaskRepository') as mock_repo_class, \
+             patch('aipartnerupflow.api.a2a.agent_executor.TaskCreator') as mock_creator_class, \
+             patch.object(executor.task_executor, 'execute_tasks') as mock_execute_tasks:
+            
+            mock_get_session.return_value = Mock()
+            
+            # Mock TaskRepository
+            mock_repository = AsyncMock(spec=TaskRepository)
+            mock_repository.get_task_by_id = AsyncMock(return_value=original_task)
+            mock_repository.get_root_task = AsyncMock(return_value=copied_task)
+            mock_repo_class.return_value = mock_repository
+            
+            # Mock TaskCreator
+            mock_creator = AsyncMock()
+            mock_creator.create_task_copy = AsyncMock(return_value=copied_tree)
+            mock_creator_class.return_value = mock_creator
+            
+            # Mock TaskExecutor.execute_tasks
+            mock_execution_result = {
+                "status": "completed",
+                "progress": 1.0,
+                "root_task_id": copied_task_id
+            }
+            mock_execute_tasks.return_value = mock_execution_result
+            
+            result = await executor._execute_simple_mode(context, mock_event_queue)
+            
+            # Verify TaskCreator.create_task_copy was called
+            mock_creator.create_task_copy.assert_called_once()
+            call_args = mock_creator.create_task_copy.call_args
+            assert call_args[0][0].id == original_task_id
+            assert call_args[1]["children"] is False
+            
+            # Verify TaskExecutor.execute_tasks was called with copied tasks
+            assert mock_execute_tasks.called
+            
+            # Verify result contains original_task_id in metadata
+            from a2a.types import Task
+            assert isinstance(result, Task)
+            assert result.metadata is not None
+            assert result.metadata.get("original_task_id") == original_task_id
+    
+    @pytest.mark.asyncio
+    async def test_execute_simple_mode_with_copy_execution_and_children(self, executor, mock_event_queue):
+        """Test simple mode execution with copy_execution=True and copy_children=True"""
+        from aipartnerupflow.core.types import TaskTreeNode
+        from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+        
+        original_task_id = "original-task-id"
+        copied_task_id = "copied-task-id"
+        
+        # Create metadata with copy_execution and copy_children
+        metadata = {
+            "task_id": original_task_id,
+            "copy_execution": True,
+            "copy_children": True
+        }
+        
+        # Create context without tasks
+        context = self._create_request_context([], metadata=metadata)
+        
+        # Mock original task
+        original_task = Mock(spec=TaskModel)
+        original_task.id = original_task_id
+        original_task.user_id = "test-user"
+        
+        # Mock copied task
+        copied_task = Mock(spec=TaskModel)
+        copied_task.id = copied_task_id
+        copied_task.user_id = "test-user"
+        copied_task.to_dict.return_value = {
+            "id": copied_task_id,
+            "user_id": "test-user",
+            "name": "Original Task",
+            "status": "pending"
+        }
+        
+        # Mock copied tree with children
+        copied_tree = Mock(spec=TaskTreeNode)
+        copied_tree.task = copied_task
+        copied_tree.children = []
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch('aipartnerupflow.api.a2a.agent_executor.TaskRepository') as mock_repo_class, \
+             patch('aipartnerupflow.api.a2a.agent_executor.TaskCreator') as mock_creator_class, \
+             patch.object(executor.task_executor, 'execute_tasks') as mock_execute_tasks:
+            
+            mock_get_session.return_value = Mock()
+            
+            # Mock TaskRepository
+            mock_repository = AsyncMock(spec=TaskRepository)
+            mock_repository.get_task_by_id = AsyncMock(return_value=original_task)
+            mock_repository.get_root_task = AsyncMock(return_value=copied_task)
+            mock_repo_class.return_value = mock_repository
+            
+            # Mock TaskCreator
+            mock_creator = AsyncMock()
+            mock_creator.create_task_copy = AsyncMock(return_value=copied_tree)
+            mock_creator_class.return_value = mock_creator
+            
+            # Mock TaskExecutor.execute_tasks
+            mock_execution_result = {
+                "status": "completed",
+                "progress": 1.0,
+                "root_task_id": copied_task_id
+            }
+            mock_execute_tasks.return_value = mock_execution_result
+            
+            result = await executor._execute_simple_mode(context, mock_event_queue)
+            
+            # Verify TaskCreator.create_task_copy was called with children=True
+            mock_creator.create_task_copy.assert_called_once()
+            call_args = mock_creator.create_task_copy.call_args
+            assert call_args[0][0].id == original_task_id
+            assert call_args[1]["children"] is True
+    
+    @pytest.mark.asyncio
+    async def test_execute_simple_mode_copy_execution_missing_task_id(self, executor, mock_event_queue):
+        """Test copy_execution=True without task_id in metadata raises error"""
+        metadata = {
+            "copy_execution": True,
+            # Missing task_id
+        }
+        
+        context = self._create_request_context([], metadata=metadata)
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session:
+            mock_get_session.return_value = Mock()
+            
+            with pytest.raises(ValueError, match="task_id is required"):
+                await executor._execute_simple_mode(context, mock_event_queue)
+    
+    @pytest.mark.asyncio
+    async def test_execute_streaming_mode_with_copy_execution(self, executor, mock_event_queue):
+        """Test streaming mode execution with copy_execution=True"""
+        from aipartnerupflow.core.types import TaskTreeNode
+        from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+        
+        original_task_id = "original-task-id"
+        copied_task_id = "copied-task-id"
+        
+        # Create metadata with copy_execution
+        metadata = {
+            "task_id": original_task_id,
+            "copy_execution": True,
+            "copy_children": False
+        }
+        
+        # Create context without tasks
+        context = self._create_request_context([], metadata=metadata)
+        context.task_id = "context-task-id"
+        context.context_id = "context-id"
+        
+        # Mock original task
+        original_task = Mock(spec=TaskModel)
+        original_task.id = original_task_id
+        original_task.user_id = "test-user"
+        
+        # Mock copied task
+        copied_task = Mock(spec=TaskModel)
+        copied_task.id = copied_task_id
+        copied_task.user_id = "test-user"
+        copied_task.to_dict.return_value = {
+            "id": copied_task_id,
+            "user_id": "test-user",
+            "name": "Original Task",
+            "status": "pending"
+        }
+        
+        # Mock copied tree
+        copied_tree = Mock(spec=TaskTreeNode)
+        copied_tree.task = copied_task
+        copied_tree.children = []
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch('aipartnerupflow.api.a2a.agent_executor.TaskRepository') as mock_repo_class, \
+             patch('aipartnerupflow.api.a2a.agent_executor.TaskCreator') as mock_creator_class, \
+             patch('aipartnerupflow.api.a2a.agent_executor.EventQueueBridge') as mock_bridge_class, \
+             patch.object(executor.task_executor, 'execute_tasks') as mock_execute_tasks:
+            
+            mock_get_session.return_value = Mock()
+            
+            # Mock TaskRepository
+            mock_repository = AsyncMock(spec=TaskRepository)
+            mock_repository.get_task_by_id = AsyncMock(return_value=original_task)
+            mock_repository.get_root_task = AsyncMock(return_value=copied_task)
+            mock_repo_class.return_value = mock_repository
+            
+            # Mock TaskCreator
+            mock_creator = AsyncMock()
+            mock_creator.create_task_copy = AsyncMock(return_value=copied_tree)
+            mock_creator_class.return_value = mock_creator
+            
+            # Mock EventQueueBridge
+            mock_bridge = Mock()
+            mock_bridge.original_task_id = None
+            mock_bridge_class.return_value = mock_bridge
+            
+            # Mock TaskExecutor.execute_tasks
+            mock_execution_result = {
+                "status": "in_progress",
+                "progress": 0.5,
+                "root_task_id": copied_task_id
+            }
+            mock_execute_tasks.return_value = mock_execution_result
+            
+            result = await executor._execute_streaming_mode(context, mock_event_queue)
+            
+            # Verify TaskCreator.create_task_copy was called
+            mock_creator.create_task_copy.assert_called_once()
+            
+            # Verify EventQueueBridge was created and original_task_id was set
+            assert mock_bridge.original_task_id == original_task_id
+            
+            # Verify result contains original_task_id
+            assert isinstance(result, dict)
+            assert result.get("original_task_id") == original_task_id
+            assert result.get("root_task_id") == copied_task_id
+    
+    @pytest.mark.asyncio
+    async def test_tree_node_to_tasks_array(self, executor):
+        """Test converting TaskTreeNode to tasks array format"""
+        from aipartnerupflow.core.types import TaskTreeNode
+        from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+        
+        # Create root task
+        root_task = Mock(spec=TaskModel)
+        root_task.id = "root-task"
+        root_task.user_id = "test-user"
+        root_task.name = "Root Task"
+        root_task.to_dict.return_value = {
+            "id": "root-task",
+            "user_id": "test-user",
+            "name": "Root Task",
+            "status": "pending"
+        }
+        
+        # Create child task
+        child_task = Mock(spec=TaskModel)
+        child_task.id = "child-task"
+        child_task.user_id = "test-user"
+        child_task.name = "Child Task"
+        child_task.to_dict.return_value = {
+            "id": "child-task",
+            "user_id": "test-user",
+            "name": "Child Task",
+            "status": "pending",
+            "parent_id": "root-task"
+        }
+        
+        # Create tree structure
+        child_node = Mock(spec=TaskTreeNode)
+        child_node.task = child_task
+        child_node.children = []
+        
+        root_node = Mock(spec=TaskTreeNode)
+        root_node.task = root_task
+        root_node.children = [child_node]
+        
+        # Convert to tasks array
+        tasks = executor._tree_node_to_tasks_array(root_node)
+        
+        # Verify structure
+        assert len(tasks) == 2
+        assert tasks[0]["id"] == "root-task"
+        assert tasks[1]["id"] == "child-task"
+    
     # ============================================================================
     # Integration Tests (Real Database)
     # ============================================================================

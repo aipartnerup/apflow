@@ -20,6 +20,7 @@ from aipartnerupflow.api.routes.tasks import TaskRoutes
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.config import get_task_model_class
+from aipartnerupflow.core.execution.task_tracker import TaskTracker
 
 
 @pytest.fixture
@@ -319,4 +320,191 @@ class TestHandleTaskExecute:
                 
                 with pytest.raises(ValueError, match="webhook_config.url is required"):
                     await task_routes.handle_task_execute(params, mock_request, request_id)
+
+    @pytest.mark.asyncio
+    async def test_copy_execution_basic(self, task_routes, mock_request, sample_task):
+        """Test copy_execution=True parameter"""
+        params = {
+            "task_id": sample_task,
+            "copy_execution": True,
+            "use_streaming": False
+        }
+        request_id = str(uuid.uuid4())
+        
+        # Mock TaskCreator.create_task_copy
+        with patch('aipartnerupflow.api.routes.tasks.TaskCreator') as mock_creator_class:
+            mock_creator = Mock()
+            mock_copied_task = Mock()
+            mock_copied_task.id = "copied-task-id"
+            mock_copied_tree = Mock()
+            mock_copied_tree.task = mock_copied_task
+            mock_creator.create_task_copy = AsyncMock(return_value=mock_copied_tree)
+            mock_creator_class.return_value = mock_creator
+            
+            # Mock _get_task_repository to return a mock repository
+            with patch.object(task_routes, '_get_task_repository') as mock_get_repo:
+                mock_repository = Mock(spec=TaskRepository)
+                
+                # Mock get_task_by_id: first call returns original task, second call returns copied task
+                call_count = {"count": 0}
+                async def get_task_side_effect(task_id):
+                    call_count["count"] += 1
+                    if task_id == sample_task:
+                        # Return original task
+                        task = Mock()
+                        task.id = sample_task
+                        task.user_id = "test_user"
+                        return task
+                    elif task_id == "copied-task-id":
+                        # Return copied task
+                        return mock_copied_task
+                    return None
+                
+                mock_repository.get_task_by_id = AsyncMock(side_effect=get_task_side_effect)
+                mock_repository.get_root_task = AsyncMock(return_value=mock_copied_task)
+                mock_get_repo.return_value = mock_repository
+                
+                # Mock TaskExecutor
+                with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor') as mock_executor_class:
+                    mock_executor = Mock()
+                    mock_executor.execute_task_by_id = AsyncMock(return_value={
+                        "status": "started",
+                        "progress": 0.0,
+                        "root_task_id": "copied-task-id"
+                    })
+                    mock_executor_class.return_value = mock_executor
+                    
+                    # Mock TaskTracker
+                    with patch.object(TaskTracker(), 'is_task_running', return_value=False):
+                        result = await task_routes.handle_task_execute(params, mock_request, request_id)
+        
+        # Verify response includes original_task_id
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        assert result["protocol"] == "jsonrpc"
+        assert result["root_task_id"] == "copied-task-id"
+        assert result["task_id"] == "copied-task-id"
+        assert result["original_task_id"] == sample_task
+        assert result["status"] == "started"
+        
+        # Verify create_task_copy was called with correct parameters
+        mock_creator.create_task_copy.assert_called_once()
+        call_args = mock_creator.create_task_copy.call_args
+        assert call_args[0][0].id == sample_task  # First positional arg is the task
+        assert call_args[1]["children"] is False  # children defaults to False
+
+    @pytest.mark.asyncio
+    async def test_copy_execution_with_children(self, task_routes, mock_request, sample_task):
+        """Test copy_execution=True with copy_children=True"""
+        params = {
+            "task_id": sample_task,
+            "copy_execution": True,
+            "copy_children": True,
+            "use_streaming": False
+        }
+        request_id = str(uuid.uuid4())
+        
+        # Mock TaskCreator.create_task_copy
+        with patch('aipartnerupflow.api.routes.tasks.TaskCreator') as mock_creator_class:
+            mock_creator = Mock()
+            mock_copied_task = Mock()
+            mock_copied_task.id = "copied-task-id"
+            mock_copied_tree = Mock()
+            mock_copied_tree.task = mock_copied_task
+            mock_creator.create_task_copy = AsyncMock(return_value=mock_copied_tree)
+            mock_creator_class.return_value = mock_creator
+            
+            # Mock _get_task_repository to return a mock repository
+            with patch.object(task_routes, '_get_task_repository') as mock_get_repo:
+                mock_repository = Mock(spec=TaskRepository)
+                async def get_task_side_effect(task_id):
+                    if task_id == sample_task:
+                        task = Mock()
+                        task.id = sample_task
+                        task.user_id = "test_user"
+                        return task
+                    elif task_id == "copied-task-id":
+                        return mock_copied_task
+                    return None
+                mock_repository.get_task_by_id = AsyncMock(side_effect=get_task_side_effect)
+                mock_repository.get_root_task = AsyncMock(return_value=mock_copied_task)
+                mock_get_repo.return_value = mock_repository
+                
+                # Mock TaskExecutor
+                with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor') as mock_executor_class:
+                    mock_executor = Mock()
+                    mock_executor.execute_task_by_id = AsyncMock(return_value={
+                        "status": "started",
+                        "progress": 0.0,
+                        "root_task_id": "copied-task-id"
+                    })
+                    mock_executor_class.return_value = mock_executor
+                    
+                    # Mock TaskTracker
+                    with patch.object(TaskTracker(), 'is_task_running', return_value=False):
+                        result = await task_routes.handle_task_execute(params, mock_request, request_id)
+        
+        # Verify response includes original_task_id
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        assert result["original_task_id"] == sample_task
+        
+        # Verify create_task_copy was called with children=True
+        mock_creator.create_task_copy.assert_called_once()
+        call_args = mock_creator.create_task_copy.call_args
+        assert call_args[1]["children"] is True
+
+    @pytest.mark.asyncio
+    async def test_copy_execution_with_streaming(self, task_routes, mock_request, sample_task):
+        """Test copy_execution=True with use_streaming=True"""
+        params = {
+            "task_id": sample_task,
+            "copy_execution": True,
+            "use_streaming": True
+        }
+        request_id = str(uuid.uuid4())
+        
+        # Mock TaskCreator.create_task_copy
+        with patch('aipartnerupflow.api.routes.tasks.TaskCreator') as mock_creator_class:
+            mock_creator = Mock()
+            mock_copied_task = Mock()
+            mock_copied_task.id = "copied-task-id"
+            mock_copied_tree = Mock()
+            mock_copied_tree.task = mock_copied_task
+            mock_creator.create_task_copy = AsyncMock(return_value=mock_copied_tree)
+            mock_creator_class.return_value = mock_creator
+            
+            # Mock _get_task_repository to return a mock repository
+            with patch.object(task_routes, '_get_task_repository') as mock_get_repo:
+                mock_repository = Mock(spec=TaskRepository)
+                async def get_task_side_effect(task_id):
+                    if task_id == sample_task:
+                        task = Mock()
+                        task.id = sample_task
+                        task.user_id = "test_user"
+                        return task
+                    elif task_id == "copied-task-id":
+                        return mock_copied_task
+                    return None
+                mock_repository.get_task_by_id = AsyncMock(side_effect=get_task_side_effect)
+                mock_repository.get_root_task = AsyncMock(return_value=mock_copied_task)
+                mock_get_repo.return_value = mock_repository
+                
+                # Mock TaskExecutor
+                with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor') as mock_executor_class:
+                    mock_executor = Mock()
+                    mock_executor.execute_task_by_id = AsyncMock(return_value={
+                        "status": "started",
+                        "progress": 0.0,
+                        "root_task_id": "copied-task-id"
+                    })
+                    mock_executor_class.return_value = mock_executor
+                    
+                    # Mock TaskTracker
+                    with patch.object(TaskTracker(), 'is_task_running', return_value=False):
+                        result = await task_routes.handle_task_execute(params, mock_request, request_id)
+        
+        # Verify response is StreamingResponse
+        assert isinstance(result, StreamingResponse)
+        assert result.media_type == "text/event-stream"
 

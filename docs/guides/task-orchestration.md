@@ -19,6 +19,8 @@ Master task orchestration in aipartnerupflow. Learn how to create complex workfl
 5. [Common Patterns](#common-patterns)
 6. [Best Practices](#best-practices)
 7. [Advanced Topics](#advanced-topics)
+   - [Task Copy and Re-execution](#task-copy-and-re-execution)
+   - [Task Re-execution](#task-re-execution)
 
 ## Core Concepts
 
@@ -740,6 +742,169 @@ for task in tasks:
 - No documentation
 
 ## Advanced Topics
+
+### Task Copy and Re-execution
+
+#### Copy Before Execution
+
+When you want to re-execute a task without modifying the original task's execution history, you can use the **copy execution** feature. This creates a new copy of the task (and optionally its children) with execution state reset, while preserving the original task unchanged.
+
+**Use Cases:**
+- **Preserve History**: Keep the original task's results and status for audit purposes
+- **A/B Testing**: Compare different execution strategies on the same task definition
+- **Retry Failed Tasks**: Create a fresh copy of a failed task for retry
+- **Task Templates**: Use completed tasks as templates for new executions
+
+#### Using Copy Execution (HTTP API)
+
+**Basic Copy:**
+```bash
+curl -X POST http://localhost:8000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tasks.execute",
+    "params": {
+      "task_id": "existing-task-id",
+      "copy_execution": true
+    },
+    "id": 1
+  }'
+```
+
+**Copy with Children:**
+```bash
+curl -X POST http://localhost:8000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tasks.execute",
+    "params": {
+      "task_id": "parent-task-id",
+      "copy_execution": true,
+      "copy_children": true
+    },
+    "id": 1
+  }'
+```
+
+**Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "success": true,
+    "root_task_id": "copied-task-id",
+    "task_id": "copied-task-id",
+    "original_task_id": "existing-task-id",
+    "status": "started"
+  }
+}
+```
+
+#### Using Copy Execution (A2A Protocol)
+
+For A2A protocol, use `metadata.copy_execution` and `metadata.copy_children`:
+
+```python
+from a2a.types import Message, DataPart, Role
+import uuid
+
+message = Message(
+    message_id=str(uuid.uuid4()),
+    role=Role.user,
+    parts=[DataPart(kind="data", data={})],  # Empty when copying
+    metadata={
+        "task_id": "existing-task-id",
+        "copy_execution": True,
+        "copy_children": True  # Optional: also copy children
+    }
+)
+```
+
+#### Using Copy Execution (Python API)
+
+```python
+from aipartnerupflow.core.execution.task_creator import TaskCreator
+from aipartnerupflow.core.storage import get_default_session
+from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from aipartnerupflow.core.execution.task_executor import TaskExecutor
+
+# Get the original task
+db_session = get_default_session()
+task_repository = TaskRepository(db_session)
+original_task = await task_repository.get_task_by_id("existing-task-id")
+
+# Create a copy
+task_creator = TaskCreator(db_session)
+copied_tree = await task_creator.create_task_copy(
+    original_task,
+    children=True  # Also copy children
+)
+
+# Execute the copied task
+task_executor = TaskExecutor()
+result = await task_executor.execute_task_by_id(copied_tree.task.id)
+```
+
+#### Copy Behavior
+
+**What Gets Copied:**
+- Task definition (name, schemas, inputs, params, etc.)
+- Task hierarchy (parent-child relationships)
+- Dependencies (when `copy_children=True`)
+- Task metadata (user_id, priority, etc.)
+
+**What Gets Reset:**
+- `status`: Set to `"pending"`
+- `result`: Set to `None`
+- `progress`: Set to `0.0`
+- Execution timestamps
+
+**What Gets Preserved:**
+- Original task remains completely unchanged
+- Original task's execution history is preserved
+- Original task's results and status remain intact
+
+#### Copy Children Behavior
+
+When `copy_children=True`:
+- Each direct child of the original task is copied
+- All dependencies of copied children are included
+- Tasks that depend on multiple copied children are only copied once (automatic deduplication)
+- The copied tree maintains the same structure as the original
+
+**Example:**
+```
+Original Tree:
+- Parent (id: parent-1)
+  - Child 1 (id: child-1, depends on: dep-1)
+  - Child 2 (id: child-2, depends on: dep-1, dep-2)
+  - Dependency 1 (id: dep-1)
+  - Dependency 2 (id: dep-2)
+
+After copy_execution=true, copy_children=true:
+- Copied Parent (id: parent-1-copy)
+  - Copied Child 1 (id: child-1-copy, depends on: dep-1-copy)
+  - Copied Child 2 (id: child-2-copy, depends on: dep-1-copy, dep-2-copy)
+  - Copied Dependency 1 (id: dep-1-copy) - copied only once!
+  - Copied Dependency 2 (id: dep-2-copy)
+```
+
+#### Best Practices
+
+1. **Use for Retries**: When a task fails, copy it before retrying to preserve the failure record
+2. **Audit Trail**: Keep original tasks for compliance and auditing
+3. **Template Tasks**: Use completed tasks as templates for similar workflows
+4. **A/B Testing**: Compare execution strategies without losing original results
+
+#### Limitations
+
+- Copy execution only works with existing tasks (not with `tasks` array mode)
+- The original task must exist in the database
+- Copying large task trees may take time
+- Dependencies are only copied within the same root tree
 
 ### Task Cancellation
 

@@ -1644,3 +1644,139 @@ class TestTaskCreatorCopy:
         assert "Task C" in task_names
         assert "Task D" in task_names
 
+    @pytest.mark.asyncio
+    async def test_create_task_copy_with_children(self, sync_db_session):
+        """Test create_task_copy with children=True parameter"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create task tree:
+        # root -> child1 -> grandchild1
+        # root -> child2 -> grandchild2
+        # task_depends_on_both (depends on both child1 and child2)
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-task-children", "Root Task"
+        )
+        child1 = await self.create_task(
+            sync_db_session, task_repository,
+            "child-1-children", "Child 1",
+            parent_id=root_task.id
+        )
+        grandchild1 = await self.create_task(
+            sync_db_session, task_repository,
+            "grandchild-1-children", "Grandchild 1",
+            parent_id=child1.id
+        )
+        child2 = await self.create_task(
+            sync_db_session, task_repository,
+            "child-2-children", "Child 2",
+            parent_id=root_task.id
+        )
+        grandchild2 = await self.create_task(
+            sync_db_session, task_repository,
+            "grandchild-2-children", "Grandchild 2",
+            parent_id=child2.id
+        )
+        task_depends_on_both = await self.create_task(
+            sync_db_session, task_repository,
+            "task-depends-both", "Task Depends on Both",
+            parent_id=root_task.id,  # Same root tree
+            dependencies=[
+                {"id": child1.id, "required": True},
+                {"id": child2.id, "required": True}
+            ]
+        )
+        
+        # Copy with children=False (default behavior)
+        new_tree_no_children = await creator.create_task_copy(root_task, children=False)
+        copied_ids_no_children = self.get_task_ids_from_tree(new_tree_no_children)
+        
+        # Copy with children=True
+        new_tree_with_children = await creator.create_task_copy(root_task, children=True)
+        copied_ids_with_children = self.get_task_ids_from_tree(new_tree_with_children)
+        
+        # Verify that with children=True, we get more tasks
+        # Both should include root, child1, child2, grandchild1, grandchild2
+        # But with children=True, we also get task_depends_on_both (which depends on both children)
+        assert len(copied_ids_with_children) >= len(copied_ids_no_children)
+        
+        # Verify task_depends_on_both is included when children=True
+        # (it depends on both child1 and child2, so should be copied)
+        copied_task_names = self.get_task_names_from_tree(new_tree_with_children)
+        assert "Task Depends on Both" in copied_task_names, "Task depending on multiple children should be copied"
+        
+        # Verify deduplication: task_depends_on_both should only appear once
+        all_copied_tasks = creator.tree_to_flat_list(new_tree_with_children)
+        depends_task_count = sum(1 for task in all_copied_tasks if task.name == "Task Depends on Both")
+        assert depends_task_count == 1, "Task depending on multiple copied tasks should only be copied once"
+
+    @pytest.mark.asyncio
+    async def test_create_task_copy_children_deduplication(self, sync_db_session):
+        """Test that tasks depending on multiple copied children are only copied once"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create task tree:
+        # root -> child1
+        # root -> child2
+        # task_x (depends on child1)
+        # task_y (depends on child2)
+        # task_z (depends on both child1 and child2) - should only be copied once
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-dedup", "Root Task"
+        )
+        child1 = await self.create_task(
+            sync_db_session, task_repository,
+            "child-1-dedup", "Child 1",
+            parent_id=root_task.id
+        )
+        child2 = await self.create_task(
+            sync_db_session, task_repository,
+            "child-2-dedup", "Child 2",
+            parent_id=root_task.id
+        )
+        task_x = await self.create_task(
+            sync_db_session, task_repository,
+            "task-x-dedup", "Task X",
+            parent_id=root_task.id,  # Same root tree
+            dependencies=[{"id": child1.id, "required": True}]
+        )
+        task_y = await self.create_task(
+            sync_db_session, task_repository,
+            "task-y-dedup", "Task Y",
+            parent_id=root_task.id,  # Same root tree
+            dependencies=[{"id": child2.id, "required": True}]
+        )
+        task_z = await self.create_task(
+            sync_db_session, task_repository,
+            "task-z-dedup", "Task Z",
+            parent_id=root_task.id,  # Same root tree
+            dependencies=[
+                {"id": child1.id, "required": True},
+                {"id": child2.id, "required": True}
+            ]
+        )
+        
+        # Copy with children=True
+        new_tree = await creator.create_task_copy(root_task, children=True)
+        all_copied_tasks = creator.tree_to_flat_list(new_tree)
+        copied_names = {task.name for task in all_copied_tasks}
+        
+        # Verify all expected tasks are copied
+        assert "Root Task" in copied_names
+        assert "Child 1" in copied_names
+        assert "Child 2" in copied_names
+        assert "Task X" in copied_names
+        assert "Task Y" in copied_names
+        assert "Task Z" in copied_names
+        
+        # Verify Task Z appears only once (deduplication)
+        task_z_count = sum(1 for task in all_copied_tasks if task.name == "Task Z")
+        assert task_z_count == 1, "Task Z should only be copied once despite depending on both children"
+

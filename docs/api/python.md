@@ -219,7 +219,7 @@ Create task trees from task arrays.
 ### Main Methods
 
 - `create_task_tree_from_array(tasks)`: Create task tree from array of task dictionaries
-- `create_task_copy(original_task)`: Create a copy of an existing task tree for re-execution
+- `create_task_copy(original_task, children=False)`: Create a copy of an existing task tree for re-execution. If `children=True`, also copy each direct child task with its dependencies (deduplication ensures tasks depending on multiple copied tasks are only copied once).
 
 **See**: `src/aipartnerupflow/core/execution/task_creator.py` for implementation and `tests/core/execution/test_task_creator.py` for examples.
 
@@ -722,6 +722,111 @@ async for response in client.send_message(message):
     # Process responses
     pass
 ```
+
+### Copy Before Execution
+
+The A2A protocol supports copying existing tasks before execution. This is useful for preserving execution history while creating new execution instances.
+
+#### Basic Copy Execution
+
+To copy a task before execution, set `copy_execution=True` in the message metadata:
+
+```python
+from a2a.types import Message, DataPart, Role
+import uuid
+
+# Create message with copy_execution metadata
+message = Message(
+    message_id=str(uuid.uuid4()),
+    role=Role.user,
+    parts=[DataPart(kind="data", data={})],  # Empty tasks array when copying
+    metadata={
+        "task_id": "existing-task-id",
+        "copy_execution": True
+    }
+)
+
+# Execute copied task
+async for response in client.send_message(message):
+    if isinstance(response, Message):
+        for part in response.parts:
+            if part.kind == "data" and isinstance(part.data, dict):
+                result = part.data
+                print(f"Copied task ID: {result.get('root_task_id')}")
+                print(f"Original task ID: {result.get('metadata', {}).get('original_task_id')}")
+```
+
+#### Copy with Children
+
+To also copy child tasks and their dependencies:
+
+```python
+message = Message(
+    message_id=str(uuid.uuid4()),
+    role=Role.user,
+    parts=[DataPart(kind="data", data={})],
+    metadata={
+        "task_id": "parent-task-id",
+        "copy_execution": True,
+        "copy_children": True  # Also copy children
+    }
+)
+```
+
+#### Complete Example
+
+```python
+import asyncio
+from a2a.client import ClientFactory, ClientConfig
+from a2a.types import Message, DataPart, Role, AgentCard
+import httpx
+
+async def copy_and_execute_task():
+    # Setup A2A client
+    httpx_client = httpx.AsyncClient(base_url="http://localhost:8000")
+    config = ClientConfig(streaming=True, httpx_client=httpx_client)
+    factory = ClientFactory(config=config)
+    
+    # Get agent card
+    card_response = await httpx_client.get("/.well-known/agent-card")
+    agent_card = AgentCard(**card_response.json())
+    client = factory.create(card=agent_card)
+    
+    # Copy existing task and execute
+    message = Message(
+        message_id=str(uuid.uuid4()),
+        role=Role.user,
+        parts=[DataPart(kind="data", data={})],
+        metadata={
+            "task_id": "my-existing-task-id",
+            "copy_execution": True,
+            "copy_children": True,
+            "stream": True  # Enable streaming
+        }
+    )
+    
+    # Process responses
+    async for response in client.send_message(message):
+        if isinstance(response, Message):
+            for part in response.parts:
+                if part.kind == "data" and isinstance(part.data, dict):
+                    data = part.data
+                    if "metadata" in data and "original_task_id" in data["metadata"]:
+                        print(f"Original: {data['metadata']['original_task_id']}")
+                        print(f"Copied: {data.get('root_task_id')}")
+                    print(f"Status: {data.get('status')}, Progress: {data.get('progress')}")
+    
+    await httpx_client.aclose()
+
+asyncio.run(copy_and_execute_task())
+```
+
+**Key Points:**
+- `metadata.task_id`: The ID of the existing task to copy
+- `metadata.copy_execution`: Set to `True` to enable copy execution
+- `metadata.copy_children`: Set to `True` to also copy child tasks (optional)
+- The response includes `original_task_id` in metadata for reference
+- Original task remains unchanged; a new copy is created and executed
 
 ### A2A Protocol Documentation
 

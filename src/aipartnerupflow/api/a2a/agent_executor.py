@@ -12,7 +12,9 @@ from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 
 from aipartnerupflow.core.execution.task_executor import TaskExecutor
+from aipartnerupflow.core.execution.task_creator import TaskCreator
 from aipartnerupflow.core.storage import get_default_session
+from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.config import get_task_model_class
 from aipartnerupflow.api.a2a.event_queue_bridge import EventQueueBridge
 from aipartnerupflow.core.utils.logger import get_logger
@@ -132,10 +134,41 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             event_queue: Event queue
         """
         try:
-            # Extract tasks array from context
-            tasks = self._extract_tasks_from_context(context)
-            if not tasks:
-                raise ValueError("No tasks provided in request")
+            # Get database session
+            db_session = get_default_session()
+            
+            # Check if copy_execution is enabled via metadata
+            copy_execution = context.metadata.get("copy_execution", False) if context.metadata else False
+            copy_children = context.metadata.get("copy_children", False) if context.metadata else False
+            original_task_id = None
+            
+            if copy_execution:
+                # If copy_execution is True, check if task_id is provided in metadata
+                task_id = context.metadata.get("task_id") if context.metadata else None
+                if not task_id:
+                    raise ValueError("task_id is required in metadata when copy_execution=True")
+                
+                # Get the original task from database
+                task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+                original_task = await task_repository.get_task_by_id(task_id)
+                if not original_task:
+                    raise ValueError(f"Task {task_id} not found")
+                
+                original_task_id = task_id
+                
+                # Copy the task (and children if copy_children=True)
+                logger.info(f"Copying task {task_id} before execution (copy_children={copy_children})")
+                task_creator = TaskCreator(db_session)
+                copied_tree = await task_creator.create_task_copy(original_task, children=copy_children)
+                logger.info(f"Task copied: original={original_task_id}, copy={copied_tree.task.id}")
+                
+                # Convert copied tree to tasks array format
+                tasks = self._tree_node_to_tasks_array(copied_tree)
+            else:
+                # Extract tasks array from context
+                tasks = self._extract_tasks_from_context(context)
+                if not tasks:
+                    raise ValueError("No tasks provided in request")
             
             # Log extracted tasks for debugging
             logger.debug(f"Extracted tasks with IDs: {[t.get('id') for t in tasks]}")
@@ -143,15 +176,12 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             # Generate context ID if not present
             context_id = context.context_id or str(uuid.uuid4())
             
-            # Get database session
-            db_session = get_default_session()
-            
             # Execute tasks using TaskExecutor (handles building tree, saving, and execution)
             # Behavior controlled by global configuration (get_require_existing_tasks())
             # Default: require_existing_tasks=False (auto-create for convenience)
             # root_task_id=None means use the actual root task ID from the created task tree
             # Allow override via context metadata for testing scenarios
-            require_existing_tasks = context.metadata.get("require_existing_tasks")
+            require_existing_tasks = context.metadata.get("require_existing_tasks") if context.metadata else None
             if require_existing_tasks is None:
                 require_existing_tasks = None  # Use global configuration
             
@@ -175,7 +205,6 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             context_id = context.context_id or actual_root_task_id
             
             # Get root task from database to create Task object
-            from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
             task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
             root_task_model = await task_repository.get_task_by_id(actual_root_task_id)
             
@@ -217,6 +246,8 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             }
             if root_task_model.user_id:
                 metadata["user_id"] = root_task_model.user_id
+            if original_task_id:
+                metadata["original_task_id"] = original_task_id
             
             a2a_task = Task(
                 id=task_id,  # Must match context.task_id
@@ -288,19 +319,51 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
         logger.info(f"Task ID: {context.task_id}, Context ID: {context.context_id}")
         
         try:
-            # Extract tasks array from context
-            tasks = self._extract_tasks_from_context(context)
-            if not tasks:
-                raise ValueError("No tasks provided in request")
-            
-            logger.info(f"Received {len(tasks)} tasks to execute")
-            
             # Get database session
             db_session = get_default_session()
             
+            # Check if copy_execution is enabled via metadata
+            copy_execution = context.metadata.get("copy_execution", False) if context.metadata else False
+            copy_children = context.metadata.get("copy_children", False) if context.metadata else False
+            original_task_id = None
+            
+            if copy_execution:
+                # If copy_execution is True, check if task_id is provided in metadata
+                task_id = context.metadata.get("task_id") if context.metadata else None
+                if not task_id:
+                    raise ValueError("task_id is required in metadata when copy_execution=True")
+                
+                # Get the original task from database
+                task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+                original_task = await task_repository.get_task_by_id(task_id)
+                if not original_task:
+                    raise ValueError(f"Task {task_id} not found")
+                
+                original_task_id = task_id
+                
+                # Copy the task (and children if copy_children=True)
+                logger.info(f"Copying task {task_id} before execution (copy_children={copy_children})")
+                task_creator = TaskCreator(db_session)
+                copied_tree = await task_creator.create_task_copy(original_task, children=copy_children)
+                logger.info(f"Task copied: original={original_task_id}, copy={copied_tree.task.id}")
+                
+                # Convert copied tree to tasks array format
+                tasks = self._tree_node_to_tasks_array(copied_tree)
+            else:
+                # Extract tasks array from context
+                tasks = self._extract_tasks_from_context(context)
+                if not tasks:
+                    raise ValueError("No tasks provided in request")
+            
+            logger.info(f"Received {len(tasks)} tasks to execute")
+            
             # Connect streaming callbacks to event queue
             # Bridge TaskManager's StreamingCallbacks to A2A EventQueue
+            # Pass original_task_id to bridge if copy_execution was used
             event_queue_bridge = EventQueueBridge(event_queue, context)
+            if original_task_id:
+                # Store original_task_id in bridge for inclusion in events
+                event_queue_bridge.original_task_id = original_task_id
             
             # Execute tasks using TaskExecutor with streaming (handles building tree, saving, and execution)
             # Behavior controlled by global configuration (get_require_existing_tasks())
@@ -320,11 +383,14 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             logger.info("Task tree execution started with streaming")
             
             # Return initial response - actual result will come via streaming
-            return {
+            result = {
                 "status": "in_progress",
                 "task_count": len(tasks),
                 "root_task_id": execution_result["root_task_id"]
             }
+            if original_task_id:
+                result["original_task_id"] = original_task_id
+            return result
             
         except Exception as e:
             logger.error(f"Error in streaming mode execution: {str(e)}", exc_info=True)
@@ -378,6 +444,39 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
         logger.info(f"Extracted {len(tasks)} tasks from context.message.parts")
         return tasks
 
+    def _tree_node_to_tasks_array(self, root_node) -> List[Dict[str, Any]]:
+        """
+        Convert TaskTreeNode to tasks array format for execution
+        
+        Args:
+            root_node: Root TaskTreeNode
+            
+        Returns:
+            List of task dictionaries in tasks array format
+        """
+        from aipartnerupflow.core.types import TaskTreeNode
+        
+        tasks = []
+        
+        def collect_tasks(node: TaskTreeNode):
+            """Recursively collect tasks from tree"""
+            # Convert TaskModel to dict
+            task_dict = node.task.to_dict()
+            
+            # Set parent_id if node has parent
+            # Note: In TaskTreeNode, parent is not directly stored, but we can infer from tree structure
+            # For now, we'll rely on the task's parent_id field which should be set during copy
+            
+            # Add to tasks array
+            tasks.append(task_dict)
+            
+            # Recursively process children
+            for child in node.children:
+                collect_tasks(child)
+        
+        collect_tasks(root_node)
+        return tasks
+    
     def _extract_single_part_data(self, part) -> Any:
         """
         Extract data from a single part

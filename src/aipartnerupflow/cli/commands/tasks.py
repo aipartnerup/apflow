@@ -371,6 +371,7 @@ def cancel(
 def copy(
     task_id: str = typer.Argument(..., help="Task ID to copy"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path for copied task tree"),
+    children: bool = typer.Option(False, "--children", help="Also copy each direct child task with its dependencies"),
 ):
     """
     Create a copy of a task tree for re-execution
@@ -380,12 +381,16 @@ def copy(
     - All tasks that depend on the original task (including transitive dependencies)
     - Automatically handles failed leaf nodes (filters out pending dependents)
     
+    When --children is used, each direct child task is also copied with its dependencies.
+    Tasks that depend on multiple copied tasks are only copied once (deduplication).
+    
     The copied tasks are linked to the original task via original_task_id field.
     All execution-specific fields (status, result, progress, etc.) are reset to initial values.
     
     Args:
         task_id: ID of the task to copy (can be root or any task in tree)
         output: Optional output file path to save the copied task tree JSON
+        children: If True, also copy each direct child task with its dependencies
     """
     try:
         from aipartnerupflow.core.storage import get_default_session
@@ -409,7 +414,7 @@ def copy(
         task_creator = TaskCreator(db_session)
         
         async def copy_task():
-            return await task_creator.create_task_copy(original_task)
+            return await task_creator.create_task_copy(original_task, children=children)
         
         new_tree = run_async_safe(copy_task())
         
