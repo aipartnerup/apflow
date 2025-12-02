@@ -529,9 +529,136 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
         context: RequestContext,
         event_queue: EventQueue
     ) -> None:
-        """Cancel execution"""
-        logger.info("Cancel requested")
-        await event_queue.enqueue_event(
-            new_agent_text_message("Cancel requested but not fully implemented")
+        """
+        Cancel task execution
+        
+        This method:
+        1. Extracts task ID from RequestContext
+        2. Calls TaskExecutor.cancel_task() to cancel the task
+        3. Sends TaskStatusUpdateEvent via EventQueue with cancellation status
+        
+        Args:
+            context: Request context from A2A protocol
+            event_queue: Event queue for streaming updates
+        """
+        try:
+            # Step 1: Extract task ID from context
+            # Priority: context.task_id > context.context_id > metadata.task_id > metadata.context_id
+            task_id = None
+            if context.task_id:
+                task_id = context.task_id
+                logger.debug(f"Using context.task_id: {task_id}")
+            elif context.context_id:
+                task_id = context.context_id
+                logger.debug(f"Using context.context_id: {task_id}")
+            elif context.metadata:
+                task_id = context.metadata.get("task_id") or context.metadata.get("context_id")
+                if task_id:
+                    logger.debug(f"Using metadata task_id/context_id: {task_id}")
+            
+            if not task_id:
+                error_msg = "Task ID not found in context. Provide task_id or context_id in context or metadata."
+                logger.error(error_msg)
+                await self._send_cancel_error(event_queue, context, error_msg)
+                return
+            
+            # Step 2: Extract optional parameters from metadata
+            metadata = context.metadata or {}
+            error_message = metadata.get("error_message")
+            # Note: force parameter is not used by TaskExecutor.cancel_task(), 
+            # but we can log it for reference
+            force = metadata.get("force", False)
+            if force:
+                logger.info(f"Force cancellation requested for task {task_id}")
+            
+            # Step 3: Get database session and call TaskExecutor.cancel_task()
+            db_session = get_default_session()
+            logger.info(f"Cancelling task {task_id}")
+            
+            cancel_result = await self.task_executor.cancel_task(
+                task_id=task_id,
+                error_message=error_message,
+                db_session=db_session
+            )
+            
+            # Step 4: Create TaskStatusUpdateEvent based on cancellation result
+            # Map status: "cancelled" -> TaskState.canceled, "failed" -> TaskState.failed
+            result_status = cancel_result.get("status", "failed")
+            task_state = TaskState.canceled if result_status == "cancelled" else TaskState.failed
+            
+            # Build event data
+            event_data = {
+                "protocol": "a2a",
+                "status": result_status,
+                "message": cancel_result.get("message", "Cancellation completed"),
+            }
+            
+            # Add optional fields if available
+            if "token_usage" in cancel_result and cancel_result["token_usage"]:
+                event_data["token_usage"] = cancel_result["token_usage"]
+            
+            if "result" in cancel_result and cancel_result["result"]:
+                event_data["result"] = cancel_result["result"]
+            
+            if "error" in cancel_result and cancel_result["error"]:
+                event_data["error"] = cancel_result["error"]
+            
+            # Add timestamp
+            event_data["timestamp"] = datetime.now(timezone.utc).isoformat()
+            
+            # Step 5: Create and send TaskStatusUpdateEvent
+            status_update = TaskStatusUpdateEvent(
+                task_id=task_id,
+                context_id=context.context_id or task_id,
+                status=TaskStatus(
+                    state=task_state,
+                    message=new_agent_parts_message([DataPart(data=event_data)])
+                ),
+                final=True
+            )
+            
+            await event_queue.enqueue_event(status_update)
+            logger.info(f"Task {task_id} cancellation completed with status: {result_status}")
+            
+        except Exception as e:
+            logger.error(f"Error cancelling task: {str(e)}", exc_info=True)
+            await self._send_cancel_error(event_queue, context, f"Failed to cancel task: {str(e)}")
+    
+    async def _send_cancel_error(
+        self,
+        event_queue: EventQueue,
+        context: RequestContext,
+        error: str
+    ):
+        """
+        Helper method to send cancellation error updates
+        
+        Args:
+            event_queue: Event queue
+            context: Request context
+            error: Error message
+        """
+        # Try to extract task_id for error event
+        task_id = context.task_id or context.context_id
+        if not task_id and context.metadata:
+            task_id = context.metadata.get("task_id") or context.metadata.get("context_id")
+        task_id = task_id or "unknown"
+        
+        error_data = {
+            "protocol": "a2a",
+            "status": "failed",
+            "error": error,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        status_update = TaskStatusUpdateEvent(
+            task_id=task_id,
+            context_id=context.context_id or task_id,
+            status=TaskStatus(
+                state=TaskState.failed,
+                message=new_agent_parts_message([DataPart(data=error_data)])
+            ),
+            final=True
         )
+        await event_queue.enqueue_event(status_update)
 

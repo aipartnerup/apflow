@@ -303,6 +303,149 @@ curl -X POST http://localhost:8000/ \
 - All responses include `protocol: "a2a"` in Task metadata and event data to identify this as an A2A Protocol response
 - This differs from JSON-RPC protocol responses (which use `protocol: "jsonrpc"` in the response object)
 
+#### `cancel` Method
+
+**Description:**  
+Cancels a running task execution. This method is part of the A2A Protocol `AgentExecutor` interface and allows clients to cancel tasks that are currently executing or pending.
+
+**Method:** `cancel`
+
+**Request Format:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cancel",
+  "params": {},
+  "id": "cancel-request-123",
+  "task_id": "task-abc-123",
+  "context_id": "context-xyz-456",
+  "metadata": {
+    "error_message": "Cancelled by user",
+    "force": false
+  }
+}
+```
+
+**Request Parameters:**
+- `jsonrpc` (string, required): JSON-RPC version, must be "2.0"
+- `method` (string, required): Method name, must be "cancel"
+- `params` (object, optional): Method parameters (currently unused, can be empty)
+- `id` (string/number, required): Request identifier for matching responses
+- `task_id` (string, optional): Task ID to cancel. Priority: `task_id` > `context_id` > `metadata.task_id` > `metadata.context_id`
+- `context_id` (string, optional): Context ID (used as task ID if `task_id` is not provided)
+- `metadata` (object, optional): Additional metadata
+  - `error_message` (string, optional): Custom error message for cancellation
+  - `force` (boolean, optional): Force flag (logged but not used by current implementation)
+  - `task_id` (string, optional): Task ID (used as fallback if not in top-level `task_id`)
+  - `context_id` (string, optional): Context ID (used as fallback if not in top-level `context_id`)
+
+**Response Format:**
+The response is sent via `TaskStatusUpdateEvent` through the EventQueue (SSE/WebSocket streaming):
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "cancel-request-123",
+  "result": {
+    "task_id": "task-abc-123",
+    "context_id": "context-xyz-456",
+    "status": {
+      "state": "canceled",
+      "message": {
+        "kind": "message",
+        "parts": [
+          {
+            "kind": "data",
+            "data": {
+              "protocol": "a2a",
+              "status": "cancelled",
+              "message": "Task cancelled successfully",
+              "token_usage": {
+                "total_tokens": 1000,
+                "prompt_tokens": 500,
+                "completion_tokens": 500
+              },
+              "result": {
+                "partial_data": "some result"
+              },
+              "timestamp": "2024-01-15T10:30:00Z"
+            }
+          }
+        ]
+      }
+    },
+    "final": true
+  }
+}
+```
+
+**Response Fields:**
+- `task_id` (string): Task ID that was cancelled
+- `context_id` (string): Context ID
+- `status` (object): Task status object
+  - `state` (string): Task state ("canceled" or "failed")
+  - `message` (object): Status message with parts
+    - `parts[].data.protocol` (string): Protocol identifier, always `"a2a"`
+    - `parts[].data.status` (string): Cancellation status ("cancelled" or "failed")
+    - `parts[].data.message` (string): Cancellation message
+    - `parts[].data.token_usage` (object, optional): Token usage information if available
+    - `parts[].data.result` (any, optional): Partial result if available
+    - `parts[].data.error` (string, optional): Error message if cancellation failed
+    - `parts[].data.timestamp` (string): ISO 8601 timestamp
+- `final` (boolean): Always `true` for cancel operations
+
+**Error Cases:**
+- Task ID not found: Returns `TaskStatusUpdateEvent` with `state: "failed"` and error message "Task ID not found in context"
+- Task not found: Returns `state: "failed"` with message "Task {task_id} not found"
+- Task already completed: Returns `state: "failed"` with message "Task {task_id} is already {status}, cannot cancel"
+- Task already cancelled: Returns `state: "failed"` with message "Task {task_id} is already cancelled, cannot cancel"
+- Exception during cancellation: Returns `state: "failed"` with error details
+
+**Notes:**
+- The `cancel()` method attempts to gracefully cancel tasks by calling the executor's `cancel()` method if supported
+- Token usage is preserved if available from the executor
+- Partial results may be returned if the task was partially completed before cancellation
+- The method sends a `TaskStatusUpdateEvent` through the EventQueue, which is compatible with SSE/WebSocket streaming
+- Task ID extraction follows priority: `task_id` > `context_id` > `metadata.task_id` > `metadata.context_id`
+- If no task ID is found, an error event is sent with `state: "failed"`
+
+**Example: Cancel a Running Task**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "cancel",
+  "params": {},
+  "id": "cancel-1",
+  "task_id": "my-running-task",
+  "metadata": {
+    "error_message": "User requested cancellation"
+  }
+}
+```
+
+**Example Response (via EventQueue):**
+```json
+{
+  "task_id": "my-running-task",
+  "context_id": "my-running-task",
+  "status": {
+    "state": "canceled",
+    "message": {
+      "parts": [{
+        "data": {
+          "protocol": "a2a",
+          "status": "cancelled",
+          "message": "Task cancelled successfully",
+          "timestamp": "2024-01-15T10:30:00Z"
+        }
+      }]
+    }
+  },
+  "final": true
+}
+```
+
 ### Task Management Endpoints
 
 #### `POST /tasks`

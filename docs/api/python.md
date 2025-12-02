@@ -644,6 +644,84 @@ async for response in client.send_message(message):
 
 The server will send task status updates to your callback URL as the task executes.
 
+### Cancelling Tasks
+
+You can cancel a running task using the A2A Protocol `cancel` method:
+
+```python
+from a2a.client import ClientFactory, ClientConfig
+from a2a.types import Message, DataPart, Role, AgentCard, RequestContext
+import httpx
+import uuid
+import asyncio
+
+async def cancel_task_via_a2a():
+    # Create HTTP client
+    httpx_client = httpx.AsyncClient(base_url="http://localhost:8000")
+    
+    # Create A2A client config
+    config = ClientConfig(
+        streaming=True,
+        polling=False,
+        httpx_client=httpx_client
+    )
+    
+    # Create client factory
+    factory = ClientFactory(config=config)
+    
+    # Fetch agent card
+    from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
+    card_response = await httpx_client.get(AGENT_CARD_WELL_KNOWN_PATH)
+    agent_card = AgentCard(**card_response.json())
+    
+    # Create A2A client
+    client = factory.create(card=agent_card)
+    
+    # Create cancel request
+    # Task ID can be provided in multiple ways (priority order):
+    # 1. task_id in RequestContext
+    # 2. context_id in RequestContext
+    # 3. metadata.task_id
+    # 4. metadata.context_id
+    cancel_message = Message(
+        message_id=str(uuid.uuid4()),
+        role=Role.user,
+        parts=[],  # Empty parts for cancel
+        task_id="my-running-task",  # Task ID to cancel
+        metadata={
+            "error_message": "User requested cancellation"  # Optional custom message
+        }
+    )
+    
+    # Send cancel request and process responses
+    async for response in client.send_message(cancel_message):
+        if isinstance(response, Message):
+            for part in response.parts:
+                if part.kind == "data" and isinstance(part.data, dict):
+                    result = part.data
+                    status = result.get("status")
+                    if status == "cancelled":
+                        print(f"Task cancelled successfully: {result.get('message')}")
+                        if "token_usage" in result:
+                            print(f"Token usage: {result['token_usage']}")
+                        if "result" in result:
+                            print(f"Partial result: {result['result']}")
+                    elif status == "failed":
+                        print(f"Cancellation failed: {result.get('error', result.get('message'))}")
+    
+    await httpx_client.aclose()
+
+# Run
+asyncio.run(cancel_task_via_a2a())
+```
+
+**Notes:**
+- The `cancel()` method sends a `TaskStatusUpdateEvent` through the EventQueue
+- Task ID extraction follows priority: `task_id` > `context_id` > `metadata.task_id` > `metadata.context_id`
+- If the task supports cancellation, the executor's `cancel()` method will be called
+- Token usage and partial results are preserved if available
+- The response includes `protocol: "a2a"` in the event data
+
 ### Streaming Mode
 
 Enable streaming mode to receive real-time progress updates:

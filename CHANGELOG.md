@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **A2A Protocol Cancel Method Implementation**
+  - Complete implementation of `AgentExecutor.cancel()` method for A2A Protocol
+  - Task ID extraction with priority: `task_id` > `context_id` > `metadata.task_id` > `metadata.context_id`
+  - Support for custom error messages via `metadata.error_message`
+  - Graceful cancellation by calling executor's `cancel()` method if supported
+  - Token usage and partial results preservation during cancellation
+  - Proper `TaskStatusUpdateEvent` generation with A2A Protocol compliance
+  - Comprehensive error handling for task not found, already completed, and exception scenarios
+  - Complete test coverage with 13 test cases covering all scenarios
+  - Documentation updates in HTTP API and Python API references
+
 - **Enhanced Task Copy Functionality**
   - `children` parameter for `create_task_copy()`: When `True`, also copy each direct child task with its dependencies
   - Deduplication ensures tasks depending on multiple copied tasks are only copied once

@@ -1290,4 +1290,380 @@ class TestAgentExecutor:
             assert post_call["has_pre_hook_marker"] is True, "Pre-hook modifications should be visible to post-hook"
             
             logger.info("✅ All decorator features verified: custom TaskModel, pre-hook, post-hook")
+    
+    # ============================================================================
+    # Cancel Method Tests
+    # ============================================================================
+    
+    def _create_cancel_context(
+        self,
+        task_id: str = None,
+        context_id: str = None,
+        metadata: dict = None
+    ) -> RequestContext:
+        """Helper to create RequestContext for cancel operations"""
+        if metadata is None:
+            metadata = {}
+        
+        context = Mock(spec=RequestContext)
+        context.task_id = task_id
+        context.context_id = context_id
+        context.metadata = metadata
+        context.configuration = {}
+        
+        return context
+    
+    @pytest.mark.asyncio
+    async def test_cancel_with_task_id(self, executor, mock_event_queue):
+        """Test cancel using context.task_id"""
+        task_id = "test-task-123"
+        context = self._create_cancel_context(task_id=task_id, context_id="context-123")
+        
+        # Mock TaskExecutor.cancel_task() to return success
+        cancel_result = {
+            "status": "cancelled",
+            "message": "Task cancelled successfully"
+        }
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+            mock_get_session.return_value = Mock()
+            mock_cancel_task.return_value = cancel_result
+            
+            await executor.cancel(context, mock_event_queue)
+            
+            # Verify cancel_task was called with correct parameters
+            mock_cancel_task.assert_called_once_with(
+                task_id=task_id,
+                error_message=None,
+                db_session=mock_get_session.return_value
+            )
+            
+            # Verify event was sent
+            assert mock_event_queue.enqueue_event.called
+            call_args = mock_event_queue.enqueue_event.call_args[0][0]
+            
+            # Check event structure
+            from a2a.types import TaskStatusUpdateEvent, TaskState
+            assert isinstance(call_args, TaskStatusUpdateEvent)
+            assert call_args.task_id == task_id
+            assert call_args.status.state == TaskState.canceled
+            assert call_args.final is True
+    
+    @pytest.mark.asyncio
+    async def test_cancel_with_context_id(self, executor, mock_event_queue):
+        """Test cancel using context.context_id when task_id is not available"""
+        context_id = "context-456"
+        context = self._create_cancel_context(context_id=context_id)
+        
+        cancel_result = {
+            "status": "cancelled",
+            "message": "Task cancelled successfully"
+        }
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+            mock_get_session.return_value = Mock()
+            mock_cancel_task.return_value = cancel_result
+            
+            await executor.cancel(context, mock_event_queue)
+            
+            # Verify cancel_task was called with context_id as task_id
+            mock_cancel_task.assert_called_once_with(
+                task_id=context_id,
+                error_message=None,
+                db_session=mock_get_session.return_value
+            )
+    
+    @pytest.mark.asyncio
+    async def test_cancel_with_metadata_task_id(self, executor, mock_event_queue):
+        """Test cancel using metadata.task_id when context fields are not available"""
+        task_id = "metadata-task-789"
+        context = self._create_cancel_context(metadata={"task_id": task_id})
+        
+        cancel_result = {
+            "status": "cancelled",
+            "message": "Task cancelled successfully"
+        }
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+            mock_get_session.return_value = Mock()
+            mock_cancel_task.return_value = cancel_result
+            
+            await executor.cancel(context, mock_event_queue)
+            
+            mock_cancel_task.assert_called_once_with(
+                task_id=task_id,
+                error_message=None,
+                db_session=mock_get_session.return_value
+            )
+    
+    @pytest.mark.asyncio
+    async def test_cancel_with_metadata_context_id(self, executor, mock_event_queue):
+        """Test cancel using metadata.context_id as fallback"""
+        context_id = "metadata-context-999"
+        context = self._create_cancel_context(metadata={"context_id": context_id})
+        
+        cancel_result = {
+            "status": "cancelled",
+            "message": "Task cancelled successfully"
+        }
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+            mock_get_session.return_value = Mock()
+            mock_cancel_task.return_value = cancel_result
+            
+            await executor.cancel(context, mock_event_queue)
+            
+            mock_cancel_task.assert_called_once_with(
+                task_id=context_id,
+                error_message=None,
+                db_session=mock_get_session.return_value
+            )
+    
+    @pytest.mark.asyncio
+    async def test_cancel_with_custom_error_message(self, executor, mock_event_queue):
+        """Test cancel with custom error_message in metadata"""
+        task_id = "task-with-custom-message"
+        error_message = "Cancelled by user request"
+        context = self._create_cancel_context(
+            task_id=task_id,
+            metadata={"error_message": error_message}
+        )
+        
+        cancel_result = {
+            "status": "cancelled",
+            "message": error_message
+        }
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+            mock_get_session.return_value = Mock()
+            mock_cancel_task.return_value = cancel_result
+            
+            await executor.cancel(context, mock_event_queue)
+            
+            mock_cancel_task.assert_called_once_with(
+                task_id=task_id,
+                error_message=error_message,
+                db_session=mock_get_session.return_value
+            )
+    
+    @pytest.mark.asyncio
+    async def test_cancel_with_token_usage(self, executor, mock_event_queue):
+        """Test cancel with token_usage in result"""
+        task_id = "task-with-tokens"
+        context = self._create_cancel_context(task_id=task_id)
+        
+        cancel_result = {
+            "status": "cancelled",
+            "message": "Task cancelled successfully",
+            "token_usage": {
+                "total_tokens": 1000,
+                "prompt_tokens": 500,
+                "completion_tokens": 500
+            }
+        }
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+            mock_get_session.return_value = Mock()
+            mock_cancel_task.return_value = cancel_result
+            
+            await executor.cancel(context, mock_event_queue)
+            
+            # Verify event contains token_usage
+            call_args = mock_event_queue.enqueue_event.call_args[0][0]
+            event_data = call_args.status.message.parts[0].root.data
+            assert "token_usage" in event_data
+            assert event_data["token_usage"]["total_tokens"] == 1000
+    
+    @pytest.mark.asyncio
+    async def test_cancel_with_partial_result(self, executor, mock_event_queue):
+        """Test cancel with partial result"""
+        task_id = "task-with-partial-result"
+        context = self._create_cancel_context(task_id=task_id)
+        
+        cancel_result = {
+            "status": "cancelled",
+            "message": "Task cancelled successfully",
+            "result": {
+                "partial_data": "some result",
+                "progress": 0.5
+            }
+        }
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+            mock_get_session.return_value = Mock()
+            mock_cancel_task.return_value = cancel_result
+            
+            await executor.cancel(context, mock_event_queue)
+            
+            # Verify event contains result
+            call_args = mock_event_queue.enqueue_event.call_args[0][0]
+            event_data = call_args.status.message.parts[0].root.data
+            assert "result" in event_data
+            assert event_data["result"]["partial_data"] == "some result"
+    
+    @pytest.mark.asyncio
+    async def test_cancel_task_not_found(self, executor, mock_event_queue):
+        """Test cancel when task is not found"""
+        task_id = "non-existent-task"
+        context = self._create_cancel_context(task_id=task_id)
+        
+        cancel_result = {
+            "status": "failed",
+            "message": f"Task {task_id} not found",
+            "error": "Task not found"
+        }
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+            mock_get_session.return_value = Mock()
+            mock_cancel_task.return_value = cancel_result
+            
+            await executor.cancel(context, mock_event_queue)
+            
+            # Verify event was sent with failed status
+            call_args = mock_event_queue.enqueue_event.call_args[0][0]
+            from a2a.types import TaskStatusUpdateEvent, TaskState
+            assert isinstance(call_args, TaskStatusUpdateEvent)
+            assert call_args.status.state == TaskState.failed
+            event_data = call_args.status.message.parts[0].root.data
+            assert event_data["status"] == "failed"
+            assert "error" in event_data
+    
+    @pytest.mark.asyncio
+    async def test_cancel_task_already_completed(self, executor, mock_event_queue):
+        """Test cancel when task is already completed"""
+        task_id = "completed-task"
+        context = self._create_cancel_context(task_id=task_id)
+        
+        cancel_result = {
+            "status": "failed",
+            "message": f"Task {task_id} is already completed, cannot cancel",
+            "current_status": "completed"
+        }
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+            mock_get_session.return_value = Mock()
+            mock_cancel_task.return_value = cancel_result
+            
+            await executor.cancel(context, mock_event_queue)
+            
+            # Verify event was sent with failed status
+            call_args = mock_event_queue.enqueue_event.call_args[0][0]
+            from a2a.types import TaskState
+            assert call_args.status.state == TaskState.failed
+            event_data = call_args.status.message.parts[0].root.data
+            assert event_data["status"] == "failed"
+    
+    @pytest.mark.asyncio
+    async def test_cancel_missing_task_id(self, executor, mock_event_queue):
+        """Test cancel when task ID is missing from context"""
+        context = self._create_cancel_context()  # No task_id or context_id
+        
+        await executor.cancel(context, mock_event_queue)
+        
+        # Verify error event was sent
+        assert mock_event_queue.enqueue_event.called
+        call_args = mock_event_queue.enqueue_event.call_args[0][0]
+        from a2a.types import TaskStatusUpdateEvent, TaskState
+        assert isinstance(call_args, TaskStatusUpdateEvent)
+        assert call_args.status.state == TaskState.failed
+        event_data = call_args.status.message.parts[0].root.data
+        assert event_data["status"] == "failed"
+        assert "Task ID not found" in event_data["error"]
+    
+    @pytest.mark.asyncio
+    async def test_cancel_exception_handling(self, executor, mock_event_queue):
+        """Test cancel exception handling"""
+        task_id = "task-with-exception"
+        context = self._create_cancel_context(task_id=task_id)
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+            mock_get_session.return_value = Mock()
+            mock_cancel_task.side_effect = Exception("Database connection error")
+            
+            await executor.cancel(context, mock_event_queue)
+            
+            # Verify error event was sent
+            assert mock_event_queue.enqueue_event.called
+            call_args = mock_event_queue.enqueue_event.call_args[0][0]
+            from a2a.types import TaskState
+            assert call_args.status.state == TaskState.failed
+            event_data = call_args.status.message.parts[0].root.data
+            assert event_data["status"] == "failed"
+            assert "Failed to cancel task" in event_data["error"]
+    
+    @pytest.mark.asyncio
+    async def test_cancel_with_force_flag(self, executor, mock_event_queue):
+        """Test cancel with force flag in metadata (should be logged but not used)"""
+        task_id = "task-with-force"
+        context = self._create_cancel_context(
+            task_id=task_id,
+            metadata={"force": True}
+        )
+        
+        cancel_result = {
+            "status": "cancelled",
+            "message": "Task cancelled successfully"
+        }
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+            mock_get_session.return_value = Mock()
+            mock_cancel_task.return_value = cancel_result
+            
+            await executor.cancel(context, mock_event_queue)
+            
+            # Verify cancel_task was called (force is logged but not passed to cancel_task)
+            mock_cancel_task.assert_called_once()
+            # Force is not passed to cancel_task, only error_message
+            call_kwargs = mock_cancel_task.call_args[1]
+            assert "force" not in call_kwargs
+    
+    @pytest.mark.asyncio
+    async def test_cancel_with_all_fields(self, executor, mock_event_queue):
+        """Test cancel with token_usage, result, and error all present"""
+        task_id = "task-with-all-fields"
+        context = self._create_cancel_context(task_id=task_id)
+        
+        cancel_result = {
+            "status": "cancelled",
+            "message": "Task cancelled successfully",
+            "token_usage": {
+                "total_tokens": 2000,
+                "prompt_tokens": 1000,
+                "completion_tokens": 1000
+            },
+            "result": {
+                "partial_data": "result data",
+                "progress": 0.75
+            },
+            "error": None  # Should not be included if None
+        }
+        
+        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+            mock_get_session.return_value = Mock()
+            mock_cancel_task.return_value = cancel_result
+            
+            await executor.cancel(context, mock_event_queue)
+            
+            # Verify event contains all fields
+            call_args = mock_event_queue.enqueue_event.call_args[0][0]
+            event_data = call_args.status.message.parts[0].root.data
+            assert event_data["status"] == "cancelled"
+            assert "token_usage" in event_data
+            assert "result" in event_data
+            assert "timestamp" in event_data
+            assert "protocol" in event_data
+            # error should not be included if None
+            assert "error" not in event_data or event_data.get("error") is None
 
