@@ -131,6 +131,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Supported protocols: `a2a`, `mcp`
     - Usage: `apflow serve --protocol mcp` or `apflow daemon start --protocol mcp`
 
+- **Task Tree Generator Executor** (`generate_executor`)
+  - Generate valid task tree JSON arrays from natural language requirements using LLM
+  - Automatically collects available executors and their input schemas for LLM context
+  - Loads framework documentation (task orchestration, examples, concepts) as LLM context
+  - Supports multiple LLM providers (OpenAI, Anthropic) via configurable backend
+  - Comprehensive validation ensures generated tasks conform to TaskCreator requirements:
+    - Validates task structure (name, id consistency, parent_id, dependencies)
+    - Detects circular dependencies
+    - Ensures single root task
+    - Validates all references exist in the array
+  - LLM prompt engineering with framework context, executor information, and examples
+  - JSON response parsing with markdown code block support
+  - Can be used through both API and CLI as a standard executor
+  - Configuration via environment variables or input parameters:
+    - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for LLM authentication
+    - `AIPARTNERUPFLOW_LLM_PROVIDER` for provider selection (default: openai)
+    - `AIPARTNERUPFLOW_LLM_MODEL` for model selection
+  - Full test coverage with 28+ test cases
+  - Usage example:
+    ```python
+    task = await task_manager.task_repository.create_task(
+        name="generate_executor",
+        inputs={"requirement": "Fetch data from API, process it, and save to database"}
+    )
+    ```
+
 ## [0.4.0] - 2025-12-5
 
 ### Added

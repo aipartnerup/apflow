@@ -1334,6 +1334,77 @@ pip install aipartnerupflow[a2a]  # For HTTP transport
 - Integrate with MCP-compatible services
 - Local and remote MCP server communication
 
+### Task Tree Generator Executor
+
+Generate valid task tree JSON arrays from natural language requirements using LLM.
+
+**Installation:**
+```bash
+# Install LLM provider package (choose one)
+pip install openai
+# or
+pip install anthropic
+```
+
+**Usage:**
+```python
+{
+    "schemas": {
+        "method": "generate_executor"
+    },
+    "inputs": {
+        "requirement": "Fetch data from API, process it, and save to database",
+        "user_id": "user123",
+        "llm_provider": "openai",  # Optional: "openai" or "anthropic"
+        "llm_model": "gpt-4",  # Optional: model name
+        "temperature": 0.7,  # Optional: LLM temperature
+        "max_tokens": 4000  # Optional: maximum tokens
+    }
+}
+```
+
+**Features:**
+- Automatically collects available executors and their schemas
+- Loads framework documentation as LLM context
+- Generates valid task trees compatible with `TaskCreator.create_task_tree_from_array()`
+- Comprehensive validation ensures generated tasks meet all requirements
+- Supports OpenAI and Anthropic LLM providers
+- Configurable via environment variables or input parameters
+
+**Configuration:**
+- `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`: LLM API key (environment variable)
+- `AIPARTNERUPFLOW_LLM_PROVIDER`: Provider selection (default: "openai")
+- `AIPARTNERUPFLOW_LLM_MODEL`: Model name (optional)
+
+**Output:**
+Returns a JSON array of task objects that can be used with `TaskCreator.create_task_tree_from_array()`:
+```python
+{
+    "status": "completed",
+    "tasks": [
+        {
+            "name": "rest_executor",
+            "inputs": {"url": "https://api.example.com/data", "method": "GET"},
+            "priority": 1
+        },
+        {
+            "name": "command_executor",
+            "parent_id": "task_1",
+            "dependencies": [{"id": "task_1", "required": True}],
+            "inputs": {"command": "python process_data.py"},
+            "priority": 2
+        }
+    ],
+    "count": 2
+}
+```
+
+**Use Cases:**
+- Automatically generate task trees from natural language requirements
+- Rapid prototyping of workflows
+- Converting business requirements into executable task structures
+- Learning tool for understanding task tree patterns
+
 ### Summary
 
 All built-in executors follow the same pattern:

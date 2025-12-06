@@ -168,6 +168,8 @@ An **executor** is the code that actually runs a task. It's like a worker that k
    - **AI Executors** (optional):
      - `crewai_executor`: LLM-based agents (requires `[crewai]`)
      - `batch_crewai_executor`: Batch execution of multiple crews (requires `[crewai]`)
+   - **Generation Executors**:
+     - `generate_executor`: Generate task tree JSON arrays from natural language requirements using LLM (requires `openai` or `anthropic` package)
 
 2. **Custom Executors**: You create these
    - API calls

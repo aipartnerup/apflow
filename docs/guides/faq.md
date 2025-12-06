@@ -162,6 +162,9 @@ class MyExecutor(BaseTask):
 - `crewai_executor` - LLM-based agents (requires `pip install aipartnerupflow[crewai]`)
 - `batch_crewai_executor` - Batch execution of multiple crews (requires `pip install aipartnerupflow[crewai]`)
 
+**Generation Executors**:
+- `generate_executor` - Generate task tree JSON arrays from natural language requirements using LLM (requires `pip install openai` or `pip install anthropic`)
+
 Just use them by name:
 ```python
 task = await task_manager.task_repository.create_task(

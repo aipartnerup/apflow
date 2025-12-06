@@ -49,6 +49,7 @@ All task executors implement the `ExecutableTask` interface:
 - **WebSocketExecutor**: Bidirectional WebSocket communication (built-in executor)
 - **ApFlowApiExecutor**: Inter-instance API calls for distributed execution (built-in executor)
 - **McpExecutor**: Model Context Protocol executor for accessing external tools and data sources (built-in executor)
+- **GenerateExecutor**: Generate task tree JSON arrays from natural language requirements using LLM (built-in executor)
 - **BatchManager** [crewai]: Batch orchestration container (batches multiple crews)
 
 ### Supporting Features

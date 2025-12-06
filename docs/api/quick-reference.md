@@ -452,6 +452,42 @@ result = await executor.execute_tasks(
 )
 ```
 
+### Pattern 7: Generate Task Tree from Natural Language
+
+```python
+from aipartnerupflow import TaskManager, TaskCreator, create_session
+from aipartnerupflow.core.types import TaskTreeNode
+from aipartnerupflow.extensions.generate import GenerateExecutor
+
+db = create_session()
+task_manager = TaskManager(db)
+
+# Step 1: Generate task tree using generate_executor
+generate_task = await task_manager.task_repository.create_task(
+    name="generate_executor",
+    user_id="user123",
+    inputs={
+        "requirement": "Fetch data from API, process it, and save to database",
+        "user_id": "user123",
+        "llm_provider": "openai",  # Optional
+        "llm_model": "gpt-4"  # Optional
+    }
+)
+
+# Step 2: Execute generate_executor
+generate_tree = TaskTreeNode(generate_task)
+await task_manager.distribute_task_tree(generate_tree)
+
+# Step 3: Get generated tasks array
+result = await task_manager.task_repository.get_task_by_id(generate_task.id)
+generated_tasks = result.result["tasks"]
+
+# Step 4: Create and execute the generated task tree
+creator = TaskCreator(db)
+final_task_tree = await creator.create_task_tree_from_array(generated_tasks)
+await task_manager.distribute_task_tree(final_task_tree)
+```
+
 ## Extension Registry
 
 ### Get Registry
