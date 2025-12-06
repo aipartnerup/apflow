@@ -1194,6 +1194,146 @@ pip install aipartnerupflow[a2a]
 - Load balancing
 - Cross-environment task execution
 
+### MCP (Model Context Protocol) Executor
+
+Interact with MCP servers to access external tools and data sources through the standardized MCP protocol.
+
+**Installation:**
+```bash
+# MCP executor uses standard library for stdio mode
+# For HTTP mode, httpx is included in a2a extra
+pip install aipartnerupflow[a2a]  # For HTTP transport
+# Or just use stdio mode (no additional dependencies)
+```
+
+**Transport Modes:**
+
+1. **stdio** - Local process communication (no dependencies)
+2. **http** - Remote server communication (requires httpx from [a2a] extra)
+
+**Operations:**
+- `list_tools`: List available MCP tools
+- `call_tool`: Call a tool with arguments
+- `list_resources`: List available resources
+- `read_resource`: Read a resource by URI
+
+**Usage Examples:**
+
+**stdio Transport - List Tools:**
+```python
+{
+    "schemas": {
+        "method": "mcp_executor"
+    },
+    "inputs": {
+        "transport": "stdio",
+        "command": ["python", "-m", "mcp_server"],
+        "operation": "list_tools"
+    }
+}
+```
+
+**stdio Transport - Call Tool:**
+```python
+{
+    "schemas": {
+        "method": "mcp_executor"
+    },
+    "inputs": {
+        "transport": "stdio",
+        "command": ["python", "-m", "mcp_server"],
+        "operation": "call_tool",
+        "tool_name": "search_web",
+        "arguments": {
+            "query": "Python async programming"
+        }
+    }
+}
+```
+
+**stdio Transport - Read Resource:**
+```python
+{
+    "schemas": {
+        "method": "mcp_executor"
+    },
+    "inputs": {
+        "transport": "stdio",
+        "command": ["python", "-m", "mcp_server"],
+        "operation": "read_resource",
+        "resource_uri": "file:///path/to/file.txt"
+    }
+}
+```
+
+**HTTP Transport - List Tools:**
+```python
+{
+    "schemas": {
+        "method": "mcp_executor"
+    },
+    "inputs": {
+        "transport": "http",
+        "url": "http://localhost:8000/mcp",
+        "operation": "list_tools",
+        "headers": {
+            "Authorization": "Bearer token"
+        }
+    }
+}
+```
+
+**HTTP Transport - Call Tool:**
+```python
+{
+    "schemas": {
+        "method": "mcp_executor"
+    },
+    "inputs": {
+        "transport": "http",
+        "url": "http://localhost:8000/mcp",
+        "operation": "call_tool",
+        "tool_name": "search_web",
+        "arguments": {
+            "query": "Python async"
+        },
+        "timeout": 30.0
+    }
+}
+```
+
+**Configuration Options:**
+- `transport`: "stdio" or "http" (required)
+- `operation`: "list_tools", "call_tool", "list_resources", "read_resource" (required)
+- For stdio:
+  - `command`: List of strings for MCP server command (required)
+  - `env`: Optional environment variables dict
+  - `cwd`: Optional working directory
+- For http:
+  - `url`: MCP server URL (required)
+  - `headers`: Optional HTTP headers dict
+- For call_tool:
+  - `tool_name`: Tool name (required)
+  - `arguments`: Tool arguments dict (required)
+- For read_resource:
+  - `resource_uri`: Resource URI (required)
+- `timeout`: Operation timeout in seconds (default: 30.0)
+
+**Features:**
+- Support for stdio and HTTP transport modes
+- JSON-RPC 2.0 protocol compliance
+- Tool and resource access
+- Environment variable injection (stdio)
+- Custom headers (HTTP)
+- Timeout and cancellation support
+- Comprehensive error handling
+
+**Use Cases:**
+- Access external tools via MCP servers
+- Read data from MCP resources
+- Integrate with MCP-compatible services
+- Local and remote MCP server communication
+
 ### Summary
 
 All built-in executors follow the same pattern:

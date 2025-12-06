@@ -20,6 +20,7 @@ The core of `aipartnerupflow` is **task orchestration and execution specificatio
 - **gRPC Executor** [grpc]: gRPC service calls (task executor implementation)
 - **WebSocket Executor**: Bidirectional WebSocket communication (task executor implementation)
 - **aipartnerupflow API Executor**: Inter-instance API calls for distributed execution (task executor implementation)
+- **MCP Executor**: Model Context Protocol executor for accessing external tools and data sources (task executor implementation)
 - **A2A Protocol Server** [a2a]: A2A Protocol Server (A2A Protocol is the standard protocol for agent communication)
 - **CLI Tools** [cli]: Command-line interface
 
@@ -46,6 +47,7 @@ All task executors implement the `ExecutableTask` interface:
 - **GrpcExecutor** [grpc]: gRPC service calls (built-in executor)
 - **WebSocketExecutor**: Bidirectional WebSocket communication (built-in executor)
 - **ApFlowApiExecutor**: Inter-instance API calls for distributed execution (built-in executor)
+- **McpExecutor**: Model Context Protocol executor for accessing external tools and data sources (built-in executor)
 - **BatchManager** [crewai]: Batch orchestration container (batches multiple crews)
 
 ### Supporting Features

@@ -159,6 +159,7 @@ An **executor** is the code that actually runs a task. It's like a worker that k
      - `grpc_executor`: gRPC service calls (requires `[grpc]`)
      - `websocket_executor`: Bidirectional WebSocket communication
      - `apflow_api_executor`: Call other aipartnerupflow API instances
+     - `mcp_executor`: Model Context Protocol executor (stdio mode: no dependencies, HTTP mode: requires `[a2a]`)
    - **Container Executors**:
      - `docker_executor`: Containerized command execution (requires `[docker]`)
    - **AI Executors** (optional):

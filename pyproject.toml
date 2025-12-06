@@ -91,6 +91,16 @@ grpc = [
     "grpcio-tools>=1.60.0",
 ]
 
+# MCP (Model Context Protocol) execution
+# Note: MCP executor uses stdio (standard library) and HTTP (httpx from a2a extra)
+# No additional dependencies required for stdio mode
+# For HTTP mode, install with [a2a] extra which includes httpx
+mcp = [
+    # MCP executor uses standard library for stdio mode
+    # httpx is available via [a2a] extra for HTTP mode
+    # No additional dependencies needed
+]
+
 # Development dependencies
 dev = [
     "pytest>=7.0.0",
@@ -104,7 +114,7 @@ dev = [
 
 # Full installation (all features)
 all = [
-    "aipartnerupflow[crewai,a2a,cli,postgres,examples,llm-key-config,ssh,docker,grpc]",
+    "aipartnerupflow[crewai,a2a,cli,postgres,examples,llm-key-config,ssh,docker,grpc,mcp]",
 ]
 
 [project.scripts]

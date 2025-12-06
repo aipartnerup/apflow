@@ -210,6 +210,14 @@ except ImportError:
 except Exception as e:
     logger.warning(f"Failed to discover apflow extension: {e}")
 
+try:
+    from aipartnerupflow.extensions.mcp import McpExecutor  # noqa: F401
+    logger.debug("Discovered mcp extension")
+except ImportError:
+    logger.debug("MCP extension not available")
+except Exception as e:
+    logger.warning(f"Failed to discover mcp extension: {e}")
+
 
 def _load_custom_task_model():
     """Load custom TaskModel class from environment variable if specified"""

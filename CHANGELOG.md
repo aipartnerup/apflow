@@ -93,6 +93,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Auto-imported in API service startup
     - Available immediately after installation
 
+- **MCP (Model Context Protocol) Executor** (`mcp_executor`)
+  - Interact with MCP servers to access external tools and data sources
+  - Support for stdio and HTTP transport modes
+  - Operations: list_tools, call_tool, list_resources, read_resource
+  - JSON-RPC 2.0 protocol compliance
+  - Environment variable injection for stdio mode
+  - Custom headers support for HTTP mode
+  - Timeout and cancellation support
+  - Comprehensive error handling for MCP protocol errors
+  - Full test coverage with 20+ test cases
 
 ## [0.4.0] - 2025-12-5
 

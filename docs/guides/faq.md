@@ -146,6 +146,7 @@ class MyExecutor(BaseTask):
 - `grpc_executor` - gRPC service calls (requires `pip install aipartnerupflow[grpc]`)
 - `websocket_executor` - Bidirectional WebSocket communication
 - `apflow_api_executor` - Call other aipartnerupflow API instances
+- `mcp_executor` - Model Context Protocol executor (stdio: no dependencies, HTTP: requires `[a2a]`)
 
 **Container Executors**:
 - `docker_executor` - Containerized command execution (requires `pip install aipartnerupflow[docker]`)
