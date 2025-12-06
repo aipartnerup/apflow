@@ -75,6 +75,22 @@ examples = []
 # LLM Key Configuration Management (multi-user support)
 llm-key-config = []
 
+# SSH remote execution
+ssh = [
+    "asyncssh>=2.14.0",
+]
+
+# Docker container execution
+docker = [
+    "docker>=7.0.0",
+]
+
+# gRPC execution
+grpc = [
+    "grpcio>=1.60.0",
+    "grpcio-tools>=1.60.0",
+]
+
 # Development dependencies
 dev = [
     "pytest>=7.0.0",
@@ -88,7 +104,7 @@ dev = [
 
 # Full installation (all features)
 all = [
-    "aipartnerupflow[crewai,a2a,cli,postgres,examples,llm-key-config]",
+    "aipartnerupflow[crewai,a2a,cli,postgres,examples,llm-key-config,ssh,docker,grpc]",
 ]
 
 [project.scripts]

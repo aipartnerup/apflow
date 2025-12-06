@@ -994,6 +994,217 @@ async def test_executor_integration():
     assert "Test User" in result.result["greeting"]
 ```
 
+## Built-in Executors
+
+aipartnerupflow provides several built-in executors for common use cases. These executors are automatically registered and can be used directly in your tasks.
+
+### HTTP/REST API Executor
+
+Execute HTTP requests to external APIs, webhooks, and HTTP-based services.
+
+**Installation:**
+```bash
+# httpx is included in a2a extra
+pip install aipartnerupflow[a2a]
+```
+
+**Usage:**
+```python
+{
+    "schemas": {
+        "method": "rest_executor"
+    },
+    "inputs": {
+        "url": "https://api.example.com/users",
+        "method": "GET",
+        "headers": {"Authorization": "Bearer token"},
+        "timeout": 30.0
+    }
+}
+```
+
+**Features:**
+- Supports GET, POST, PUT, DELETE, PATCH methods
+- Authentication: Bearer token, Basic auth, API key
+- Custom headers and query parameters
+- JSON and form data support
+- SSL verification control
+
+### SSH Remote Executor
+
+Execute commands on remote servers via SSH.
+
+**Installation:**
+```bash
+pip install aipartnerupflow[ssh]
+```
+
+**Usage:**
+```python
+{
+    "schemas": {
+        "method": "ssh_executor"
+    },
+    "inputs": {
+        "host": "example.com",
+        "username": "user",
+        "key_file": "/path/to/key",
+        "command": "ls -la",
+        "timeout": 30
+    }
+}
+```
+
+**Features:**
+- Password and key-based authentication
+- Environment variable support
+- Automatic key file permission validation
+- Command timeout handling
+
+### Docker Container Executor
+
+Execute commands in isolated Docker containers.
+
+**Installation:**
+```bash
+pip install aipartnerupflow[docker]
+```
+
+**Usage:**
+```python
+{
+    "schemas": {
+        "method": "docker_executor"
+    },
+    "inputs": {
+        "image": "python:3.11",
+        "command": "python -c 'print(\"Hello\")'",
+        "env": {"KEY": "value"},
+        "volumes": {"/host/path": "/container/path"},
+        "resources": {"cpu": "1.0", "memory": "512m"}
+    }
+}
+```
+
+**Features:**
+- Custom Docker images
+- Environment variables
+- Volume mounts
+- Resource limits (CPU, memory)
+- Automatic container cleanup
+
+### gRPC Executor
+
+Call gRPC services and microservices.
+
+**Installation:**
+```bash
+pip install aipartnerupflow[grpc]
+```
+
+**Usage:**
+```python
+{
+    "schemas": {
+        "method": "grpc_executor"
+    },
+    "inputs": {
+        "server": "localhost:50051",
+        "service": "Greeter",
+        "method": "SayHello",
+        "request": {"name": "World"},
+        "timeout": 30.0
+    }
+}
+```
+
+**Features:**
+- Dynamic proto loading support
+- Custom metadata
+- Timeout handling
+- Error handling
+
+### WebSocket Executor
+
+Bidirectional WebSocket communication.
+
+**Installation:**
+```bash
+# websockets is included in a2a extra
+pip install aipartnerupflow[a2a]
+```
+
+**Usage:**
+```python
+{
+    "schemas": {
+        "method": "websocket_executor"
+    },
+    "inputs": {
+        "url": "ws://example.com/ws",
+        "message": "Hello",
+        "wait_response": true,
+        "timeout": 30.0
+    }
+}
+```
+
+**Features:**
+- Send and receive messages
+- JSON message support
+- Configurable response waiting
+- Connection timeout handling
+
+### aipartnerupflow API Executor
+
+Call other aipartnerupflow API instances for distributed execution.
+
+**Installation:**
+```bash
+# httpx is included in a2a extra
+pip install aipartnerupflow[a2a]
+```
+
+**Usage:**
+```python
+{
+    "schemas": {
+        "method": "apflow_api_executor"
+    },
+    "inputs": {
+        "base_url": "http://remote-instance:8000",
+        "method": "tasks.execute",
+        "params": {"task_id": "task-123"},
+        "auth_token": "eyJ...",
+        "wait_for_completion": true
+    }
+}
+```
+
+**Features:**
+- All task management methods (tasks.execute, tasks.create, tasks.get, etc.)
+- JWT authentication support
+- Task completion polling
+- Streaming support
+- Distributed execution scenarios
+
+**Use Cases:**
+- Distributed task execution across multiple instances
+- Service orchestration
+- Load balancing
+- Cross-environment task execution
+
+### Summary
+
+All built-in executors follow the same pattern:
+1. Inherit from `BaseTask`
+2. Registered with `@executor_register()`
+3. Support cancellation (where applicable)
+4. Provide input schema validation
+5. Return consistent result format
+
+You can use these executors directly in your task schemas or extend them for custom behavior.
+
 ## Next Steps
 
 - **[Task Orchestration Guide](task-orchestration.md)** - Learn how to orchestrate multiple tasks

@@ -161,6 +161,55 @@ except ImportError:
 except Exception as e:
     logger.warning(f"Failed to discover crewai extension: {e}")
 
+# Auto-discover new executor extensions
+try:
+    from aipartnerupflow.extensions.http import RestExecutor  # noqa: F401
+    logger.debug("Discovered http extension")
+except ImportError:
+    logger.debug("HTTP extension not available")
+except Exception as e:
+    logger.warning(f"Failed to discover http extension: {e}")
+
+try:
+    from aipartnerupflow.extensions.ssh import SshExecutor  # noqa: F401
+    logger.debug("Discovered ssh extension")
+except ImportError:
+    logger.debug("SSH extension not available (requires [ssh] extra)")
+except Exception as e:
+    logger.warning(f"Failed to discover ssh extension: {e}")
+
+try:
+    from aipartnerupflow.extensions.docker import DockerExecutor  # noqa: F401
+    logger.debug("Discovered docker extension")
+except ImportError:
+    logger.debug("Docker extension not available (requires [docker] extra)")
+except Exception as e:
+    logger.warning(f"Failed to discover docker extension: {e}")
+
+try:
+    from aipartnerupflow.extensions.grpc import GrpcExecutor  # noqa: F401
+    logger.debug("Discovered grpc extension")
+except ImportError:
+    logger.debug("gRPC extension not available (requires [grpc] extra)")
+except Exception as e:
+    logger.warning(f"Failed to discover grpc extension: {e}")
+
+try:
+    from aipartnerupflow.extensions.websocket import WebSocketExecutor  # noqa: F401
+    logger.debug("Discovered websocket extension")
+except ImportError:
+    logger.debug("WebSocket extension not available")
+except Exception as e:
+    logger.warning(f"Failed to discover websocket extension: {e}")
+
+try:
+    from aipartnerupflow.extensions.apflow import ApFlowApiExecutor  # noqa: F401
+    logger.debug("Discovered apflow extension")
+except ImportError:
+    logger.debug("ApFlow extension not available")
+except Exception as e:
+    logger.warning(f"Failed to discover apflow extension: {e}")
+
 
 def _load_custom_task_model():
     """Load custom TaskModel class from environment variable if specified"""
