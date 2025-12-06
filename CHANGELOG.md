@@ -126,6 +126,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comprehensive error handling with proper HTTP status codes
   - Full test coverage with 45+ test cases across all components
   - Protocol selection via `AIPARTNERUPFLOW_API_PROTOCOL=mcp` environment variable
+  - CLI protocol selection: `--protocol` parameter for `serve` and `daemon` commands
+    - Default protocol: `a2a`
+    - Supported protocols: `a2a`, `mcp`
+    - Usage: `apflow serve --protocol mcp` or `apflow daemon start --protocol mcp`
 
 ## [0.4.0] - 2025-12-5
 

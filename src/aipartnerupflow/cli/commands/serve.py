@@ -62,7 +62,7 @@ def _start_server(
     port: int = 8000,
     reload: bool = False,
     workers: int = 1,
-    protocol: str | None = None,
+    protocol: str = "a2a",
 ):
     """
     Internal function to start the API server
@@ -75,13 +75,8 @@ def _start_server(
         protocol: API protocol to use (optional, defaults to api/main.py default)
     """
     try:
-        # Determine protocol: command line option > environment variable > default
-        from aipartnerupflow.api.main import get_protocol_from_env
-        
-        if protocol is None:
-            protocol = get_protocol_from_env()
-        else:
-            protocol = protocol.lower()
+        # Use provided protocol (defaults to "a2a")
+        protocol = protocol.lower()
         
         # Check if protocol dependencies are installed
         _check_protocol_dependency(protocol)
@@ -121,23 +116,19 @@ def serve_callback(
     port: int = typer.Option(8000, "--port", "-p", help="Port to bind"),
     reload: bool = typer.Option(False, "--reload", help="Enable auto-reload"),
     workers: int = typer.Option(1, "--workers", "-w", help="Number of workers"),
-    protocol: str | None = typer.Option(
-        None,
+    protocol: str = typer.Option(
+        "a2a",
         "--protocol",
         "-P",
-        help="API protocol to use (a2a, rest, etc.). "
-        "If not specified, uses AIPARTNERUPFLOW_API_PROTOCOL environment variable "
-        "or defaults to the protocol defined in api/main.py (currently 'a2a'). "
-        "This parameter is optional - you can run 'serve' without it.",
+        help="API protocol to use (a2a or mcp). Defaults to 'a2a'.",
     ),
 ):
     """
     Start API server
     
-    Protocol selection (optional - defaults to 'a2a' if not specified):
-    1. --protocol command line option (highest priority)
-    2. AIPARTNERUPFLOW_API_PROTOCOL environment variable
-    3. Default protocol from api/main.py (currently 'a2a')
+    Protocol selection:
+    - Default: a2a
+    - Use --protocol to specify: a2a or mcp
     
     Examples:
         # Use default protocol (a2a)
@@ -146,14 +137,14 @@ def serve_callback(
         # Specify port
         apflow serve --port 8000
         
-        # Specify protocol explicitly
+        # Use A2A protocol (default)
         apflow serve --protocol a2a
         
-        # Use environment variable
-        AIPARTNERUPFLOW_API_PROTOCOL=a2a apflow serve
+        # Use MCP protocol
+        apflow serve --protocol mcp
         
         # Use subcommand (also supported)
-        apflow serve start --port 8000
+        apflow serve start --port 8000 --protocol mcp
     """
     # If no subcommand was provided, start the server directly
     if ctx.invoked_subcommand is None:
@@ -166,40 +157,36 @@ def start(
     port: int = typer.Option(8000, "--port", "-p", help="Port to bind"),
     reload: bool = typer.Option(False, "--reload", help="Enable auto-reload"),
     workers: int = typer.Option(1, "--workers", "-w", help="Number of workers"),
-    protocol: str | None = typer.Option(
-        None,
+    protocol: str = typer.Option(
+        "a2a",
         "--protocol",
         "-P",
-        help="API protocol to use (a2a, rest, etc.). "
-        "If not specified, uses AIPARTNERUPFLOW_API_PROTOCOL environment variable "
-        "or defaults to the protocol defined in api/main.py (currently 'a2a'). "
-        "This parameter is optional - you can run 'serve start' without it.",
+        help="API protocol to use (a2a or mcp). Defaults to 'a2a'.",
     ),
 ):
     """
     Start API server (subcommand - same as running 'serve' directly)
     
-    Protocol selection (optional - defaults to 'a2a' if not specified):
-    1. --protocol command line option (highest priority)
-    2. AIPARTNERUPFLOW_API_PROTOCOL environment variable
-    3. Default protocol from api/main.py (currently 'a2a')
+    Protocol selection:
+    - Default: a2a
+    - Use --protocol to specify: a2a or mcp
     
     Examples:
         # Use default protocol (a2a)
         apflow serve start
         
-        # Specify protocol explicitly
+        # Use A2A protocol
         apflow serve start --protocol a2a
         
-        # Use environment variable
-        AIPARTNERUPFLOW_API_PROTOCOL=a2a apflow serve start
+        # Use MCP protocol
+        apflow serve start --protocol mcp
     
     Args:
         host: Host address
         port: Port number
         reload: Enable auto-reload for development
         workers: Number of worker processes
-        protocol: API protocol to use (optional, defaults to api/main.py default)
+        protocol: API protocol to use (a2a or mcp, defaults to a2a)
     """
     _start_server(host=host, port=port, reload=reload, workers=workers, protocol=protocol)
 
@@ -228,7 +215,8 @@ if __name__ == "__main__":
             host="0.0.0.0",
             port=8000,
             reload=False,
-            workers=1
+            workers=1,
+            protocol="a2a"
         )
     else:
         # Has arguments: let Typer handle it

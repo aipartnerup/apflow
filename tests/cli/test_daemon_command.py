@@ -59,6 +59,7 @@ class TestDaemonCommand:
         assert result.exit_code == 0
         assert "Start daemon service" in result.stdout
         assert "--port" in result.stdout or "-p" in result.stdout
+        assert "--protocol" in result.stdout
     
     def test_daemon_stop_help(self):
         """Test daemon stop command help"""
@@ -97,6 +98,26 @@ class TestDaemonCommand:
         stop_result = runner.invoke(app, ["daemon", "stop"])
         # Stop might fail if daemon already stopped, that's okay
         # Just verify we tried to stop it
+        assert "stop" in stop_result.stdout.lower() or stop_result.exit_code in [0, 1]
+    
+    def test_daemon_start_with_protocol(self, cleanup_daemon_files):
+        """Test daemon start with protocol option"""
+        # Start daemon with MCP protocol
+        result = runner.invoke(app, [
+            "daemon", "start",
+            "--port", "8997",
+            "--protocol", "mcp",
+            "--background"
+        ])
+        
+        # Should start successfully
+        assert result.exit_code == 0
+        assert "started successfully" in result.stdout.lower() or "Daemon started" in result.stdout
+        assert "protocol: mcp" in result.stdout.lower() or "mcp" in result.stdout.lower()
+        
+        # Cleanup: stop the daemon
+        time.sleep(1)  # Give it a moment to start
+        stop_result = runner.invoke(app, ["daemon", "stop"])
         assert "stop" in stop_result.stdout.lower() or stop_result.exit_code in [0, 1]
     
     def test_daemon_restart(self, cleanup_daemon_files):

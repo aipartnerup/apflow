@@ -78,6 +78,7 @@ def is_process_running(pid: int) -> bool:
 def start(
     host: str = typer.Option("0.0.0.0", "--host", "-h", help="Host to bind"),
     port: int = typer.Option(8000, "--port", "-p", help="Port to bind"),
+    protocol: str = typer.Option("a2a", "--protocol", help="Protocol to use (a2a or mcp)"),
     background: bool = typer.Option(True, "--background/--foreground", help="Run in background"),
 ):
     """Start daemon service"""
@@ -104,6 +105,7 @@ def start(
         env = os.environ.copy()
         env["AIPARTNERUPFLOW_API_HOST"] = host
         env["AIPARTNERUPFLOW_API_PORT"] = str(port)
+        env["AIPARTNERUPFLOW_API_PROTOCOL"] = protocol
         
         if background:
             typer.echo(f"Starting daemon service in background...")
@@ -128,13 +130,14 @@ def start(
             # Check if process is still running
             if process.poll() is None:
                 typer.echo(f"Daemon started successfully (PID: {process.pid})")
-                typer.echo(f"API server running on {host}:{port}")
+                typer.echo(f"API server running on {host}:{port} (protocol: {protocol})")
             else:
                 typer.echo("Daemon failed to start. Check log file for details.", err=True)
                 remove_pid()
                 raise typer.Exit(1)
         else:
             typer.echo(f"Starting daemon service in foreground...")
+            typer.echo(f"API server will run on {host}:{port} (protocol: {protocol})")
             typer.echo(f"Press Ctrl+C to stop")
             # Run in foreground
             subprocess.run(cmd, env=env)

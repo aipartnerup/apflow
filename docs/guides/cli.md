@@ -94,8 +94,11 @@ aipartnerupflow tasks cancel <task_id>
 **Use Case**: Production deployment, remote access, A2A protocol integration.
 
 ```bash
-# 1. Start API server
+# 1. Start API server (default: A2A protocol)
 aipartnerupflow serve start --host 0.0.0.0 --port 8000
+
+# Or start with MCP protocol
+aipartnerupflow serve start --host 0.0.0.0 --port 8000 --protocol mcp
 
 # 2. Use HTTP API or A2A protocol to execute tasks
 curl -X POST http://localhost:8000/api/tasks \
@@ -117,8 +120,11 @@ curl http://localhost:8000/api/tasks/task-123/status
 **Use Case**: Development with both CLI convenience and API testing.
 
 ```bash
-# Terminal 1: Start API server
+# Terminal 1: Start API server (default: A2A protocol)
 aipartnerupflow serve start --port 8000
+
+# Or start with MCP protocol
+aipartnerupflow serve start --port 8000 --protocol mcp
 
 # Terminal 2: Use CLI to execute tasks
 aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"data": "test"}}]'
@@ -210,8 +216,11 @@ aipartnerupflow tasks cancel task1-id task2-id
 ### Workflow 4: Development with API Server
 
 ```bash
-# Terminal 1: Start API server (development mode)
+# Terminal 1: Start API server (development mode, default: A2A protocol)
 aipartnerupflow serve start --port 8000 --reload
+
+# Or start with MCP protocol
+aipartnerupflow serve start --port 8000 --reload --protocol mcp
 
 # Terminal 2: Execute via CLI (standard mode)
 aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"data": "test"}}]'
@@ -521,14 +530,23 @@ aipartnerupflow examples init --force
 ### API Server Management
 
 ```bash
-# Start API server (foreground)
+# Start API server (foreground, default: A2A protocol)
 aipartnerupflow serve start --port 8000
+
+# Start API server with A2A protocol (explicit)
+aipartnerupflow serve start --port 8000 --protocol a2a
+
+# Start API server with MCP protocol
+aipartnerupflow serve start --port 8000 --protocol mcp
 
 # Start with auto-reload (development)
 aipartnerupflow serve start --port 8000 --reload
 
-# Start daemon (background service)
+# Start daemon (background service, default: A2A protocol)
 aipartnerupflow daemon start --port 8000
+
+# Start daemon with MCP protocol
+aipartnerupflow daemon start --port 8000 --protocol mcp
 
 # Check daemon status
 aipartnerupflow daemon status
@@ -539,6 +557,13 @@ aipartnerupflow daemon stop
 # View daemon logs
 aipartnerupflow daemon logs
 ```
+
+**Protocol Selection:**
+- `--protocol` / `-P`: Specify protocol to use (`a2a` or `mcp`)
+- Default: `a2a` (A2A Protocol Server)
+- Supported protocols:
+  - `a2a`: A2A Protocol Server (default)
+  - `mcp`: MCP (Model Context Protocol) Server
 
 ## Database Configuration
 
@@ -726,8 +751,11 @@ aipartnerupflow serve start --reload
 # No server needed, just use CLI commands
 
 # Option B: API server (for remote access)
+# Start with A2A protocol (default)
 aipartnerupflow daemon start --port 8000
-# Then use HTTP API or A2A protocol
+# Or start with MCP protocol
+aipartnerupflow daemon start --port 8000 --protocol mcp
+# Then use HTTP API, A2A protocol, or MCP protocol
 ```
 
 ### 3. Monitoring
