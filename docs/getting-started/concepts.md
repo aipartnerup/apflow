@@ -149,9 +149,21 @@ An **executor** is the code that actually runs a task. It's like a worker that k
 ### Types of Executors
 
 1. **Built-in Executors**: Provided by aipartnerupflow
-   - `system_info_executor`: Get system information
-   - `command_executor`: Run shell commands
-   - `crewai_executor`: LLM-based agents (optional)
+   - **Core Executors** (always available):
+     - `system_info_executor`: Get system information
+     - `command_executor`: Run shell commands
+     - `aggregate_results_executor`: Aggregate dependency results
+   - **Remote Execution Executors**:
+     - `rest_executor`: HTTP/REST API calls (requires `[http]`)
+     - `ssh_executor`: Remote command execution via SSH (requires `[ssh]`)
+     - `grpc_executor`: gRPC service calls (requires `[grpc]`)
+     - `websocket_executor`: Bidirectional WebSocket communication
+     - `apflow_api_executor`: Call other aipartnerupflow API instances
+   - **Container Executors**:
+     - `docker_executor`: Containerized command execution (requires `[docker]`)
+   - **AI Executors** (optional):
+     - `crewai_executor`: LLM-based agents (requires `[crewai]`)
+     - `batch_crewai_executor`: Batch execution of multiple crews (requires `[crewai]`)
 
 2. **Custom Executors**: You create these
    - API calls

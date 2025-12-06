@@ -135,9 +135,24 @@ class MyExecutor(BaseTask):
 
 **A:** Yes! Built-in executors are automatically available:
 
+**Core Executors** (always available):
 - `system_info_executor` - Get system information (CPU, memory, disk)
 - `command_executor` - Execute shell commands (requires security config)
 - `aggregate_results_executor` - Aggregate results from multiple tasks
+
+**Remote Execution Executors**:
+- `rest_executor` - HTTP/REST API calls (requires `pip install aipartnerupflow[http]`)
+- `ssh_executor` - Remote command execution via SSH (requires `pip install aipartnerupflow[ssh]`)
+- `grpc_executor` - gRPC service calls (requires `pip install aipartnerupflow[grpc]`)
+- `websocket_executor` - Bidirectional WebSocket communication
+- `apflow_api_executor` - Call other aipartnerupflow API instances
+
+**Container Executors**:
+- `docker_executor` - Containerized command execution (requires `pip install aipartnerupflow[docker]`)
+
+**AI Executors** (optional):
+- `crewai_executor` - LLM-based agents (requires `pip install aipartnerupflow[crewai]`)
+- `batch_crewai_executor` - Batch execution of multiple crews (requires `pip install aipartnerupflow[crewai]`)
 
 Just use them by name:
 ```python
@@ -147,6 +162,8 @@ task = await task_manager.task_repository.create_task(
     inputs={"resource": "cpu"}
 )
 ```
+
+For more details on all executors, see the [Custom Tasks Guide](custom-tasks.md).
 
 ## Task Orchestration
 

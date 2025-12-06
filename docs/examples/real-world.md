@@ -28,7 +28,7 @@ async def main():
     
     # Step 1: Fetch data from multiple sources
     fetch_api = await task_manager.task_repository.create_task(
-        name="http_request_executor",
+        name="rest_executor",  # Use built-in REST executor
         user_id="user123",
         priority=1,
         inputs={

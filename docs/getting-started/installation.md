@@ -80,6 +80,36 @@ pip install aipartnerupflow[postgres]
 **Includes:**
 - PostgreSQL storage support (for enterprise/distributed scenarios)
 
+### SSH Executor
+
+```bash
+pip install aipartnerupflow[ssh]
+```
+
+**Includes:**
+- SSH executor for remote command execution
+- Execute commands on remote servers via SSH
+
+### Docker Executor
+
+```bash
+pip install aipartnerupflow[docker]
+```
+
+**Includes:**
+- Docker executor for containerized execution
+- Execute commands in isolated Docker containers
+
+### gRPC Executor
+
+```bash
+pip install aipartnerupflow[grpc]
+```
+
+**Includes:**
+- gRPC executor for gRPC service calls
+- Call gRPC services and microservices
+
 ### Everything
 
 ```bash
@@ -87,7 +117,7 @@ pip install aipartnerupflow[all]
 ```
 
 **Includes:**
-- All optional features (crewai, a2a, cli, postgres)
+- All optional features (crewai, a2a, cli, postgres, ssh, docker, grpc)
 
 ## Requirements
 

@@ -5,6 +5,95 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Added
+
+- **Extended Executor Framework with Mainstream Execution Methods**
+  - **HTTP/REST API Executor** (`rest_executor`)
+    - Support for all HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)
+    - Authentication support (Bearer token, Basic auth, API keys)
+    - Configurable timeout and retry mechanisms
+    - Request/response headers and body handling
+    - JSON and form data support
+    - Comprehensive error handling for HTTP status codes
+    - Full test coverage with 15+ test cases
+  
+  - **SSH Remote Executor** (`ssh_executor`)
+    - Execute commands on remote servers via SSH
+    - Support for password and key-based authentication
+    - Key file validation with security checks (permissions, existence)
+    - Environment variable injection
+    - Custom SSH port configuration
+    - Timeout and cancellation support
+    - Comprehensive error handling for connection and execution failures
+    - Full test coverage with 12+ test cases
+  
+  - **Docker Container Executor** (`docker_executor`)
+    - Execute commands in isolated Docker containers
+    - Support for custom Docker images
+    - Volume mounts for data persistence
+    - Environment variable configuration
+    - Resource limits (CPU, memory)
+    - Container lifecycle management (create, start, wait, remove)
+    - Timeout handling with automatic container cleanup
+    - Option to keep containers after execution
+    - Comprehensive error handling for image not found, execution failures
+    - Full test coverage with 13+ test cases
+  
+  - **gRPC Executor** (`grpc_executor`)
+    - Call gRPC services and microservices
+    - Support for dynamic proto file loading
+    - Method invocation with parameter serialization
+    - Metadata and timeout configuration
+    - Error handling for gRPC status codes
+    - Support for unary, server streaming, client streaming, and bidirectional streaming
+    - Full test coverage with 10+ test cases
+  
+  - **WebSocket Executor** (`websocket_executor`)
+    - Bidirectional WebSocket communication
+    - Send and receive messages in real-time
+    - Support for JSON and text messages
+    - Custom headers for authentication
+    - Optional response waiting with timeout
+    - Connection error handling (invalid URI, connection closed, timeout)
+    - Cancellation support
+    - Full test coverage with 13+ test cases
+  
+  - **aipartnerupflow API Executor** (`apflow_api_executor`)
+    - Call other aipartnerupflow API instances for distributed execution
+    - Support for all task management methods (tasks.execute, tasks.create, tasks.get, etc.)
+    - Authentication via JWT tokens
+    - Task completion polling with production-grade retry logic:
+      - Exponential backoff on failures (1s → 2s → 4s → 8s → 30s max)
+      - Circuit breaker pattern (stops after 10 consecutive failures)
+      - Error classification (retryable vs non-retryable)
+      - Total failure threshold (20 failures across all polls)
+      - Detailed logging for debugging
+    - Timeout protection and cancellation support
+    - Comprehensive error handling for network, server, and client errors
+    - Full test coverage with 12+ test cases
+  
+  - **Dependency Management**
+    - Optional dependencies for new executors:
+      - `[ssh]`: asyncssh for SSH executor
+      - `[docker]`: docker for Docker executor
+      - `[grpc]`: grpcio, grpcio-tools for gRPC executor
+      - `[all]`: Includes all optional dependencies
+    - Graceful handling when optional dependencies are not installed
+    - Clear error messages with installation instructions
+  
+  - **Documentation**
+    - Comprehensive usage examples for all new executors in `docs/guides/custom-tasks.md`
+    - Configuration parameters and examples for each executor
+    - Best practices and common patterns
+    - Error handling guidelines
+  
+  - **Auto-discovery**
+    - All new executors automatically registered via extension system
+    - Auto-imported in API service startup
+    - Available immediately after installation
+
+
 ## [0.4.0] - 2025-12-5
 
 ### Added
@@ -100,6 +189,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New utility module: `dependency_validator.py` with reusable validation functions
   - Comprehensive test coverage with 23 test cases covering all validation scenarios
 
+### Fixed
+- **Docker Executor Exit Code Extraction**
+  - Fixed incorrect exit code handling: `container.wait()` returns `{"StatusCode": 0}` dict, not integer
+  - Properly extract `StatusCode` from wait result dictionary
+  - Fixed container removal logic to prevent duplicate cleanup calls
+  - Improved cancellation handling before container start
+
+- **WebSocket Executor Exception Handling**
+  - Fixed `ConnectionClosed` exception construction in tests
+  - Fixed `InvalidURI` exception construction in tests
+  - Added proper `asyncio` import for timeout error handling
+  - Improved error handling for WebSocket connection failures
+
+- **SSH Executor Key File Validation**
+  - Fixed key file validation in tests by properly mocking file system operations
+  - Added proper handling for key file permissions and existence checks
+  - Improved error messages for authentication failures
+
+- **API Executor Infinite Polling Loop**
+  - Fixed infinite polling loop when API calls fail repeatedly
+  - Implemented production-grade retry logic with exponential backoff
+  - Added circuit breaker pattern to stop polling after consecutive failures
+  - Added total failure threshold to prevent resource waste
+  - Improved error classification (retryable vs non-retryable errors)
+  - Enhanced logging for better debugging in production environments
 
 ## [0.3.0] - 2025-11-30
 

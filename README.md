@@ -14,7 +14,12 @@ The core of `aipartnerupflow` is **task orchestration and execution specificatio
 
 **Optional features:**
 - **CrewAI Support** [crewai]: LLM-based agent crews via CrewManager (task executor implementation)
-- **HTTP Executor** [http]: Remote API calls via HTTPExecutor (future, task executor implementation)
+- **HTTP/REST Executor** [http]: Remote API calls via RestExecutor (task executor implementation)
+- **SSH Executor** [ssh]: Remote command execution via SSH (task executor implementation)
+- **Docker Executor** [docker]: Containerized command execution (task executor implementation)
+- **gRPC Executor** [grpc]: gRPC service calls (task executor implementation)
+- **WebSocket Executor**: Bidirectional WebSocket communication (task executor implementation)
+- **aipartnerupflow API Executor**: Inter-instance API calls for distributed execution (task executor implementation)
 - **A2A Protocol Server** [a2a]: A2A Protocol Server (A2A Protocol is the standard protocol for agent communication)
 - **CLI Tools** [cli]: Command-line interface
 
@@ -35,7 +40,12 @@ All task executors implement the `ExecutableTask` interface:
 
 - **Custom Tasks** (core): Users implement `ExecutableTask` for their own task types
 - **CrewManager** [crewai]: LLM-based task execution via CrewAI (built-in executor)
-- **HTTPExecutor** [http]: Remote API call execution via HTTP (future, built-in executor)
+- **RestExecutor** [http]: HTTP/REST API calls with authentication and retry (built-in executor)
+- **SshExecutor** [ssh]: Remote command execution via SSH (built-in executor)
+- **DockerExecutor** [docker]: Containerized command execution (built-in executor)
+- **GrpcExecutor** [grpc]: gRPC service calls (built-in executor)
+- **WebSocketExecutor**: Bidirectional WebSocket communication (built-in executor)
+- **ApFlowApiExecutor**: Inter-instance API calls for distributed execution (built-in executor)
 - **BatchManager** [crewai]: Batch orchestration container (batches multiple crews)
 
 ### Supporting Features
@@ -83,6 +93,15 @@ pip install aipartnerupflow[cli]
 
 # PostgreSQL storage
 pip install aipartnerupflow[postgres]
+
+# SSH executor (remote command execution)
+pip install aipartnerupflow[ssh]
+
+# Docker executor (containerized execution)
+pip install aipartnerupflow[docker]
+
+# gRPC executor (gRPC service calls)
+pip install aipartnerupflow[grpc]
 
 # Everything (includes all extras)
 pip install aipartnerupflow[all]
