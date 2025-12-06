@@ -104,6 +104,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Comprehensive error handling for MCP protocol errors
   - Full test coverage with 20+ test cases
 
+- **MCP (Model Context Protocol) Server** (`api/mcp/`)
+  - Expose aipartnerupflow task orchestration capabilities as MCP tools and resources
+  - Support for stdio and HTTP/SSE transport modes
+  - MCP Tools (8 tools):
+    - `execute_task` - Execute tasks or task trees
+    - `create_task` - Create new tasks or task trees
+    - `get_task` - Get task details by ID
+    - `update_task` - Update existing tasks
+    - `delete_task` - Delete tasks (if all pending)
+    - `list_tasks` - List tasks with filtering
+    - `get_task_status` - Get status of running tasks
+    - `cancel_task` - Cancel running tasks
+  - MCP Resources:
+    - `task://{task_id}` - Access individual task data
+    - `tasks://` - Access task list with query parameters
+  - JSON-RPC 2.0 protocol compliance
+  - Integration with existing TaskRoutes for protocol-agnostic design
+  - HTTP mode: FastAPI/Starlette integration with `/mcp` endpoint
+  - stdio mode: Standalone process for local integration
+  - Comprehensive error handling with proper HTTP status codes
+  - Full test coverage with 45+ test cases across all components
+  - Protocol selection via `AIPARTNERUPFLOW_API_PROTOCOL=mcp` environment variable
+
 ## [0.4.0] - 2025-12-5
 
 ### Added

@@ -5,7 +5,8 @@ This guide explains how to use the aipartnerupflow API server for remote task ex
 ## Overview
 
 The API server provides:
-- **A2A Protocol Server**: Standard agent-to-agent communication protocol
+- **A2A Protocol Server**: Standard agent-to-agent communication protocol (default)
+- **MCP Server**: Model Context Protocol server exposing task orchestration as MCP tools and resources
 - **HTTP API**: RESTful endpoints for task management
 - **Real-time Streaming**: Progress updates via SSE/WebSocket
 - **Multi-user Support**: User isolation and authentication
@@ -15,7 +16,7 @@ The API server provides:
 ### Basic Startup
 
 ```bash
-# Start server on default port (8000)
+# Start server on default port (8000) with A2A Protocol (default)
 aipartnerupflow serve
 
 # Or use the server command
@@ -24,6 +25,24 @@ aipartnerupflow-server
 # Or use Python module
 python -m aipartnerupflow.api.main
 ```
+
+### Protocol Selection
+
+You can choose which protocol to use via the `AIPARTNERUPFLOW_API_PROTOCOL` environment variable:
+
+```bash
+# A2A Protocol Server (default)
+export AIPARTNERUPFLOW_API_PROTOCOL=a2a
+python -m aipartnerupflow.api.main
+
+# MCP Server
+export AIPARTNERUPFLOW_API_PROTOCOL=mcp
+python -m aipartnerupflow.api.main
+```
+
+**Supported Protocols:**
+- `a2a` (default): A2A Protocol Server for agent-to-agent communication
+- `mcp`: MCP (Model Context Protocol) Server exposing task orchestration as MCP tools and resources
 
 ### Advanced Options
 
@@ -43,9 +62,16 @@ aipartnerupflow serve --config config.yaml
 
 ## API Endpoints
 
+### Protocol Selection
+
+The API server supports multiple protocols:
+
+1. **A2A Protocol** (default): Standard agent-to-agent communication protocol
+2. **MCP Protocol**: Model Context Protocol for tool and resource access
+
 ### A2A Protocol Endpoints
 
-The API server implements the A2A (Agent-to-Agent) Protocol standard.
+The API server implements the A2A (Agent-to-Agent) Protocol standard when `AIPARTNERUPFLOW_API_PROTOCOL=a2a` (default).
 
 #### Get Agent Card
 
@@ -470,8 +496,89 @@ curl http://localhost:8000/metrics
 - Check network connectivity
 - Ensure server is accessible
 
+## MCP Server
+
+When started with `AIPARTNERUPFLOW_API_PROTOCOL=mcp`, the API server exposes task orchestration capabilities as MCP tools and resources.
+
+### MCP Tools
+
+The MCP server provides 8 tools for task orchestration:
+
+- `execute_task` - Execute tasks or task trees
+- `create_task` - Create new tasks or task trees
+- `get_task` - Get task details by ID
+- `update_task` - Update existing tasks
+- `delete_task` - Delete tasks (if all pending)
+- `list_tasks` - List tasks with filtering
+- `get_task_status` - Get status of running tasks
+- `cancel_task` - Cancel running tasks
+
+### MCP Resources
+
+The MCP server provides 2 resource types:
+
+- `task://{task_id}` - Access individual task data
+- `tasks://` - Access task list with query parameters (e.g., `tasks://?status=running&limit=10`)
+
+### MCP Endpoints
+
+**HTTP Mode:**
+```bash
+# POST /mcp - JSON-RPC endpoint
+curl -X POST http://localhost:8000/mcp \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "tools/list",
+    "params": {}
+  }'
+```
+
+**stdio Mode:**
+```bash
+# Run as standalone process
+python -m aipartnerupflow.api.mcp.server
+```
+
+### MCP Usage Example
+
+```python
+# List available tools
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/list",
+  "params": {}
+}
+
+# Call a tool
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "execute_task",
+    "arguments": {
+      "task_id": "task-123"
+    }
+  }
+}
+
+# Read a resource
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "method": "resources/read",
+  "params": {
+    "uri": "task://task-123"
+  }
+}
+```
+
 ## Next Steps
 
 - See [HTTP API Reference](../api/http.md) for complete endpoint documentation
 - Check [Examples](../examples/basic_task.md) for integration examples
+- See [Custom Tasks Guide](./custom-tasks.md) for MCP executor usage
 

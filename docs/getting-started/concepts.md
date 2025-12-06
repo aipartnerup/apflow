@@ -160,6 +160,9 @@ An **executor** is the code that actually runs a task. It's like a worker that k
      - `websocket_executor`: Bidirectional WebSocket communication
      - `apflow_api_executor`: Call other aipartnerupflow API instances
      - `mcp_executor`: Model Context Protocol executor (stdio mode: no dependencies, HTTP mode: requires `[a2a]`)
+   - **Protocol Servers**:
+     - `a2a`: A2A Protocol Server (default)
+     - `mcp`: MCP (Model Context Protocol) Server - exposes task orchestration as MCP tools and resources
    - **Container Executors**:
      - `docker_executor`: Containerized command execution (requires `[docker]`)
    - **AI Executors** (optional):

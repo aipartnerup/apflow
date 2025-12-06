@@ -21,6 +21,7 @@ The core of `aipartnerupflow` is **task orchestration and execution specificatio
 - **WebSocket Executor**: Bidirectional WebSocket communication (task executor implementation)
 - **aipartnerupflow API Executor**: Inter-instance API calls for distributed execution (task executor implementation)
 - **MCP Executor**: Model Context Protocol executor for accessing external tools and data sources (task executor implementation)
+- **MCP Server** [a2a]: MCP (Model Context Protocol) server exposing task orchestration as MCP tools and resources
 - **A2A Protocol Server** [a2a]: A2A Protocol Server (A2A Protocol is the standard protocol for agent communication)
 - **CLI Tools** [cli]: Command-line interface
 

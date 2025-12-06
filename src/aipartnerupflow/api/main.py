@@ -47,6 +47,11 @@ PROTOCOL_DEPENDENCIES = {
         "a2a",
         "A2A Protocol Server",
     ),
+    "mcp": (
+        "aipartnerupflow.api.mcp.server",
+        "a2a",  # MCP uses a2a dependencies (httpx, fastapi, starlette)
+        "MCP (Model Context Protocol) Server",
+    ),
     # Future protocols can be added here:
     # "rest": (
     #     "aipartnerupflow.api.rest.server",
@@ -338,6 +343,57 @@ def _create_a2a_server(
     return a2a_server_instance.build()
 
 
+def _create_mcp_server(
+    base_url: str,
+    enable_system_routes: bool,
+    enable_docs: bool = True,
+):
+    """Create MCP (Model Context Protocol) Server"""
+    from fastapi import FastAPI
+    from aipartnerupflow.api.mcp.server import McpServer
+    
+    logger.info(
+        f"MCP Server configuration: "
+        f"System routes={enable_system_routes}, "
+        f"Docs={enable_docs}"
+    )
+    
+    # Create FastAPI app
+    app = FastAPI(
+        title="aipartnerupflow MCP Server",
+        description="Model Context Protocol server for task orchestration",
+        version="0.4.0"
+    )
+    
+    # Create MCP server instance
+    mcp_server = McpServer()
+    
+    # Add MCP HTTP routes
+    mcp_routes = mcp_server.get_http_routes()
+    for route in mcp_routes:
+        app.routes.append(route)
+    
+    # Add system routes if enabled
+    if enable_system_routes:
+        from starlette.routing import Route
+        from aipartnerupflow.api.routes.system import SystemRoutes
+        system_routes = SystemRoutes()
+        
+        async def system_handler(request):
+            return await system_routes.handle_system_requests(request)
+        
+        app.routes.append(
+            Route("/system", system_handler, methods=["POST"])
+        )
+    
+    # Add docs if enabled
+    if enable_docs:
+        from aipartnerupflow.api.docs.swagger_ui import setup_swagger_ui
+        setup_swagger_ui(app)
+    
+    return app
+
+
 def _create_rest_server():
     """Create REST API Server (future implementation)"""
     # TODO: Implement REST API server when ready
@@ -396,12 +452,18 @@ def create_app_by_protocol(protocol: Optional[str] = None) -> Any:
             enable_system_routes=enable_system_routes,
             enable_docs=enable_docs,
         )
+    elif protocol == "mcp":
+        return _create_mcp_server(
+            base_url=base_url,
+            enable_system_routes=enable_system_routes,
+            enable_docs=enable_docs,
+        )
     elif protocol == "rest":
         return _create_rest_server()
     else:
         raise ValueError(
             f"Unknown protocol: {protocol}. "
-            f"Supported protocols: 'a2a', 'rest' (future). "
+            f"Supported protocols: 'a2a', 'mcp', 'rest' (future). "
             f"Set AIPARTNERUPFLOW_API_PROTOCOL environment variable."
         )
 
@@ -412,6 +474,7 @@ def main():
     
     Protocol selection via AIPARTNERUPFLOW_API_PROTOCOL environment variable:
     - "a2a" (default): A2A Protocol Server
+    - "mcp": MCP (Model Context Protocol) Server
     - "rest" (future): REST API server
     """
     # Log startup time

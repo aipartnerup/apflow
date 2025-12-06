@@ -148,6 +148,13 @@ class MyExecutor(BaseTask):
 - `apflow_api_executor` - Call other aipartnerupflow API instances
 - `mcp_executor` - Model Context Protocol executor (stdio: no dependencies, HTTP: requires `[a2a]`)
 
+**MCP Server:**
+- MCP Server exposes aipartnerupflow task orchestration as MCP tools and resources
+- Start with: `AIPARTNERUPFLOW_API_PROTOCOL=mcp python -m aipartnerupflow.api.main`
+- Provides 8 MCP tools: execute_task, create_task, get_task, update_task, delete_task, list_tasks, get_task_status, cancel_task
+- Provides 2 MCP resources: task://{task_id}, tasks://
+- Supports both HTTP and stdio transport modes
+
 **Container Executors**:
 - `docker_executor` - Containerized command execution (requires `pip install aipartnerupflow[docker]`)
 
