@@ -488,6 +488,37 @@ final_task_tree = await creator.create_task_tree_from_array(generated_tasks)
 await task_manager.distribute_task_tree(final_task_tree)
 ```
 
+**CLI Usage Examples:**
+
+```bash
+# Basic parallel workflow
+apflow generate task-tree "Fetch data from two different APIs in parallel, then merge the results and save to database"
+
+# ETL pipeline
+apflow generate task-tree "Extract data from REST API, transform it by filtering and aggregating, then load it into database"
+
+# Complex processing flow
+apflow generate task-tree "Call REST API to get user data, process response with Python script, validate processed data, and save to file"
+
+# Fan-out fan-in pattern
+apflow generate task-tree "Fetch data from API, process it in two different ways in parallel (filter and aggregate), merge both results, and save to database"
+
+# Complete business scenario
+apflow generate task-tree "Monitor system resources (CPU, memory, disk) in parallel, analyze metrics, generate report, and send notification if threshold exceeded"
+
+# Save output to file
+apflow generate task-tree "Your requirement" --output tasks.json
+
+# Save to database
+apflow generate task-tree "Your requirement" --save --user-id user123
+```
+
+**Tips for Better Generation:**
+- Use specific keywords: "parallel", "sequential", "merge", "aggregate" help guide the generation
+- Describe data flow: Explain how data moves between steps
+- Mention executors: Specify operations like "API", "database", "file", "command" for better executor selection
+- Be detailed: More context leads to more accurate task trees
+
 ## Extension Registry
 
 ### Get Registry

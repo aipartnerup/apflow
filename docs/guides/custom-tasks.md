@@ -1405,6 +1405,46 @@ Returns a JSON array of task objects that can be used with `TaskCreator.create_t
 - Converting business requirements into executable task structures
 - Learning tool for understanding task tree patterns
 
+**CLI Usage Examples:**
+
+The following examples demonstrate the intelligent task tree generation capabilities:
+
+```bash
+# 1. Parallel Workflow - Fetch from multiple APIs in parallel
+apflow generate task-tree "Fetch data from two different APIs in parallel, then merge the results and save to database"
+
+# 2. ETL Pipeline - Extract, Transform, Load workflow
+apflow generate task-tree "Extract data from REST API, transform it by filtering and aggregating, then load it into database"
+
+# 3. Multi-Source Data Collection - Parallel system monitoring
+apflow generate task-tree "Collect system information about CPU and memory in parallel, analyze the data, and aggregate results"
+
+# 4. Complex Processing Flow - Multi-step data processing
+apflow generate task-tree "Call REST API to get user data, process response with Python script, validate processed data, and save to file"
+
+# 5. Fan-Out Fan-In Pattern - Parallel processing with convergence
+apflow generate task-tree "Fetch data from API, process it in two different ways in parallel (filter and aggregate), merge both results, and save to database"
+
+# 6. Complete Business Scenario - Real-world monitoring workflow
+apflow generate task-tree "Monitor system resources (CPU, memory, disk) in parallel, analyze metrics, generate report, and send notification if threshold exceeded"
+
+# 7. Data Pipeline - Multi-source processing
+apflow generate task-tree "Download data from multiple sources simultaneously, transform each dataset independently, then combine all results into single output file"
+
+# 8. Hierarchical Processing - Category-based organization
+apflow generate task-tree "Fetch data from API, organize into categories, process each category in parallel, then aggregate all category results"
+
+# 9. Complex Workflow - Complete business process
+apflow generate task-tree "Fetch customer data from API, validate information, process orders in parallel for each customer, aggregate results, calculate totals, and generate final report"
+```
+
+**Tips for Better Results:**
+- **Be specific**: More detailed requirements lead to better task trees
+- **Mention patterns**: Use words like "parallel", "sequential", "merge", "aggregate" to guide generation
+- **Specify executors**: Mention specific operations (API, database, file, command) for better executor selection
+- **Describe flow**: Explain the data flow and execution order in your requirement
+- **Save to file**: Use `--output tasks.json` to save generated tasks for later use
+
 ### Summary
 
 All built-in executors follow the same pattern:
