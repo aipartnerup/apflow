@@ -59,6 +59,8 @@ def task_tree(
     user_id: Optional[str] = typer.Option(None, "--user-id", "-u", help="User ID for the generated tasks"),
     provider: Optional[str] = typer.Option(None, "--provider", "-p", help="LLM provider (openai or anthropic)"),
     model: Optional[str] = typer.Option(None, "--model", "-m", help="LLM model name"),
+    temperature: Optional[float] = typer.Option(None, "--temperature", "-t", help="LLM temperature (0.0 to 2.0, default: 0.7)"),
+    max_tokens: Optional[int] = typer.Option(None, "--max-tokens", help="Maximum tokens in LLM response (default: 4000)"),
     output: Optional[str] = typer.Option(None, "--output", "-o", help="Output file path (default: stdout)"),
     pretty: bool = typer.Option(True, "--pretty/--no-pretty", help="Pretty print JSON output"),
     save: bool = typer.Option(False, "--save/--no-save", help="Save generated tasks to database"),
@@ -75,6 +77,9 @@ def task_tree(
         
         # Generate with specific LLM provider
         apflow generate task-tree "Create a workflow" --provider openai --model gpt-4
+        
+        # Generate with custom temperature and max_tokens
+        apflow generate task-tree "Create a workflow" --temperature 0.9 --max-tokens 6000
         
         # Save to file
         apflow generate task-tree "My requirement" --output tasks.json
@@ -114,6 +119,8 @@ def task_tree(
                     "user_id": user_id,
                     "llm_provider": provider,
                     "llm_model": model,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
                 },
                 schemas={"method": "generate_executor"}  # Required for TaskManager to find executor
             )

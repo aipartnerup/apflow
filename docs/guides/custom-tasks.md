@@ -1436,6 +1436,12 @@ apflow generate task-tree "Fetch data from API, organize into categories, proces
 
 # 9. Complex Workflow - Complete business process
 apflow generate task-tree "Fetch customer data from API, validate information, process orders in parallel for each customer, aggregate results, calculate totals, and generate final report"
+
+# 10. With custom LLM parameters
+apflow generate task-tree "Create a workflow" --temperature 0.9 --max-tokens 6000 --provider openai --model gpt-4o
+
+# 11. Save to database
+apflow generate task-tree "My requirement" --save --user-id user123
 ```
 
 **Tips for Better Results:**

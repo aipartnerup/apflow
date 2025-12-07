@@ -33,12 +33,9 @@ docs/
     ├── setup.md                # Development setup guide for contributors
     ├── extending.md             # Guide for extending the framework
     ├── contributing.md         # Contribution guidelines and process
-    ├── design/                  # Design documents for specific features
-    │   ├── cli-design.md       # CLI design and implementation
-    │   └── aggregate-results-design.md  # Aggregate results executor design
-    └── planning/               # Planning documents (historical reference)
-        ├── implementation-plan.md  # Architecture implementation plan (completed)
-        └── task-tree-dependent-validation.md  # Task tree validation planning
+    └── design/                  # Design documents for specific features
+        ├── cli-design.md       # CLI design and implementation
+        └── aggregate-results-design.md  # Aggregate results executor design
 ```
 
 ## Root Directory Files
@@ -121,11 +118,9 @@ Guides for developers contributing to the project.
 - Extending the framework (custom executors, extensions, hooks)
 - Contribution guidelines and process
 - Design documents for specific features
-- Planning documents (historical reference)
 
 **Subdirectories**:
 - `design/`: Design documents for specific features
-- `planning/`: Historical planning documents (completed implementations)
 
 ## Structure Rationale
 

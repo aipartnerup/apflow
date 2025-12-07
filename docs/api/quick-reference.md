@@ -527,6 +527,13 @@ apflow generate task-tree "Fetch data from two different APIs in parallel, then 
 # ETL pipeline
 apflow generate task-tree "Extract data from REST API, transform it by filtering and aggregating, then load it into database"
 
+# With custom LLM parameters
+apflow generate task-tree "Create a workflow" --temperature 0.9 --max-tokens 6000
+
+# Save to database
+apflow generate task-tree "My requirement" --save --user-id user123
+```
+
 # Complex processing flow
 apflow generate task-tree "Call REST API to get user data, process response with Python script, validate processed data, and save to file"
 

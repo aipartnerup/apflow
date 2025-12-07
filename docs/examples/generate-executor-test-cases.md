@@ -16,6 +16,12 @@ Or save the output to a file:
 apflow generate task-tree "YOUR_REQUIREMENT" --output tasks.json
 ```
 
+With custom LLM parameters:
+
+```bash
+apflow generate task-tree "YOUR_REQUIREMENT" --temperature 0.9 --max-tokens 6000
+```
+
 ## Test Case 1: Complex Data Pipeline
 
 **Command:**
