@@ -55,7 +55,7 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "slow: mark test as slow"
     )
-    
+
     # Disable CrewAI execution traces prompt in tests
     # This prevents the interactive "Would you like to view your execution traces?" prompt
     # that appears when CrewAI executes crews, which would cause tests to hang

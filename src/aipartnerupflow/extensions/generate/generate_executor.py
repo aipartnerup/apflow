@@ -197,18 +197,22 @@ class GenerateExecutor(BaseTask):
             "⚠️ IMPORTANT: Understand these concepts correctly:",
             "",
             "1. parent_id vs dependencies:",
-            "   - parent_id: ONLY for organization (like folders), does NOT control execution order",
+            "   - parent_id: REQUIRED for tree structure - ensures all tasks form a single tree",
             "   - dependencies: Controls EXECUTION ORDER - tasks wait for dependencies to complete",
-            "   - Example: Task B depends on Task A → Task B waits for Task A to finish",
+            "   - CRITICAL: If a task has dependencies, it MUST have a parent_id (usually the first dependency)",
+            "   - Example: Task B depends on Task A → Task B must have parent_id='task_a' AND dependencies=[{'id': 'task_a'}]",
             "",
             "2. Task identification:",
             "   - Either ALL tasks have 'id' field, or NONE do (no mixing)",
             "   - If using 'id', all references (parent_id, dependencies) must use 'id'",
             "   - If not using 'id', references can use 'name'",
             "",
-            "3. Tree structure:",
-            "   - Exactly ONE root task (task with no parent_id)",
-            "   - All tasks must be reachable from the root",
+            "3. Tree structure (CRITICAL):",
+            "   - Exactly ONE root task (task with no parent_id and no dependencies)",
+            "   - All other tasks MUST have a parent_id to form a single tree",
+            "   - If a task depends on multiple tasks, set parent_id to the FIRST dependency",
+            "   - For sequential tasks (A → B → C), each task's parent_id should be the previous task",
+            "   - All tasks must be reachable from the root via parent_id chain",
             "   - No circular dependencies",
             "",
             "4. Executor matching:",
@@ -250,10 +254,13 @@ class GenerateExecutor(BaseTask):
             "   - What data flows between steps?",
             "",
             "2. DESIGN the task tree:",
-            "   - Identify the root task (starting point)",
+            "   - Identify the root task (starting point - no parent_id, no dependencies)",
             "   - Map business steps to executor tasks",
             "   - Determine execution order (use dependencies)",
-            "   - Organize hierarchy (use parent_id for grouping)",
+            "   - Set parent_id for ALL non-root tasks to form a single tree:",
+            "     * For sequential tasks: each task's parent_id = previous task",
+            "     * For tasks with multiple dependencies: parent_id = first dependency",
+            "     * For parallel tasks: choose one as root, others as its children",
             "",
             "3. SELECT executors:",
             "   - Match each step to an appropriate executor",
@@ -265,7 +272,10 @@ class GenerateExecutor(BaseTask):
             "   - For command_executor: use full commands with arguments (e.g., 'python script.py --input file.json')",
             "   - For rest_executor: use complete URLs and proper HTTP methods",
             "   - Set dependencies to ensure correct execution order",
-            "   - Use parent_id to organize related tasks (optional)",
+            "   - Set parent_id for ALL non-root tasks (REQUIRED for tree structure):",
+            "     * If task has dependencies, set parent_id to the FIRST dependency",
+            "     * For sequential chain: parent_id = previous task in chain",
+            "     * This ensures all tasks form a single tree with one root",
             "",
             "5. VALIDATE:",
             "   - Single root task",
@@ -290,18 +300,41 @@ class GenerateExecutor(BaseTask):
                         "headers": {"Accept": "application/json"}
                     },
                     "priority": 1
+                    # No parent_id = root task
                 },
                 {
                     "id": "task_2",
                     "name": "command_executor",
-                    "parent_id": "task_1",
+                    "parent_id": "task_1",  # REQUIRED: parent_id = first dependency
                     "dependencies": [{"id": "task_1", "required": True}],
                     "inputs": {
                         "command": "python process_data.py --input /tmp/api_response.json --output /tmp/processed.json"
                     },
                     "priority": 2
+                },
+                {
+                    "id": "task_3",
+                    "name": "rest_executor",
+                    "parent_id": "task_2",  # REQUIRED: parent_id = previous task in chain
+                    "dependencies": [{"id": "task_2", "required": True}],
+                    "inputs": {
+                        "url": "https://api.example.com/notify",
+                        "method": "POST",
+                        "data": {"status": "completed"}
+                    },
+                    "priority": 2
                 }
             ], indent=2),
+            "",
+            "=== CRITICAL: parent_id Rules ===",
+            "1. Root task: NO parent_id (only one root task allowed)",
+            "2. Sequential tasks: parent_id = previous task in the chain",
+            "3. Tasks with dependencies: parent_id = FIRST dependency",
+            "4. Parallel tasks: Choose one as root, others have parent_id = root",
+            "5. Example: If Task B depends on [Task A, Task C], then:",
+            "   - Task B.parent_id = 'task_a' (first dependency)",
+            "   - Task B.dependencies = [{'id': 'task_a'}, {'id': 'task_c'}]",
+            "",
         ]
         
         if user_id:
@@ -442,9 +475,17 @@ class GenerateExecutor(BaseTask):
         if len(root_tasks) == 0:
             return {"valid": False, "error": "No root task found (task with no parent_id)"}
         if len(root_tasks) > 1:
+            root_task_names = [task.get('name', 'unknown') for task in root_tasks]
             return {
                 "valid": False,
-                "error": f"Multiple root tasks found: {[task.get('name', 'unknown') for task in root_tasks]}. Only one root task is allowed."
+                "error": (
+                    f"Multiple root tasks found: {root_task_names}. "
+                    f"Only one root task is allowed. "
+                    f"Fix: Set parent_id for all non-root tasks. "
+                    f"For sequential tasks, set parent_id to the previous task. "
+                    f"For tasks with dependencies, set parent_id to the first dependency. "
+                    f"For parallel tasks, choose one as root and set others' parent_id to the root."
+                )
             }
         
         # Check for circular dependencies (simple check - all tasks reachable from root)
