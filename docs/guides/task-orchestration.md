@@ -132,12 +132,45 @@ Task A (root)
 
 Tasks go through these states:
 
-```
-pending → in_progress → completed
-                ↓
-            failed
-                ↓
-            cancelled
+```mermaid
+stateDiagram-v2
+    [*] --> pending: Task Created
+    
+    pending --> in_progress: Execution Started
+    pending --> cancelled: User Cancellation
+    
+    in_progress --> completed: Execution Successful
+    in_progress --> failed: Execution Failed
+    in_progress --> cancelled: User Cancellation
+    
+    completed --> [*]: Task Finished
+    failed --> [*]: Task Finished
+    cancelled --> [*]: Task Finished
+    
+    note right of pending
+        Initial state after task creation.
+        Waiting for dependencies to be satisfied.
+    end note
+    
+    note right of in_progress
+        Task is currently executing.
+        Executor is running the task logic.
+    end note
+    
+    note right of completed
+        Task finished successfully.
+        Result is available in task.result.
+    end note
+    
+    note right of failed
+        Task execution failed.
+        Error details in task.error.
+    end note
+    
+    note right of cancelled
+        Task was cancelled before completion.
+        Can be cancelled from any active state.
+    end note
 ```
 
 **Status Meanings:**
@@ -233,6 +266,46 @@ Root Task
 ## Dependencies
 
 Dependencies are the mechanism that controls execution order. They ensure tasks run in the correct sequence.
+
+### Dependency Resolution Flow
+
+The following diagram illustrates how the system resolves task dependencies:
+
+```mermaid
+flowchart TD
+    Start([Task Ready to Execute]) --> GetDeps[Get Task Dependencies]
+    GetDeps --> HasDeps{Has<br/>Dependencies?}
+    
+    HasDeps -->|No| ExecuteTask[Execute Task Immediately]
+    HasDeps -->|Yes| CheckDepStatus[Check Each Dependency Status]
+    
+    CheckDepStatus --> AllRequiredComplete{All Required<br/>Dependencies<br/>Complete?}
+    
+    AllRequiredComplete -->|No| CheckOptional{Has Optional<br/>Dependencies?}
+    AllRequiredComplete -->|Yes| MergeResults[Merge Dependency Results]
+    
+    CheckOptional -->|Yes| CheckOptionalStatus{Optional Dependencies<br/>Complete or Failed?}
+    CheckOptional -->|No| WaitForDeps[Wait for Required Dependencies]
+    
+    CheckOptionalStatus -->|Complete| MergeResults
+    CheckOptionalStatus -->|Failed| MergeResults
+    CheckOptionalStatus -->|In Progress| WaitForDeps
+    
+    WaitForDeps --> CheckDepStatus
+    
+    MergeResults --> CollectResults[Collect Results from Dependencies]
+    CollectResults --> MergeWithInputs[Merge with Task Inputs]
+    
+    MergeWithInputs --> ExecuteTask
+    
+    ExecuteTask --> TaskComplete([Task Execution Complete])
+    
+    style Start fill:#e1f5ff
+    style ExecuteTask fill:#c8e6c9
+    style TaskComplete fill:#c8e6c9
+    style WaitForDeps fill:#fff9c4
+    style MergeResults fill:#e1bee7
+```
 
 ### Basic Dependency
 

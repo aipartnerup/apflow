@@ -100,6 +100,7 @@ pip install aipartnerupflow
 
 **Architecture:**
 - **[Architecture Overview](architecture/overview.md)** - System design and principles
+- **[Architecture Diagrams](architecture/diagrams.md)** - Visual diagrams (sequence, flow, state diagrams)
 - **[Directory Structure](architecture/directory-structure.md)** - Code organization
 - **[Extension Registry](architecture/extension-registry-design.md)** - Extension system design
 - **[Naming Conventions](architecture/naming-convention.md)** - Code style guide
@@ -171,6 +172,7 @@ Complete API documentation:
 ### Architecture
 System design and structure:
 - **[Architecture Overview](architecture/overview.md)** - System design
+- **[Architecture Diagrams](architecture/diagrams.md)** - Visual diagrams (sequence, flow, state diagrams)
 - **[Directory Structure](architecture/directory-structure.md)** - Code organization
 - **[Extension Registry](architecture/extension-registry-design.md)** - Extension system
 - **[Naming Conventions](architecture/naming-convention.md)** - Code style
@@ -237,8 +239,9 @@ For contributors:
 **For Contributors:**
 1. [Development Setup](development/setup.md)
 2. [Architecture Overview](architecture/overview.md)
-3. [Contributing](development/contributing.md)
-4. [Extension Registry Design](architecture/extension-registry-design.md)
+3. [Architecture Diagrams](architecture/diagrams.md)
+4. [Contributing](development/contributing.md)
+5. [Extension Registry Design](architecture/extension-registry-design.md)
 
 ## 📝 Documentation Updates
 

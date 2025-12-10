@@ -73,17 +73,23 @@ A **task tree** is a hierarchical structure that organizes related tasks. It's l
 
 ### Visual Example
 
-```
-Root Task: "Prepare Dinner"
-│
-├── Task 1: "Buy Ingredients"
-│   └── Task 1.1: "Go to Store"
-│
-├── Task 2: "Cook Main Course"
-│   ├── Task 2.1: "Cook Pasta"
-│   └── Task 2.2: "Make Sauce"
-│
-└── Task 3: "Set Table"
+```mermaid
+flowchart TD
+    Root["Root Task: Prepare Dinner"] --> Task1["Task 1: Buy Ingredients"]
+    Root --> Task2["Task 2: Cook Main Course"]
+    Root --> Task3["Task 3: Set Table"]
+    
+    Task1 --> Task11["Task 1.1: Go to Store"]
+    Task2 --> Task21["Task 2.1: Cook Pasta"]
+    Task2 --> Task22["Task 2.2: Make Sauce"]
+    
+    style Root fill:#e1f5ff
+    style Task1 fill:#fff4e1
+    style Task2 fill:#fff4e1
+    style Task3 fill:#fff4e1
+    style Task11 fill:#e8f5e9
+    style Task21 fill:#e8f5e9
+    style Task22 fill:#e8f5e9
 ```
 
 ### Key Points
@@ -125,12 +131,23 @@ Task 4 (Serve Dinner) **depends on** Tasks 1, 2, and 3.
 
 ### Visual Example
 
-```
-Task A: "Fetch Data"
-  │
-  └──> Task B: "Process Data" (depends on A)
-         │
-         └──> Task C: "Save Results" (depends on B)
+```mermaid
+sequenceDiagram
+    participant TaskA as Task A: Fetch Data
+    participant TaskB as Task B: Process Data
+    participant TaskC as Task C: Save Results
+    
+    Note over TaskA: No dependencies<br/>Executes first
+    TaskA->>TaskA: Execute
+    TaskA-->>TaskB: Result available
+    
+    Note over TaskB: Depends on Task A<br/>Waits for completion
+    TaskB->>TaskB: Execute (with Task A result)
+    TaskB-->>TaskC: Result available
+    
+    Note over TaskC: Depends on Task B<br/>Waits for completion
+    TaskC->>TaskC: Execute (with Task B result)
+    TaskC-->>TaskC: Complete
 ```
 
 **Execution Order**: A → B → C (automatic!)
@@ -233,6 +250,47 @@ class MyCustomExecutor(BaseTask):
 3. **Handles Failures**: Manages errors and retries
 4. **Tracks Progress**: Monitors task status
 5. **Manages Priorities**: Executes high-priority tasks first
+
+### TaskManager Workflow
+
+The following diagram shows how TaskManager orchestrates task execution:
+
+```mermaid
+flowchart TD
+    Start([Task Tree Received]) --> LoadTasks[Load All Tasks]
+    LoadTasks --> CheckDeps[Check Dependencies for Each Task]
+    CheckDeps --> ReadyTasks{Any Tasks<br/>Ready?}
+    
+    ReadyTasks -->|No| Wait[Wait for Dependencies]
+    Wait --> CheckDeps
+    
+    ReadyTasks -->|Yes| SortPriority[Sort by Priority]
+    SortPriority --> Execute[Execute Highest Priority Task]
+    
+    Execute --> UpdateStatus[Update Status: in_progress]
+    UpdateStatus --> RunExecutor[Run Executor]
+    RunExecutor --> Success{Success?}
+    
+    Success -->|Yes| Complete[Update Status: completed]
+    Success -->|No| Failed[Update Status: failed]
+    
+    Complete --> CheckDependents[Check Dependent Tasks]
+    Failed --> CheckDependents
+    
+    CheckDependents --> MoreReady{More Tasks<br/>Ready?}
+    MoreReady -->|Yes| SortPriority
+    MoreReady -->|No| AllDone{All Tasks<br/>Complete?}
+    
+    AllDone -->|No| CheckDeps
+    AllDone -->|Yes| End([Execution Complete])
+    
+    style Start fill:#e1f5ff
+    style Execute fill:#c8e6c9
+    style Complete fill:#c8e6c9
+    style End fill:#c8e6c9
+    style Failed fill:#ffcdd2
+    style Wait fill:#fff9c4
+```
 
 ### Real-World Analogy
 

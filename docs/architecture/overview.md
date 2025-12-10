@@ -13,21 +13,47 @@ aipartnerupflow is a reusable **framework library**.
 
 ## Architecture Layers
 
+The aipartnerupflow architecture consists of four main layers:
+
+```mermaid
+flowchart TD
+    subgraph APILayer["Unified External API Interface Layer"]
+        A2AServer["A2A Protocol Server<br/>(HTTP/SSE/WebSocket)"]
+        CLI["CLI Tools"]
+    end
+    
+    subgraph OrchestrationLayer["Task Orchestration Specification Layer (CORE)"]
+        TaskManager["TaskManager<br/>- Task tree orchestration<br/>- Dependency management<br/>- Priority scheduling"]
+        ExecutableTask["ExecutableTask<br/>- Task execution interface"]
+    end
+    
+    subgraph ExecutionLayer["Task Execution Layer"]
+        CrewManager["CrewManager [crewai]<br/>- LLM task execution"]
+        BatchManager["BatchManager [crewai]<br/>- Batch orchestration"]
+        CustomTasks["Custom Tasks<br/>- External services<br/>- Automated tasks"]
+    end
+    
+    subgraph SupportLayer["Supporting Features Layer"]
+        Storage["Storage<br/>- DuckDB/PostgreSQL<br/>- Task state persistence"]
+        Streaming["Streaming<br/>- Real-time updates"]
+    end
+    
+    APILayer --> OrchestrationLayer
+    OrchestrationLayer --> ExecutionLayer
+    ExecutionLayer --> SupportLayer
+    
+    style APILayer fill:#e1f5ff
+    style OrchestrationLayer fill:#fff4e1
+    style ExecutionLayer fill:#e8f5e9
+    style SupportLayer fill:#f3e5f5
 ```
-┌─────────────────────────────────────────────────────────────┐
-│              Unified External API Interface Layer            │
-│  - A2A Protocol Server (HTTP/SSE/WebSocket) [a2a]          │
-│    (A2A Protocol is the standard protocol for agent communication)
-│  - CLI Tools [cli]                                          │
-└─────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────┐
-│        Task Orchestration Specification Layer (CORE)        │
-│  - TaskManager: Task tree orchestration, dependency         │
-│    management, priority scheduling                          │
-│  - ExecutableTask: Task execution specification interface   │
-└─────────────────────────────────────────────────────────────┘
-```
+
+### Layer Details
+
+**Unified External API Interface Layer**
+- A2A Protocol Server (HTTP/SSE/WebSocket) [a2a]
+  - A2A Protocol is the standard protocol for agent communication
+- CLI Tools [cli]
 
 ### Protocol Standard
 
@@ -44,21 +70,19 @@ aipartnerupflow is a reusable **framework library**.
 - `RequestContext`: Encapsulates method, parameters, metadata, and message content
 - `EventQueue`: Unified interface for streaming updates and real-time progress notifications
 - `AgentCard` / `AgentSkill`: Agent capability description mechanism
-                          ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    Task Execution Layer                      │
-│  - CrewManager [crewai]: CrewAI (LLM) task execution        │
-│  - BatchManager [batch]: Batch task orchestration            │
-│  - Custom Tasks: Traditional external service calls,        │
-│    automated task services, etc.                            │
-└─────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    Supporting Features Layer                 │
-│  - Storage: Task state persistence (DuckDB/PostgreSQL)     │
-│  - Streaming: Real-time progress updates                    │
-└─────────────────────────────────────────────────────────────┘
-```
+
+**Task Orchestration Specification Layer (CORE)**
+- TaskManager: Task tree orchestration, dependency management, priority scheduling
+- ExecutableTask: Task execution specification interface
+
+**Task Execution Layer**
+- CrewManager [crewai]: CrewAI (LLM) task execution
+- BatchManager [crewai]: Batch task orchestration
+- Custom Tasks: Traditional external service calls, automated task services, etc.
+
+**Supporting Features Layer**
+- Storage: Task state persistence (DuckDB/PostgreSQL)
+- Streaming: Real-time progress updates
 
 ## Module Organization
 
