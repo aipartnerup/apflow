@@ -317,4 +317,21 @@ class DockerExecutor(BaseTask):
             },
             "required": ["image", "command"]
         }
+    
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Provide demo Docker container execution result"""
+        image = inputs.get("image", "python:3.11")
+        command = inputs.get("command", "echo 'Hello from Docker'")
+        
+        return {
+            "image": image,
+            "command": command,
+            "container_id": "demo-container-123",
+            "return_code": 0,
+            "stdout": "Hello from Docker\nDemo Docker execution result",
+            "stderr": "",
+            "success": True,
+            "execution_time": 1.5,
+            "_demo_sleep": 1.0  # Simulate Docker container startup and execution time
+        }
 

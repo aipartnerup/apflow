@@ -6,7 +6,7 @@ like task model class and hooks. Components can access configuration without
 passing parameters through multiple layers.
 """
 
-from typing import Optional, Type, List, Callable, Union
+from typing import Optional, Type, List, Callable, Union, Dict
 from threading import local
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.types import TaskPreHook, TaskPostHook
@@ -37,6 +37,18 @@ class ConfigRegistry:
         self._post_hooks: List[TaskPostHook] = []
         self._use_task_creator: bool = True  # Default to True for rigorous task creation
         self._require_existing_tasks: bool = False  # Default to False for convenience (auto-create)
+        # Task tree lifecycle hooks
+        self._task_tree_hooks: Dict[str, List[Callable]] = {
+            "on_tree_created": [],
+            "on_tree_started": [],
+            "on_tree_completed": [],
+            "on_tree_failed": [],
+        }
+        # Demo mode sleep scale factor - multiplies executor-specific _demo_sleep values
+        # Default: read from environment variable AIPARTNERUPFLOW_DEMO_SLEEP_SCALE, or 1.0 (no scaling)
+        # Example: executor returns _demo_sleep=2.0, global scale=0.5 → actual sleep=1.0s
+        import os
+        self._demo_sleep_scale: float = float(os.getenv("AIPARTNERUPFLOW_DEMO_SLEEP_SCALE", "1.0"))
     
     def set_task_model_class(self, task_model_class: Optional[Type[TaskModel]]) -> None:
         """
@@ -44,11 +56,19 @@ class ConfigRegistry:
         
         Args:
             task_model_class: Custom TaskModel class, or None for default
+        
+        Raises:
+            TypeError: If task_model_class is not a subclass of TaskModel
         """
         if task_model_class and not issubclass(task_model_class, TaskModel):
             raise TypeError(
                 f"task_model_class must be a subclass of TaskModel, "
-                f"got {task_model_class}"
+                f"got {task_model_class}. "
+                f"Please ensure your custom class inherits from TaskModel:\n"
+                f"  from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel\n"
+                f"  class MyTaskModel(TaskModel):\n"
+                f"      # Your custom fields here\n"
+                f"      pass"
             )
         self._task_model_class = task_model_class
         logger.debug(
@@ -147,6 +167,70 @@ class ConfigRegistry:
         """
         return self._require_existing_tasks
     
+    def register_task_tree_hook(self, hook_type: str, hook: Callable) -> None:
+        """
+        Register a task tree lifecycle hook
+        
+        Args:
+            hook_type: One of "on_tree_created", "on_tree_started", 
+                      "on_tree_completed", "on_tree_failed"
+            hook: Hook function (sync or async)
+                 Signature: async def hook(root_task: TaskModel, *args) -> None
+        """
+        if hook_type not in self._task_tree_hooks:
+            raise ValueError(
+                f"Invalid hook_type: {hook_type}. "
+                f"Must be one of: {list(self._task_tree_hooks.keys())}"
+            )
+        if hook not in self._task_tree_hooks[hook_type]:
+            self._task_tree_hooks[hook_type].append(hook)
+            logger.debug(
+                f"Registered task tree hook '{hook_type}': "
+                f"{hook.__name__ if hasattr(hook, '__name__') else str(hook)}"
+            )
+    
+    def get_task_tree_hooks(self, hook_type: str) -> List[Callable]:
+        """
+        Get all registered task tree hooks for a specific hook type
+        
+        Args:
+            hook_type: One of "on_tree_created", "on_tree_started", 
+                      "on_tree_completed", "on_tree_failed"
+        
+        Returns:
+            List of hook functions
+        """
+        return self._task_tree_hooks.get(hook_type, []).copy()
+    
+    def set_demo_sleep_scale(self, scale: float) -> None:
+        """
+        Set demo mode sleep scale factor
+        
+        This multiplies executor-specific _demo_sleep values to adjust demo execution time.
+        Each executor can define its own sleep time via _demo_sleep in get_demo_result(),
+        and this global scale factor is applied to all of them.
+        
+        Examples:
+            - scale=1.0: No scaling (use executor's _demo_sleep as-is)
+            - scale=0.5: Half the sleep time (faster for testing)
+            - scale=2.0: Double the sleep time (slower for realistic simulation)
+            - scale=0.0: No sleep at all (fastest, ignores executor _demo_sleep)
+        
+        Args:
+            scale: Scale factor (default: 1.0, or from AIPARTNERUPFLOW_DEMO_SLEEP_SCALE env var)
+        """
+        self._demo_sleep_scale = float(scale)
+        logger.debug(f"Set demo_sleep_scale: {scale}")
+    
+    def get_demo_sleep_scale(self) -> float:
+        """
+        Get demo mode sleep scale factor
+        
+        Returns:
+            Scale factor (default: 1.0, or from AIPARTNERUPFLOW_DEMO_SLEEP_SCALE env var)
+        """
+        return self._demo_sleep_scale
+    
     def clear(self) -> None:
         """Clear all configuration (useful for testing)"""
         self._task_model_class = None
@@ -154,6 +238,9 @@ class ConfigRegistry:
         self._post_hooks.clear()
         self._use_task_creator = True  # Reset to default
         self._require_existing_tasks = False  # Reset to default
+        # Clear task tree hooks
+        for hook_list in self._task_tree_hooks.values():
+            hook_list.clear()
         logger.debug("Cleared configuration registry")
 
 
@@ -325,6 +412,44 @@ def set_require_existing_tasks(require_existing_tasks: bool) -> None:
     _get_registry().set_require_existing_tasks(require_existing_tasks)
 
 
+def set_demo_sleep_scale(scale: float) -> None:
+    """
+    Set demo mode sleep scale factor
+    
+    This multiplies executor-specific _demo_sleep values to adjust demo execution time.
+    Each executor can define its own sleep time via _demo_sleep in get_demo_result(),
+    and this global scale factor is applied to all of them.
+    
+    Examples:
+        - scale=1.0: No scaling (use executor's _demo_sleep as-is)
+        - scale=0.5: Half the sleep time (faster for testing)
+        - scale=2.0: Double the sleep time (slower for realistic simulation)
+        - scale=0.0: No sleep at all (fastest, ignores executor _demo_sleep)
+    
+    Args:
+        scale: Scale factor (default: 1.0, or from AIPARTNERUPFLOW_DEMO_SLEEP_SCALE env var)
+    
+    Example:
+        from aipartnerupflow.core.config import set_demo_sleep_scale
+        set_demo_sleep_scale(0.5)  # Reduce all executor sleep times by half
+    """
+    _get_registry().set_demo_sleep_scale(scale)
+
+
+def get_demo_sleep_scale() -> float:
+    """
+    Get demo mode sleep scale factor
+    
+    Returns:
+        Scale factor (default: 1.0, or from AIPARTNERUPFLOW_DEMO_SLEEP_SCALE env var)
+    
+    Example:
+        from aipartnerupflow.core.config import get_demo_sleep_scale
+        scale = get_demo_sleep_scale()  # Get current demo sleep scale
+    """
+    return _get_registry().get_demo_sleep_scale()
+
+
 def get_require_existing_tasks() -> bool:
     """
     Get whether to require tasks to exist before execution
@@ -333,6 +458,86 @@ def get_require_existing_tasks() -> bool:
         True if only existing tasks should be executed, False if tasks can be auto-created (default)
     """
     return _get_registry().get_require_existing_tasks()
+
+
+def register_task_tree_hook(hook_type: Optional[str] = None):
+    """
+    Register a task tree lifecycle hook using decorator syntax
+    
+    Can be used as a decorator:
+        @register_task_tree_hook("on_tree_completed")
+        async def on_tree_completed(root_task, status):
+            ...
+    
+    Or called directly:
+        register_task_tree_hook("on_tree_completed")(my_hook)
+    
+    Args:
+        hook_type: One of "on_tree_created", "on_tree_started", 
+                  "on_tree_completed", "on_tree_failed"
+    
+    Returns:
+        Decorator function or None
+    """
+    def decorator(func: Callable) -> Callable:
+        if hook_type is None:
+            raise ValueError("hook_type must be provided when using as decorator")
+        _get_registry().register_task_tree_hook(hook_type, func)
+        return func
+    
+    if hook_type is None:
+        # Used as decorator without parentheses: @register_task_tree_hook
+        # This is not supported - hook_type is required
+        raise ValueError(
+            "hook_type is required. Use: @register_task_tree_hook('on_tree_completed')"
+        )
+    else:
+        # Used as decorator with parentheses: @register_task_tree_hook("on_tree_completed")
+        return decorator
+
+
+def get_task_tree_hooks(hook_type: str) -> List[Callable]:
+    """
+    Get all registered task tree hooks for a specific hook type
+    
+    Args:
+        hook_type: One of "on_tree_created", "on_tree_started", 
+                  "on_tree_completed", "on_tree_failed"
+    
+    Returns:
+        List of hook functions
+    """
+    return _get_registry().get_task_tree_hooks(hook_type)
+
+
+def task_model_register():
+    """
+    Decorator to register a custom TaskModel class
+    
+    Can be used as a decorator:
+        @task_model_register()
+        class MyTaskModel(TaskModel):
+            ...
+    
+    This automatically calls set_task_model_class() with the decorated class.
+    
+    Returns:
+        Decorator function
+    """
+    def decorator(cls: Type[TaskModel]) -> Type[TaskModel]:
+        if not issubclass(cls, TaskModel):
+            raise TypeError(
+                f"Class {cls.__name__} must be a subclass of TaskModel. "
+                f"Please ensure your class inherits from TaskModel:\n"
+                f"  from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel\n"
+                f"  class MyTaskModel(TaskModel):\n"
+                f"      # Your custom fields here\n"
+                f"      pass"
+            )
+        set_task_model_class(cls)
+        logger.debug(f"Registered TaskModel class via decorator: {cls.__name__}")
+        return cls
+    return decorator
 
 
 __all__ = [
@@ -349,5 +554,8 @@ __all__ = [
     "get_use_task_creator",
     "set_require_existing_tasks",
     "get_require_existing_tasks",
+    "register_task_tree_hook",
+    "get_task_tree_hooks",
+    "task_model_register",
 ]
 

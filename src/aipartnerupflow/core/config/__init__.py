@@ -21,6 +21,11 @@ from aipartnerupflow.core.config.registry import (
     get_use_task_creator,
     set_require_existing_tasks,
     get_require_existing_tasks,
+    register_task_tree_hook,
+    get_task_tree_hooks,
+    task_model_register,
+    set_demo_sleep_scale,
+    get_demo_sleep_scale,
 )
 
 __all__ = [
@@ -36,5 +41,10 @@ __all__ = [
     "get_use_task_creator",
     "set_require_existing_tasks",
     "get_require_existing_tasks",
+    "register_task_tree_hook",
+    "get_task_tree_hooks",
+    "task_model_register",
+    "set_demo_sleep_scale",
+    "get_demo_sleep_scale",
 ]
 

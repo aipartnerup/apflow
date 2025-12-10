@@ -513,6 +513,38 @@ class GenerateExecutor(BaseTask):
         
         return {"valid": True, "error": None}
     
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Provide demo generated task tree"""
+        requirement = inputs.get("requirement", "Demo requirement")
+        user_id = inputs.get("user_id", "demo_user")
+        
+        # Return a simple demo task tree based on requirement
+        demo_tasks = [
+            {
+                "id": "demo-task-1",
+                "name": "demo_task_1",
+                "user_id": user_id,
+                "schemas": {"method": "system_info_executor"},
+                "inputs": {"resource": "cpu"}
+            },
+            {
+                "id": "demo-task-2",
+                "name": "demo_task_2",
+                "user_id": user_id,
+                "schemas": {"method": "system_info_executor"},
+                "inputs": {"resource": "memory"},
+                "dependencies": [{"id": "demo-task-1", "required": True}]
+            }
+        ]
+        
+        return {
+            "status": "completed",
+            "tasks": demo_tasks,
+            "requirement": requirement,
+            "task_count": len(demo_tasks),
+            "_demo_sleep": 1.5  # Simulate LLM generation time (longer for realistic demo)
+        }
+    
     def get_input_schema(self) -> Dict[str, Any]:
         """Return input parameter schema"""
         return {

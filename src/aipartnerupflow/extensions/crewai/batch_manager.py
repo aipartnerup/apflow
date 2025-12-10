@@ -457,4 +457,132 @@ class BatchManager(BaseTask):
             logger.warning(f"Failed to aggregate token usage: {str(e)}")
         
         return None
+    
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Provide demo BatchManager execution result
+        
+        Generates a realistic demo result based on the batch's works definition.
+        Simulates execution of multiple crews and aggregates their results.
+        
+        Args:
+            task: Task object (may contain works definition in params or schemas)
+            inputs: Input parameters
+            
+        Returns:
+            Demo execution result with status, result (dict of work results), and aggregated token_usage
+        """
+        # Try to get works definition from task params, schemas, or self.works
+        works = None
+        if hasattr(task, 'params') and task.params:
+            works = task.params.get("works")
+        if not works and hasattr(task, 'schemas') and task.schemas:
+            works = task.schemas.get("works")
+        if not works:
+            # Fallback: use self.works if BatchManager was already initialized
+            works = getattr(self, 'works', {})
+        
+        # If still no works, use default demo structure
+        if not works:
+            works = {
+                "work_1": {
+                    "agents": {
+                        "demo_agent_1": {
+                            "role": "Demo Agent 1",
+                            "goal": "Complete demo task 1"
+                        }
+                    },
+                    "tasks": {
+                        "demo_task_1": {
+                            "description": "Execute demo task 1",
+                            "agent": "demo_agent_1"
+                        }
+                    }
+                },
+                "work_2": {
+                    "agents": {
+                        "demo_agent_2": {
+                            "role": "Demo Agent 2",
+                            "goal": "Complete demo task 2"
+                        }
+                    },
+                    "tasks": {
+                        "demo_task_2": {
+                            "description": "Execute demo task 2",
+                            "agent": "demo_agent_2"
+                        }
+                    }
+                }
+            }
+        
+        # Generate demo results for each work
+        work_results = {}
+        total_tokens = 0
+        total_prompt_tokens = 0
+        total_completion_tokens = 0
+        total_successful_requests = 0
+        
+        for work_name, work in works.items():
+            if not isinstance(work, dict):
+                continue
+            
+            agents = work.get("agents", {})
+            tasks = work.get("tasks", {})
+            agent_names = list(agents.keys()) if isinstance(agents, dict) else []
+            task_names = list(tasks.keys()) if isinstance(tasks, dict) else []
+            
+            # Generate demo result for this work
+            demo_results = []
+            for task_name in task_names:
+                task_config = tasks.get(task_name, {}) if isinstance(tasks, dict) else {}
+                task_description = task_config.get("description", f"Demo task: {task_name}")
+                demo_results.append(f"Completed: {task_description}")
+            
+            combined_result = "\n".join(demo_results) if demo_results else f"Demo work {work_name} completed successfully"
+            
+            # Calculate token usage for this work
+            num_tasks = len(task_names) if task_names else 1
+            num_agents = len(agent_names) if agent_names else 1
+            estimated_tokens = 1500 * num_tasks * num_agents
+            
+            work_token_usage = {
+                "total_tokens": estimated_tokens,
+                "prompt_tokens": int(estimated_tokens * 0.7),
+                "completion_tokens": int(estimated_tokens * 0.3),
+                "cached_prompt_tokens": 0,
+                "successful_requests": num_tasks
+            }
+            
+            # Store work result
+            work_results[work_name] = {
+                "status": "success",
+                "result": combined_result,
+                "token_usage": work_token_usage
+            }
+            
+            # Aggregate token usage
+            total_tokens += estimated_tokens
+            total_prompt_tokens += work_token_usage["prompt_tokens"]
+            total_completion_tokens += work_token_usage["completion_tokens"]
+            total_successful_requests += num_tasks
+        
+        # Create aggregated token usage
+        aggregated_token_usage = {
+            "total_tokens": total_tokens,
+            "prompt_tokens": total_prompt_tokens,
+            "completion_tokens": total_completion_tokens,
+            "cached_prompt_tokens": 0,
+            "successful_requests": total_successful_requests
+        }
+        
+        # Calculate sleep time based on number of works (each work takes ~2s)
+        num_works = len(work_results) if work_results else 1
+        sleep_time = 2.0 * num_works  # Each work simulates ~2s LLM generation
+        
+        return {
+            "status": "success",
+            "result": work_results,
+            "token_usage": aggregated_token_usage,
+            "_demo_sleep": sleep_time  # Simulate batch execution time (sum of all works)
+        }
 

@@ -160,6 +160,34 @@ class BaseTask(ExecutableTask):
         """
         if self.inputs_schema:
             _check_input_schema(self.inputs_schema, parameters)
+    
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Optional method to provide custom demo data for this executor
+        
+        This method is called when use_demo=True is set in task inputs.
+        Executors can override this method to provide realistic demo data
+        that matches their actual execution results.
+        
+        Args:
+            task: TaskModel instance for this task
+            inputs: Input parameters for the task
+        
+        Returns:
+            Demo result dictionary, or None to use default demo data.
+            If returning a dict, it should match the format of actual execution results.
+            The "demo_mode" field will be automatically added by TaskManager.
+        
+        Example:
+            def get_demo_result(self, task, inputs):
+                return {
+                    "status": "completed",
+                    "result": "Demo execution result",
+                    "data": {"processed": True}
+                }
+        """
+        # Default implementation: return None to use default demo data
+        return None
 
 
 __all__ = ["BaseTask"]

@@ -212,6 +212,30 @@ class WebSocketExecutor(BaseTask):
                 "url": url
             }
     
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Provide demo WebSocket communication result"""
+        import json
+        url = inputs.get("url", "ws://demo.example.com")
+        message = inputs.get("message", "Hello, WebSocket!")
+        wait_response = inputs.get("wait_response", True)
+        
+        result = {
+            "url": url,
+            "message_sent": message if isinstance(message, str) else json.dumps(message),
+            "connected": True,
+            "success": True
+        }
+        
+        if wait_response:
+            result["response"] = {
+                "type": "message",
+                "data": "Demo WebSocket response",
+                "timestamp": "2024-01-01T00:00:00Z"
+            }
+        
+        result["_demo_sleep"] = 0.2  # Simulate WebSocket connection and message exchange
+        return result
+    
     def get_input_schema(self) -> Dict[str, Any]:
         """Return input parameter schema"""
         return {

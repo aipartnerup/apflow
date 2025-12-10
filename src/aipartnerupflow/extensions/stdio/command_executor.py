@@ -186,6 +186,18 @@ class CommandExecutor(BaseTask):
                 "error": str(e)
             }
     
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Provide demo command execution result"""
+        command = inputs.get("command", "echo 'Hello, World!'")
+        return {
+            "command": command,
+            "return_code": 0,
+            "stdout": "Hello, World!\nDemo execution result",
+            "stderr": "",
+            "success": True,
+            "_demo_sleep": 0.1  # Simulate local command execution time
+        }
+    
     def get_input_schema(self) -> Dict[str, Any]:
         """Return input parameter schema"""
         return {

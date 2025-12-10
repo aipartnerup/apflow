@@ -489,6 +489,50 @@ class ExtensionRegistry:
             List of extension IDs
         """
         return [ext.id for ext in self.get_all_by_category(category)]
+    
+    def add_executor_hook(self, executor_id: str, hook_type: str, hook_func: Callable) -> None:
+        """
+        Add hook to an already registered executor
+        
+        Args:
+            executor_id: Executor ID (e.g., "crewai_executor")
+            hook_type: "pre_hook" or "post_hook"
+            hook_func: Hook function
+        
+        Raises:
+            ValueError: If executor_id is not found or hook_type is invalid
+        """
+        if hook_type not in ("pre_hook", "post_hook"):
+            raise ValueError(f"Invalid hook_type: {hook_type}. Must be 'pre_hook' or 'post_hook'")
+        
+        extension = self.get_by_id(executor_id)
+        if not extension:
+            raise ValueError(f"Executor '{executor_id}' not found")
+        
+        if extension.category != ExtensionCategory.EXECUTOR:
+            raise ValueError(f"Extension '{executor_id}' is not an executor")
+        
+        # Get executor class from registry
+        executor_class = self._executor_classes.get(executor_id)
+        if not executor_class:
+            # Try to get from extension instance
+            # The extension is an instance, so we can get its class
+            if hasattr(extension, '__class__'):
+                executor_class = extension.__class__
+                # Store it for future use
+                self._executor_classes[executor_id] = executor_class
+            else:
+                raise ValueError(
+                    f"Cannot find executor class for '{executor_id}'. "
+                    f"Make sure the executor was registered using @executor_register() decorator."
+                )
+        
+        # Store hooks in executor class metadata
+        if not hasattr(executor_class, '_executor_hooks'):
+            executor_class._executor_hooks = {}
+        
+        executor_class._executor_hooks[hook_type] = hook_func
+        logger.info(f"Added {hook_type} to executor '{executor_id}'")
 
 
 # Global registry instance
@@ -533,9 +577,32 @@ def register_extension(
     _registry.register(extension, override=override)
 
 
+def add_executor_hook(executor_id: str, hook_type: str, hook_func: Callable) -> None:
+    """
+    Add hook to an already registered executor (convenience function)
+    
+    Args:
+        executor_id: Executor ID (e.g., "crewai_executor")
+        hook_type: "pre_hook" or "post_hook"
+        hook_func: Hook function
+    
+    Example:
+        from aipartnerupflow.core.extensions.registry import add_executor_hook
+        
+        async def quota_check_hook(executor, task, inputs):
+            if should_use_demo_data(task):
+                return get_demo_data(task)
+            return None
+        
+        add_executor_hook("crewai_executor", "pre_hook", quota_check_hook)
+    """
+    _registry.add_executor_hook(executor_id, hook_type, hook_func)
+
+
 __all__ = [
     "ExtensionRegistry",
     "get_registry",
     "register_extension",
+    "add_executor_hook",
 ]
 

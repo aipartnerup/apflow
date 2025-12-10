@@ -164,6 +164,8 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         enable_system_routes: bool = True,
         enable_docs: bool = True,
         task_model_class: Optional[Type[TaskModel]] = None,
+        task_routes_class: Optional[Type[TaskRoutes]] = None,
+        custom_routes: Optional[List[Route]] = None,
         **kwargs
     ):
         """
@@ -194,6 +196,12 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                              Users can pass their custom TaskModel subclass that inherits TaskModel
                              to add custom fields (e.g., project_id, department, etc.).
                              If None, default TaskModel will be used.
+            task_routes_class: Optional custom TaskRoutes class to use instead of default TaskRoutes.
+                             Allows extending TaskRoutes functionality without monkey patching.
+                             If None, default TaskRoutes will be used.
+            custom_routes: Optional list of custom Starlette Route objects to add to the application.
+                          Routes are merged after default routes (custom routes can override defaults if needed).
+                          If None, no custom routes are added.
             **kwargs: Keyword arguments for A2AStarletteApplication
         """
         super().__init__(*args, **kwargs)
@@ -211,8 +219,14 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
         # Store task_model_class for task management APIs
         self.task_model_class = task_model_class or TaskModel
         
+        # Store custom routes
+        self.custom_routes = custom_routes or []
+        
+        # Use provided task_routes_class or default TaskRoutes
+        task_routes_cls = task_routes_class or TaskRoutes
+        
         # Initialize protocol-agnostic route handlers
-        self.task_routes = TaskRoutes(
+        self.task_routes = task_routes_cls(
             task_model_class=self.task_model_class,
             verify_token_func=self.verify_token_func,
             verify_permission_func=self.verify_permission_func
@@ -352,6 +366,10 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                     name='openapi_json',
                 ),
             ])
+        
+        # Add user-provided custom routes
+        if self.custom_routes:
+            custom_routes.extend(self.custom_routes)
         
         # Combine standard routes with custom routes
         return app_routes + custom_routes

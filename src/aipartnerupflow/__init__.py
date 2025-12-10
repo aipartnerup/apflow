@@ -19,7 +19,7 @@ Optional extensions (require extras):
 Protocol Standard: A2A (Agent-to-Agent) Protocol
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 # Core framework - re-export from core module for convenience
 from aipartnerupflow.core import (
@@ -38,8 +38,11 @@ from aipartnerupflow.core import (
 from aipartnerupflow.core.decorators import (
     register_pre_hook,
     register_post_hook,
+    register_task_tree_hook,
+    get_task_tree_hooks,
     set_task_model_class,
     get_task_model_class,
+    task_model_register,
     clear_config,
     set_use_task_creator,
     get_use_task_creator,
@@ -50,6 +53,9 @@ from aipartnerupflow.core.decorators import (
     hook_register,
     tool_register,
 )
+
+# Extension registry utilities
+from aipartnerupflow.core.extensions import add_executor_hook
 
 __all__ = [
     # Core framework (from core module)
@@ -65,8 +71,11 @@ __all__ = [
     # Unified decorators (Flask-style API)
     "register_pre_hook",
     "register_post_hook",
+    "register_task_tree_hook",
+    "get_task_tree_hooks",
     "set_task_model_class",
     "get_task_model_class",
+    "task_model_register",
     "clear_config",
     "set_use_task_creator",
     "get_use_task_creator",
@@ -76,6 +85,8 @@ __all__ = [
     "storage_register",
     "hook_register",
     "tool_register",
+    # Extension registry utilities
+    "add_executor_hook",
     # Version
     "__version__",
 ]

@@ -5,7 +5,77 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] 
+## [0.6.0] 2025-12-10
+
+### Added
+- **TaskRoutes Extension Mechanism**
+  - Added `task_routes_class` parameter to `create_a2a_server()` and `_create_request_handler()` for custom TaskRoutes injection
+  - Eliminates the need for monkey patching when extending TaskRoutes functionality
+  - Supports custom routes via `custom_routes` parameter in `CustomA2AStarletteApplication`
+  - Backward compatible: optional parameter with default `TaskRoutes` class
+  - Usage: `create_a2a_server(task_routes_class=CustomTaskRoutes, custom_routes=[...])`
+
+- **Task Tree Lifecycle Hooks**
+  - New `register_task_tree_hook()` decorator for task tree lifecycle events
+  - Four hook types: `on_tree_created`, `on_tree_started`, `on_tree_completed`, `on_tree_failed`
+  - Explicit lifecycle tracking without manual root task detection
+  - Hooks receive root task and relevant context (status, error message)
+  - Usage: `@register_task_tree_hook("on_tree_completed") async def on_completed(root_task, status): ...`
+
+- **Executor-Specific Hooks**
+  - Added `pre_hook` and `post_hook` parameters to `@executor_register()` decorator
+  - Runtime hook registration via `add_executor_hook(executor_id, hook_type, hook_func)`
+  - Inject custom logic (e.g., quota checks, demo data fallback) for specific executors
+  - `pre_hook` can return a result to skip executor execution (useful for demo mode)
+  - `post_hook` receives executor, task, inputs, and result for post-processing
+  - Supports both decorator-based and runtime registration for existing executors
+
+- **Automatic user_id Extraction**
+  - Automatic `user_id` extraction from JWT token in `TaskRoutes.handle_task_generate` and `handle_task_create`
+  - Only extracts from JWT token payload for security (HTTP headers can be spoofed)
+  - Supports `user_id` field or standard JWT `sub` claim in token payload
+  - Extracted `user_id` automatically set on task data
+  - Simplifies custom route implementations and ensures consistent user identification
+  - Security: Only trusted JWT tokens are used, no fallback to HTTP headers
+
+- **Demo Mode Support**
+  - Built-in demo mode via `use_demo` parameter in task inputs
+  - CLI support: `--use-demo` flag for `apflow run flow` command
+  - API support: `use_demo` parameter in task creation and execution
+  - Executors can override `get_demo_result()` method in `BaseTask` for custom demo data
+  - Default demo data format: `{"result": "Demo execution result", "demo_mode": True}`
+  - All built-in executors now implement `get_demo_result()` method:
+    - `SystemInfoExecutor`, `CommandExecutor`, `AggregateResultsExecutor`
+    - `RestExecutor`, `GenerateExecutor`, `ApiExecutor`
+    - `SshExecutor`, `GrpcExecutor`, `WebSocketExecutor`
+    - `McpExecutor`, `DockerExecutor`
+    - `CrewManager`, `BatchManager` (CrewAI executors)
+  - **Realistic Demo Execution Timing**: All executors include `_demo_sleep` values to simulate real execution time:
+    - Network operations (HTTP, SSH, API): 0.2-0.5 seconds
+    - Container operations (Docker): 1.0 second
+    - LLM operations (CrewAI, Generate): 1.0-1.5 seconds
+    - Local operations (SystemInfo, Command, Aggregate): 0.05-0.1 seconds
+  - **Global Demo Sleep Scale**: Configurable via `AIPARTNERUPFLOW_DEMO_SLEEP_SCALE` environment variable (default: 1.0)
+    - Allows adjusting demo execution speed globally (e.g., `0.5` for faster, `2.0` for slower)
+    - API: `set_demo_sleep_scale(scale)` and `get_demo_sleep_scale()` functions
+  - **CrewAI Demo Support**: `CrewManager` and `BatchManager` generate realistic demo results:
+    - Based on `works` definition (agents and tasks) from task params or schemas
+    - Includes simulated `token_usage` matching real LLM execution patterns
+    - `BatchManager` aggregates token usage across multiple works
+  - Demo mode helps developers test workflows without external dependencies
+
+- **TaskModel Customization Improvements**
+  - Enhanced `set_task_model_class()` with improved validation and error messages
+  - New `@task_model_register()` decorator for convenient TaskModel registration
+  - Validation ensures custom classes inherit from `TaskModel` with helpful error messages
+  - Supports `__table_args__ = {'extend_existing': True}` for extending existing table definitions
+  - Better support for user-defined `MyTaskModel(TaskModel)` with additional fields
+
+- **Documentation for Hook Types**
+  - Added comprehensive documentation explaining differences between hook types
+  - `pre_hook` / `post_hook`: Task-level hooks for individual task execution
+  - `task_tree_hook`: Task tree-level hooks for tree lifecycle events
+  - Clear usage scenarios and examples in `docs/development/extending.md`
 
 ### Changed
 - **LLM Model Parameter Naming**: Unified LLM model parameter naming to `model` across all components
@@ -18,6 +88,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Priority: `schemas["model"]` > `params.works.agents[].llm` (CrewAI standard)
   - **Impact**: Only affects generate functionality introduced in 0.5.0, minimal breaking change
   - **Migration**: Update any code using `llm_model` parameter to use `model` instead
+
+### Removed
+- **Redundant decorators.py file**
+  - Removed `src/aipartnerupflow/decorators.py` as it was no longer used
+  - Functionality superseded by `src/aipartnerupflow/core/decorators.py`
+  - No impact on existing code (file was not imported by any other modules)
 
 
 ## [0.5.0] 2025-12-7

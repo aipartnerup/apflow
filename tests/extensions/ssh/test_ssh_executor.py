@@ -113,14 +113,16 @@ class TestSshExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_auth(self):
         """Test error when neither password nor key_file is provided"""
-        executor = SshExecutor()
-        
-        with pytest.raises(ValueError, match="Either password or key_file"):
-            await executor.execute({
-                "host": "example.com",
-                "username": "user",
-                "command": "ls"
-            })
+        # Mock ASYNCSSH_AVAILABLE = True to test authentication validation logic
+        with patch("aipartnerupflow.extensions.ssh.ssh_executor.ASYNCSSH_AVAILABLE", True):
+            executor = SshExecutor()
+            
+            with pytest.raises(ValueError, match="Either password or key_file"):
+                await executor.execute({
+                    "host": "example.com",
+                    "username": "user",
+                    "command": "ls"
+                })
     
     @pytest.mark.asyncio
     async def test_execute_asyncssh_not_available(self):

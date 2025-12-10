@@ -456,4 +456,79 @@ class McpExecutor(BaseTask):
             },
             "required": ["transport", "operation"]
         }
+    
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Provide demo MCP operation result"""
+        operation = inputs.get("operation", "list_tools")
+        transport = inputs.get("transport", "stdio")
+        
+        if operation == "list_tools":
+            return {
+                "tools": [
+                    {
+                        "name": "demo_tool",
+                        "description": "Demo MCP tool",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "input": {"type": "string"}
+                            }
+                        }
+                    }
+                ],
+                "transport": transport,
+                "success": True,
+                "_demo_sleep": 0.15  # Simulate MCP protocol communication latency
+            }
+        elif operation == "call_tool":
+            tool_name = inputs.get("tool_name", "demo_tool")
+            arguments = inputs.get("arguments", {})
+            return {
+                "tool": tool_name,
+                "arguments": arguments,
+                "result": {
+                    "output": "Demo tool execution result",
+                    "success": True
+                },
+                "transport": transport,
+                "success": True,
+                "_demo_sleep": 0.2  # Simulate tool execution time
+            }
+        elif operation == "list_resources":
+            return {
+                "resources": [
+                    {
+                        "uri": "demo://resource/1",
+                        "name": "Demo Resource",
+                        "description": "A demo resource",
+                        "mimeType": "text/plain"
+                    }
+                ],
+                "transport": transport,
+                "success": True,
+                "_demo_sleep": 0.15  # Simulate MCP protocol communication latency
+            }
+        elif operation == "read_resource":
+            resource_uri = inputs.get("resource_uri", "demo://resource/1")
+            return {
+                "uri": resource_uri,
+                "contents": [
+                    {
+                        "uri": resource_uri,
+                        "mimeType": "text/plain",
+                        "text": "Demo resource content"
+                    }
+                ],
+                "transport": transport,
+                "success": True,
+                "_demo_sleep": 0.15  # Simulate resource read latency
+            }
+        else:
+            return {
+                "operation": operation,
+                "transport": transport,
+                "result": "Demo MCP operation completed",
+                "success": True,
+                "_demo_sleep": 0.15  # Simulate MCP protocol communication latency
+            }
 

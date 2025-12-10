@@ -1047,11 +1047,6 @@ class TaskRoutes(BaseRouteHandler):
             if not tasks_array:
                 raise ValueError("Tasks array cannot be empty")
             
-            # Get authenticated user_id if JWT is enabled
-            authenticated_user_id = None
-            if self.verify_token_func:
-                authenticated_user_id, _ = self._get_user_info(request)
-            
             # Collect all user_ids from tasks array
             task_user_ids = set()
             for task_data in tasks_array:
@@ -1086,15 +1081,16 @@ class TaskRoutes(BaseRouteHandler):
                     if task_data.get("user_id"):
                         task_data["user_id"] = resolved_user_id
             else:
-                # No user_id in tasks - use authenticated user_id or None
-                if authenticated_user_id:
-                    resolved_user_id = authenticated_user_id
+                # No user_id in tasks - automatically extract from request
+                extracted_user_id = self._extract_user_id_from_request(request)
+                if extracted_user_id:
+                    resolved_user_id = extracted_user_id
                     # Set user_id for all tasks
                     for task_data in tasks_array:
                         if "user_id" not in task_data:
                             task_data["user_id"] = resolved_user_id
                 else:
-                    # No JWT and no user_id in tasks, allow None (no user restriction)
+                    # No user_id found, allow None (no user restriction)
                     resolved_user_id = None
             
             # Get database session and create TaskCreator
@@ -1625,9 +1621,11 @@ class TaskRoutes(BaseRouteHandler):
             if not requirement:
                 raise ValueError("Requirement is required")
             
-            # Get user_id - check permission if provided
+            # Get user_id - automatically extract from request if not provided
             user_id = params.get("user_id")
-            authenticated_user_id, _ = self._get_user_info(request)
+            if not user_id:
+                # Automatically extract user_id from request (JWT or header)
+                user_id = self._extract_user_id_from_request(request)
             
             if user_id:
                 # Check permission for specified user_id
@@ -1635,8 +1633,8 @@ class TaskRoutes(BaseRouteHandler):
                 if resolved_user_id:
                     user_id = resolved_user_id
             else:
-                # Use authenticated user_id or None
-                user_id = authenticated_user_id
+                # No user_id found, use None (will default to "api_user" in create_task)
+                user_id = None
             
             # Check if LLM API key is available
             api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
@@ -1677,8 +1675,9 @@ class TaskRoutes(BaseRouteHandler):
             await task_executor.execute_task_tree(
                 task_tree=task_tree,
                 root_task_id=generate_task.id,
-                db_session=db_session,
-                use_streaming=False
+                use_streaming=False,
+                use_demo=False,
+                db_session=db_session
             )
             
             # Get result
@@ -1763,6 +1762,7 @@ class TaskRoutes(BaseRouteHandler):
             task_id: Optional, Task ID to execute (if provided, uses execute_task_by_id)
             tasks: Optional, Array of task dictionaries to execute (if provided, uses execute_tasks)
             use_streaming: Optional, if True, use SSE mode (default: False, regular POST mode)
+            use_demo: Optional, if True, use demo mode (returns demo data instead of executing) (default: False)
             copy_execution: Optional, if True, copy the task before execution to preserve original task history (default: False)
                           Only applies to task_id mode. When True, creates a copy of the task tree and executes the copy.
             copy_children: Optional, if True and copy_execution=True, also copy each direct child task with its dependencies (default: False)
@@ -1803,6 +1803,7 @@ class TaskRoutes(BaseRouteHandler):
             task_id = params.get("task_id") or params.get("id")
             tasks = params.get("tasks")
             use_streaming = params.get("use_streaming", False)
+            use_demo = params.get("use_demo", False)
             copy_execution = params.get("copy_execution", False)
             copy_children = params.get("copy_children", False)
             webhook_config = params.get("webhook_config")
@@ -1855,6 +1856,7 @@ class TaskRoutes(BaseRouteHandler):
                     if not task:
                         raise ValueError(f"Copied task {task_id} not found")
                 
+                # Note: use_demo is now passed as parameter to TaskExecutor, not injected into inputs
                 # Check if task is already running
                 from aipartnerupflow.core.execution.task_tracker import TaskTracker
                 task_tracker = TaskTracker()
@@ -1886,6 +1888,7 @@ class TaskRoutes(BaseRouteHandler):
                     task_id=task_id,
                     use_streaming=bool(streaming_context),
                     streaming_callbacks_context=streaming_context,
+                    use_demo=use_demo,
                     db_session=db_session
                 )
                 root_task_id = execution_result.get("root_task_id", root_task_id)
@@ -1899,6 +1902,7 @@ class TaskRoutes(BaseRouteHandler):
                     if user_id:
                         self._check_permission(request, user_id, "execute")
                 
+                # Note: use_demo is now passed as parameter to TaskExecutor, not injected into inputs
                 # Determine streaming context (root_task_id will be determined after execution)
                 # For now, use a temporary ID for streaming context initialization
                 temp_root_id = str(uuid.uuid4())
@@ -1917,6 +1921,7 @@ class TaskRoutes(BaseRouteHandler):
                     use_streaming=bool(streaming_context),
                     streaming_callbacks_context=streaming_context,
                     require_existing_tasks=None,
+                    use_demo=use_demo,
                     db_session=db_session
                 )
                 root_task_id = execution_result.get("root_task_id")

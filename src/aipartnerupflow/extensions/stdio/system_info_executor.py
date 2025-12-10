@@ -7,7 +7,7 @@ for CPU, memory, and disk resources. All commands are predefined and safe.
 
 import asyncio
 import platform
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from aipartnerupflow.core.base import BaseTask
 from aipartnerupflow.core.extensions.decorators import executor_register
 from aipartnerupflow.core.utils.logger import get_logger
@@ -283,6 +283,49 @@ class SystemInfoExecutor(BaseTask):
             "system": system,
             "note": "Disk info not available for this system"
         }
+    
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Provide demo system information data"""
+        resource = inputs.get("resource", "all")
+        
+        demo_cpu = {
+            "system": "Darwin",
+            "brand": "Apple M1 Pro",
+            "cores": 10,
+            "threads": 10
+        }
+        
+        demo_memory = {
+            "total_gb": 32.0,
+            "system": "Darwin"
+        }
+        
+        demo_disk = {
+            "total": "500GB",
+            "used": "200GB",
+            "available": "300GB",
+            "used_percent": "40%",
+            "system": "Darwin"
+        }
+        
+        if resource == "cpu":
+            result = demo_cpu
+        elif resource == "memory":
+            result = demo_memory
+        elif resource == "disk":
+            result = demo_disk
+        else:  # "all"
+            result = {
+                "cpu": demo_cpu,
+                "memory": demo_memory,
+                "disk": demo_disk
+            }
+        
+        # Add sleep time for demo mode (local operation, very fast)
+        if isinstance(result, dict):
+            result["_demo_sleep"] = 0.05  # Simulate quick local system info query
+        
+        return result
     
     def get_input_schema(self) -> Dict[str, Any]:
         """Return input parameter schema"""

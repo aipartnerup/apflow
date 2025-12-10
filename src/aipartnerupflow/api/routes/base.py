@@ -65,6 +65,39 @@ class BaseRouteHandler:
                 roles = [roles]
         return user_id, roles
     
+    def _extract_user_id_from_request(self, request: Request) -> Optional[str]:
+        """
+        Extract user_id from request JWT token
+        
+        This method extracts user_id from JWT token payload.
+        Only JWT tokens are trusted for security reasons - HTTP headers
+        can be easily spoofed by clients and should not be used for
+        authentication or user identification.
+        
+        Args:
+            request: Starlette request object
+            
+        Returns:
+            User ID string from JWT token payload, or None if not found
+        """
+        # Only extract from JWT token (if verify_token_func is available)
+        if self.verify_token_func:
+            auth_header = request.headers.get("Authorization")
+            if auth_header and auth_header.startswith("Bearer "):
+                token = auth_header.split(" ", 1)[1]
+                try:
+                    payload = self.verify_token_func(token)
+                    if payload and "user_id" in payload:
+                        return payload["user_id"]
+                    # Also try "sub" field (standard JWT claim)
+                    if payload and "sub" in payload:
+                        return payload["sub"]
+                except Exception:
+                    # Token verification failed
+                    pass
+        
+        return None
+    
     def _check_permission(
         self,
         request: Request,

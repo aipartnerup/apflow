@@ -522,6 +522,64 @@ class ApFlowApiExecutor(BaseTask):
             # Wait before next poll
             await asyncio.sleep(current_backoff)
     
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Provide demo API call result"""
+        import json
+        method = inputs.get("method", "tasks.get")
+        params = inputs.get("params", {})
+        
+        # Generate appropriate demo response based on method
+        if method == "tasks.execute":
+            return {
+                "jsonrpc": "2.0",
+                "result": {
+                    "success": True,
+                    "protocol": "jsonrpc",
+                    "root_task_id": params.get("task_id", "demo-task-123"),
+                    "status": "completed"
+                },
+                "id": "demo-request-id",
+                "_demo_sleep": 0.4  # Simulate API call and task execution time
+            }
+        elif method == "tasks.create":
+            return {
+                "jsonrpc": "2.0",
+                "result": {
+                    "success": True,
+                    "tasks": [
+                        {
+                            "id": "demo-created-task-456",
+                            "name": params.get("name", "demo_task"),
+                            "status": "pending"
+                        }
+                    ]
+                },
+                "id": "demo-request-id",
+                "_demo_sleep": 0.2  # Simulate API call latency
+            }
+        elif method == "tasks.get":
+            return {
+                "jsonrpc": "2.0",
+                "result": {
+                    "id": params.get("task_id", "demo-task-123"),
+                    "name": "demo_task",
+                    "status": "completed",
+                    "result": {"output": "Demo execution result"}
+                },
+                "id": "demo-request-id",
+                "_demo_sleep": 0.2  # Simulate API call latency
+            }
+        else:
+            return {
+                "jsonrpc": "2.0",
+                "result": {
+                    "success": True,
+                    "message": f"Demo {method} completed"
+                },
+                "id": "demo-request-id",
+                "_demo_sleep": 0.2  # Simulate API call latency
+            }
+    
     def get_input_schema(self) -> Dict[str, Any]:
         """Return input parameter schema"""
         return {

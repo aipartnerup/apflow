@@ -217,6 +217,47 @@ class RestExecutor(BaseTask):
                 "method": method
             }
     
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Provide demo HTTP response data"""
+        url = inputs.get("url", "https://api.example.com/demo")
+        method = inputs.get("method", "GET").upper()
+        
+        # Generate appropriate demo response based on method
+        if method == "GET":
+            demo_json = {
+                "status": "success",
+                "data": {
+                    "id": "demo-123",
+                    "name": "Demo Resource",
+                    "value": 42
+                }
+            }
+        elif method == "POST":
+            demo_json = {
+                "status": "created",
+                "id": "new-resource-456",
+                "message": "Resource created successfully"
+            }
+        else:
+            demo_json = {
+                "status": "success",
+                "message": f"{method} operation completed"
+            }
+        
+        return {
+            "url": url,
+            "status_code": 200 if method in ["GET", "POST", "PUT", "PATCH"] else 204,
+            "headers": {
+                "Content-Type": "application/json",
+                "X-Demo": "true"
+            },
+            "body": json.dumps(demo_json),
+            "json": demo_json,
+            "success": True,
+            "method": method,
+            "_demo_sleep": 0.3  # Simulate HTTP request latency (network round-trip)
+        }
+    
     def get_input_schema(self) -> Dict[str, Any]:
         """Return input parameter schema"""
         return {

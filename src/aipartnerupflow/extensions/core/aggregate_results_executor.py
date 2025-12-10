@@ -229,6 +229,34 @@ class AggregateResultsExecutor(BaseTask):
         
         return aggregated
     
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Provide demo aggregated results"""
+        from datetime import datetime, timezone
+        
+        # Create demo dependency results based on inputs
+        # Filter out internal markers
+        pre_hook_markers = {"_pre_hook_executed", "_pre_hook_timestamp", "use_demo"}
+        dependency_results = {
+            key: value
+            for key, value in inputs.items()
+            if key not in pre_hook_markers
+        }
+        
+        # If no dependency results, create some demo ones
+        if not dependency_results:
+            dependency_results = {
+                "demo-task-1": {"status": "completed", "result": "Demo result 1"},
+                "demo-task-2": {"status": "completed", "result": "Demo result 2"}
+            }
+        
+        return {
+            "summary": "Task Results Aggregation",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "results": dependency_results,
+            "result_count": len(dependency_results),
+            "_demo_sleep": 0.05  # Simulate quick data aggregation (local operation)
+        }
+    
     def get_input_schema(self) -> Dict[str, Any]:
         """
         Get input parameter schema

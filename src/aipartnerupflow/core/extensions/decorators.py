@@ -163,7 +163,9 @@ def _register_extension(
 
 def executor_register(
     factory: Optional[ExecutorFactory] = None,
-    override: bool = False
+    override: bool = False,
+    pre_hook: Optional[Callable] = None,
+    post_hook: Optional[Callable] = None,
 ):
     """
     Decorator for executor registration (type-specific)
@@ -179,11 +181,24 @@ def executor_register(
         @executor_register(factory=lambda inputs: MyExecutor(**inputs))
         class MyExecutor(BaseTask):
             ...
+        
+        # Or with pre/post hooks
+        @executor_register(
+            pre_hook=lambda executor, task, inputs: check_quota(executor, task, inputs),
+            post_hook=lambda executor, task, inputs, result: log_execution(executor, task, result)
+        )
+        class MyExecutor(BaseTask):
+            ...
     
     Args:
         factory: Optional factory function to create executor instances.
                 Signature: factory(inputs: Dict[str, Any]) -> ExecutableTask
         override: If True, allow overriding existing registration. Default False.
+        pre_hook: Optional hook function called before executor.execute().
+                 Signature: async def pre_hook(executor, task, inputs) -> Optional[Dict[str, Any]]
+                 If returns non-None, skips executor execution and uses returned value.
+        post_hook: Optional hook function called after executor.execute().
+                  Signature: async def post_hook(executor, task, inputs, result) -> None
     
     Returns:
         Decorated class (same class, registered automatically)
@@ -201,7 +216,18 @@ def executor_register(
     """
     def decorator(cls: Type[Any]) -> Type[Any]:
         from aipartnerupflow.core.extensions.types import ExtensionCategory
-        return _register_extension(cls, ExtensionCategory.EXECUTOR, factory, override)
+        registered_cls = _register_extension(cls, ExtensionCategory.EXECUTOR, factory, override)
+        
+        # Store hooks in executor class metadata
+        if not hasattr(registered_cls, '_executor_hooks'):
+            registered_cls._executor_hooks = {}
+        
+        if pre_hook:
+            registered_cls._executor_hooks['pre_hook'] = pre_hook
+        if post_hook:
+            registered_cls._executor_hooks['post_hook'] = post_hook
+        
+        return registered_cls
     return decorator
 
 

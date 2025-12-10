@@ -154,6 +154,7 @@ class TaskExecutor:
         root_task_id: str,
         use_streaming: bool = False,
         streaming_callbacks_context: Optional[Any] = None,
+        use_demo: bool = False,
         db_session: Optional[Union[Session, AsyncSession]] = None
     ) -> Dict[str, Any]:
         """
@@ -165,6 +166,9 @@ class TaskExecutor:
             use_streaming: Whether to use streaming mode
             streaming_callbacks_context: Context for streaming callbacks (if use_streaming is True)
             db_session: Optional database session (defaults to get_default_session())
+            use_demo: If True, executors return demo data instead of executing (default: False)
+                     This is an execution option, not a task input. It's passed to TaskManager
+                     and used to determine whether to return demo data.
             
         Returns:
             Execution result dictionary
@@ -188,7 +192,8 @@ class TaskExecutor:
                 root_task_id=root_task_id,
                 pre_hooks=self.pre_hooks,
                 post_hooks=self.post_hooks,
-                executor_instances=self._executor_instances  # Pass shared executor instances
+                executor_instances=self._executor_instances,  # Pass shared executor instances
+                use_demo=use_demo  # Pass use_demo flag
             )
             
             # Set tasks to re-execute in TaskManager
@@ -616,6 +621,7 @@ class TaskExecutor:
         use_streaming: bool = False,
         streaming_callbacks_context: Optional[Any] = None,
         require_existing_tasks: Optional[bool] = None,
+        use_demo: bool = False,
         db_session: Optional[Union[Session, AsyncSession]] = None
     ) -> Dict[str, Any]:
         """
@@ -708,6 +714,7 @@ class TaskExecutor:
             root_task_id=root_task_id,
             use_streaming=use_streaming,
             streaming_callbacks_context=streaming_callbacks_context,
+            use_demo=use_demo,
             db_session=db_session
         )
         
@@ -934,6 +941,7 @@ class TaskExecutor:
         task_id: str,
         use_streaming: bool = False,
         streaming_callbacks_context: Optional[Any] = None,
+        use_demo: bool = False,
         db_session: Optional[Union[Session, AsyncSession]] = None
     ) -> Dict[str, Any]:
         """
@@ -948,6 +956,9 @@ class TaskExecutor:
             use_streaming: Whether to use streaming mode
             streaming_callbacks_context: Context for streaming callbacks (if use_streaming is True)
             db_session: Optional database session (defaults to get_default_session())
+            use_demo: If True, executors return demo data instead of executing (default: False)
+                     This is an execution option, not a task input. It's passed to TaskManager
+                     and used to determine whether to return demo data.
             
         Returns:
             Execution result dictionary with status, progress, and root_task_id
@@ -1012,6 +1023,7 @@ class TaskExecutor:
             root_task_id=root_task_id,
             use_streaming=use_streaming,
             streaming_callbacks_context=streaming_callbacks_context,
+            use_demo=use_demo,
             db_session=db_session
         )
         

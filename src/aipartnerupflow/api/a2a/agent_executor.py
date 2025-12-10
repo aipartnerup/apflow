@@ -235,11 +235,28 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             if require_existing_tasks is None:
                 require_existing_tasks = None  # Use global configuration
             
+            # Extract use_demo from metadata, message.metadata, or configuration
+            use_demo = False
+            if context.metadata:
+                use_demo = context.metadata.get("use_demo", False)
+            # Also check message.metadata if available (A2A protocol supports metadata in message)
+            if not use_demo and context.message and hasattr(context.message, "metadata"):
+                message_metadata = context.message.metadata
+                if isinstance(message_metadata, dict):
+                    use_demo = message_metadata.get("use_demo", False)
+            if not use_demo and context.configuration:
+                try:
+                    config_dict = context.configuration.model_dump(exclude_none=True) if hasattr(context.configuration, 'model_dump') else context.configuration.dict(exclude_none=True)
+                    use_demo = config_dict.get("use_demo", False)
+                except (AttributeError, TypeError):
+                    pass
+            
             execution_result = await self.task_executor.execute_tasks(
                 tasks=tasks,
                 root_task_id=None,  # Use actual root task ID from created task tree
                 use_streaming=False,
                 require_existing_tasks=require_existing_tasks,  # Allow override via metadata
+                use_demo=use_demo,
                 db_session=db_session
             )
             
@@ -419,12 +436,29 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             # Behavior controlled by global configuration (get_require_existing_tasks())
             # Default: require_existing_tasks=False (auto-create for convenience)
             # root_task_id=None means use the actual root task ID from the created task tree
+            # Extract use_demo from metadata, message.metadata, or configuration
+            use_demo = False
+            if context.metadata:
+                use_demo = context.metadata.get("use_demo", False)
+            # Also check message.metadata if available (A2A protocol supports metadata in message)
+            if not use_demo and context.message and hasattr(context.message, "metadata"):
+                message_metadata = context.message.metadata
+                if isinstance(message_metadata, dict):
+                    use_demo = message_metadata.get("use_demo", False)
+            if not use_demo and context.configuration:
+                try:
+                    config_dict = context.configuration.model_dump(exclude_none=True) if hasattr(context.configuration, 'model_dump') else context.configuration.dict(exclude_none=True)
+                    use_demo = config_dict.get("use_demo", False)
+                except (AttributeError, TypeError):
+                    pass
+            
             execution_result = await self.task_executor.execute_tasks(
                 tasks=tasks,
                 root_task_id=None,  # Use actual root task ID from created task tree
                 use_streaming=True,
                 streaming_callbacks_context=event_queue_bridge,
                 require_existing_tasks=None,  # Use global configuration (default: False, auto-create)
+                use_demo=use_demo,
                 db_session=db_session
             )
             

@@ -110,33 +110,38 @@ class SshExecutor(BaseTask):
                 - return_code: Exit code
                 - success: Boolean indicating success (return_code == 0)
         """
+        # Validate basic required inputs first (before checking ASYNCSSH_AVAILABLE)
+        # This ensures tests can verify validation logic even when asyncssh is not installed
+        host = inputs.get("host")
+        if not host:
+            raise ValueError("host is required")
+        
+        username = inputs.get("username")
+        if not username:
+            raise ValueError("username is required")
+        
+        command = inputs.get("command")
+        if not command:
+            raise ValueError("command is required")
+        
+        # Check if asyncssh is available before authentication validation
+        # If not available, return error immediately (allows tests to verify asyncssh-not-available
+        # behavior even without complete authentication inputs)
         if not ASYNCSSH_AVAILABLE:
             return {
                 "success": False,
                 "error": "asyncssh is not installed. Install it with: pip install aipartnerupflow[ssh]"
             }
         
-        host = inputs.get("host")
-        if not host:
-            raise ValueError("host is required in inputs")
-        
-        username = inputs.get("username")
-        if not username:
-            raise ValueError("username is required in inputs")
-        
-        command = inputs.get("command")
-        if not command:
-            raise ValueError("command is required in inputs")
-        
-        port = inputs.get("port", 22)
+        # Validate authentication (only if asyncssh is available)
         password = inputs.get("password")
         key_file = inputs.get("key_file")
-        timeout = inputs.get("timeout", 30)
-        env = inputs.get("env", {})
-        
-        # Validate authentication
         if not password and not key_file:
             raise ValueError("Either password or key_file must be provided")
+        
+        port = inputs.get("port", 22)
+        timeout = inputs.get("timeout", 30)
+        env = inputs.get("env", {})
         
         # Validate key file if provided
         if key_file:
@@ -242,6 +247,20 @@ class SshExecutor(BaseTask):
                 "host": host,
                 "command": command
             }
+    
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Provide demo SSH command execution result"""
+        command = inputs.get("command", "echo 'Hello from remote server'")
+        host = inputs.get("host", "demo.example.com")
+        return {
+            "host": host,
+            "command": command,
+            "return_code": 0,
+            "stdout": "Hello from remote server\nDemo SSH execution result",
+            "stderr": "",
+            "success": True,
+            "_demo_sleep": 0.5  # Simulate SSH connection and command execution time
+        }
     
     def get_input_schema(self) -> Dict[str, Any]:
         """Return input parameter schema"""

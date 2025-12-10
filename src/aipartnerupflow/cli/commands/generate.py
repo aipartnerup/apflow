@@ -131,8 +131,9 @@ def task_tree(
             await task_executor.execute_task_tree(
                 task_tree=task_tree,
                 root_task_id=generate_task.id,
-                db_session=db,
-                use_streaming=False
+                use_streaming=False,
+                use_demo=False,
+                db_session=db
             )
             
             # Get result

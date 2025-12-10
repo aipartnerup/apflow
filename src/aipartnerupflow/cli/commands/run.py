@@ -133,6 +133,7 @@ def flow(
     user_id: str = typer.Option("cli_user", "--user-id", "-u", help="User ID for task execution"),
     background: bool = typer.Option(False, "--background", "-b", help="Run in background (returns immediately with task ID)"),
     watch: bool = typer.Option(False, "--watch", "-w", help="Watch task status in real-time after starting"),
+    use_demo: bool = typer.Option(False, "--use-demo", help="Use demo mode (returns demo data instead of executing)"),
 ):
     """
     Execute tasks through TaskExecutor (same execution path as API)
@@ -211,6 +212,7 @@ def flow(
         for task in tasks_list:
             if "user_id" not in task:
                 task["user_id"] = user_id
+            # Note: use_demo is now passed as parameter to TaskExecutor, not injected into inputs
         
         typer.echo(f"Executing {len(tasks_list)} task(s)...")
         
@@ -238,6 +240,8 @@ def flow(
                     root_task_id=None,
                     use_streaming=False,
                     require_existing_tasks=False,
+                    use_demo=use_demo,
+                    db_session=None
                 )
                 return execution_result
             except Exception as e:

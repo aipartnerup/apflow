@@ -15,12 +15,14 @@ from aipartnerupflow.core.extensions.registry import (
     ExtensionRegistry,
     get_registry,
     register_extension,
+    add_executor_hook,
 )
 from aipartnerupflow.core.extensions.decorators import (
     executor_register,
     storage_register,
     hook_register,
 )
+from aipartnerupflow.core.config import register_task_tree_hook, get_task_tree_hooks
 
 __all__ = [
     "Extension",
@@ -30,8 +32,11 @@ __all__ = [
     "ExtensionRegistry",
     "get_registry",
     "register_extension",
+    "add_executor_hook",
     "executor_register",
     "storage_register",
     "hook_register",
+    "register_task_tree_hook",
+    "get_task_tree_hooks",
 ]
 

@@ -19,7 +19,7 @@ from aipartnerupflow.core.types import (
     TaskPostHook,
     TaskStatus,
 )
-from aipartnerupflow.core.config import get_pre_hooks, get_post_hooks, get_task_model_class
+from aipartnerupflow.core.config import get_pre_hooks, get_post_hooks, get_task_model_class, get_task_tree_hooks
 from aipartnerupflow.core.execution.dependency_resolver import (
     are_dependencies_satisfied,
     resolve_task_dependencies,
@@ -74,7 +74,8 @@ class TaskManager:
         root_task_id: Optional[str] = None,
         pre_hooks: Optional[List[TaskPreHook]] = None,
         post_hooks: Optional[List[TaskPostHook]] = None,
-        executor_instances: Optional[Dict[str, Any]] = None
+        executor_instances: Optional[Dict[str, Any]] = None,
+        use_demo: bool = False
     ):
         """
         Initialize TaskManager
@@ -103,6 +104,9 @@ class TaskManager:
             executor_instances: Optional shared dictionary for storing executor instances (task_id -> executor)
                 Used for cancellation support. If provided, executors created during execution are stored here
                 so that cancel_task() can access them. Typically passed from TaskExecutor.
+            use_demo: If True, executors return demo data instead of executing (default: False)
+                This is an execution option, not a task input. It's passed as a parameter to TaskManager
+                and used by TaskManager._execute_task_with_schemas() to determine whether to return demo data.
         """
         self.db = db
         self.is_async = isinstance(db, AsyncSession)
@@ -124,6 +128,8 @@ class TaskManager:
         # Track tasks that should be re-executed (even if they are completed or failed)
         # This allows re-executing failed tasks and ensures dependencies are also re-executed
         self._tasks_to_reexecute: set[str] = set()
+        # Demo mode flag - if True, executors return demo data instead of executing
+        self.use_demo = use_demo
     
     async def cancel_task(
         self,
@@ -273,9 +279,33 @@ class TaskManager:
         """
         logger.info(f"Distributing task tree with root task: {task_tree.task.id}")
         
-        await self._execute_task_tree_recursive(task_tree, use_callback)
+        root_task = task_tree.task
         
-        return task_tree
+        # Call on_tree_created hook
+        await self._call_task_tree_hooks("on_tree_created", root_task, task_tree)
+        
+        # Call on_tree_started hook
+        await self._call_task_tree_hooks("on_tree_started", root_task)
+        
+        try:
+            # Execute task tree
+            await self._execute_task_tree_recursive(task_tree, use_callback)
+            
+            # Check final status
+            final_status = task_tree.calculate_status()
+            
+            # Call on_tree_completed hook
+            if final_status == "completed":
+                await self._call_task_tree_hooks("on_tree_completed", root_task, "completed")
+            else:
+                # Tree finished but not all tasks completed (some failed)
+                await self._call_task_tree_hooks("on_tree_failed", root_task, f"Tree finished with status: {final_status}")
+            
+            return task_tree
+        except Exception as e:
+            # Call on_tree_failed hook
+            await self._call_task_tree_hooks("on_tree_failed", root_task, str(e))
+            raise
     
     async def distribute_task_tree_with_streaming(
         self,
@@ -295,6 +325,14 @@ class TaskManager:
         self.stream = True
         self.streaming_final = False
         self.root_task_id = task_tree.task.id
+        
+        root_task = task_tree.task
+        
+        # Call on_tree_created hook
+        await self._call_task_tree_hooks("on_tree_created", root_task, task_tree)
+        
+        # Call on_tree_started hook
+        await self._call_task_tree_hooks("on_tree_started", root_task)
         
         try:
             # Send initial status
@@ -318,6 +356,8 @@ class TaskManager:
                     final_status,
                     result={"progress": final_progress}
                 )
+                # Call on_tree_completed hook
+                await self._call_task_tree_hooks("on_tree_completed", root_task, "completed")
             else:
                 # Send progress update
                 self.streaming_callbacks.progress(
@@ -325,10 +365,15 @@ class TaskManager:
                     final_progress,
                     f"Task tree execution {final_status}"
                 )
+                # Call on_tree_failed hook
+                await self._call_task_tree_hooks("on_tree_failed", root_task, f"Tree finished with status: {final_status}")
                 
         except Exception as e:
             logger.error(f"Error in distribute_task_tree_with_streaming: {str(e)}")
             self.streaming_callbacks.task_failed(task_tree.task.id, str(e))
+            # Call on_tree_failed hook
+            await self._call_task_tree_hooks("on_tree_failed", root_task, str(e))
+            raise
     
     async def _execute_task_tree_recursive(
         self,
@@ -842,12 +887,41 @@ class TaskManager:
         
         Args:
             root_task: Root task of the tree
-            
+        
         Returns:
             List of all tasks in the tree
         """
         # Use repository method
         return await self.task_repository.get_all_tasks_in_tree(root_task)
+    
+    async def _call_task_tree_hooks(self, hook_type: str, root_task: TaskModel, *args):
+        """
+        Call task tree lifecycle hooks
+        
+        Args:
+            hook_type: Hook type ("on_tree_created", "on_tree_started", "on_tree_completed", "on_tree_failed")
+            root_task: Root task of the task tree
+            *args: Additional arguments to pass to hooks
+        """
+        hooks = get_task_tree_hooks(hook_type)
+        if not hooks:
+            return
+        
+        logger.debug(f"Calling {len(hooks)} task tree hooks for '{hook_type}' on root task {root_task.id}")
+        
+        for hook in hooks:
+            try:
+                if iscoroutinefunction(hook):
+                    await hook(root_task, *args)
+                else:
+                    # Synchronous function - run in executor to avoid blocking
+                    await asyncio.to_thread(hook, root_task, *args)
+            except Exception as e:
+                # Log error but don't fail the task tree execution
+                logger.warning(
+                    f"Task tree hook '{hook_type}' {hook.__name__ if hasattr(hook, '__name__') else str(hook)} "
+                    f"failed for root task {root_task.id}: {str(e)}. Continuing with task tree execution."
+                )
     
     async def execute_after_task(self, completed_task: TaskModel):
         """
@@ -1154,13 +1228,104 @@ class TaskManager:
             logger.debug(f"Stored executor instance for task {task.id} (supports cancellation)")
         
         # ============================================================
-        # 4. execute executor
+        # 4. execute executor (with hooks)
         # ============================================================
         # Note: Input validation and any executor-specific input processing
         # should be handled by the executor itself (in BaseTask or executor.execute)
         # TaskManager only handles task orchestration and distribution
+        
+        # Check for demo mode (use instance variable instead of inputs)
+        if self.use_demo:
+            logger.info(f"Demo mode enabled for task {task.id} with executor {executor_id}")
+            # Try to get custom demo result from executor if available
+            demo_result = None
+            if hasattr(executor, 'get_demo_result'):
+                try:
+                    demo_result = executor.get_demo_result(task, inputs)
+                except Exception as e:
+                    logger.warning(f"get_demo_result() failed for executor {executor_id}: {str(e)}. Using default demo data.")
+            
+            # Use default demo result if executor doesn't provide one
+            if demo_result is None:
+                demo_result = {"result": "Demo execution result", "demo_mode": True}
+            
+            # Ensure result format is consistent
+            if isinstance(demo_result, dict):
+                demo_result["demo_mode"] = True
+                
+                # Handle demo sleep time
+                # Executor can specify _demo_sleep in get_demo_result() return value
+                # Global scale factor is applied to executor's sleep time
+                sleep_seconds = 0.0
+                if "_demo_sleep" in demo_result:
+                    # Executor-specific sleep time (remove from result)
+                    executor_sleep = float(demo_result.pop("_demo_sleep"))
+                    # Apply global scale factor
+                    from aipartnerupflow.core.config import get_demo_sleep_scale
+                    scale = get_demo_sleep_scale()
+                    sleep_seconds = executor_sleep * scale
+                    logger.debug(f"Demo mode: executor sleep={executor_sleep}s, scale={scale}, final sleep={sleep_seconds}s")
+                
+                # Sleep to simulate execution time if configured
+                if sleep_seconds > 0:
+                    import asyncio
+                    await asyncio.sleep(sleep_seconds)
+                
+                return demo_result
+            else:
+                return {"result": demo_result, "demo_mode": True}
+            
+            # Default demo result
+            return {"result": "Demo execution result", "demo_mode": True}
+        
+        # Get executor class to check for hooks
+        executor_class = type(executor)
+        
+        # Call executor-specific pre_hook if available
+        hook_result = None
+        if hasattr(executor_class, '_executor_hooks'):
+            pre_hook = executor_class._executor_hooks.get('pre_hook')
+            if pre_hook:
+                try:
+                    logger.debug(f"Calling pre_hook for executor {executor_id} on task {task.id}")
+                    if iscoroutinefunction(pre_hook):
+                        hook_result = await pre_hook(executor, task, inputs)
+                    else:
+                        hook_result = await asyncio.to_thread(pre_hook, executor, task, inputs)
+                    
+                    # If hook returned a result, skip executor execution
+                    if hook_result is not None:
+                        logger.info(f"Pre_hook returned result for executor {executor_id}, skipping execution")
+                        # Call post_hook if available
+                        post_hook = executor_class._executor_hooks.get('post_hook')
+                        if post_hook:
+                            try:
+                                if iscoroutinefunction(post_hook):
+                                    await post_hook(executor, task, inputs, hook_result)
+                                else:
+                                    await asyncio.to_thread(post_hook, executor, task, inputs, hook_result)
+                            except Exception as e:
+                                logger.warning(f"Post_hook failed for executor {executor_id}: {str(e)}")
+                        return hook_result
+                except Exception as e:
+                    logger.warning(f"Pre_hook failed for executor {executor_id}: {str(e)}. Continuing with execution.")
+        
         try:
             result = await executor.execute(inputs)
+            
+            # Call executor-specific post_hook if available
+            if hasattr(executor_class, '_executor_hooks'):
+                post_hook = executor_class._executor_hooks.get('post_hook')
+                if post_hook:
+                    try:
+                        logger.debug(f"Calling post_hook for executor {executor_id} on task {task.id}")
+                        if iscoroutinefunction(post_hook):
+                            await post_hook(executor, task, inputs, result)
+                        else:
+                            await asyncio.to_thread(post_hook, executor, task, inputs, result)
+                    except Exception as e:
+                        logger.warning(f"Post_hook failed for executor {executor_id}: {str(e)}")
+            
             return result
         except Exception as e:
             logger.error(f"Error executing task {task.id} with executor {executor.__class__.__name__}: {e}", exc_info=True)

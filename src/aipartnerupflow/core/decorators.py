@@ -38,6 +38,9 @@ from aipartnerupflow.core.config import (
     get_use_task_creator,
     set_require_existing_tasks,
     get_require_existing_tasks,
+    register_task_tree_hook,
+    get_task_tree_hooks,
+    task_model_register,
 )
 
 # Re-export extension decorators
@@ -54,9 +57,12 @@ __all__ = [
     # Hook decorators
     "register_pre_hook",
     "register_post_hook",
+    "register_task_tree_hook",
+    "get_task_tree_hooks",
     # TaskModel configuration
     "set_task_model_class",
     "get_task_model_class",
+    "task_model_register",
     "clear_config",
     # TaskCreator configuration
     "set_use_task_creator",

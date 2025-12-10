@@ -562,4 +562,91 @@ class CrewManager(BaseTask):
             logger.warning(f"Failed to extract token_usage from handlers: {str(e)}")
         
         return None
+    
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        Provide demo CrewAI execution result
+        
+        Generates a realistic demo result based on the crew's works definition (agents and tasks).
+        Includes simulated token usage to match real LLM execution behavior.
+        
+        Args:
+            task: Task object (may contain works definition in params or schemas)
+            inputs: Input parameters
+            
+        Returns:
+            Demo execution result with status, result, and token_usage
+        """
+        # Try to get works definition from task params or schemas
+        works = None
+        if hasattr(task, 'params') and task.params:
+            works = task.params.get("works")
+        if not works and hasattr(task, 'schemas') and task.schemas:
+            works = task.schemas.get("works")
+        if not works:
+            # Fallback: try to get from self.works if CrewManager was already initialized
+            if hasattr(self, 'task_config') and self.task_config:
+                # Reconstruct works from stored config
+                agents = {}
+                tasks = {}
+                for agent_name in getattr(self, 'agents', {}).keys():
+                    agents[agent_name] = {"role": f"Demo {agent_name}", "goal": f"Demo goal for {agent_name}"}
+                for task_name in getattr(self, 'tasks', {}).keys():
+                    tasks[task_name] = {"description": f"Demo task {task_name}"}
+                if agents and tasks:
+                    works = {"agents": agents, "tasks": tasks}
+        
+        # If still no works, use default demo structure
+        if not works:
+            works = {
+                "agents": {
+                    "demo_agent": {
+                        "role": "Demo Agent",
+                        "goal": "Complete demo tasks"
+                    }
+                },
+                "tasks": {
+                    "demo_task": {
+                        "description": "Execute demo task",
+                        "agent": "demo_agent"
+                    }
+                }
+            }
+        
+        # Extract agent and task names for demo result
+        agents = works.get("agents", {})
+        tasks = works.get("tasks", {})
+        agent_names = list(agents.keys()) if isinstance(agents, dict) else []
+        task_names = list(tasks.keys()) if isinstance(tasks, dict) else []
+        
+        # Generate demo result based on tasks
+        demo_results = []
+        for task_name in task_names:
+            task_config = tasks.get(task_name, {}) if isinstance(tasks, dict) else {}
+            task_description = task_config.get("description", f"Demo task: {task_name}")
+            demo_results.append(f"Completed: {task_description}")
+        
+        # Combine results
+        combined_result = "\n".join(demo_results) if demo_results else "Demo crew execution completed successfully"
+        
+        # Generate realistic token usage (simulate LLM consumption)
+        # Typical LLM call: 1000-5000 tokens depending on task complexity
+        num_tasks = len(task_names) if task_names else 1
+        num_agents = len(agent_names) if agent_names else 1
+        estimated_tokens = 1500 * num_tasks * num_agents  # Base tokens per task-agent interaction
+        
+        token_usage = {
+            "total_tokens": estimated_tokens,
+            "prompt_tokens": int(estimated_tokens * 0.7),  # ~70% prompt tokens
+            "completion_tokens": int(estimated_tokens * 0.3),  # ~30% completion tokens
+            "cached_prompt_tokens": 0,
+            "successful_requests": num_tasks
+        }
+        
+        return {
+            "status": "success",
+            "result": combined_result,
+            "token_usage": token_usage,
+            "_demo_sleep": 1.0  # Simulate LLM generation time (longer for realistic demo)
+        }
 

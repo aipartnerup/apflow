@@ -1097,3 +1097,99 @@ class TestHandleTaskGenerate:
                 with pytest.raises(ValueError, match="Permission denied"):
                     await task_routes.handle_task_generate(params, mock_request, request_id)
 
+
+class TestHandleTaskExecuteUseDemo:
+    """Test cases for handle_task_execute method with use_demo parameter"""
+    
+    @pytest.mark.asyncio
+    async def test_execute_with_use_demo_task_id_mode(self, task_routes, mock_request, sample_task):
+        """Test executing task by task_id with use_demo=True"""
+        params = {
+            "task_id": sample_task,
+            "use_streaming": False,
+            "use_demo": True
+        }
+        request_id = str(uuid.uuid4())
+        
+        # Mock TaskExecutor to avoid actual execution
+        with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor') as mock_executor_class:
+            mock_executor = Mock()
+            mock_execute_task_by_id = AsyncMock(return_value={
+                "status": "started",
+                "progress": 0.0,
+                "root_task_id": sample_task
+            })
+            mock_executor.execute_task_by_id = mock_execute_task_by_id
+            mock_executor_class.return_value = mock_executor
+
+            # Mock TaskTracker
+            with patch('aipartnerupflow.core.execution.task_tracker.TaskTracker') as mock_tracker_class:
+                mock_tracker = Mock()
+                mock_tracker.is_task_running = Mock(return_value=False)
+                mock_tracker_class.return_value = mock_tracker
+
+                result = await task_routes.handle_task_execute(params, mock_request, request_id)
+
+        # Verify response
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        assert result["protocol"] == "jsonrpc"
+        assert result["root_task_id"] == sample_task
+        
+        # Note: use_demo is now passed as parameter to TaskExecutor, not stored in inputs
+        # Verify that execute_task_by_id was called with use_demo=True
+        mock_execute_task_by_id.assert_called_once()
+        call_kwargs = mock_execute_task_by_id.call_args[1]
+        assert call_kwargs.get("use_demo") is True
+    
+    @pytest.mark.asyncio
+    async def test_execute_with_use_demo_tasks_array_mode(self, task_routes, mock_request):
+        """Test executing tasks array with use_demo=True"""
+        tasks = [
+            {
+                "id": f"demo-task-{uuid.uuid4().hex[:8]}",
+                "name": "Demo Task 1",
+                "user_id": "test_user",
+                "status": "pending",
+                "priority": 1,
+                "has_children": False,
+                "schemas": {
+                    "method": "system_info_executor"
+                },
+                "inputs": {
+                    "resource": "cpu"
+                }
+            }
+        ]
+        
+        params = {
+            "tasks": tasks,
+            "use_streaming": False,
+            "use_demo": True
+        }
+        request_id = str(uuid.uuid4())
+        
+        # Mock TaskExecutor to avoid actual execution
+        with patch('aipartnerupflow.core.execution.task_executor.TaskExecutor') as mock_executor_class:
+            mock_executor = Mock()
+            mock_execute_tasks = AsyncMock(return_value={
+                "status": "started",
+                "progress": 0.0,
+                "root_task_id": tasks[0]["id"]
+            })
+            mock_executor.execute_tasks = mock_execute_tasks
+            mock_executor_class.return_value = mock_executor
+
+            result = await task_routes.handle_task_execute(params, mock_request, request_id)
+
+        # Verify response
+        assert isinstance(result, dict)
+        assert result["success"] is True
+        assert result["protocol"] == "jsonrpc"
+        
+        # Note: use_demo is now passed as parameter to TaskExecutor, not stored in inputs
+        # Verify that execute_tasks was called with use_demo=True
+        mock_execute_tasks.assert_called_once()
+        call_kwargs = mock_execute_tasks.call_args[1]
+        assert call_kwargs.get("use_demo") is True
+

@@ -209,6 +209,27 @@ class GrpcExecutor(BaseTask):
                 "method": method
             }
     
+    def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Provide demo gRPC call result"""
+        service = inputs.get("service", "DemoService")
+        method = inputs.get("method", "DemoMethod")
+        request = inputs.get("request", {})
+        
+        return {
+            "service": service,
+            "method": method,
+            "request": request,
+            "response": {
+                "status": "success",
+                "data": {
+                    "result": "Demo gRPC response",
+                    "processed": True
+                }
+            },
+            "success": True,
+            "_demo_sleep": 0.15  # Simulate gRPC call latency (typically faster than HTTP)
+        }
+    
     def get_input_schema(self) -> Dict[str, Any]:
         """Return input parameter schema"""
         return {

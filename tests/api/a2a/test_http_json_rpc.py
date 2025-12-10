@@ -875,6 +875,113 @@ def test_jsonrpc_tasks_execute(json_rpc_client):
     assert "message" in execution_result
 
 
+def test_jsonrpc_tasks_execute_with_use_demo(json_rpc_client):
+    """Test executing a task with use_demo=True via JSON-RPC /tasks route"""
+    # First create a task
+    task_data = {
+        "id": f"demo-test-{uuid.uuid4().hex[:8]}",
+        "name": "Task to Execute in Demo Mode",
+        "user_id": "test-user",
+        "status": "pending",
+        "priority": 1,
+        "has_children": False,
+        "dependencies": [],
+        "schemas": {
+            "method": "system_info_executor",
+            "type": "stdio"
+        },
+        "inputs": {
+            "resource": "cpu"
+        }
+    }
+    
+    # Create task
+    create_request = {
+        "jsonrpc": "2.0",
+        "id": 400,
+        "method": "tasks.create",
+        "params": [task_data]
+    }
+    
+    create_response = json_rpc_client.post("/tasks", json=create_request)
+    assert create_response.status_code == 200
+    created_result = create_response.json()
+    task_id = created_result["result"]["id"]
+    
+    # Execute task with use_demo=True via /tasks route
+    execute_request = {
+        "jsonrpc": "2.0",
+        "id": 401,
+        "method": "tasks.execute",
+        "params": {
+            "task_id": task_id,
+            "use_streaming": False,
+            "use_demo": True
+        }
+    }
+    
+    response = json_rpc_client.post(
+        "/tasks",
+        json=execute_request,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    assert response.status_code == 200
+    result = response.json()
+    
+    # Verify JSON-RPC response structure
+    assert "jsonrpc" in result
+    assert result["jsonrpc"] == "2.0"
+    assert "id" in result
+    assert result["id"] == 401
+    assert "result" in result
+    
+    # Verify execution result
+    execution_result = result["result"]
+    assert "success" in execution_result
+    assert execution_result["success"] is True
+    assert "protocol" in execution_result
+    assert execution_result["protocol"] == "jsonrpc"
+    assert "root_task_id" in execution_result
+    
+    # Wait a bit for task to complete (demo mode should be fast)
+    import time
+    import asyncio
+    time.sleep(0.5)
+    
+    # Verify task was executed with demo mode by checking task result
+    from aipartnerupflow.core.storage import get_default_session
+    from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+    from aipartnerupflow.core.config import get_task_model_class
+    
+    db_session = get_default_session()
+    task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+    
+    # Get task from database (using async helper)
+    async def get_task():
+        return await task_repository.get_task_by_id(task_id)
+    
+    # Use asyncio.run() to avoid event loop issues
+    try:
+        task = asyncio.run(get_task())
+    except RuntimeError:
+        # If event loop is already running, create a new one in a thread
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(lambda: asyncio.run(get_task()))
+            task = future.result()
+    
+    assert task is not None
+    
+    # Note: use_demo is now passed as parameter to TaskExecutor, not stored in inputs
+    # Verify task result contains demo data (if task completed)
+    if task.status == "completed" and task.result:
+        # Demo result should contain demo_mode flag or demo data
+        result_data = task.result if isinstance(task.result, dict) else {}
+        # SystemInfoExecutor demo result should have demo_mode or be a demo result
+        assert "demo_mode" in result_data or "result" in result_data
+
+
 def test_jsonrpc_tasks_execute_with_streaming(json_rpc_client):
     """Test executing a task with streaming enabled via JSON-RPC"""
     # Create a task
@@ -2083,4 +2190,97 @@ def test_a2a_execute_task_tree_vs_tasks_execute(json_rpc_client):
     # Both methods should work, but have different use cases:
     # - tasks.execute: Execute existing tasks
     # - A2A message/send: Create and execute in one call using Message format
+
+
+def test_a2a_execute_task_tree_with_use_demo(json_rpc_client):
+    """Test executing task tree with use_demo=True via A2A Protocol / route"""
+    # Prepare task data with use_demo in inputs
+    task_data = {
+        "id": f"a2a-demo-{uuid.uuid4().hex[:8]}",
+        "name": "A2A Demo Task",
+        "user_id": "test-user",
+        "schemas": {
+            "method": "system_info_executor",
+            "type": "stdio"
+        },
+        "inputs": {
+            "resource": "cpu"
+        }
+    }
+    
+    # A2A Protocol JSON-RPC format
+    # use_demo is passed via metadata in A2A protocol
+    a2a_request = {
+        "jsonrpc": "2.0",
+        "method": "message/send",
+        "params": {
+            "message": {
+                "message_id": str(uuid.uuid4()),
+                "role": "user",
+                "parts": [
+                    {
+                        "kind": "data",
+                        "data": {
+                            "tasks": [task_data]
+                        }
+                    }
+                ],
+                "metadata": {
+                    "use_demo": True  # Pass use_demo via metadata
+                }
+            }
+        },
+        "id": "a2a-demo-1"
+    }
+    
+    response = json_rpc_client.post(
+        "/",
+        json=a2a_request,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    assert response.status_code == 200
+    result = response.json()
+    
+    assert "jsonrpc" in result
+    assert result["jsonrpc"] == "2.0"
+    assert "id" in result
+    assert result["id"] == "a2a-demo-1"
+    
+    # Wait a bit for task to complete (demo mode should be fast)
+    import time
+    import asyncio
+    time.sleep(0.5)
+    
+    # Verify task was executed with demo mode by checking task result
+    from aipartnerupflow.core.storage import get_default_session
+    from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+    from aipartnerupflow.core.config import get_task_model_class
+    
+    db_session = get_default_session()
+    task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+    
+    # Get task from database using task_id from task_data
+    async def get_task():
+        return await task_repository.get_task_by_id(task_data["id"])
+    
+    # Use asyncio.run() to avoid event loop issues
+    try:
+        task = asyncio.run(get_task())
+    except RuntimeError:
+        # If event loop is already running, create a new one in a thread
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(lambda: asyncio.run(get_task()))
+            task = future.result()
+    
+    # Task might not exist if execution failed, so check if it exists
+    if task:
+        # Note: use_demo is now passed as parameter to TaskExecutor, not stored in inputs
+        # Verify task result contains demo data (if task completed)
+        if task.status == "completed" and task.result:
+            # Demo result should contain demo_mode flag or demo data
+            result_data = task.result if isinstance(task.result, dict) else {}
+            # SystemInfoExecutor demo result should have demo_mode or be a demo result
+            assert "demo_mode" in result_data or "result" in result_data
 

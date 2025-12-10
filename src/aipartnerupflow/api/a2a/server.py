@@ -3,7 +3,7 @@ A2A server implementation for aipartnerupflow
 """
 
 import httpx
-from typing import Optional
+from typing import Optional, Type
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import (
     InMemoryTaskStore,
@@ -207,7 +207,11 @@ push_sender = BasePushNotificationSender(
     config_store=push_config_store
 )
 
-def _create_request_handler(verify_token_func=None, verify_permission_func=None):
+def _create_request_handler(
+    verify_token_func=None,
+    verify_permission_func=None,
+    task_routes_class: Optional[Type[TaskRoutes]] = None,
+):
     """
     Create request handler with agent executor
     
@@ -217,12 +221,16 @@ def _create_request_handler(verify_token_func=None, verify_permission_func=None)
     Args:
         verify_token_func: Optional JWT verification function
         verify_permission_func: Optional permission verification function
+        task_routes_class: Optional custom TaskRoutes class (default: TaskRoutes)
     """
     # Get task_model_class from registry
     task_model_class = get_task_model_class()
     
+    # Use provided task_routes_class or default TaskRoutes
+    task_routes_cls = task_routes_class or TaskRoutes
+    
     # Create TaskRoutes instance for the adapter
-    task_routes = TaskRoutes(
+    task_routes = task_routes_cls(
         task_model_class=task_model_class,
         verify_token_func=verify_token_func,
         verify_permission_func=verify_permission_func
@@ -276,6 +284,7 @@ def create_a2a_server(
     base_url: Optional[str] = None,
     enable_system_routes: bool = True,
     enable_docs: bool = True,
+    task_routes_class: Optional[Type[TaskRoutes]] = None,
 ) -> CustomA2AStarletteApplication:
     """
     Create A2A server instance with configuration
@@ -311,6 +320,9 @@ def create_a2a_server(
         enable_system_routes: Whether to enable system routes like /system (default: True)
         enable_docs: Whether to enable interactive API documentation at /docs (default: True).
                     Only available when API server is running, not when used as a library.
+        task_routes_class: Optional custom TaskRoutes class to use instead of default TaskRoutes.
+                         Allows extending TaskRoutes functionality without monkey patching.
+                         Example: task_routes_class=MyCustomTaskRoutes
     
     Returns:
         CustomA2AStarletteApplication instance
@@ -328,7 +340,8 @@ def create_a2a_server(
     # Permission checking will be handled at the middleware level
     request_handler = _create_request_handler(
         verify_token_func=verify_token_func,
-        verify_permission_func=None
+        verify_permission_func=None,
+        task_routes_class=task_routes_class,
     )
 
     # Create agent card
@@ -361,5 +374,6 @@ def create_a2a_server(
         enable_system_routes=enable_system_routes,
         enable_docs=enable_docs,
         task_model_class=final_task_model_class,
+        task_routes_class=task_routes_class,
     )
 
