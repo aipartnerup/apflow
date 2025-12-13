@@ -366,132 +366,6 @@ app = create_app_by_protocol(
 )
 ```
 
-## Complete Example
-
-Here's a complete example combining all features using `create_runnable_app()`:
-
-```python
-"""
-aipartnerupflow-demo: Custom application using aipartnerupflow as a library
-"""
-from starlette.routing import Route
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-import uvicorn
-
-# Note: .env file is automatically loaded by create_runnable_app()
-# from the calling project's directory (not library's directory)
-
-from aipartnerupflow.api.main import create_runnable_app
-from aipartnerupflow.core.storage.factory import configure_database
-from aipartnerupflow.core.utils.logger import get_logger
-
-logger = get_logger(__name__)
-
-# ============================================================================
-# Database Configuration
-# ============================================================================
-
-# Option 1: Use environment variable (recommended)
-# DATABASE_URL=postgresql+asyncpg://user:password@localhost/dbname
-
-# Option 2: Configure programmatically
-# configure_database(
-#     connection_string="postgresql+asyncpg://user:password@localhost/dbname"
-# )
-
-# ============================================================================
-# Custom Routes
-# ============================================================================
-
-async def health_check(request: Request) -> JSONResponse:
-    """Health check endpoint"""
-    return JSONResponse({
-        "status": "healthy",
-        "service": "aipartnerupflow-demo",
-        "version": "1.0.0"
-    })
-
-async def custom_api(request: Request) -> JSONResponse:
-    """Custom API endpoint"""
-    data = await request.json()
-    return JSONResponse({
-        "message": "Custom API endpoint",
-        "received": data
-    })
-
-custom_routes = [
-    Route("/health", health_check, methods=["GET"]),
-    Route("/api/custom", custom_api, methods=["POST"]),
-]
-
-# ============================================================================
-# Custom Middleware
-# ============================================================================
-
-class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    """Log all requests"""
-    
-    async def dispatch(self, request: Request, call_next):
-        logger.info(f"{request.method} {request.url.path}")
-        response = await call_next(request)
-        logger.info(f"Response: {response.status_code}")
-        return response
-
-class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Simple rate limiting middleware"""
-    
-    def __init__(self, app, requests_per_minute: int = 60):
-        super().__init__(app)
-        self.requests_per_minute = requests_per_minute
-        self.request_counts = {}
-    
-    async def dispatch(self, request: Request, call_next):
-        client_ip = request.client.host
-        # Simple rate limiting logic here
-        # (In production, use Redis or similar)
-        return await call_next(request)
-
-custom_middleware = [
-    RequestLoggingMiddleware,
-    RateLimitMiddleware,
-]
-
-# ============================================================================
-# Create Application
-# ============================================================================
-
-def create_app():
-    """Create and configure the application"""
-    # Using create_runnable_app() handles all initialization automatically
-    from aipartnerupflow.api.main import create_runnable_app
-    
-    app = create_runnable_app(
-        protocol="a2a",
-        custom_routes=custom_routes,
-        custom_middleware=custom_middleware,
-    )
-    return app
-
-# ============================================================================
-# Main Entry Point
-# ============================================================================
-
-if __name__ == "__main__":
-    app = create_app()
-    
-    host = os.getenv("HOST", "0.0.0.0")
-    port = int(os.getenv("API_PORT", "8000"))
-    
-    uvicorn.run(
-        app,
-        host=host,
-        port=port,
-        log_level="info"
-    )
-```
-
 ## Running Your Application
 
 ```bash
@@ -548,12 +422,153 @@ For reference, here's what `aipartnerupflow.api.main.main()` and `create_runnabl
 
 **Manual setup**: You need to call steps 3-5 yourself before creating the app (see Option B in Basic Setup).
 
-See `docs/guides/library-usage-example.py` for a complete working example.
+## Complete Example
+
+Here's a complete example combining all features:
+
+```python
+"""
+Complete example: Using aipartnerupflow as a library in your own project
+
+This example shows how to use aipartnerupflow as a library with custom routes,
+middleware, and configurations. All initialization steps are handled automatically
+by create_runnable_app() or main().
+"""
+
+import os
+from starlette.routing import Route
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+
+# ============================================================================
+# Step 1: Configure database (REQUIRED)
+# ============================================================================
+from aipartnerupflow.core.storage.factory import configure_database
+
+# Option A: Use environment variable (recommended)
+# Set DATABASE_URL in .env file or environment variable
+# DATABASE_URL=postgresql+asyncpg://user:password@localhost/dbname
+# DATABASE_URL=duckdb:///./data/app.duckdb
+
+# Option B: Configure programmatically
+# configure_database(connection_string="postgresql+asyncpg://user:password@localhost/dbname")
+# Or for DuckDB:
+# configure_database(path="./data/app.duckdb")
+
+# Note: .env file is automatically loaded by create_runnable_app() or main()
+# from your project's directory (not from library's directory)
+
+# ============================================================================
+# Step 2: Define custom routes
+# ============================================================================
+async def health_check(request: Request) -> JSONResponse:
+    """Health check endpoint"""
+    return JSONResponse({
+        "status": "healthy",
+        "service": "my-custom-service"
+    })
+
+async def custom_api(request: Request) -> JSONResponse:
+    """Custom API endpoint"""
+    data = await request.json()
+    return JSONResponse({
+        "message": "Custom API endpoint",
+        "received": data
+    })
+
+custom_routes = [
+    Route("/health", health_check, methods=["GET"]),
+    Route("/api/custom", custom_api, methods=["POST"]),
+]
+
+# ============================================================================
+# Step 3: Define custom middleware
+# ============================================================================
+class LoggingMiddleware(BaseHTTPMiddleware):
+    """Log all requests"""
+    async def dispatch(self, request: Request, call_next):
+        print(f"Request: {request.method} {request.url.path}")
+        response = await call_next(request)
+        print(f"Response: {response.status_code}")
+        return response
+
+class RateLimitMiddleware(BaseHTTPMiddleware):
+    """Simple rate limiting middleware"""
+    def __init__(self, app, requests_per_minute: int = 60):
+        super().__init__(app)
+        self.requests_per_minute = requests_per_minute
+    
+    async def dispatch(self, request: Request, call_next):
+        # Simple rate limiting logic here
+        # (In production, use Redis or similar)
+        return await call_next(request)
+
+custom_middleware = [
+    LoggingMiddleware,
+    RateLimitMiddleware,
+]
+
+# ============================================================================
+# Step 4: Create application (Option A - Recommended: Using main())
+# ============================================================================
+# Option A: Using main() - Simplest approach, handles everything automatically
+from aipartnerupflow.api.main import main
+
+if __name__ == "__main__":
+    # main() handles all initialization and runs the server
+    main(
+        protocol="a2a",
+        custom_routes=custom_routes,
+        custom_middleware=custom_middleware,
+        host="0.0.0.0",
+        port=8000,
+        workers=1,
+    )
+
+# ============================================================================
+# Step 4: Create application (Option B - Using create_runnable_app())
+# ============================================================================
+# Option B: Using create_runnable_app() - Get app instance and run server yourself
+# from aipartnerupflow.api.main import create_runnable_app
+# import uvicorn
+#
+# if __name__ == "__main__":
+#     # create_runnable_app() handles all initialization and returns the app
+#     app = create_runnable_app(
+#         protocol="a2a",
+#         custom_routes=custom_routes,
+#         custom_middleware=custom_middleware,
+#     )
+#     
+#     # Run with custom uvicorn configuration
+#     uvicorn.run(
+#         app,
+#         host="0.0.0.0",
+#         port=8000,
+#         workers=1,
+#         loop="asyncio",
+#         limit_concurrency=100,
+#         limit_max_requests=1000,
+#         access_log=True,
+#     )
+
+# ============================================================================
+# What's automatically handled by create_runnable_app() or main():
+# ============================================================================
+# 1. ✅ Loads .env file from your project's directory
+# 2. ✅ Initializes extensions (executors, hooks, storage backends)
+# 3. ✅ Loads custom TaskModel if specified in AIPARTNERUPFLOW_TASK_MODEL_CLASS
+# 4. ✅ Auto-initializes examples if database is empty
+# 5. ✅ Creates the API application with proper configuration
+# 6. ✅ (main() only) Runs the uvicorn server
+#
+# You don't need to manually call these steps anymore!
+```
 
 ## Next Steps
 
 - See [API Documentation](../api/quick-reference.md) for available APIs
 - See [Task Management Guide](./task-management.md) for task operations
 - See [Extension Development](./extension-development.md) for creating custom executors
-- See `library-usage-example.py` for a complete working example
 
