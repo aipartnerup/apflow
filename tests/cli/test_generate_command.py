@@ -15,6 +15,7 @@ from typer.testing import CliRunner
 from aipartnerupflow.cli.main import app
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.config import get_task_model_class
+from aipartnerupflow import clear_config
 
 runner = CliRunner()
 
@@ -64,8 +65,11 @@ class TestGenerateCommand:
         assert "--temperature" in result.stdout
         assert "--max-tokens" in result.stdout
     
-    def test_generate_missing_api_key(self):
+    def test_generate_missing_api_key(self, use_test_db_session):
         """Test generate command fails when API key is missing"""
+        # Clear config to ensure we use default TaskModel (no custom fields like project_id)
+        clear_config()
+        
         # Clear environment variables
         env_backup = dict(os.environ)
         try:
@@ -73,18 +77,36 @@ class TestGenerateCommand:
             os.environ.pop("OPENAI_API_KEY", None)
             os.environ.pop("ANTHROPIC_API_KEY", None)
             
-            result = runner.invoke(app, [
-                "generate", "task-tree",
-                "Test requirement"
-            ])
-            assert result.exit_code == 1
-            # Error message can be in stdout or stderr
-            output = result.stdout + result.stderr
-            assert "No LLM API key found" in output or "Warning" in output or "LLM API key" in output
+            # Mock get_default_session to use test database session
+            # This ensures we use a clean database with correct schema
+            # Also mock os.getenv to prevent .env file from loading API keys
+            # (generate.py loads .env at module level, which would restore API keys)
+            with patch('aipartnerupflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
+                # Mock os.getenv to return None for API keys even if .env file was loaded
+                # This simulates the scenario where .env file doesn't contain API keys
+                original_getenv = os.getenv
+                def mock_getenv(key, default=None):
+                    # If checking for API keys, return None (simulate missing API keys)
+                    if key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY"):
+                        return None
+                    # Otherwise, use real os.getenv
+                    return original_getenv(key, default)
+                
+                with patch('aipartnerupflow.cli.commands.generate.os.getenv', side_effect=mock_getenv):
+                    result = runner.invoke(app, [
+                        "generate", "task-tree",
+                        "Test requirement"
+                    ])
+                    assert result.exit_code == 1
+                    # Error message can be in stdout or stderr
+                    output = result.stdout + result.stderr
+                    assert "No LLM API key found" in output or "Warning" in output or "LLM API key" in output
         finally:
             # Restore environment
             os.environ.clear()
             os.environ.update(env_backup)
+            # Clear config again to ensure clean state
+            clear_config()
     
     @pytest.mark.asyncio
     async def test_generate_basic(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):

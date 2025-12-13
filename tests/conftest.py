@@ -161,6 +161,15 @@ def sync_db_session(temp_db_path):
         # Create engine with PostgreSQL
         engine = create_engine(connection_string, echo=False)
         
+        # For PostgreSQL, we need to drop and recreate tables to ensure schema matches
+        # PostgreSQL is a shared database, so previous tests may have created tables
+        # with custom fields (e.g., priority_level from custom TaskModel tests)
+        # Note: This is necessary for PostgreSQL but not for DuckDB (which uses new files each time)
+        try:
+            Base.metadata.drop_all(engine)
+        except Exception as e:
+            logger.warning(f"Error dropping tables (may not exist): {e}")
+        
         # Create tables fresh for each test
         Base.metadata.create_all(engine)
         
@@ -171,24 +180,36 @@ def sync_db_session(temp_db_path):
         try:
             yield session
         finally:
-            # Cleanup: Rollback any pending transactions
+            # Cleanup: Rollback any pending transactions first
             try:
                 session.rollback()
             except Exception:
                 pass
             
             # Cleanup: Delete all data from tables to ensure test isolation
+            # Use a new transaction to avoid InFailedSqlTransaction errors
             try:
-                # Delete all tasks to ensure test isolation
-                # Note: Using TASK_TABLE_NAME constant for table name
+                # Start a new transaction for cleanup
+                session.begin()
                 session.execute(text(f"DELETE FROM {TASK_TABLE_NAME}"))
                 session.commit()
-            except Exception:
-                session.rollback()
+            except Exception as e:
+                # If cleanup fails, rollback and try to continue
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
+                logger.debug(f"Cleanup failed (non-critical): {e}")
             
             # Close session and dispose engine
-            session.close()
-            engine.dispose()
+            try:
+                session.close()
+            except Exception:
+                pass
+            try:
+                engine.dispose()
+            except Exception:
+                pass
     else:
         # Use DuckDB (default behavior)
         logger.info(f"Using DuckDB database for testing: {temp_db_path}")
@@ -205,7 +226,8 @@ def sync_db_session(temp_db_path):
             echo=False
         )
         
-        # Create tables fresh for each test
+        # For DuckDB, we don't need to drop tables because each test uses a new file
+        # The file is deleted after each test, so schema is always fresh
         Base.metadata.create_all(engine)
         
         # Create session
@@ -267,6 +289,15 @@ async def async_db_session(temp_db_path):
         # Create async engine with PostgreSQL
         engine = create_async_engine(connection_string, echo=False)
         
+        # For PostgreSQL async, we need to drop and recreate tables to ensure schema matches
+        # PostgreSQL is a shared database, so previous tests may have created tables
+        # with custom fields (e.g., priority_level from custom TaskModel tests)
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.drop_all)
+        except Exception as e:
+            logger.warning(f"Error dropping tables (may not exist): {e}")
+        
         # Create tables fresh for each test
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
@@ -278,30 +309,42 @@ async def async_db_session(temp_db_path):
         try:
             yield session
         finally:
-            # Cleanup: Rollback any pending transactions
+            # Cleanup: Rollback any pending transactions first
             try:
                 await session.rollback()
             except Exception:
                 pass
             
             # Cleanup: Delete all data from tables to ensure test isolation
+            # Use a new transaction to avoid InFailedSqlTransaction errors
             try:
-                # Delete all tasks to ensure test isolation
-                # Note: Using TASK_TABLE_NAME constant for table name
+                # Start a new transaction for cleanup
+                await session.begin()
                 await session.execute(text(f"DELETE FROM {TASK_TABLE_NAME}"))
                 await session.commit()
-            except Exception:
-                await session.rollback()
+            except Exception as e:
+                # If cleanup fails, rollback and try to continue
+                try:
+                    await session.rollback()
+                except Exception:
+                    pass
+                logger.debug(f"Cleanup failed (non-critical): {e}")
             
             # Close session and dispose engine
-            await session.close()
-            await engine.dispose()
+            try:
+                await session.close()
+            except Exception:
+                pass
+            try:
+                await engine.dispose()
+            except Exception:
+                pass
     else:
         # Use mock AsyncSession for DuckDB (DuckDB doesn't support async)
         logger.info("Using mock AsyncSession for DuckDB (DuckDB doesn't support async drivers)")
         from unittest.mock import AsyncMock, MagicMock
-        from sqlalchemy.ext.asyncio import AsyncSession
         
+        # Note: AsyncSession is already imported at module level, don't re-import here
         # Create a mock that will pass isinstance checks
         # We subclass MagicMock and set __class__ to make isinstance work
         class MockAsyncSession(AsyncSession):
@@ -546,6 +589,117 @@ def use_test_db_session(sync_db_session):
     set_default_session(sync_db_session)
     yield sync_db_session
     reset_default_session()
+
+
+@pytest.fixture(scope="function")
+def fresh_db_session(temp_db_path):
+    """
+    Create a fresh database session with tables dropped and recreated
+    
+    This fixture is specifically for tests that need custom TaskModel with additional fields.
+    It drops and recreates tables to ensure schema matches the current TaskModel.
+    
+    Performance note: This fixture has higher overhead than sync_db_session because it
+    drops and recreates tables. Only use this fixture when you need to test custom TaskModel
+    or when schema changes are required.
+    
+    Usage:
+        - Use this fixture instead of sync_db_session when testing custom TaskModel
+        - Example: def test_custom_model(self, fresh_db_session):
+    """
+    test_db_url = _get_test_database_url()
+    
+    # Use PostgreSQL if TEST_DATABASE_URL is set and is PostgreSQL
+    if test_db_url and _is_postgresql_url(test_db_url):
+        logger.info(f"Using PostgreSQL database with fresh tables: {test_db_url}")
+        connection_string = _normalize_postgresql_url(test_db_url, async_mode=False)
+        engine = create_engine(connection_string, echo=False)
+        
+        # Drop and recreate tables to ensure schema matches
+        try:
+            Base.metadata.drop_all(engine)
+        except Exception as e:
+            logger.warning(f"Error dropping tables (may not exist): {e}")
+        
+        Base.metadata.create_all(engine)
+        
+        SessionLocal = sessionmaker(bind=engine)
+        session = SessionLocal()
+        
+        try:
+            yield session
+        finally:
+            try:
+                session.rollback()
+            except Exception:
+                pass
+            
+            try:
+                session.begin()
+                session.execute(text(f"DELETE FROM {TASK_TABLE_NAME}"))
+                session.commit()
+            except Exception as e:
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
+                logger.debug(f"Cleanup failed (non-critical): {e}")
+            
+            try:
+                session.close()
+            except Exception:
+                pass
+            try:
+                engine.dispose()
+            except Exception:
+                pass
+    else:
+        # Use DuckDB (default behavior)
+        logger.info(f"Using DuckDB database with fresh tables: {temp_db_path}")
+        if temp_db_path and os.path.exists(temp_db_path):
+            try:
+                os.unlink(temp_db_path)
+            except Exception:
+                pass
+        
+        engine = create_engine(
+            f"duckdb:///{temp_db_path}",
+            echo=False
+        )
+        
+        # Drop and recreate tables to ensure schema matches
+        try:
+            Base.metadata.drop_all(engine)
+        except Exception as e:
+            logger.warning(f"Error dropping tables (may not exist): {e}")
+        
+        Base.metadata.create_all(engine)
+        
+        SessionLocal = sessionmaker(bind=engine)
+        session = SessionLocal()
+        
+        try:
+            yield session
+        finally:
+            try:
+                session.rollback()
+            except Exception:
+                pass
+            
+            try:
+                session.execute(text(f"DELETE FROM {TASK_TABLE_NAME}"))
+                session.commit()
+            except Exception:
+                session.rollback()
+            
+            session.close()
+            engine.dispose()
+            
+            try:
+                if temp_db_path and os.path.exists(temp_db_path):
+                    os.unlink(temp_db_path)
+            except Exception:
+                pass
 
 
 @pytest.fixture(autouse=True)
