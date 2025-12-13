@@ -47,7 +47,14 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from aipartnerupflow.core.storage.sqlalchemy.models import Base, TaskModel, TASK_TABLE_NAME
-from aipartnerupflow.core.storage.factory import create_session, get_default_session, reset_default_session, set_default_session
+from aipartnerupflow.core.storage.factory import (
+    create_session,
+    get_default_session,
+    reset_default_session,
+    set_default_session,
+    is_postgresql_url,
+    normalize_postgresql_url,
+)
 from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -81,46 +88,13 @@ def _get_test_database_url() -> Optional[str]:
     return os.getenv("TEST_DATABASE_URL")
 
 
-def _is_postgresql_url(url: str) -> bool:
-    """Check if connection string is PostgreSQL"""
-    return url.startswith("postgresql://") or url.startswith("postgresql+")
-
-
-def _normalize_postgresql_url(url: str, async_mode: bool) -> str:
-    """
-    Normalize PostgreSQL connection string to use appropriate driver
-    
-    Args:
-        url: PostgreSQL connection string
-        async_mode: Whether to use async driver (asyncpg) or sync (psycopg2)
-    
-    Returns:
-        Normalized connection string
-    """
-    # If already has driver specified, use as-is
-    if "+" in url.split("://")[0]:
-        return url
-    
-    # Extract scheme and rest
-    if url.startswith("postgresql://"):
-        rest = url[13:]  # Remove "postgresql://"
-    else:
-        rest = url.split("://", 1)[1] if "://" in url else url
-    
-    # Add appropriate driver
-    if async_mode:
-        return f"postgresql+asyncpg://{rest}"
-    else:
-        return f"postgresql+psycopg2://{rest}"
-
-
 @pytest.fixture(scope="function")
 def temp_db_path():
     """Create a temporary database file path (only used for DuckDB)"""
     test_db_url = _get_test_database_url()
     
     # If using PostgreSQL, don't create temp file
-    if test_db_url and _is_postgresql_url(test_db_url):
+    if test_db_url and is_postgresql_url(test_db_url):
         logger.info("Using PostgreSQL database for testing")
         yield None
         return
@@ -153,10 +127,10 @@ def sync_db_session(temp_db_path):
     test_db_url = _get_test_database_url()
     
     # Use PostgreSQL if TEST_DATABASE_URL is set and is PostgreSQL
-    if test_db_url and _is_postgresql_url(test_db_url):
+    if test_db_url and is_postgresql_url(test_db_url):
         logger.info(f"Using PostgreSQL database for testing: {test_db_url}")
         # Normalize connection string for sync mode
-        connection_string = _normalize_postgresql_url(test_db_url, async_mode=False)
+        connection_string = normalize_postgresql_url(test_db_url, async_mode=False)
         
         # Create engine with PostgreSQL
         engine = create_engine(connection_string, echo=False)
@@ -281,10 +255,10 @@ async def async_db_session(temp_db_path):
     test_db_url = _get_test_database_url()
     
     # Use PostgreSQL if TEST_DATABASE_URL is set and is PostgreSQL
-    if test_db_url and _is_postgresql_url(test_db_url):
+    if test_db_url and is_postgresql_url(test_db_url):
         logger.info(f"Using PostgreSQL database for async testing: {test_db_url}")
         # Normalize connection string for async mode
-        connection_string = _normalize_postgresql_url(test_db_url, async_mode=True)
+        connection_string = normalize_postgresql_url(test_db_url, async_mode=True)
         
         # Create async engine with PostgreSQL
         engine = create_async_engine(connection_string, echo=False)
@@ -610,9 +584,9 @@ def fresh_db_session(temp_db_path):
     test_db_url = _get_test_database_url()
     
     # Use PostgreSQL if TEST_DATABASE_URL is set and is PostgreSQL
-    if test_db_url and _is_postgresql_url(test_db_url):
+    if test_db_url and is_postgresql_url(test_db_url):
         logger.info(f"Using PostgreSQL database with fresh tables: {test_db_url}")
-        connection_string = _normalize_postgresql_url(test_db_url, async_mode=False)
+        connection_string = normalize_postgresql_url(test_db_url, async_mode=False)
         engine = create_engine(connection_string, echo=False)
         
         # Drop and recreate tables to ensure schema matches

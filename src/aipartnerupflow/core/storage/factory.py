@@ -18,9 +18,45 @@ logger = get_logger(__name__)
 _default_session: Optional[Union[Session, AsyncSession]] = None
 
 
-def _is_postgresql_url(url: str) -> bool:
-    """Check if connection string is PostgreSQL"""
+def is_postgresql_url(url: str) -> bool:
+    """
+    Check if connection string is PostgreSQL
+    
+    Args:
+        url: Database connection string
+    
+    Returns:
+        True if the URL is PostgreSQL, False otherwise
+    """
     return url.startswith("postgresql://") or url.startswith("postgresql+")
+
+
+def normalize_postgresql_url(url: str, async_mode: bool) -> str:
+    """
+    Normalize PostgreSQL connection string to use appropriate driver
+    
+    Args:
+        url: PostgreSQL connection string
+        async_mode: Whether to use async driver (asyncpg) or sync (psycopg2)
+    
+    Returns:
+        Normalized connection string
+    """
+    # If already has driver specified, use as-is
+    if "+" in url.split("://")[0]:
+        return url
+    
+    # Extract scheme and rest
+    if url.startswith("postgresql://"):
+        rest = url[13:]  # Remove "postgresql://"
+    else:
+        rest = url.split("://", 1)[1] if "://" in url else url
+    
+    # Add appropriate driver
+    if async_mode:
+        return f"postgresql+asyncpg://{rest}"
+    else:
+        return f"postgresql+psycopg2://{rest}"
 
 
 def _get_database_url_from_env() -> Optional[str]:
@@ -84,10 +120,14 @@ def create_session(
     
     Args:
         connection_string: Full database connection string. Examples:
+            - PostgreSQL: "postgresql://user:password@host:port/dbname" (automatically converted to postgresql+asyncpg:// for async mode)
             - PostgreSQL: "postgresql+asyncpg://user:password@host:port/dbname?sslmode=require"
             - PostgreSQL with SSL cert: "postgresql+asyncpg://user:password@host:port/dbname?sslrootcert=/path/to/cert"
             - DuckDB: "duckdb:///path/to/file.duckdb" or "duckdb:///:memory:"
             If None, defaults to DuckDB using path parameter
+            Note: For PostgreSQL, if connection_string is "postgresql://..." (without driver),
+                  it will be automatically normalized to "postgresql+asyncpg://..." for async mode
+                  or "postgresql+psycopg2://..." for sync mode.
         path: Database file path (DuckDB only, used when connection_string is None)
             - If None and connection_string is None: uses default persistent path
             - If ":memory:": uses in-memory database
@@ -111,28 +151,36 @@ def create_session(
         session = create_session(path="./data/agentflow.duckdb")
         
         # PostgreSQL with connection string (recommended for library usage)
+        # Note: "postgresql://" is automatically converted to "postgresql+asyncpg://" for async mode
+        session = create_session(
+            connection_string="postgresql://user:password@localhost/dbname"
+        )
+        
+        # PostgreSQL with explicit driver
         session = create_session(
             connection_string="postgresql+asyncpg://user:password@localhost/dbname"
         )
         
-        # PostgreSQL with SSL
+        # PostgreSQL with SSL (auto-converted)
         session = create_session(
-            connection_string="postgresql+asyncpg://user:password@host:port/dbname?sslmode=require"
+            connection_string="postgresql://user:password@host:port/dbname?sslmode=require"
         )
         
-        # PostgreSQL with SSL certificate
+        # PostgreSQL with SSL certificate (auto-converted)
         session = create_session(
-            connection_string="postgresql+asyncpg://user:password@host:port/dbname?sslrootcert=/path/to/ca.crt"
+            connection_string="postgresql://user:password@host:port/dbname?sslrootcert=/path/to/ca.crt"
         )
     """
     # Determine dialect and connection string
     if connection_string is not None:
         # Connection string provided - detect dialect from connection string
-        if _is_postgresql_url(connection_string):
+        if is_postgresql_url(connection_string):
             dialect = "postgresql"
             # For PostgreSQL, default to async mode if not specified
             if async_mode is None:
                 async_mode = True
+            # Normalize PostgreSQL URL to use appropriate driver
+            connection_string = normalize_postgresql_url(connection_string, async_mode)
         elif connection_string.startswith("duckdb://"):
             dialect = "duckdb"
             # For DuckDB, default to sync mode if not specified
@@ -233,8 +281,12 @@ def get_default_session(
         connection_string: Full database connection string. If provided, uses it directly.
             If None, checks DATABASE_URL or AIPARTNERUPFLOW_DATABASE_URL environment variable.
             Examples:
+            - PostgreSQL: "postgresql://user:password@host:port/dbname" (automatically converted to postgresql+asyncpg:// for async mode)
             - PostgreSQL: "postgresql+asyncpg://user:password@host:port/dbname?sslmode=require"
             - DuckDB: "duckdb:///path/to/file.duckdb"
+            Note: For PostgreSQL, if connection_string is "postgresql://..." (without driver),
+                  it will be automatically normalized to "postgresql+asyncpg://..." for async mode
+                  or "postgresql+psycopg2://..." for sync mode.
         path: Database file path (DuckDB only, used when connection_string is None).
             If None:
               - Checks DATABASE_URL or AIPARTNERUPFLOW_DATABASE_URL environment variable first
