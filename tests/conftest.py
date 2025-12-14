@@ -76,6 +76,7 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "slow: mark test as slow"
     )
+    config.addinivalue_line("markers", "manual: mark test file as manual only (skip by default)")
 
     # Disable CrewAI execution traces prompt in tests
     # This prevents the interactive "Would you like to view your execution traces?" prompt

@@ -5,6 +5,7 @@ This file tests the SessionPoolManager and TaskTreeSession components
 to ensure proper session management, limits, and cleanup.
 """
 import pytest
+pytestmark = pytest.mark.manual
 import asyncio
 import time
 import os
@@ -25,8 +26,6 @@ from aipartnerupflow.core.storage.sqlalchemy.models import Base, TaskModel
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
 
-@pytest.mark.skip(reason="This test is excluded from the default test run to avoid Base.metadata pollution.")
-@pytest.mark.custom_task_model
 class TestSessionPoolManager:
     """Test SessionPoolManager basic functionality"""
     
@@ -242,8 +241,6 @@ class TestSessionPoolManager:
         assert manager1 is not manager2
 
 
-@pytest.mark.skip(reason="This test is excluded from the default test run to avoid Base.metadata pollution.")
-@pytest.mark.custom_task_model
 class TestTaskTreeSession:
     """Test TaskTreeSession context manager"""
     
@@ -404,8 +401,6 @@ class TestTaskTreeSession:
             assert result.scalar() == 1
 
 
-@pytest.mark.skip(reason="This test is excluded from the default test run to avoid Base.metadata pollution.")
-@pytest.mark.custom_task_model
 class TestSessionPoolWithTaskExecutor:
     """Test Session Pool integration with TaskExecutor"""
     
@@ -711,9 +706,30 @@ class TestSessionPoolWithTaskExecutor:
     async def test_concurrent_execution_no_data_conflicts(self, tmp_path):
         """Test that concurrent executions don't cause data conflicts"""
         import uuid
+        import sys
         from aipartnerupflow.core.execution.task_executor import TaskExecutor
         from aipartnerupflow.core.types import TaskTreeNode
         from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        # Ensure we use a clean TaskModel by re-importing it
+        # This is necessary because Base.metadata might be polluted by previous tests
+        if 'aipartnerupflow.core.storage.sqlalchemy.models' in sys.modules:
+            import importlib
+            importlib.reload(sys.modules['aipartnerupflow.core.storage.sqlalchemy.models'])
+        from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel as CleanTaskModel, Base as CleanBase
+        from sqlalchemy.orm import configure_mappers
+        
+        # Force clean metadata and mapper
+        from aipartnerupflow.core.storage.sqlalchemy.models import TASK_TABLE_NAME
+        if TASK_TABLE_NAME in CleanBase.metadata.tables:
+            table = CleanBase.metadata.tables[TASK_TABLE_NAME]
+            custom_columns = {'project_id', 'priority_level', 'department'}
+            actual_columns = {c.name for c in table.columns}
+            if custom_columns & actual_columns:
+                # Metadata is polluted, remove and recreate
+                CleanBase.metadata.remove(table)
+                _ = CleanTaskModel.__table__
+                configure_mappers()
         
         db_path = tmp_path / "test.duckdb"
         connection_string = f"duckdb:///{db_path}"
@@ -723,8 +739,8 @@ class TestSessionPoolWithTaskExecutor:
         
         # Create tables and tasks in the database
         async with create_task_tree_session(connection_string=connection_string) as session:
-            Base.metadata.create_all(session.bind)
-            repo = TaskRepository(session, task_model_class=TaskModel)
+            CleanBase.metadata.create_all(session.bind)
+            repo = TaskRepository(session, task_model_class=CleanTaskModel)
             for i, task_id in enumerate(task_ids):
                 await repo.create_task(
                     id=task_id,
@@ -739,7 +755,7 @@ class TestSessionPoolWithTaskExecutor:
         # Execute all tasks concurrently
         async def execute_tree(task_id):
             async with create_task_tree_session(connection_string=connection_string) as session:
-                repo = TaskRepository(session, task_model_class=TaskModel)
+                repo = TaskRepository(session, task_model_class=CleanTaskModel)
                 root_task = await repo.get_task_by_id(task_id)
                 task_tree = TaskTreeNode(task=root_task)
                 executor = TaskExecutor()
@@ -759,7 +775,7 @@ class TestSessionPoolWithTaskExecutor:
         
         # Verify all tasks are in completed state (no conflicts)
         async with create_task_tree_session(connection_string=connection_string) as session:
-            repo = TaskRepository(session, task_model_class=TaskModel)
+            repo = TaskRepository(session, task_model_class=CleanTaskModel)
             for task_id in task_ids:
                 task = await repo.get_task_by_id(task_id)
                 assert task is not None

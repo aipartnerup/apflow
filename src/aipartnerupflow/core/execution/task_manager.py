@@ -338,6 +338,10 @@ class TaskManager:
             # Send initial status
             self.streaming_callbacks.progress(task_tree.task.id, 0.0, "Task tree execution started")
             
+            # Save task IDs before execution to avoid accessing them after session rollback
+            root_task_id = root_task.id
+            task_tree_root_id = task_tree.task.id
+            
             # Execute task tree with progress streaming
             await self._execute_task_tree_recursive(task_tree, use_callback)
             
@@ -352,7 +356,7 @@ class TaskManager:
             # Send final status if all tasks are completed
             if final_status == "completed":
                 self.streaming_callbacks.final(
-                    task_tree.task.id,
+                    task_tree_root_id,
                     final_status,
                     result={"progress": final_progress}
                 )
@@ -361,7 +365,7 @@ class TaskManager:
             else:
                 # Send progress update
                 self.streaming_callbacks.progress(
-                    task_tree.task.id,
+                    task_tree_root_id,
                     final_progress,
                     f"Task tree execution {final_status}"
                 )
@@ -370,7 +374,12 @@ class TaskManager:
                 
         except Exception as e:
             logger.error(f"Error in distribute_task_tree_with_streaming: {str(e)}")
-            self.streaming_callbacks.task_failed(task_tree.task.id, str(e))
+            # Use saved task ID to avoid accessing task after session rollback
+            try:
+                task_tree_root_id = task_tree.task.id if task_tree and task_tree.task else root_task_id
+            except Exception:
+                task_tree_root_id = root_task_id
+            self.streaming_callbacks.task_failed(task_tree_root_id, str(e))
             # Call on_tree_failed hook
             await self._call_task_tree_hooks("on_tree_failed", root_task, str(e))
             raise
@@ -393,6 +402,29 @@ class TaskManager:
             node: Task tree node to execute
             use_callback: Whether to use callbacks
         """
+        # Save task ID at the beginning to avoid accessing it after session rollback
+        # Use SQLAlchemy inspect to safely get ID without triggering lazy loading
+        from sqlalchemy import inspect as sa_inspect
+        node_task_id_for_error_handling = None
+        if node and node.task:
+            try:
+                # Try to get ID directly from the object's dict to avoid triggering SQLAlchemy lazy loading
+                node_task_id_for_error_handling = node.task.__dict__.get('id') if hasattr(node.task, '__dict__') else None
+                # If not in __dict__, try using inspect to get the identity
+                if node_task_id_for_error_handling is None:
+                    insp = sa_inspect(node.task)
+                    if insp.persistent or insp.detached:
+                        # Get identity key (primary key)
+                        identity = insp.identity
+                        if identity:
+                            node_task_id_for_error_handling = identity[0] if identity else None
+                # Last resort: try direct attribute access (may trigger lazy loading)
+                if node_task_id_for_error_handling is None:
+                    node_task_id_for_error_handling = node.task.id
+            except Exception:
+                # If all methods fail, set to None
+                node_task_id_for_error_handling = None
+        
         try:
             # Check if streaming has been marked as final
             if self.streaming_final:
@@ -514,14 +546,17 @@ class TaskManager:
                 await self._execute_single_task(node.task, use_callback)
                     
         except Exception as e:
-            logger.error(f"Error in _execute_task_tree_recursive for task {node.task.id}: {str(e)}")
+            # Use saved task ID to avoid accessing node.task.id after session rollback
+            task_id = str(node_task_id_for_error_handling) if node_task_id_for_error_handling else "unknown"
+            logger.error(f"Error in _execute_task_tree_recursive for task {task_id}: {str(e)}")
             try:
-                # Update task status using repository
-                await self.task_repository.update_task_status(
-                    task_id=node.task.id,
-                    status="failed",
-                    error=str(e),
-                    completed_at=datetime.now(timezone.utc)
+                # Update task status using repository (only if we have a valid task ID)
+                if node_task_id_for_error_handling:
+                    await self.task_repository.update_task_status(
+                        task_id=node_task_id_for_error_handling,
+                        status="failed",
+                        error=str(e),
+                        completed_at=datetime.now(timezone.utc)
                 )
             except Exception as db_error:
                 logger.error(f"Error updating task status in database: {str(db_error)}")
@@ -580,91 +615,125 @@ class TaskManager:
             task: Task to execute
             use_callback: Whether to use callbacks
         """
+        # Save task ID at the beginning to avoid accessing it after session rollback
+        # Use SQLAlchemy inspect to safely get ID without triggering lazy loading
+        from sqlalchemy import inspect as sa_inspect
+        task_id_for_error_handling = None
+        if task:
+            try:
+                # Try to get ID directly from the object's dict to avoid triggering SQLAlchemy lazy loading
+                task_id_for_error_handling = task.__dict__.get('id') if hasattr(task, '__dict__') else None
+                # If not in __dict__, try using inspect to get the identity
+                if task_id_for_error_handling is None:
+                    insp = sa_inspect(task)
+                    if insp.persistent or insp.detached:
+                        # Get identity key (primary key)
+                        identity = insp.identity
+                        if identity:
+                            task_id_for_error_handling = identity[0] if identity else None
+                # Last resort: try direct attribute access (may trigger lazy loading)
+                if task_id_for_error_handling is None:
+                    task_id_for_error_handling = task.id
+            except Exception:
+                # If all methods fail, set to None
+                task_id_for_error_handling = None
+        
         try:
             # Check if streaming has been marked as final
             if self.streaming_final:
-                logger.info(f"Streaming marked as final, stopping single task execution for {task.id}")
+                logger.info(f"Streaming marked as final, stopping single task execution for {task_id_for_error_handling or 'unknown'}")
                 return
                 
             # Check if task is already finished or cancelled
             # Allow re-execution of failed tasks if they are marked for re-execution
-            task_id = str(task.id)
+            # Use saved task_id_for_error_handling if available, otherwise try to get from task
+            try:
+                task_id = str(task_id_for_error_handling) if task_id_for_error_handling else str(task.id)
+            except Exception:
+                task_id = str(task_id_for_error_handling) if task_id_for_error_handling else "unknown"
             if task.status in ["completed", "cancelled"]:
                 # Check if task is marked for re-execution
                 if task_id not in self._tasks_to_reexecute:
-                    logger.info(f"Task {task.id} already {task.status}, skipping execution")
+                    logger.info(f"Task {task_id} already {task.status}, skipping execution")
                     return
                 else:
-                    logger.info(f"Task {task.id} is {task.status} but marked for re-execution, will re-execute")
+                    logger.info(f"Task {task_id} is {task.status} but marked for re-execution, will re-execute")
             elif task.status == "failed":
                 # Failed tasks can be re-executed if marked for re-execution
                 if task_id in self._tasks_to_reexecute:
-                    logger.info(f"Task {task.id} is failed and marked for re-execution, will re-execute")
+                    logger.info(f"Task {task_id} is failed and marked for re-execution, will re-execute")
                 else:
                     # If not marked for re-execution, skip (shouldn't happen in normal flow)
-                    logger.info(f"Task {task.id} is failed but not marked for re-execution, skipping execution")
+                    logger.info(f"Task {task_id} is failed but not marked for re-execution, skipping execution")
                     return
             
             # Check if task is already in progress (may have been started by another process)
             if task.status == "in_progress":
-                logger.info(f"Task {task.id} already in_progress, skipping execution")
+                logger.info(f"Task {task_id} already in_progress, skipping execution")
                 return
             
             # Check if task was cancelled before starting (double-check after potential race condition)
             # Refresh task from database to get latest status
-            task = await self.task_repository.get_task_by_id(task.id)
+            # Use saved task_id_for_error_handling to avoid accessing task.id after potential session rollback
+            refresh_task_id = task_id_for_error_handling if task_id_for_error_handling else (task.id if task else None)
+            if not refresh_task_id:
+                raise ValueError(f"Task ID not available for refresh")
+            task = await self.task_repository.get_task_by_id(refresh_task_id)
             if not task:
-                raise ValueError(f"Task {task.id} not found")
+                raise ValueError(f"Task {refresh_task_id} not found")
             
             if task.status == "cancelled":
                 logger.info(f"Task {task.id} was cancelled, skipping execution")
                 return
             
             # Send task start status if streaming is enabled
+            # Use saved task_id_for_error_handling for all task.id accesses to avoid session rollback issues
+            current_task_id = task_id_for_error_handling if task_id_for_error_handling else (task.id if task else None)
+            
             if self.stream:
-                self.streaming_callbacks.task_start(task.id)
+                self.streaming_callbacks.task_start(current_task_id)
             
             # Update task status to in_progress using repository
             await self.task_repository.update_task_status(
-                task_id=task.id,
+                task_id=current_task_id,
                 status="in_progress",
                 error=None,
                 started_at=datetime.now(timezone.utc)
             )
             # Refresh task object
-            task = await self.task_repository.get_task_by_id(task.id)
+            task = await self.task_repository.get_task_by_id(current_task_id)
             if not task:
-                raise ValueError(f"Task {task.id} not found after status update")
+                raise ValueError(f"Task {current_task_id} not found after status update")
             
             # Final check: if task was cancelled between status update and refresh
             if task.status == "cancelled":
-                logger.info(f"Task {task.id} was cancelled after status update, stopping execution")
+                logger.info(f"Task {current_task_id} was cancelled after status update, stopping execution")
                 return
             
-            logger.info(f"Task {task.id} status updated to in_progress")
+            logger.info(f"Task {current_task_id} status updated to in_progress")
             
             # Resolve dependencies first (merge dependency results into inputs)
             resolved_inputs = await resolve_task_dependencies(task, self.task_repository)
             
             # Check cancellation before proceeding
-            task = await self.task_repository.get_task_by_id(task.id)
+            task = await self.task_repository.get_task_by_id(current_task_id)
             if not task:
-                raise ValueError(f"Task {task.id} not found")
+                raise ValueError(f"Task {current_task_id} not found")
             if task.status == "cancelled":
-                logger.info(f"Task {task.id} was cancelled during dependency resolution, stopping execution")
+                logger.info(f"Task {current_task_id} was cancelled during dependency resolution, stopping execution")
                 return
             
             if resolved_inputs != (task.inputs or {}):
                 # Update inputs using repository
-                await self.task_repository.update_task_inputs(task.id, resolved_inputs)
+                await self.task_repository.update_task_inputs(current_task_id, resolved_inputs)
                 # Refresh task object
-                task = await self.task_repository.get_task_by_id(task.id)
+                task = await self.task_repository.get_task_by_id(current_task_id)
                 if not task:
-                    raise ValueError(f"Task {task.id} not found after input data update")
+                    raise ValueError(f"Task {current_task_id} not found after input data update")
                 
                 # Check cancellation again
                 if task.status == "cancelled":
-                    logger.info(f"Task {task.id} was cancelled after input data update, stopping execution")
+                    logger.info(f"Task {current_task_id} was cancelled after input data update, stopping execution")
                     return
             
             # Execute pre-hooks (after dependency resolution, to allow user adjustment based on complete data)
@@ -683,31 +752,31 @@ class TaskManager:
                 # Make a deep copy to ensure we're saving the current state
                 inputs_to_save = copy.deepcopy(inputs_after_pre_hooks) if inputs_after_pre_hooks else {}
                 logger.info(
-                    f"Pre-hooks modified inputs for task {task.id}: "
+                    f"Pre-hooks modified inputs for task {current_task_id}: "
                     f"before_keys={list(inputs_before_pre_hooks.keys())}, "
                     f"after_keys={list(inputs_after_pre_hooks.keys())}"
                 )
-                await self.task_repository.update_task_inputs(task.id, inputs_to_save)
+                await self.task_repository.update_task_inputs(current_task_id, inputs_to_save)
                 # Refresh task object to get latest state from database
-                task = await self.task_repository.get_task_by_id(task.id)
+                task = await self.task_repository.get_task_by_id(current_task_id)
                 if not task:
-                    raise ValueError(f"Task {task.id} not found after pre-hook inputs update")
-                logger.info(f"Pre-hooks modified inputs for task {task.id}, updated in database")
+                    raise ValueError(f"Task {current_task_id} not found after pre-hook inputs update")
+                logger.info(f"Pre-hooks modified inputs for task {current_task_id}, updated in database")
             else:
-                logger.debug(f"Pre-hooks did not modify inputs for task {task.id}")
+                logger.debug(f"Pre-hooks did not modify inputs for task {current_task_id}")
             
             # Check cancellation before executing
-            task = await self.task_repository.get_task_by_id(task.id)
+            task = await self.task_repository.get_task_by_id(current_task_id)
             if not task:
-                raise ValueError(f"Task {task.id} not found")
+                raise ValueError(f"Task {current_task_id} not found")
             if task.status == "cancelled":
-                logger.info(f"Task {task.id} was cancelled before execution, stopping")
+                logger.info(f"Task {current_task_id} was cancelled before execution, stopping")
                 return
             
             # Execute task using agent executor
             # Use task.inputs (which may have been modified by pre-hooks)
             final_inputs = task.inputs or {}
-            logger.info(f"Task {task.id} execution - calling agent executor (name: {task.name})")
+            logger.info(f"Task {current_task_id} execution - calling agent executor (name: {task.name})")
             
             # Execute task based on schemas
             # Note: For long-running executors, cancellation check should be done inside executor
@@ -717,29 +786,29 @@ class TaskManager:
             # Check cancellation after execution (in case it was cancelled during execution)
             # Note: If task was cancelled, cancel_task() was already called by external source,
             # so we just need to stop execution and preserve the cancelled status
-            task = await self.task_repository.get_task_by_id(task.id)
+            task = await self.task_repository.get_task_by_id(current_task_id)
             if task and task.status == "cancelled":
-                logger.info(f"Task {task.id} was cancelled during execution, stopping")
+                logger.info(f"Task {current_task_id} was cancelled during execution, stopping")
                 
                 # Clear executor reference
-                self._executor_instances.pop(task.id, None)
+                self._executor_instances.pop(current_task_id, None)
                 
                 # Don't update to completed, keep cancelled status
                 if self.stream:
                     # StreamingCallbacks may not have task_cancelled method, use task_failed as fallback
                     if hasattr(self.streaming_callbacks, 'task_cancelled'):
-                        self.streaming_callbacks.task_cancelled(task.id)
+                        self.streaming_callbacks.task_cancelled(current_task_id)
                     else:
-                        self.streaming_callbacks.task_failed(task.id, "Task was cancelled")
+                        self.streaming_callbacks.task_failed(current_task_id, "Task was cancelled")
                 return
             
             # Clear executor reference after successful execution
-            self._executor_instances.pop(task.id, None)
+            self._executor_instances.pop(current_task_id, None)
             
             # Update task status using repository
             # Clear error field when task completes successfully (for re-execution scenarios)
             await self.task_repository.update_task_status(
-                task_id=task.id,
+                task_id=current_task_id,
                 status="completed",
                 progress=1.0,
                 result=task_result,
@@ -747,12 +816,12 @@ class TaskManager:
                 completed_at=datetime.now(timezone.utc)
             )
             # Refresh task object
-            task = await self.task_repository.get_task_by_id(task.id)
+            task = await self.task_repository.get_task_by_id(current_task_id)
             if not task:
-                raise ValueError(f"Task {task.id} not found after completion update")
+                raise ValueError(f"Task {current_task_id} not found after completion update")
             
             if self.stream:
-                self.streaming_callbacks.task_completed(task.id, result=task.result)
+                self.streaming_callbacks.task_completed(current_task_id, result=task.result)
             
             # System-internal dependency task triggering
             # execute_after_task is always executed to trigger dependent tasks
@@ -762,27 +831,36 @@ class TaskManager:
             try:
                 await self.execute_after_task(task)
             except Exception as e:
-                logger.error(f"Error triggering dependent tasks for {task.id}: {str(e)}")
+                logger.error(f"Error triggering dependent tasks for {current_task_id}: {str(e)}")
                 # Don't fail the current task if dependency triggering fails
             
             # Note: use_callback is for external URL callback notifications (if configured)
             # It doesn't affect execute_after_task which handles internal dependency triggering
                 
         except Exception as e:
-            # Handle case where task might be None
-            task_id_str = str(task.id) if task else "unknown"
+            # Use saved task ID to avoid accessing task after session rollback
+            task_id_str = str(task_id_for_error_handling) if task_id_for_error_handling else "unknown"
             logger.error(f"Error executing task {task_id_str}: {str(e)}", exc_info=True)
             
-            # Update task status using repository
-            await self.task_repository.update_task_status(
-                task_id=task.id,
-                status="failed",
-                error=str(e),
-                completed_at=datetime.now(timezone.utc)
-            )
+            # Update task status using repository (only if we have a valid task ID)
+            if task_id_for_error_handling:
+                try:
+                    await self.task_repository.update_task_status(
+                        task_id=task_id_for_error_handling,
+                        status="failed",
+                        error=str(e),
+                        completed_at=datetime.now(timezone.utc)
+                    )
+                except Exception as update_error:
+                    # If update fails (e.g., session already rolled back), log but don't fail
+                    logger.warning(f"Failed to update task status for {task_id_str}: {update_error}")
             
-            if self.stream:
-                self.streaming_callbacks.task_failed(task.id, str(e))
+            if self.stream and task_id_for_error_handling:
+                try:
+                    self.streaming_callbacks.task_failed(task_id_for_error_handling, str(e))
+                except Exception as callback_error:
+                    # If callback fails (e.g., accessing task.id triggers session reload), log but don't fail
+                    logger.warning(f"Failed to call task_failed callback for {task_id_str}: {callback_error}")
     
     async def _execute_pre_hooks(self, task: TaskModel) -> None:
         """
@@ -1279,9 +1357,7 @@ class TaskManager:
             else:
                 return {"result": demo_result, "demo_mode": True}
             
-            # Default demo result
-            return {"result": "Demo execution result", "demo_mode": True}
-        
+
         # Get executor class to check for hooks
         executor_class = type(executor)
         

@@ -5,9 +5,10 @@ This file contains all tests related to custom TaskModel fields (e.g., project_i
 These tests use extend_existing=True which modifies Base.metadata, so they are excluded from default test runs
 to avoid Base.metadata pollution.
 
-Run these tests explicitly with: pytest -m custom_task_model
+Run these tests explicitly with: pytest -m no_auto_run
 """
 import pytest
+pytestmark = pytest.mark.manual
 from sqlalchemy import Column, String, Integer
 from aipartnerupflow import (
     set_task_model_class,
@@ -17,11 +18,7 @@ from aipartnerupflow import (
 )
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel, Base
 
-# Mark all tests in this file as custom_task_model
-pytestmark = pytest.mark.custom_task_model
 
-@pytest.mark.skip(reason="This test is excluded from the default test run to avoid Base.metadata pollution.")
-@pytest.mark.custom_task_model
 class TestTaskModelCustomization:
     """Test TaskModel customization features"""
     
@@ -131,8 +128,7 @@ class TestTaskModelCustomization:
         model_class = get_task_model_class()
         assert model_class == TaskModel
 
-@pytest.mark.skip(reason="This test is excluded from the default test run to avoid Base.metadata pollution.")
-@pytest.mark.custom_task_model
+
 class TestCustomTaskModelWithRepository:
     """Test custom TaskModel with TaskRepository"""
     
@@ -209,8 +205,7 @@ class TestCustomTaskModelWithRepository:
         assert task.project_id == "proj-123"
         assert isinstance(task, CustomTaskModel)
 
-@pytest.mark.skip(reason="This test is excluded from the default test run to avoid Base.metadata pollution.")
-@pytest.mark.custom_task_model
+
 class TestCustomTaskModelWithAgentExecutor:
     """Test custom TaskModel with AgentExecutor and hooks"""
     
