@@ -280,8 +280,9 @@ Task status constants and utilities.
 
 ### Session Management
 
-- `create_session()`: Create a new database session
-- `get_default_session()`: Get the default database session
+- `create_pooled_session()`: Create a pooled database session context manager (recommended)
+- `create_session()`: Create a new raw database session
+- `get_default_session()`: **Deprecated**. Use `create_pooled_session()` instead.
 
 ### Extension Registry
 

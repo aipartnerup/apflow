@@ -56,6 +56,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enables aipartnerupflow-demo to use standard API functions directly without workarounds
   - All new parameters are optional with safe defaults for backward compatibility
 
+- **Executor Metadata API**
+  - New `get_executor_metadata(executor_id)` function to query executor metadata
+  - New `validate_task_format(task, executor_id)` function to validate tasks against executor schemas
+  - New `get_all_executor_metadata()` function to get metadata for all executors
+  - Located in `aipartnerupflow.core.extensions.executor_metadata`
+  - Used by demo applications to generate accurate demo tasks
+  - Returns: id, name, description, input_schema, examples, tags
+
 ### Removed
 - **Examples Module Deprecation**
   - Removed `aipartnerupflow.examples` module from core library
@@ -66,19 +74,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - This keeps the core library focused on orchestration functionality
   - For demo tasks, please use [aipartnerupflow-demo](https://github.com/aipartnerup/aipartnerupflow-demo)
 
-### Removed (continued)
 - **Examples API Methods**
   - Removed `examples.init` and `examples.status` API methods from system routes
   - These methods are no longer available in the API
   - **Migration**: Use aipartnerupflow-demo for demo task initialization
 
-- **Executor Metadata API**
-  - New `get_executor_metadata(executor_id)` function to query executor metadata
-  - New `validate_task_format(task, executor_id)` function to validate tasks against executor schemas
-  - New `get_all_executor_metadata()` function to get metadata for all executors
-  - Located in `aipartnerupflow.core.extensions.executor_metadata`
-  - Used by demo applications to generate accurate demo tasks
-  - Returns: id, name, description, input_schema, examples, tags
+
+### Changed
+- **Session Management Refactoring**
+  - Replaced `get_default_session()` with `create_pooled_session()` context manager in all API routes
+  - Renamed `create_task_tree_session` to `create_pooled_session` in `storage/factory.py`
+  - Updated `TaskExecutor` to use `create_pooled_session` as fallback
+  - Improved concurrency safety for API requests
+  - **Breaking Change**: `get_default_session()` is now deprecated for route handlers
+
 
 ## [0.6.1] 2025-12-11
 

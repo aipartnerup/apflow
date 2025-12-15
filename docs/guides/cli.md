@@ -22,8 +22,8 @@ The CLI is **completely independent** from the API server. You can use CLI comma
 ```
 
 **Key Points**:
-- **CLI**: Direct database access via `get_default_session()`
-- **API**: Direct database access via `get_default_session()`
+- **CLI**: Direct database access via session pool
+- **API**: Direct database access via session pool
 - **No dependency**: CLI does NOT need API server to be running
 - **Shared data**: Both CLI and API read/write to the same database
 

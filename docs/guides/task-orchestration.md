@@ -900,21 +900,21 @@ message = Message(
 
 ```python
 from aipartnerupflow.core.execution.task_creator import TaskCreator
-from aipartnerupflow.core.storage import get_default_session
+from aipartnerupflow.core.storage import create_pooled_session
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from aipartnerupflow.core.execution.task_executor import TaskExecutor
 
 # Get the original task
-db_session = get_default_session()
-task_repository = TaskRepository(db_session)
-original_task = await task_repository.get_task_by_id("existing-task-id")
+async with create_pooled_session() as db_session:
+    task_repository = TaskRepository(db_session)
+    original_task = await task_repository.get_task_by_id("existing-task-id")
 
-# Create a copy
-task_creator = TaskCreator(db_session)
-copied_tree = await task_creator.create_task_copy(
-    original_task,
-    children=True  # Also copy children
-)
+    # Create a copy
+    task_creator = TaskCreator(db_session)
+    copied_tree = await task_creator.create_task_copy(
+        original_task,
+        children=True  # Also copy children
+    )
 
 # Execute the copied task
 task_executor = TaskExecutor()
