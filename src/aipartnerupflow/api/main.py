@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from aipartnerupflow.api.app import create_app_by_protocol
-from aipartnerupflow.api.extensions import initialize_extensions, _auto_init_examples_if_needed, _load_custom_task_model
+from aipartnerupflow.api.extensions import initialize_extensions, _load_custom_task_model
 from aipartnerupflow.api.protocols import get_protocol_from_env
 from aipartnerupflow.core.storage.factory import get_default_session
 from aipartnerupflow.core.utils.logger import get_logger
@@ -244,9 +244,6 @@ def create_runnable_app(**kwargs):
         # Don't fail startup if database initialization fails
         # This allows the server to start even if database is not available
         logger.warning(f"Database initialization skipped: {e}")
-
-    # Auto-initialize examples data if database is empty
-    _auto_init_examples_if_needed()
 
     # Determine protocol (default to A2A for backward compatibility)
     protocol = kwargs.pop("protocol", None) or get_protocol_from_env()

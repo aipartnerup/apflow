@@ -388,16 +388,6 @@ export ANTHROPIC_API_KEY="sk-ant-xxx"
 export GOOGLE_API_KEY="xxx"
 ```
 
-### Examples Auto-initialization ⚠️ DEPRECATED
-
-> **Note:** Examples auto-initialization has been removed from aipartnerupflow core library.
-> The `_auto_init_examples_if_needed()` function in `api/main.py` is now deprecated and does nothing.
-> 
-> **Migration:** For demo task initialization, please use the **aipartnerupflow-demo** project instead.
-> See [aipartnerupflow-demo](https://github.com/aipartnerup/aipartnerupflow-demo) for complete demo task management.
-
-The examples module and CLI command have been removed. The API server no longer auto-initializes examples on startup.
-
 ## Configuration
 
 ### Environment Variables

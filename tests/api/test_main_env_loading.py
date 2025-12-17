@@ -214,13 +214,12 @@ class TestCreateRunnableApp:
             # Mock other initialization functions
             with patch("aipartnerupflow.api.main.initialize_extensions"):
                 with patch("aipartnerupflow.api.main._load_custom_task_model"):
-                    with patch("aipartnerupflow.api.main._auto_init_examples_if_needed"):
-                        with patch("aipartnerupflow.api.main._setup_development_environment"):
-                            app = create_runnable_app(protocol="a2a")
-                            
-                            # .env should be loaded
-                            assert os.getenv("TEST_VAR") == "app_value"
-                            assert app is not None
+                    with patch("aipartnerupflow.api.main._setup_development_environment"):
+                        app = create_runnable_app(protocol="a2a")
+                        
+                        # .env should be loaded
+                        assert os.getenv("TEST_VAR") == "app_value"
+                        assert app is not None
     
     @pytest.mark.asyncio
     async def test_create_runnable_app_calls_setup_dev_env(self, monkeypatch):
@@ -231,15 +230,14 @@ class TestCreateRunnableApp:
             
             with patch("aipartnerupflow.api.main.initialize_extensions"):
                 with patch("aipartnerupflow.api.main._load_custom_task_model"):
-                    with patch("aipartnerupflow.api.main._auto_init_examples_if_needed"):
-                        with patch("aipartnerupflow.api.main._load_env_file"):
-                            with patch("aipartnerupflow.api.main._setup_development_environment") as mock_setup:
-                                app = create_runnable_app(protocol="a2a")
-                                
-                                # Should call _setup_development_environment
-                                assert mock_setup.called
-                                assert app is not None
-    
+                    with patch("aipartnerupflow.api.main._load_env_file"):
+                        with patch("aipartnerupflow.api.main._setup_development_environment") as mock_setup:
+                            app = create_runnable_app(protocol="a2a")
+                            
+                            # Should call _setup_development_environment
+                            assert mock_setup.called
+                            assert app is not None
+
     @pytest.mark.asyncio
     async def test_create_runnable_app_initializes_extensions(self, monkeypatch):
         """Test that create_runnable_app() initializes extensions by default"""
@@ -249,14 +247,13 @@ class TestCreateRunnableApp:
             
             with patch("aipartnerupflow.api.main.initialize_extensions") as mock_init:
                 with patch("aipartnerupflow.api.main._load_custom_task_model"):
-                    with patch("aipartnerupflow.api.main._auto_init_examples_if_needed"):
-                        with patch("aipartnerupflow.api.main._load_env_file"):
-                            with patch("aipartnerupflow.api.main._setup_development_environment"):
-                                app = create_runnable_app(protocol="a2a")
-                                
-                                # Should initialize extensions by default
-                                mock_init.assert_called_once()
-                                assert app is not None
+                    with patch("aipartnerupflow.api.main._load_env_file"):
+                        with patch("aipartnerupflow.api.main._setup_development_environment"):
+                            app = create_runnable_app(protocol="a2a")
+                            
+                            # Should initialize extensions by default
+                            mock_init.assert_called_once()
+                            assert app is not None
     
     @pytest.mark.asyncio
     async def test_create_runnable_app_skips_extension_init_when_disabled(self, monkeypatch):
@@ -267,17 +264,16 @@ class TestCreateRunnableApp:
             
             with patch("aipartnerupflow.api.main.initialize_extensions") as mock_init:
                 with patch("aipartnerupflow.api.main._load_custom_task_model"):
-                    with patch("aipartnerupflow.api.main._auto_init_examples_if_needed"):
-                        with patch("aipartnerupflow.api.main._load_env_file"):
-                            with patch("aipartnerupflow.api.main._setup_development_environment"):
-                                app = create_runnable_app(
-                                    protocol="a2a",
-                                    auto_initialize_extensions=False
-                                )
-                                
-                                # Should not initialize extensions
-                                mock_init.assert_not_called()
-                                assert app is not None
+                    with patch("aipartnerupflow.api.main._load_env_file"):
+                        with patch("aipartnerupflow.api.main._setup_development_environment"):
+                            app = create_runnable_app(
+                                protocol="a2a",
+                                auto_initialize_extensions=False
+                            )
+                            
+                            # Should not initialize extensions
+                            mock_init.assert_not_called()
+                            assert app is not None
     
     @pytest.mark.asyncio
     async def test_create_runnable_app_passes_kwargs_to_create_app(self, monkeypatch):
@@ -288,24 +284,23 @@ class TestCreateRunnableApp:
             
             with patch("aipartnerupflow.api.main.initialize_extensions"):
                 with patch("aipartnerupflow.api.main._load_custom_task_model"):
-                    with patch("aipartnerupflow.api.main._auto_init_examples_if_needed"):
-                        with patch("aipartnerupflow.api.main._load_env_file"):
-                            with patch("aipartnerupflow.api.main._setup_development_environment"):
-                                # Pass custom kwargs
-                                custom_routes = [MagicMock()]
-                                custom_middleware = [MagicMock()]
-                                
-                                app = create_runnable_app(
-                                    protocol="a2a",
-                                    custom_routes=custom_routes,
-                                    custom_middleware=custom_middleware,
-                                )
-                                
-                                # Should pass kwargs to create_app_by_protocol
-                                mock_create.assert_called_once()
-                                call_kwargs = mock_create.call_args[1]
-                                assert call_kwargs["protocol"] == "a2a"
-                                assert call_kwargs["custom_routes"] == custom_routes
-                                assert call_kwargs["custom_middleware"] == custom_middleware
-                                assert app is not None
+                    with patch("aipartnerupflow.api.main._load_env_file"):
+                        with patch("aipartnerupflow.api.main._setup_development_environment"):
+                            # Pass custom kwargs
+                            custom_routes = [MagicMock()]
+                            custom_middleware = [MagicMock()]
+                            
+                            app = create_runnable_app(
+                                protocol="a2a",
+                                custom_routes=custom_routes,
+                                custom_middleware=custom_middleware,
+                            )
+                            
+                            # Should pass kwargs to create_app_by_protocol
+                            mock_create.assert_called_once()
+                            call_kwargs = mock_create.call_args[1]
+                            assert call_kwargs["protocol"] == "a2a"
+                            assert call_kwargs["custom_routes"] == custom_routes
+                            assert call_kwargs["custom_middleware"] == custom_middleware
+                            assert app is not None
 

@@ -225,21 +225,6 @@ def _load_custom_task_model() -> None:
             logger.warning(f"Failed to load custom TaskModel from {task_model_class_path}: {e}")
 
 
-def _auto_init_examples_if_needed() -> None:
-    """
-    Auto-initialize examples data if database is empty and examples are available
-
-    DEPRECATED: This function is deprecated. The examples module has been removed
-    from aipartnerupflow core library. For demo task initialization, please use
-    aipartnerupflow-demo project instead.
-
-    This function is kept for backward compatibility but will be removed in a future version.
-    """
-    # Examples module has been removed from core library
-    # Demo task initialization should be handled by aipartnerupflow-demo
-    logger.debug("Examples auto-initialization is deprecated. Use aipartnerupflow-demo for demo tasks.")
-    return
-
 
 def initialize_extensions(
     include_stdio: Optional[bool] = None,
@@ -348,10 +333,6 @@ def initialize_extensions(
     # Load custom TaskModel if specified
     if load_custom_task_model:
         _load_custom_task_model()
-
-    # Auto-initialize examples if needed
-    if auto_init_examples:
-        _auto_init_examples_if_needed()
 
     logger.info("Extension initialization completed")
 
