@@ -547,6 +547,222 @@ class TestTasksCopyCommand:
         except (json.JSONDecodeError, AttributeError):
             # If JSON parsing fails, just verify basic success message
             pass
+    
+    @pytest.mark.asyncio
+    async def test_tasks_copy_with_save_false(self, use_test_db_session):
+        """Test copying a task with --no-save flag (returns task array)"""
+        task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
+        
+        # Create a task tree: root -> child
+        root_task_id = f"copy-save-false-root-{uuid.uuid4()}"
+        root_task = await task_repository.create_task(
+            id=root_task_id,
+            name="Root Task for Save False",
+            user_id="test_user",
+            status="completed",
+            priority=1,
+            has_children=True,
+            progress=1.0
+        )
+        
+        child_task_id = f"copy-save-false-child-{uuid.uuid4()}"
+        await task_repository.create_task(
+            id=child_task_id,
+            name="Child Task",
+            user_id="test_user",
+            parent_id=root_task_id,
+            status="completed",
+            priority=1,
+            has_children=False,
+            progress=1.0
+        )
+        
+        # Copy task with --no-save flag
+        result = runner.invoke(app, [
+            "tasks", "copy", root_task_id,
+            "--no-save"
+        ])
+        
+        assert result.exit_code == 0
+        output = result.stdout
+        
+        # Verify output contains task array
+        try:
+            import re
+            json_match = re.search(r'\{.*\}', output, re.DOTALL)
+            if json_match:
+                copied_data = json.loads(json_match.group())
+                assert "tasks" in copied_data
+                assert copied_data.get("saved") is False
+                assert isinstance(copied_data["tasks"], list)
+                assert len(copied_data["tasks"]) > 0
+                # Verify task array format
+                for task_dict in copied_data["tasks"]:
+                    assert "id" in task_dict
+                    assert "name" in task_dict
+        except (json.JSONDecodeError, AttributeError):
+            # If JSON parsing fails, just verify basic output
+            assert "tasks" in output.lower() or "array" in output.lower()
+    
+    @pytest.mark.asyncio
+    async def test_tasks_copy_custom_mode(self, use_test_db_session):
+        """Test copying with custom mode"""
+        task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
+        
+        # Create a task tree: root -> child1, child2
+        root_task_id = f"copy-custom-root-{uuid.uuid4()}"
+        await task_repository.create_task(
+            id=root_task_id,
+            name="Root Task",
+            user_id="test_user",
+            status="completed",
+            priority=1,
+            has_children=True,
+            progress=1.0
+        )
+        
+        child1_id = f"copy-custom-child1-{uuid.uuid4()}"
+        child1 = await task_repository.create_task(
+            id=child1_id,
+            name="Child Task 1",
+            user_id="test_user",
+            parent_id=root_task_id,
+            status="completed",
+            priority=1,
+            has_children=False,
+            progress=1.0
+        )
+        
+        child2_id = f"copy-custom-child2-{uuid.uuid4()}"
+        await task_repository.create_task(
+            id=child2_id,
+            name="Child Task 2",
+            user_id="test_user",
+            parent_id=root_task_id,
+            status="completed",
+            priority=1,
+            has_children=False,
+            progress=1.0
+        )
+        
+        # Copy with custom mode
+        result = runner.invoke(app, [
+            "tasks", "copy", child1_id,
+            "--copy-mode", "custom",
+            "--custom-task-ids", child1_id
+        ])
+        
+        assert result.exit_code == 0
+        output = result.stdout
+        
+        # Verify copied task
+        try:
+            import re
+            json_match = re.search(r'\{.*\}', output, re.DOTALL)
+            if json_match:
+                copied_data = json.loads(json_match.group())
+                assert "id" in copied_data
+                assert copied_data["id"] != child1_id
+                assert copied_data["name"] == "Child Task 1"
+        except (json.JSONDecodeError, AttributeError):
+            # If JSON parsing fails, just verify basic success
+            assert "Successfully copied" in output or child1_id in output
+    
+    @pytest.mark.asyncio
+    async def test_tasks_copy_full_mode(self, use_test_db_session):
+        """Test copying with full mode"""
+        task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
+        
+        # Create a task tree
+        root_task_id = f"copy-full-root-{uuid.uuid4()}"
+        root_task = await task_repository.create_task(
+            id=root_task_id,
+            name="Root Task for Full Mode",
+            user_id="test_user",
+            status="completed",
+            priority=1,
+            has_children=True,
+            progress=1.0
+        )
+        
+        child_id = f"copy-full-child-{uuid.uuid4()}"
+        await task_repository.create_task(
+            id=child_id,
+            name="Child Task",
+            user_id="test_user",
+            parent_id=root_task_id,
+            status="completed",
+            priority=1,
+            has_children=False,
+            progress=1.0
+        )
+        
+        # Copy with full mode
+        result = runner.invoke(app, [
+            "tasks", "copy", root_task_id,
+            "--copy-mode", "full"
+        ])
+        
+        assert result.exit_code == 0
+        output = result.stdout
+        
+        # Verify copied task
+        try:
+            import re
+            json_match = re.search(r'\{.*\}', output, re.DOTALL)
+            if json_match:
+                copied_data = json.loads(json_match.group())
+                assert "id" in copied_data
+                assert copied_data["id"] != root_task_id
+                assert copied_data["name"] == "Root Task for Full Mode"
+        except (json.JSONDecodeError, AttributeError):
+            # If JSON parsing fails, just verify basic success
+            assert "Successfully copied" in output or root_task_id in output
+    
+    @pytest.mark.asyncio
+    async def test_tasks_copy_with_reset_fields(self, use_test_db_session):
+        """Test copying with reset_fields"""
+        task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
+        
+        # Create a completed task
+        task_id = f"copy-reset-{uuid.uuid4()}"
+        await task_repository.create_task(
+            id=task_id,
+            name="Task to Reset",
+            user_id="test_user",
+            status="completed",
+            priority=1,
+            has_children=False,
+            progress=1.0,
+            result={"output": "test result"}
+        )
+        
+        # Copy with reset_fields
+        result = runner.invoke(app, [
+            "tasks", "copy", task_id,
+            "--reset-fields", "status,progress"
+        ])
+        
+        assert result.exit_code == 0
+        output = result.stdout
+        
+        # Verify copied task and check reset fields
+        try:
+            import re
+            json_match = re.search(r'\{.*\}', output, re.DOTALL)
+            if json_match:
+                copied_data = json.loads(json_match.group())
+                assert "id" in copied_data
+                copied_task_id = copied_data["id"]
+                
+                # Verify reset fields in database
+                copied_task = await task_repository.get_task_by_id(copied_task_id)
+                assert copied_task is not None
+                assert copied_task.status == "pending"  # Reset from completed
+                assert copied_task.progress == 0.0  # Reset from 1.0
+        except (json.JSONDecodeError, AttributeError):
+            # If JSON parsing fails, just verify basic success
+            assert "Successfully copied" in output or task_id in output
 
 
 class TestTasksGetCommand:
@@ -597,6 +813,252 @@ class TestTasksGetCommand:
         assert result.exit_code == 1
         output = result.stdout + result.stderr
         assert "not found" in output.lower() or "error" in output.lower()
+
+
+class TestTasksCopyCommand:
+    """Test cases for tasks copy command"""
+
+    @pytest_asyncio.fixture
+    async def task_tree_for_copy(self, use_test_db_session):
+        """Create a task tree for copy testing"""
+        task_repository = TaskRepository(
+            use_test_db_session, task_model_class=get_task_model_class()
+        )
+
+        # Create task tree: root -> child1, child2
+        root = await task_repository.create_task(
+            name="Root Task",
+            user_id="test_user",
+            status="completed",
+            priority=1,
+        )
+        child1 = await task_repository.create_task(
+            name="Child Task 1",
+            user_id="test_user",
+            parent_id=root.id,
+            status="completed",
+            priority=1,
+        )
+        child2 = await task_repository.create_task(
+            name="Child Task 2",
+            user_id="test_user",
+            parent_id=root.id,
+            status="completed",
+            priority=1,
+            dependencies=[{"id": child1.id, "required": True}],
+        )
+
+        return {
+            "root": root,
+            "child1": child1,
+            "child2": child2,
+        }
+
+    @pytest.mark.asyncio
+    async def test_tasks_copy_basic(self, use_test_db_session, task_tree_for_copy):
+        """Test basic task copy with minimal mode"""
+        set_default_session(use_test_db_session)
+        try:
+            root = task_tree_for_copy["root"]
+            result = runner.invoke(app, [
+                "tasks", "copy",
+                root.id,
+                "--copy-mode", "minimal"
+            ])
+
+            assert result.exit_code == 0
+            output = result.stdout
+
+            # Extract JSON from output
+            import re
+            json_match = re.search(r'\{.*\}', output, re.DOTALL)
+            if json_match:
+                copied_data = json.loads(json_match.group())
+            else:
+                copied_data = json.loads(output)
+
+            assert "id" in copied_data
+            assert copied_data["name"] == "Root Task"
+            assert copied_data["id"] != root.id  # New task ID
+
+            # Verify task was saved to database
+            task_repository = TaskRepository(
+                use_test_db_session, task_model_class=get_task_model_class()
+            )
+            copied_task = await task_repository.get_task_by_id(copied_data["id"])
+            assert copied_task is not None
+            assert copied_task.name == "Root Task"
+        finally:
+            reset_default_session()
+
+    @pytest.mark.asyncio
+    async def test_tasks_copy_save_false(self, use_test_db_session, task_tree_for_copy):
+        """Test task copy with save=False returns task array"""
+        set_default_session(use_test_db_session)
+        try:
+            root = task_tree_for_copy["root"]
+            result = runner.invoke(app, [
+                "tasks", "copy",
+                root.id,
+                "--copy-mode", "minimal",
+                "--dry-run"
+            ])
+
+            assert result.exit_code == 0
+            output = result.stdout
+
+            # Extract JSON from output
+            import re
+            json_match = re.search(r'\{.*\}', output, re.DOTALL)
+            if json_match:
+                result_data = json.loads(json_match.group())
+            else:
+                result_data = json.loads(output)
+
+            assert "tasks" in result_data
+            assert result_data.get("saved") is False
+            assert isinstance(result_data["tasks"], list)
+            assert len(result_data["tasks"]) > 0
+        finally:
+            reset_default_session()
+
+    @pytest.mark.asyncio
+    async def test_tasks_copy_with_children(self, use_test_db_session, task_tree_for_copy):
+        """Test task copy with children=True"""
+        set_default_session(use_test_db_session)
+        try:
+            root = task_tree_for_copy["root"]
+            result = runner.invoke(app, [
+                "tasks", "copy",
+                root.id,
+                "--copy-mode", "minimal",
+                "--children"
+            ])
+
+            assert result.exit_code == 0
+            output = result.stdout
+
+            # Extract JSON from output
+            import re
+            json_match = re.search(r'\{.*\}', output, re.DOTALL)
+            if json_match:
+                copied_data = json.loads(json_match.group())
+            else:
+                copied_data = json.loads(output)
+
+            assert "id" in copied_data
+            assert copied_data["name"] == "Root Task"
+        finally:
+            reset_default_session()
+
+    @pytest.mark.asyncio
+    async def test_tasks_copy_custom_mode(self, use_test_db_session, task_tree_for_copy):
+        """Test task copy with custom mode"""
+        set_default_session(use_test_db_session)
+        try:
+            child1 = task_tree_for_copy["child1"]
+            result = runner.invoke(app, [
+                "tasks", "copy",
+                child1.id,
+                "--copy-mode", "custom",
+                "--custom-task-ids", child1.id
+            ])
+
+            assert result.exit_code == 0
+            output = result.stdout
+
+            # Extract JSON from output
+            import re
+            json_match = re.search(r'\{.*\}', output, re.DOTALL)
+            if json_match:
+                copied_data = json.loads(json_match.group())
+            else:
+                copied_data = json.loads(output)
+
+            assert "id" in copied_data
+            assert copied_data["id"] != child1.id  # New task ID
+        finally:
+            reset_default_session()
+
+    @pytest.mark.asyncio
+    async def test_tasks_copy_full_mode(self, use_test_db_session, task_tree_for_copy):
+        """Test task copy with full mode"""
+        set_default_session(use_test_db_session)
+        try:
+            root = task_tree_for_copy["root"]
+            result = runner.invoke(app, [
+                "tasks", "copy",
+                root.id,
+                "--copy-mode", "full"
+            ])
+
+            assert result.exit_code == 0
+            output = result.stdout
+
+            # Extract JSON from output
+            import re
+            json_match = re.search(r'\{.*\}', output, re.DOTALL)
+            if json_match:
+                copied_data = json.loads(json_match.group())
+            else:
+                copied_data = json.loads(output)
+
+            assert "id" in copied_data
+            assert copied_data["name"] == "Root Task"
+        finally:
+            reset_default_session()
+
+    @pytest.mark.asyncio
+    async def test_tasks_copy_with_reset_fields(self, use_test_db_session, task_tree_for_copy):
+        """Test task copy with reset_fields"""
+        set_default_session(use_test_db_session)
+        try:
+            root = task_tree_for_copy["root"]
+            result = runner.invoke(app, [
+                "tasks", "copy",
+                root.id,
+                "--copy-mode", "minimal",
+                "--reset-fields", "status,progress"
+            ])
+
+            assert result.exit_code == 0
+            output = result.stdout
+
+            # Extract JSON from output
+            import re
+            json_match = re.search(r'\{.*\}', output, re.DOTALL)
+            if json_match:
+                copied_data = json.loads(json_match.group())
+            else:
+                copied_data = json.loads(output)
+
+            assert "id" in copied_data
+
+            # Verify reset fields were applied
+            task_repository = TaskRepository(
+                use_test_db_session, task_model_class=get_task_model_class()
+            )
+            copied_task = await task_repository.get_task_by_id(copied_data["id"])
+            assert copied_task.status == "pending"  # Reset from completed
+            assert copied_task.progress == 0.0  # Reset from previous value
+        finally:
+            reset_default_session()
+
+    @pytest.mark.asyncio
+    async def test_tasks_copy_not_found(self, use_test_db_session):
+        """Test error handling when task is not found"""
+        set_default_session(use_test_db_session)
+        try:
+            result = runner.invoke(app, [
+                "tasks", "copy",
+                "non-existent-task",
+                "--copy-mode", "minimal"
+            ])
+
+            assert result.exit_code != 0
+            assert "not found" in result.stdout.lower() or "error" in result.stdout.lower() or result.exit_code == 1
+        finally:
+            reset_default_session()
 
 
 class TestTasksCreateCommand:

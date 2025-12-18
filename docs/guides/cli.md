@@ -471,7 +471,7 @@ aipartnerupflow tasks delete task-123 --force
 Create a copy of a task tree for re-execution. This is useful for retrying failed tasks or re-running completed tasks.
 
 ```bash
-# Copy a task tree (basic usage)
+# Copy a task tree (basic usage, minimal mode)
 aipartnerupflow tasks copy task-123
 
 # Copy and save to file
@@ -479,22 +479,50 @@ aipartnerupflow tasks copy task-123 --output /path/to/copied_task.json
 
 # Copy with children (also copy each direct child task with its dependencies)
 aipartnerupflow tasks copy task-123 --children
+
+# Copy with full mode (copies complete tree from root)
+aipartnerupflow tasks copy task-123 --copy-mode full
+
+# Copy with custom mode (copy only specified tasks)
+aipartnerupflow tasks copy task-123 \
+  --copy-mode custom \
+  --custom-task-ids task-123,task-child-456
+
+# Copy with custom mode and include children recursively
+aipartnerupflow tasks copy task-123 \
+  --copy-mode custom \
+  --custom-task-ids task-123,task-child-456 \
+  --custom-include-children
+
+# Preview copy without saving to database (returns task array)
+aipartnerupflow tasks copy task-123 --dry-run
+
+# Copy with reset fields (reset specific fields during copy)
+aipartnerupflow tasks copy task-123 --reset-fields status,progress
 ```
 
+**Copy Modes:**
+- `minimal` (default): Copies minimal subtree (original_task + children + dependents). All copied tasks are marked as pending for re-execution.
+- `full`: Copies complete tree from root. Tasks that need re-execution are marked as pending, unrelated successful tasks are marked as completed with preserved token_usage.
+- `custom`: Copies only specified tasks (requires `--custom-task-ids`). Useful for selective copying of specific tasks in a tree.
+
 **What gets copied:**
-- The original task and all its children
+- The original task and all its children (depending on mode and parameters)
 - All tasks that depend on the original task (including transitive dependencies)
 - Automatically handles failed leaf nodes (filters out pending dependents)
+- Task structure (parent-child relationships)
+- Task definitions (name, inputs, schemas, params, dependencies)
 
 **What happens:**
-- New task IDs are generated for all copied tasks
-- All execution fields are reset (status="pending", progress=0.0, result=null)
-- The original task's `has_copy` flag is set to `true`
+- New task IDs (UUIDs) are generated for all copied tasks
+- All execution fields are reset (status="pending", progress=0.0, result=null) unless `--reset-fields` is specified
+- The original task's `has_copy` flag is set to `true` (when not using `--dry-run`)
 - Copied tasks are linked to the original via `original_task_id` field
+- Dependencies correctly reference new task IDs within the copied tree
 
-**Use case:**
+**Use cases:**
 ```bash
-# 1. Original task failed
+# 1. Original task failed - retry with copy
 aipartnerupflow tasks status task-123
 # Status: failed
 
@@ -504,6 +532,14 @@ aipartnerupflow tasks copy task-123
 
 # 3. Execute the copied task
 aipartnerupflow run flow --tasks '[{"id": "task-copy-xyz-789", ...}]'
+
+# Preview copy before saving (useful for validation)
+aipartnerupflow tasks copy task-123 --dry-run --output preview.json
+
+# Copy specific tasks only (custom mode)
+aipartnerupflow tasks copy task-123 \
+  --copy-mode custom \
+  --custom-task-ids task-123,task-child-456
 ```
 
 ### Examples Data Management ⚠️ DEPRECATED

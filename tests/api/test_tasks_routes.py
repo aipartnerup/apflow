@@ -961,14 +961,79 @@ class TestHandleTaskGenerate:
         """Test error handling when LLM API key is missing"""
         import os
         from unittest.mock import patch
+        from aipartnerupflow.core.utils.llm_key_context import clear_llm_key_context
 
-        # Ensure no API key in environment
+        # Clear context and ensure no API key in environment
+        clear_llm_key_context()
         with patch.dict(os.environ, {}, clear=True):
             params = {"requirement": "Fetch data from API", "user_id": "test_user"}
             request_id = str(uuid.uuid4())
 
             with pytest.raises(ValueError, match="LLM API key not found"):
                 await task_routes.handle_task_generate(params, mock_request, request_id)
+
+    @pytest.mark.asyncio
+    async def test_generate_with_header_api_key(self, task_routes, mock_request, use_test_db_session):
+        """Test task generation using X-LLM-API-KEY header"""
+        import os
+        from unittest.mock import patch, AsyncMock, Mock
+        from aipartnerupflow.core.utils.llm_key_context import set_llm_key_from_header, clear_llm_key_context
+
+        # Clear context first, then set header key
+        clear_llm_key_context()
+        set_llm_key_from_header("header-test-key")
+        
+        # Ensure no API key in environment to test header takes priority
+        with patch.dict(os.environ, {}, clear=True):
+            params = {"requirement": "Fetch data from API", "user_id": "test_user"}
+            request_id = str(uuid.uuid4())
+
+            mock_generated_tasks = [{"name": "rest_executor", "inputs": {}}]
+
+            # Mock TaskRepository constructor
+            mock_repository = Mock(spec=TaskRepository)
+            mock_generate_task = Mock()
+            mock_generate_task.id = "generate-task-id"
+            mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
+
+            mock_result_task = Mock()
+            mock_result_task.id = "generate-task-id"
+            mock_result_task.status = "completed"
+            mock_result_task.result = {"tasks": mock_generated_tasks}
+            mock_result_task.error = None
+            mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
+
+            # Mock TaskExecutor.execute_task_tree
+            mock_executor = Mock()
+
+            async def mock_execute_task_tree(*args, **kwargs):
+                import asyncio
+
+                await asyncio.sleep(0.01)
+
+            mock_executor.execute_task_tree = mock_execute_task_tree
+
+            with patch(
+                "aipartnerupflow.api.routes.tasks.TaskRepository", return_value=mock_repository
+            ):
+                with patch(
+                    "aipartnerupflow.core.execution.task_executor.TaskExecutor",
+                    return_value=mock_executor,
+                ):
+                    result = await task_routes.handle_task_generate(
+                        params, mock_request, request_id
+                    )
+
+            # Verify response
+            assert isinstance(result, dict)
+            assert "tasks" in result
+            assert result["tasks"] == mock_generated_tasks
+            assert result["count"] == 1
+            assert "message" in result
+            assert "Successfully generated" in result["message"]
+            
+            # Clean up
+            clear_llm_key_context()
 
     @pytest.mark.asyncio
     async def test_generate_with_llm_config(self, task_routes, mock_request, use_test_db_session):
@@ -1441,3 +1506,243 @@ class TestHandleTaskExecuteUseDemo:
         mock_execute_tasks.assert_called_once()
         call_kwargs = mock_execute_tasks.call_args[1]
         assert call_kwargs.get("use_demo") is True
+
+
+class TestHandleTaskCopy:
+    """Test cases for handle_task_copy method"""
+
+    @pytest_asyncio.fixture
+    async def task_tree_for_copy(self, use_test_db_session):
+        """Create a task tree for copy testing"""
+        task_repository = TaskRepository(
+            use_test_db_session, task_model_class=get_task_model_class()
+        )
+
+        # Create task tree: root -> child1, child2
+        root = await task_repository.create_task(
+            name="Root Task",
+            user_id="test_user",
+            status="completed",
+            priority=1,
+        )
+        child1 = await task_repository.create_task(
+            name="Child Task 1",
+            user_id="test_user",
+            parent_id=root.id,
+            status="completed",
+            priority=1,
+        )
+        child2 = await task_repository.create_task(
+            name="Child Task 2",
+            user_id="test_user",
+            parent_id=root.id,
+            status="completed",
+            priority=1,
+            dependencies=[{"id": child1.id, "required": True}],
+        )
+
+        return {
+            "root": root,
+            "child1": child1,
+            "child2": child2,
+        }
+
+    @pytest.mark.asyncio
+    async def test_copy_basic_minimal_mode(self, task_routes, mock_request, task_tree_for_copy, use_test_db_session):
+        """Test basic copy with minimal mode (default)"""
+        root = task_tree_for_copy["root"]
+        params = {"task_id": root.id, "copy_mode": "minimal", "save": True}
+        request_id = str(uuid.uuid4())
+
+        result = await task_routes.handle_task_copy(params, mock_request, request_id)
+
+        # Verify response
+        assert isinstance(result, dict)
+        assert "id" in result
+        assert result["name"] == "Root Task"
+        assert result["id"] != root.id  # New task ID
+
+        # Verify task was saved to database
+        task_repository = TaskRepository(
+            use_test_db_session, task_model_class=get_task_model_class()
+        )
+        copied_task = await task_repository.get_task_by_id(result["id"])
+        assert copied_task is not None
+        assert copied_task.name == "Root Task"
+
+    @pytest.mark.asyncio
+    async def test_copy_with_save_false(self, task_routes, mock_request, task_tree_for_copy):
+        """Test copy with save=False returns task array"""
+        root = task_tree_for_copy["root"]
+        params = {"task_id": root.id, "copy_mode": "minimal", "save": False}
+        request_id = str(uuid.uuid4())
+
+        result = await task_routes.handle_task_copy(params, mock_request, request_id)
+
+        # Verify response is task array
+        assert isinstance(result, dict)
+        assert "tasks" in result
+        assert result["saved"] is False
+        assert isinstance(result["tasks"], list)
+        assert len(result["tasks"]) > 0
+
+        # Verify task array format
+        task_array = result["tasks"]
+        for task_dict in task_array:
+            assert "id" in task_dict
+            assert "name" in task_dict
+
+    @pytest.mark.asyncio
+    async def test_copy_with_children(self, task_routes, mock_request, task_tree_for_copy):
+        """Test copy with children=True"""
+        root = task_tree_for_copy["root"]
+        params = {
+            "task_id": root.id,
+            "copy_mode": "minimal",
+            "children": True,
+            "save": True,
+        }
+        request_id = str(uuid.uuid4())
+
+        result = await task_routes.handle_task_copy(params, mock_request, request_id)
+
+        # Verify response
+        assert isinstance(result, dict)
+        assert "id" in result
+        assert result["name"] == "Root Task"
+
+        # Verify children were copied
+        if "children" in result:
+            assert len(result["children"]) > 0
+
+    @pytest.mark.asyncio
+    async def test_copy_custom_mode(self, task_routes, mock_request, task_tree_for_copy):
+        """Test copy with custom mode"""
+        child1 = task_tree_for_copy["child1"]
+        params = {
+            "task_id": child1.id,
+            "copy_mode": "custom",
+            "custom_task_ids": [child1.id],
+            "custom_include_children": False,
+            "save": True,
+        }
+        request_id = str(uuid.uuid4())
+
+        result = await task_routes.handle_task_copy(params, mock_request, request_id)
+
+        # Verify response
+        assert isinstance(result, dict)
+        assert "id" in result
+        assert result["id"] != child1.id  # New task ID
+
+    @pytest.mark.asyncio
+    async def test_copy_full_mode(self, task_routes, mock_request, task_tree_for_copy):
+        """Test copy with full mode"""
+        root = task_tree_for_copy["root"]
+        params = {"task_id": root.id, "copy_mode": "full", "save": True}
+        request_id = str(uuid.uuid4())
+
+        result = await task_routes.handle_task_copy(params, mock_request, request_id)
+
+        # Verify response
+        assert isinstance(result, dict)
+        assert "id" in result
+        assert result["name"] == "Root Task"
+
+    @pytest.mark.asyncio
+    async def test_copy_with_reset_fields(self, task_routes, mock_request, task_tree_for_copy, use_test_db_session):
+        """Test copy with reset_fields"""
+        root = task_tree_for_copy["root"]
+        params = {
+            "task_id": root.id,
+            "copy_mode": "minimal",
+            "reset_fields": ["status", "progress"],
+            "save": True,
+        }
+        request_id = str(uuid.uuid4())
+
+        result = await task_routes.handle_task_copy(params, mock_request, request_id)
+
+        # Verify response
+        assert isinstance(result, dict)
+        assert "id" in result
+
+        # Verify reset fields were applied
+        task_repository = TaskRepository(
+            use_test_db_session, task_model_class=get_task_model_class()
+        )
+        copied_task = await task_repository.get_task_by_id(result["id"])
+        assert copied_task.status == "pending"  # Reset from completed
+        assert copied_task.progress == 0.0  # Reset from previous value
+
+    @pytest.mark.asyncio
+    async def test_copy_task_not_found(self, task_routes, mock_request):
+        """Test error handling when task is not found"""
+        params = {"task_id": "non-existent-task", "copy_mode": "minimal"}
+        request_id = str(uuid.uuid4())
+
+        with pytest.raises(ValueError, match="not found"):
+            await task_routes.handle_task_copy(params, mock_request, request_id)
+
+    @pytest.mark.asyncio
+    async def test_copy_missing_task_id(self, task_routes, mock_request):
+        """Test error handling when task_id is missing"""
+        params = {"copy_mode": "minimal"}
+        request_id = str(uuid.uuid4())
+
+        with pytest.raises(ValueError, match="Task ID is required"):
+            await task_routes.handle_task_copy(params, mock_request, request_id)
+
+    @pytest.mark.asyncio
+    async def test_copy_custom_mode_missing_task_ids(self, task_routes, mock_request, task_tree_for_copy):
+        """Test error handling when custom_task_ids is missing in custom mode"""
+        root = task_tree_for_copy["root"]
+        params = {"task_id": root.id, "copy_mode": "custom"}
+        request_id = str(uuid.uuid4())
+
+        with pytest.raises(ValueError, match="custom_task_ids is required"):
+            await task_routes.handle_task_copy(params, mock_request, request_id)
+    
+    @pytest.mark.asyncio
+    async def test_copy_custom_mode_with_include_children(self, task_routes, mock_request, task_tree_for_copy):
+        """Test copy with custom mode and custom_include_children=True"""
+        root = task_tree_for_copy["root"]
+        child1 = task_tree_for_copy["child1"]
+        params = {
+            "task_id": root.id,
+            "copy_mode": "custom",
+            "custom_task_ids": [child1.id],
+            "custom_include_children": True,
+            "save": True,
+        }
+        request_id = str(uuid.uuid4())
+
+        result = await task_routes.handle_task_copy(params, mock_request, request_id)
+
+        # Verify response
+        assert isinstance(result, dict)
+        assert "id" in result
+    
+    @pytest.mark.asyncio
+    async def test_copy_with_save_false_returns_array(self, task_routes, mock_request, task_tree_for_copy):
+        """Test copy with save=False returns task array format"""
+        root = task_tree_for_copy["root"]
+        params = {"task_id": root.id, "copy_mode": "minimal", "save": False}
+        request_id = str(uuid.uuid4())
+
+        result = await task_routes.handle_task_copy(params, mock_request, request_id)
+
+        # Verify response is task array
+        assert isinstance(result, dict)
+        assert "tasks" in result
+        assert result["saved"] is False
+        assert isinstance(result["tasks"], list)
+        
+        # Verify task array has correct format for tasks.create
+        task_array = result["tasks"]
+        assert len(task_array) > 0
+        for task_dict in task_array:
+            assert "id" in task_dict
+            assert "name" in task_dict
+            assert isinstance(task_dict["id"], str)
+            assert isinstance(task_dict["name"], str)

@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Enhanced Task Copy Functionality**
+  - **UUID Generation for Task IDs**: Task copy now always generates new UUIDs for copied tasks, regardless of `save` parameter value
+    - Ensures clear task tree relationships and prevents ID conflicts
+    - All copied tasks receive unique IDs for proper dependency mapping
+    - Compatible with `tasks.create` API when `save=False` (returns task array with complete data)
+  - **Save Parameter Support**: New `save` parameter for `create_task_copy()` method and `tasks.copy` API
+    - `save=True` (default): Saves copied tasks to database and returns TaskTreeNode
+    - `save=False`: Returns task array without saving to database, suitable for preview or direct use with `tasks.create`
+    - Task array format includes all required fields (id, name, parent_id, dependencies) with new UUIDs
+    - Dependencies correctly reference new task IDs within the copied tree
+  - **Parameter Renaming for Clarity**: Renamed parameters in custom copy mode for better clarity
+    - `task_ids` → `custom_task_ids` (required when `copy_mode="custom"`)
+    - `include_children` → `custom_include_children` (used when `copy_mode="custom"`)
+    - Old parameter names removed (no backward compatibility)
+    - CLI: `--task-ids` → `--custom-task-ids`, `--include-children` → `--custom-include-children`
+  - **Improved Dependency Mapping**: Fixed dependency resolution in copied task trees
+    - Dependencies now correctly reference new task IDs within the copied tree
+    - Original task IDs properly mapped to new IDs for all tasks in the tree
+    - Circular dependency detection works correctly with new task IDs
+    - `original_task_id` correctly points to each task's direct original counterpart (not root)
+  - **Comprehensive Test Coverage**: Added extensive test cases for API and CLI
+    - API tests: 11 test cases covering all copy modes, save parameter, error handling
+    - CLI tests: 7 test cases covering all copy modes, dry-run, reset_fields
+    - Tests verify UUID generation, dependency mapping, and database interaction
 - **API Module Refactoring for Better Library Usage**
   - Split `api/main.py` into modular components for improved code organization
   - New `api/extensions.py`: Extension management module with `initialize_extensions()` and extension configuration

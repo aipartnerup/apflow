@@ -1497,6 +1497,11 @@ class TaskRoutes(BaseRouteHandler):
         Params:
             task_id: Task ID to copy (required)
             children: If True, also copy each direct child task with its dependencies (default: False)
+            copy_mode: Copy mode - "minimal" (default), "full", or "custom"
+            custom_task_ids: List of task IDs to copy (required when copy_mode="custom")
+            custom_include_children: If True, also include all children recursively (used when copy_mode="custom", default: False)
+            reset_fields: Optional list of field names to reset (default: None)
+            save: If True (default), save to database. If False, return task array without saving.
         """
         try:
             task_id = params.get("task_id")
@@ -1504,6 +1509,15 @@ class TaskRoutes(BaseRouteHandler):
                 raise ValueError("Task ID is required")
 
             children = params.get("children", False)
+            copy_mode = params.get("copy_mode", "minimal")
+            custom_task_ids = params.get("custom_task_ids")
+            custom_include_children = params.get("custom_include_children", False)
+            reset_fields = params.get("reset_fields")
+            save = params.get("save", True)
+
+            # Validate parameters
+            if copy_mode == "custom" and not custom_task_ids:
+                raise ValueError("custom_task_ids is required when copy_mode='custom'")
 
             # Get database session and create repository with custom TaskModel
             async with create_pooled_session() as db_session:
@@ -1520,15 +1534,31 @@ class TaskRoutes(BaseRouteHandler):
                 # Create TaskCreator and copy task
                 task_creator = TaskCreator(db_session)
 
-                new_tree = await task_creator.create_task_copy(original_task, children=children)
-
-                # Convert task tree to dictionary format for response
-                result = tree_node_to_dict(new_tree)
-
-                logger.info(
-                    f"Copied task {task_id} to new task {new_tree.task.id} (children={children})"
+                result = await task_creator.create_task_copy(
+                    original_task,
+                    children=children,
+                    copy_mode=copy_mode,
+                    custom_task_ids=custom_task_ids,
+                    custom_include_children=custom_include_children,
+                    reset_fields=reset_fields,
+                    save=save
                 )
-                return result
+
+                # Handle result based on save parameter
+                if save:
+                    # Return TaskTreeNode as dict
+                    response = tree_node_to_dict(result)
+                    logger.info(
+                        f"Copied task {task_id} to new task {result.task.id} (children={children})"
+                    )
+                else:
+                    # Return task array directly
+                    response = {"tasks": result, "saved": False}
+                    logger.info(
+                        f"Generated task copy preview for {task_id}: {len(result)} tasks (not saved)"
+                    )
+                
+                return response
 
         except Exception as e:
             logger.error(f"Error copying task: {str(e)}", exc_info=True)
@@ -1586,11 +1616,18 @@ class TaskRoutes(BaseRouteHandler):
                 user_id = None
 
             # Check if LLM API key is available
-            api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+            # Priority: context (from X-LLM-API-KEY header) > environment variables
+            from aipartnerupflow.core.utils.llm_key_context import get_llm_key_from_header
+            
+            api_key = get_llm_key_from_header()
+            if not api_key:
+                # Fall back to environment variables
+                api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
+            
             if not api_key:
                 raise ValueError(
-                    "LLM API key not found. Please set OPENAI_API_KEY or ANTHROPIC_API_KEY "
-                    "environment variable or in a .env file."
+                    "LLM API key not found. Please provide X-LLM-API-KEY header, or set "
+                    "OPENAI_API_KEY or ANTHROPIC_API_KEY environment variable or in a .env file."
                 )
 
             # Get LLM configuration

@@ -861,6 +861,21 @@ curl -X POST http://localhost:8000/tasks \
   }'
 ```
 
+**Copy with Full Mode:**
+```bash
+curl -X POST http://localhost:8000/tasks \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tasks.copy",
+    "params": {
+      "task_id": "task-abc-123",
+      "copy_mode": "full"
+    },
+    "id": 1
+  }'
+```
+
 **Response:**
 ```json
 {
@@ -909,11 +924,20 @@ async with create_pooled_session() as db_session:
     task_repository = TaskRepository(db_session)
     original_task = await task_repository.get_task_by_id("existing-task-id")
 
-    # Create a copy
+    # Create a copy (minimal mode by default)
     task_creator = TaskCreator(db_session)
     copied_tree = await task_creator.create_task_copy(
         original_task,
-        children=True  # Also copy children
+        children=True,  # Also copy children
+        copy_mode="minimal",  # or "full" for complete tree copy, or "custom" for selective copying
+        save=True  # Set to False to get task array without saving to database
+    )
+    
+    # Alternative: Get task array without saving (useful for preview or direct use with tasks.create)
+    task_array = await task_creator.create_task_copy(
+        original_task,
+        copy_mode="minimal",
+        save=False  # Returns task array compatible with tasks.create
     )
 
 # Execute the copied task
@@ -923,22 +947,40 @@ result = await task_executor.execute_task_by_id(copied_tree.task.id)
 
 #### Copy Behavior
 
+**Copy Modes:**
+
+1. **Minimal Mode (default):**
+   - Copies minimal subtree (original_task + children + dependents)
+   - All copied tasks are marked as pending for re-execution
+   - Efficient for targeted re-execution
+
+2. **Full Mode:**
+   - Always copies complete tree from root
+   - Tasks that need re-execution are marked as pending
+   - Unrelated successful tasks are marked as completed with preserved token_usage
+   - Better for comprehensive re-execution scenarios
+
 **What Gets Copied:**
 - Task definition (name, schemas, inputs, params, etc.)
 - Task hierarchy (parent-child relationships)
 - Dependencies (when `copy_children=True`)
 - Task metadata (user_id, priority, etc.)
 
-**What Gets Reset:**
+**What Gets Reset (Minimal Mode):**
 - `status`: Set to `"pending"`
 - `result`: Set to `None`
 - `progress`: Set to `0.0`
 - Execution timestamps
 
+**What Gets Reset (Full Mode):**
+- Re-execution tasks: `status` → `"pending"`, `result` → `None`, `progress` → `0.0`
+- Unrelated tasks: `status` → `"completed"`, `result` → preserved with token_usage, `progress` → `1.0`
+
 **What Gets Preserved:**
 - Original task remains completely unchanged
 - Original task's execution history is preserved
 - Original task's results and status remain intact
+- In full mode: Unrelated tasks preserve token_usage and execution results
 
 #### Copy Children Behavior
 

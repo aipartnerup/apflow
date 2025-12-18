@@ -239,7 +239,18 @@ Create task trees from task arrays.
 ### Main Methods
 
 - `create_task_tree_from_array(tasks)`: Create task tree from array of task dictionaries
-- `create_task_copy(original_task, children=False)`: Create a copy of an existing task tree for re-execution. If `children=True`, also copy each direct child task with its dependencies (deduplication ensures tasks depending on multiple copied tasks are only copied once).
+- `create_task_copy(original_task, children=False, copy_mode="minimal", custom_task_ids=None, custom_include_children=False, reset_fields=None, save=True)`: Create a copy of an existing task tree for re-execution.
+  - `children` (bool): If `True`, also copy each direct child task with its dependencies (deduplication ensures tasks depending on multiple copied tasks are only copied once). Default: `False`.
+  - `copy_mode` (str): Copy mode - `"minimal"` (default), `"full"`, or `"custom"`.
+    - `"minimal"`: Copies minimal subtree (original_task + children + dependents). All copied tasks are marked as pending for re-execution.
+    - `"full"`: Copies complete tree from root. Tasks that need re-execution are marked as pending, unrelated successful tasks are marked as completed with preserved token_usage.
+    - `"custom"`: Copies only specified tasks. Requires `custom_task_ids` parameter.
+  - `custom_task_ids` (list[str], optional): List of task IDs to copy. Required when `copy_mode="custom"`. Only tasks with IDs in this list (and their dependencies) will be copied.
+  - `custom_include_children` (bool): If `True`, also include all children recursively when using `copy_mode="custom"`. Default: `False`.
+  - `reset_fields` (list[str], optional): List of field names to reset during copy. Common fields: `["status", "progress", "result", "error"]`. Default: `None` (uses mode-specific defaults).
+  - `save` (bool): If `True` (default), saves copied tasks to database and returns `TaskTreeNode`. If `False`, returns task array without saving to database (suitable for preview or direct use with `tasks.create`).
+  - **Returns**: `TaskTreeNode` when `save=True`, or `List[Dict[str, Any]]` (task array) when `save=False`.
+  - **Note**: All copied tasks receive new UUIDs for clear task tree relationships. Dependencies correctly reference new task IDs within the copied tree.
 
 **See**: `src/aipartnerupflow/core/execution/task_creator.py` for implementation and `tests/core/execution/test_task_creator.py` for examples.
 

@@ -375,27 +375,62 @@ def copy(
     task_id: str = typer.Argument(..., help="Task ID to copy"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path for copied task tree"),
     children: bool = typer.Option(False, "--children", help="Also copy each direct child task with its dependencies"),
+    copy_mode: str = typer.Option("minimal", "--copy-mode", help="Copy mode: 'minimal' (default), 'full', or 'custom'"),
+    custom_task_ids: Optional[str] = typer.Option(None, "--custom-task-ids", help="Comma-separated list of task IDs (required when copy-mode='custom')"),
+    custom_include_children: bool = typer.Option(False, "--custom-include-children", help="Include all children recursively (used when copy-mode='custom')"),
+    reset_fields: Optional[str] = typer.Option(None, "--reset-fields", help="Comma-separated list of field names to reset (e.g., 'status,progress,result')"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview task copy without saving to database"),
 ):
     """
     Create a copy of a task tree for re-execution
     
-    This command creates a new copy of an existing task tree, including:
-    - The original task and all its children
-    - All tasks that depend on the original task (including transitive dependencies)
-    - Automatically handles failed leaf nodes (filters out pending dependents)
+    This command creates a new copy of an existing task tree.
+    
+    Copy modes:
+    - minimal (default): Copies minimal subtree (original_task + children + dependents).
+      All copied tasks are marked as pending for re-execution.
+    - full: Copies complete tree from root. Tasks that need re-execution are marked as pending,
+      unrelated successful tasks are marked as completed with preserved token_usage.
+    - custom: Copies only specified task_ids with auto-include dependencies.
+      Requires --task-ids parameter. Optionally include children with --include-children.
     
     When --children is used, each direct child task is also copied with its dependencies.
     Tasks that depend on multiple copied tasks are only copied once (deduplication).
     
     The copied tasks are linked to the original task via original_task_id field.
-    All execution-specific fields (status, result, progress, etc.) are reset to initial values.
     
     Args:
         task_id: ID of the task to copy (can be root or any task in tree)
         output: Optional output file path to save the copied task tree JSON
         children: If True, also copy each direct child task with its dependencies
+        copy_mode: Copy mode - "minimal" (default), "full", or "custom"
+        custom_task_ids: Comma-separated list of task IDs (required when copy-mode='custom')
+        custom_include_children: Include all children recursively (used when copy-mode='custom')
+        reset_fields: Comma-separated list of field names to reset
+        dry_run: Preview task copy without saving to database
     """
     try:
+        if copy_mode not in ("minimal", "full", "custom"):
+            typer.echo(f"Error: Invalid copy_mode '{copy_mode}'. Must be 'minimal', 'full', or 'custom'", err=True)
+            raise typer.Exit(1)
+        
+        if copy_mode == "custom" and not custom_task_ids:
+            typer.echo("Error: --custom-task-ids is required when copy-mode='custom'", err=True)
+            raise typer.Exit(1)
+        
+        # Parse custom_task_ids if provided
+        parsed_custom_task_ids = None
+        if custom_task_ids:
+            parsed_custom_task_ids = [tid.strip() for tid in custom_task_ids.split(",") if tid.strip()]
+        
+        # Parse reset_fields if provided
+        parsed_reset_fields = None
+        if reset_fields:
+            parsed_reset_fields = [field.strip() for field in reset_fields.split(",") if field.strip()]
+        
+        # Convert dry_run to save parameter
+        save = not dry_run
+        
         from aipartnerupflow.core.storage import get_default_session
         from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
         from aipartnerupflow.core.config import get_task_model_class
@@ -417,22 +452,44 @@ def copy(
         task_creator = TaskCreator(db_session)
         
         async def copy_task():
-            return await task_creator.create_task_copy(original_task, children=children)
+            return await task_creator.create_task_copy(
+                original_task,
+                children=children,
+                copy_mode=copy_mode,
+                custom_task_ids=parsed_custom_task_ids,
+                custom_include_children=custom_include_children,
+                reset_fields=parsed_reset_fields,
+                save=save
+            )
         
-        new_tree = run_async_safe(copy_task())
+        result = run_async_safe(copy_task())
         
-        # Convert task tree to dictionary format
-        result = tree_node_to_dict(new_tree)
+        # Handle result based on save parameter
+        if save:
+            # Convert TaskTreeNode to dict
+            result_dict = tree_node_to_dict(result)
+            task_count = 1  # Root task
+            if hasattr(result, 'children'):
+                def count_children(node):
+                    return 1 + sum(count_children(child) for child in node.children)
+                task_count = count_children(result)
+        else:
+            # Task array (already in dict format)
+            result_dict = {"tasks": result, "saved": False}
+            task_count = len(result)
         
         # Output result
         if output:
             with open(output, 'w') as f:
-                json.dump(result, f, indent=2)
-            typer.echo(f"Copied task tree saved to {output}")
+                json.dump(result_dict, f, indent=2)
+            typer.echo(f"Task copy {'preview' if dry_run else 'result'} saved to {output}")
         else:
-            typer.echo(json.dumps(result, indent=2))
+            typer.echo(json.dumps(result_dict, indent=2))
         
-        typer.echo(f"\n✅ Successfully copied task {task_id} to new task {new_tree.task.id}")
+        if save:
+            typer.echo(f"\n✅ Successfully copied task {task_id} to new task {result.task.id} (mode: {copy_mode})")
+        else:
+            typer.echo(f"\n✅ Preview generated: {task_count} tasks (mode: {copy_mode}, not saved)")
         
     except Exception as e:
         typer.echo(f"Error: {str(e)}", err=True)

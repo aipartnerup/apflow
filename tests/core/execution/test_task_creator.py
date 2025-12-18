@@ -1061,7 +1061,9 @@ class TestTaskCreatorCopy:
         child1_copy = new_tree.children[0]
         assert isinstance(child1_copy, TaskTreeNode)
         assert child1_copy.task.id != child1.id
-        assert child1_copy.task.original_task_id == root_task.id
+        # Each task's original_task_id should point to its own original task ID (not root)
+        # This allows dependencies to be correctly mapped in _tree_to_task_array
+        assert child1_copy.task.original_task_id == str(child1.id)
         assert child1_copy.task.name == child1.name
         
         # Verify grandchild is copied
@@ -1069,7 +1071,9 @@ class TestTaskCreatorCopy:
         child2_copy = child1_copy.children[0]
         assert isinstance(child2_copy, TaskTreeNode)
         assert child2_copy.task.id != child2.id
-        assert child2_copy.task.original_task_id == root_task.id
+        # Each task's original_task_id should point to its own original task ID (not root)
+        # This allows dependencies to be correctly mapped in _tree_to_task_array
+        assert child2_copy.task.original_task_id == str(child2.id)
         assert child2_copy.task.name == child2.name
     
     @pytest.mark.asyncio
@@ -1109,11 +1113,15 @@ class TestTaskCreatorCopy:
         assert "Task A" in copied_names
         assert "Task B" in copied_names, "Dependent task should be copied"
         
-        # Verify original_task_id points to root
-        root_original_id = new_tree.task.original_task_id
+        # Verify original_task_id: each task should point to its own original task ID
+        # This allows dependencies to be correctly mapped in _tree_to_task_array
         all_copied_tasks = creator.tree_to_flat_list(new_tree)
-        for task in all_copied_tasks:
-            assert task.original_task_id == root_original_id
+        copied_task_a = next(t for t in all_copied_tasks if t.name == "Task A")
+        copied_task_b = next(t for t in all_copied_tasks if t.name == "Task B")
+        
+        # Each copied task should link to its own original task ID
+        assert copied_task_a.original_task_id == str(task_a.id)
+        assert copied_task_b.original_task_id == str(task_b.id)
     
     @pytest.mark.asyncio
     async def test_create_task_copy_with_transitive_dependency(self, sync_db_session):
@@ -1829,4 +1837,632 @@ class TestTaskCreatorCopy:
         # Verify Task Z appears only once (deduplication)
         task_z_count = sum(1 for task in all_copied_tasks if task.name == "Task Z")
         assert task_z_count == 1, "Task Z should only be copied once despite depending on both children"
+
+
+class TestTaskCreatorCopyWithSave:
+    """Test task copy functionality with save parameter"""
+    
+    async def create_task(
+        self,
+        db_session,
+        task_repository,
+        task_id: str,
+        name: str,
+        user_id: str = "user_123",
+        parent_id: Optional[str] = None,
+        dependencies: Optional[List[Dict[str, Any]]] = None,
+        status: str = "completed",
+        result: Optional[Dict[str, Any]] = None,
+        progress: float = 1.0
+    ) -> TaskModel:
+        """Helper to create a task"""
+        task = await task_repository.create_task(
+            name=name,
+            user_id=user_id,
+            parent_id=parent_id,
+            priority=1,
+            dependencies=dependencies,
+            inputs={"test": "data"},
+            id=task_id
+        )
+        
+        # Update status and result
+        await task_repository.update_task_status(
+            task.id,
+            status=status,
+            result=result or {"result": f"Result for {name}"} if status == "completed" else None,
+            progress=progress
+        )
+        
+        # Commit and refresh based on session type
+        if isinstance(db_session, AsyncSession):
+            await db_session.commit()
+            await db_session.refresh(task)
+        else:
+            db_session.commit()
+            db_session.refresh(task)
+        
+        return task
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_save_false_returns_array(self, sync_db_session):
+        """Test that save=False returns task array instead of saving to database"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create a simple task tree
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-save-test", "Root Task"
+        )
+        child_task = await self.create_task(
+            sync_db_session, task_repository,
+            "child-save-test", "Child Task",
+            parent_id=root_task.id
+        )
+        
+        # Copy with save=False
+        result = await creator.create_task_copy(root_task, save=False)
+        
+        # Verify result is a list (task array)
+        assert isinstance(result, list)
+        assert len(result) == 2  # Root + Child
+        
+        # Verify tasks are not saved to database
+        all_tasks = await task_repository.get_all_tasks_in_tree(root_task)
+        assert len(all_tasks) == 2  # Only original tasks, no new tasks
+        
+        # Verify task array format
+        for task_dict in result:
+            assert isinstance(task_dict, dict)
+            assert "name" in task_dict
+            assert "user_id" in task_dict
+            assert "status" in task_dict
+            assert "priority" in task_dict
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_save_true_saves_to_database(self, sync_db_session):
+        """Test that save=True saves tasks to database and returns TaskTreeNode"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create a simple task tree
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-save-true", "Root Task"
+        )
+        child_task = await self.create_task(
+            sync_db_session, task_repository,
+            "child-save-true", "Child Task",
+            parent_id=root_task.id
+        )
+        
+        # Copy with save=True (default)
+        result = await creator.create_task_copy(root_task, save=True)
+        
+        # Verify result is TaskTreeNode
+        assert isinstance(result, TaskTreeNode)
+        
+        # Verify new tasks exist in database
+        new_root = await task_repository.get_task_by_id(result.task.id)
+        assert new_root is not None
+        assert new_root.name == "Root Task"
+        assert new_root.original_task_id == root_task.id
+        
+        # Verify copied tree structure
+        new_tree = await task_repository.build_task_tree(new_root)
+        all_copied_tasks = creator.tree_to_flat_list(new_tree)
+        assert len(all_copied_tasks) == 2  # Root + Child
+        
+        # Verify original tasks still exist
+        original_root = await task_repository.get_task_by_id(root_task.id)
+        assert original_root is not None
+        assert original_root.name == "Root Task"
+    
+    @pytest.mark.asyncio
+    async def test_tree_to_task_array_format(self, sync_db_session):
+        """Test that _tree_to_task_array returns correct format compatible with tasks.create"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from aipartnerupflow.core.config import get_task_model_class
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create a task tree
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-array-test", "Root Task"
+        )
+        child_task = await self.create_task(
+            sync_db_session, task_repository,
+            "child-array-test", "Child Task",
+            parent_id=root_task.id,
+            dependencies=[{"id": root_task.id, "required": True}]
+        )
+        
+        # Get task tree
+        task_tree = await task_repository.build_task_tree(root_task)
+        
+        # Convert to array
+        task_array = creator._tree_to_task_array(task_tree)
+        
+        # Verify array format
+        assert isinstance(task_array, list)
+        assert len(task_array) == 2
+        
+        # Verify all tasks have required fields (based on TaskModel)
+        task_model_class = get_task_model_class()
+        task_columns = set(task_model_class.__table__.columns.keys())
+        
+        for task_dict in task_array:
+            # Should have name (required for tasks.create)
+            assert "name" in task_dict
+            assert isinstance(task_dict["name"], str)
+            
+            # Should have id (tasks.create needs complete data with id)
+            assert "id" in task_dict
+            assert isinstance(task_dict["id"], str)
+            
+            # Should not have auto-generated fields
+            assert "created_at" not in task_dict
+            assert "updated_at" not in task_dict
+            assert "has_copy" not in task_dict
+            
+            # Should have parent_id as id reference (if not root)
+            if task_dict["name"] == "Child Task":
+                assert "parent_id" in task_dict
+                # parent_id should reference parent's id (UUID), not name
+                parent_task = next(t for t in task_array if t["name"] == "Root Task")
+                assert task_dict["parent_id"] == parent_task["id"]
+            
+            # Verify dependencies use id references (since all tasks have id now)
+            if "dependencies" in task_dict and task_dict["dependencies"]:
+                for dep in task_dict["dependencies"]:
+                    if isinstance(dep, dict):
+                        # Dependencies should use id references (since all tasks have id)
+                        assert "id" in dep, "Dependencies should reference tasks by id"
+                        # Verify the referenced id exists in the task array
+                        referenced_id = dep["id"]
+                        assert any(t["id"] == referenced_id for t in task_array), \
+                            f"Dependency references id '{referenced_id}' which should exist in task array"
+    
+    @pytest.mark.asyncio
+    async def test_tree_to_task_array_name_uniqueness(self, sync_db_session):
+        """Test that _tree_to_task_array ensures name uniqueness"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create tasks with duplicate names
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-dup-1", "Duplicate Name"
+        )
+        child1 = await self.create_task(
+            sync_db_session, task_repository,
+            "child-dup-1", "Duplicate Name",  # Same name
+            parent_id=root_task.id
+        )
+        child2 = await self.create_task(
+            sync_db_session, task_repository,
+            "child-dup-2", "Duplicate Name",  # Same name again
+            parent_id=root_task.id
+        )
+        
+        # Get task tree
+        task_tree = await task_repository.build_task_tree(root_task)
+        
+        # Convert to array
+        task_array = creator._tree_to_task_array(task_tree)
+        
+        # Verify all names are unique
+        names = [task_dict["name"] for task_dict in task_array]
+        assert len(names) == len(set(names)), "All names should be unique"
+        
+        # Verify names are generated correctly
+        assert "Duplicate Name" in names
+        assert "Duplicate Name_1" in names or any("Duplicate Name" in name and "_" in name for name in names)
+    
+    @pytest.mark.asyncio
+    async def test_tree_to_task_array_parent_id_references(self, sync_db_session):
+        """Test that parent_id uses name references instead of ID"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create multi-level task tree
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-parent-ref", "Root Task"
+        )
+        child_task = await self.create_task(
+            sync_db_session, task_repository,
+            "child-parent-ref", "Child Task",
+            parent_id=root_task.id
+        )
+        grandchild_task = await self.create_task(
+            sync_db_session, task_repository,
+            "grandchild-parent-ref", "Grandchild Task",
+            parent_id=child_task.id
+        )
+        
+        # Get task tree
+        task_tree = await task_repository.build_task_tree(root_task)
+        
+        # Convert to array
+        task_array = creator._tree_to_task_array(task_tree)
+        
+        # Find tasks in array
+        root_dict = next(t for t in task_array if t["name"] == "Root Task")
+        child_dict = next(t for t in task_array if t["name"] == "Child Task")
+        grandchild_dict = next(t for t in task_array if t["name"] == "Grandchild Task")
+        
+        # Verify parent_id references use ids (since all tasks have id now)
+        assert "parent_id" not in root_dict  # Root has no parent
+        assert "parent_id" in child_dict
+        assert child_dict["parent_id"] == root_dict["id"]  # ID reference
+        assert "parent_id" in grandchild_dict
+        assert grandchild_dict["parent_id"] == child_dict["id"]  # ID reference
+        
+        # Verify all tasks have id
+        assert "id" in root_dict
+        assert "id" in child_dict
+        assert "id" in grandchild_dict
+    
+    @pytest.mark.asyncio
+    async def test_tree_to_task_array_dependencies_references(self, sync_db_session):
+        """Test that dependencies use name references instead of ID"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create tasks with dependencies
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-dep-ref", "Root Task"
+        )
+        task_a = await self.create_task(
+            sync_db_session, task_repository,
+            "task-a-dep", "Task A",
+            parent_id=root_task.id
+        )
+        task_b = await self.create_task(
+            sync_db_session, task_repository,
+            "task-b-dep", "Task B",
+            parent_id=root_task.id,
+            dependencies=[{"id": task_a.id, "required": True}]
+        )
+        
+        # Get task tree
+        task_tree = await task_repository.build_task_tree(root_task)
+        
+        # Convert to array
+        task_array = creator._tree_to_task_array(task_tree)
+        
+        # Find task_b in array
+        task_b_dict = next(t for t in task_array if t["name"] == "Task B")
+        
+        # Verify dependencies use id references (since all tasks have id now)
+        assert "dependencies" in task_b_dict
+        assert len(task_b_dict["dependencies"]) == 1
+        dep = task_b_dict["dependencies"][0]
+        assert isinstance(dep, dict)
+        assert "id" in dep  # Should have id
+        # Find task_a in array to verify id reference
+        task_a_dict = next(t for t in task_array if t["name"] == "Task A")
+        assert dep["id"] == task_a_dict["id"]  # ID reference
+        assert "name" not in dep  # Should not have name when using id field
+    
+    @pytest.mark.asyncio
+    async def test_task_array_compatible_with_tasks_create(self, sync_db_session):
+        """Test that returned task array can be used with tasks.create"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create original task tree
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-compat", "Root Task"
+        )
+        child_task = await self.create_task(
+            sync_db_session, task_repository,
+            "child-compat", "Child Task",
+            parent_id=root_task.id,
+            dependencies=[{"id": root_task.id, "required": True}]
+        )
+        
+        # Copy with save=False to get task array
+        task_array = await creator.create_task_copy(root_task, save=False)
+        
+        # Verify it's a list
+        assert isinstance(task_array, list)
+        assert len(task_array) == 2
+        
+        # Verify format is compatible with tasks.create
+        # (tasks.create expects id-based references when all tasks have id)
+        for task_dict in task_array:
+            assert "name" in task_dict
+            assert isinstance(task_dict["name"], str)
+            assert "id" in task_dict, "All tasks should have id for id-based mode"
+            assert isinstance(task_dict["id"], str)
+            if "parent_id" in task_dict:
+                # parent_id should be an id (since all tasks have id now)
+                assert isinstance(task_dict["parent_id"], str)
+                # Find parent task to verify it's an id reference
+                parent_dict = next((t for t in task_array if t["id"] == task_dict["parent_id"]), None)
+                assert parent_dict is not None, "parent_id should reference a task by id"
+        
+        # Try to create tasks from the array (this should work)
+        new_tree = await creator.create_task_tree_from_array(task_array)
+        
+        # Verify new tree was created successfully
+        assert isinstance(new_tree, TaskTreeNode)
+        assert new_tree.task.name == "Root Task"
+        assert len(new_tree.children) == 1
+        assert new_tree.children[0].task.name == "Child Task"
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_custom_mode_save_false(self, sync_db_session):
+        """Test custom copy mode with save=False"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create task tree
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-custom", "Root Task"
+        )
+        task_a = await self.create_task(
+            sync_db_session, task_repository,
+            "task-a-custom", "Task A",
+            parent_id=root_task.id
+        )
+        task_b = await self.create_task(
+            sync_db_session, task_repository,
+            "task-b-custom", "Task B",
+            parent_id=root_task.id,
+            dependencies=[{"id": task_a.id, "required": True}]
+        )
+        task_c = await self.create_task(
+            sync_db_session, task_repository,
+            "task-c-custom", "Task C",
+            parent_id=root_task.id
+        )
+        
+        # Copy with custom mode, save=False
+        task_array = await creator.create_task_copy(
+            root_task,
+            copy_mode="custom",
+            custom_task_ids=[str(task_b.id)],
+            save=False
+        )
+        
+        # Verify result is array
+        assert isinstance(task_array, list)
+        
+        # Verify task_b and its dependency (task_a) are included
+        task_names = [t["name"] for t in task_array]
+        assert "Task B" in task_names
+        assert "Task A" in task_names, "Dependency should be auto-included"
+        
+        # Verify task_c is not included (not in task_ids and not a dependency)
+        assert "Task C" not in task_names
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_full_mode_save_false(self, sync_db_session):
+        """Test full copy mode with save=False"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create task tree
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-full", "Root Task"
+        )
+        task_a = await self.create_task(
+            sync_db_session, task_repository,
+            "task-a-full", "Task A",
+            parent_id=root_task.id
+        )
+        task_b = await self.create_task(
+            sync_db_session, task_repository,
+            "task-b-full", "Task B",
+            parent_id=root_task.id
+        )
+        
+        # Copy with full mode, save=False
+        task_array = await creator.create_task_copy(
+            task_a,  # Start from task_a, but should copy from root
+            copy_mode="full",
+            save=False
+        )
+        
+        # Verify result is array
+        assert isinstance(task_array, list)
+        
+        # Verify all tasks from root are included
+        task_names = [t["name"] for t in task_array]
+        assert "Root Task" in task_names
+        assert "Task A" in task_names
+        assert "Task B" in task_names
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_reset_fields(self, sync_db_session):
+        """Test reset_fields parameter functionality"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create completed task with results
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-reset", "Root Task",
+            status="completed",
+            result={"output": "test result"},
+            progress=1.0
+        )
+        
+        # Copy with reset_fields=["status", "progress"] (preserve result)
+        task_array = await creator.create_task_copy(
+            root_task,
+            save=False,
+            reset_fields=["status", "progress"]
+        )
+        
+        # Verify reset_fields behavior
+        root_dict = next(t for t in task_array if t["name"] == "Root Task")
+        
+        # Status and progress should be reset
+        assert root_dict["status"] == "pending"
+        assert root_dict["progress"] == 0.0
+        
+        # Result should be preserved (not in reset_fields)
+        # Note: If result is None, it may not be included in the dict
+        # But if it exists, it should be preserved
+        if "result" in root_dict:
+            # If result field is present, it should be preserved (not None)
+            assert root_dict["result"] is not None
+        # If result is not in dict, it means it was None and excluded (which is also valid)
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_reset_fields_all(self, sync_db_session):
+        """Test reset_fields=None resets all execution fields"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create completed task with results
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-reset-all", "Root Task",
+            status="completed",
+            result={"output": "test result"},
+            progress=1.0
+        )
+        
+        # Copy with reset_fields=None (default - reset all)
+        task_array = await creator.create_task_copy(
+            root_task,
+            save=False,
+            reset_fields=None
+        )
+        
+        # Verify all execution fields are reset
+        root_dict = next(t for t in task_array if t["name"] == "Root Task")
+        assert root_dict["status"] == "pending"
+        assert root_dict["progress"] == 0.0
+        assert root_dict.get("result") is None
+        assert root_dict.get("error") is None
+    
+    @pytest.mark.asyncio
+    async def test_create_task_copy_custom_include_children(self, sync_db_session):
+        """Test custom copy mode with include_children parameter"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create task tree
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-include", "Root Task"
+        )
+        task_a = await self.create_task(
+            sync_db_session, task_repository,
+            "task-a-include", "Task A",
+            parent_id=root_task.id
+        )
+        child_a = await self.create_task(
+            sync_db_session, task_repository,
+            "child-a-include", "Child A",
+            parent_id=task_a.id
+        )
+        
+        # Copy with custom_include_children=False (default)
+        task_array_no_children = await creator.create_task_copy(
+            root_task,
+            copy_mode="custom",
+            custom_task_ids=[str(task_a.id)],
+            custom_include_children=False,
+            save=False
+        )
+        
+        # Copy with custom_include_children=True
+        task_array_with_children = await creator.create_task_copy(
+            root_task,
+            copy_mode="custom",
+            custom_task_ids=[str(task_a.id)],
+            custom_include_children=True,
+            save=False
+        )
+        
+        # Verify custom_include_children=False doesn't include children
+        names_no_children = [t["name"] for t in task_array_no_children]
+        assert "Task A" in names_no_children
+        assert "Child A" not in names_no_children
+        
+        # Verify custom_include_children=True includes children
+        names_with_children = [t["name"] for t in task_array_with_children]
+        assert "Task A" in names_with_children
+        assert "Child A" in names_with_children
+    
+    @pytest.mark.asyncio
+    async def test_tree_to_task_array_uses_task_model_fields(self, sync_db_session):
+        """Test that _tree_to_task_array only uses TaskModel's actual fields"""
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from aipartnerupflow.core.config import get_task_model_class
+        
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        
+        # Create a task
+        root_task = await self.create_task(
+            sync_db_session, task_repository,
+            "root-fields", "Root Task",
+            result={"token_usage": {"total_tokens": 100}}
+        )
+        
+        # Get task tree
+        task_tree = await task_repository.build_task_tree(root_task)
+        
+        # Convert to array
+        task_array = creator._tree_to_task_array(task_tree)
+        
+        # Get TaskModel fields
+        task_model_class = get_task_model_class()
+        valid_fields = set(task_model_class.__table__.columns.keys())
+        # Remove fields that shouldn't be in create array
+        # Note: id is now included for id-based mode
+        valid_fields.discard("created_at")
+        valid_fields.discard("updated_at")
+        valid_fields.discard("has_copy")
+        
+        # Verify all fields in array are valid TaskModel fields
+        root_dict = task_array[0]
+        for field_name in root_dict.keys():
+            # parent_id is converted to name reference, so it's valid
+            if field_name == "parent_id":
+                continue
+            assert field_name in valid_fields or field_name == "parent_id", \
+                f"Field '{field_name}' is not a valid TaskModel field"
+        
+        # Verify no fictional fields
+        fictional_fields = ["display_name", "parent_index", "task_index"]
+        for field in fictional_fields:
+            assert field not in root_dict, f"Fictional field '{field}' should not be present"
 

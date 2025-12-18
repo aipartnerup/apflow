@@ -989,7 +989,9 @@ If all conditions are met, the task and all its children are physically deleted.
 ### `tasks.copy`
 
 **Description:**  
-Creates a new executable copy of an existing task tree for re-execution. This method creates a complete copy of the task tree including the original task, all its children, and all tasks that depend on it (including transitive dependencies). All execution-specific fields are reset to initial values, making the copied tree ready for fresh execution.
+Creates a new executable copy of an existing task tree for re-execution. Supports two copy modes:
+- **Minimal mode (default)**: Copies minimal subtree (original_task + children + dependents). All copied tasks are marked as pending for re-execution.
+- **Full mode**: Copies complete tree from root. Tasks that need re-execution are marked as pending, unrelated successful tasks are marked as completed with preserved token_usage.
 
 **Method:** `tasks.copy`
 
@@ -1001,14 +1003,21 @@ Creates a new executable copy of an existing task tree for re-execution. This me
 - User and product associations (user_id, product_id)
 - Priority settings
 
-**What Gets Reset:**
+**What Gets Reset (Minimal Mode):**
 - Task IDs (new IDs generated)
 - Status (reset to "pending")
 - Progress (reset to 0.0)
 - Result (reset to null)
 - Error (reset to null)
 - Execution timestamps (started_at, completed_at)
-- Token usage counters (token_success, token_failed)
+
+**What Gets Reset (Full Mode):**
+- Task IDs (new IDs generated)
+- Status: Tasks needing re-execution → "pending", unrelated tasks → "completed"
+- Progress: Re-execution tasks → 0.0, unrelated tasks → 1.0
+- Result: Re-execution tasks → null, unrelated tasks → preserved with token_usage
+- Error: Re-execution tasks → null, unrelated tasks → preserved
+- Execution timestamps: Re-execution tasks → reset, unrelated tasks → preserved
 
 **What Gets Preserved:**
 - Task definitions (name, code, inputs, schemas, params)
@@ -1023,6 +1032,14 @@ Creates a new executable copy of an existing task tree for re-execution. This me
 **Parameters:**
 - `task_id` (string, required): ID of the task to copy. Can be root task or any task in the tree. The method will copy the minimal subtree containing the task and all its dependencies.
 - `children` (boolean, optional): If `true`, also copy each direct child task of the original task with its dependencies. When copying children, tasks that depend on multiple copied tasks are only copied once (deduplication by task ID). Default: `false`.
+- `copy_mode` (string, optional): Copy mode - `"minimal"` (default), `"full"`, or `"custom"`.
+  - `"minimal"`: Copies minimal subtree (original_task + children + dependents). All copied tasks are marked as pending for re-execution.
+  - `"full"`: Copies complete tree from root. Tasks that need re-execution are marked as pending, unrelated successful tasks are marked as completed with preserved token_usage.
+  - `"custom"`: Copies only specified tasks. Requires `custom_task_ids` parameter.
+- `custom_task_ids` (array of strings, optional): List of task IDs to copy. Required when `copy_mode="custom"`. Only tasks with IDs in this list (and their dependencies) will be copied.
+- `custom_include_children` (boolean, optional): If `true`, also include all children recursively when using `copy_mode="custom"`. Default: `false`.
+- `reset_fields` (array of strings, optional): List of field names to reset during copy. Common fields: `["status", "progress", "result", "error"]`. Default: `null` (uses mode-specific defaults).
+- `save` (boolean, optional): If `true` (default), saves copied tasks to database and returns TaskTreeNode. If `false`, returns task array without saving to database (suitable for preview or direct use with `tasks.create`).
 
 **Example Request:**
 ```json
@@ -1047,6 +1064,77 @@ Creates a new executable copy of an existing task tree for re-execution. This me
     "children": true
   },
   "id": "copy-request-2"
+}
+```
+
+**Example Request with full mode:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tasks.copy",
+  "params": {
+    "task_id": "task-abc-123",
+    "copy_mode": "full"
+  },
+  "id": "copy-request-3"
+}
+```
+
+**Example Request with custom mode:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tasks.copy",
+  "params": {
+    "task_id": "task-abc-123",
+    "copy_mode": "custom",
+    "custom_task_ids": ["task-abc-123", "task-child-456"],
+    "custom_include_children": false
+  },
+  "id": "copy-request-4"
+}
+```
+
+**Example Request with save=false (returns task array):**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "tasks.copy",
+  "params": {
+    "task_id": "task-abc-123",
+    "copy_mode": "minimal",
+    "save": false
+  },
+  "id": "copy-request-5"
+}
+```
+
+**Example Response (save=false):**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "copy-request-5",
+  "result": {
+    "tasks": [
+      {
+        "id": "new-uuid-1",
+        "name": "Original Task Name",
+        "parent_id": null,
+        "dependencies": [],
+        "status": "pending",
+        "progress": 0.0
+      },
+      {
+        "id": "new-uuid-2",
+        "name": "Child Task",
+        "parent_id": "new-uuid-1",
+        "dependencies": [{"id": "new-uuid-1", "required": true}],
+        "status": "pending",
+        "progress": 0.0
+      }
+    ],
+    "saved": false
+  }
 }
 ```
 
@@ -1079,10 +1167,12 @@ Creates a new executable copy of an existing task tree for re-execution. This me
 - Permission denied: Returns error with code -32001
 
 **Notes:**
-- The copied task tree has new task IDs but preserves the original structure
-- All execution fields are reset (status="pending", progress=0.0, result=null)
-- The original task's `has_copy` flag is set to `true`
-- Use the returned task tree's root ID to execute the copied tasks
+- The copied task tree has new task IDs (UUIDs) but preserves the original structure
+- All execution fields are reset (status="pending", progress=0.0, result=null) unless `reset_fields` is specified
+- The original task's `has_copy` flag is set to `true` when `save=true`
+- Dependencies correctly reference new task IDs within the copied tree
+- When `save=false`, the returned task array is compatible with `tasks.create` API
+- Each copied task's `original_task_id` points to its direct original counterpart (not root)
 - Failed leaf nodes are automatically handled (pending dependents are filtered out)
 - The copied tree is ready for immediate execution
 
