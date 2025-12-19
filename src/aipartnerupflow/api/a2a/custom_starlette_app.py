@@ -30,13 +30,24 @@ class LLMAPIKeyMiddleware(BaseHTTPMiddleware):
     """Middleware to extract LLM API key from request headers"""
     
     async def dispatch(self, request: Request, call_next):
-        """Extract LLM API key from X-LLM-API-KEY header and set it in context"""
-        # Extract LLM API key from request header
+        """
+        Extract LLM API key from X-LLM-API-KEY header and set it in context.
+        
+        Clears context at the start of each request to prevent using stale keys
+        from previous requests (security measure).
+        """
+        from aipartnerupflow.core.utils.llm_key_context import (
+            clear_llm_key_context,
+            set_llm_key_from_header
+        )
+        
+        # Clear context at start of each request to prevent using stale keys
+        clear_llm_key_context()
+        
+        # Extract and set LLM key from header if present
         # Format: provider:key (e.g., "openai:sk-xxx...") or just key (backward compatible)
         llm_key_header = request.headers.get("X-LLM-API-KEY") or request.headers.get("x-llm-api-key")
         if llm_key_header:
-            from aipartnerupflow.core.utils.llm_key_context import set_llm_key_from_header
-            
             # Parse format: provider:key or just key
             provider = None
             api_key = llm_key_header

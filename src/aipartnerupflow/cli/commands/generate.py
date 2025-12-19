@@ -91,19 +91,36 @@ def task_tree(
         # Import to register executor
         from aipartnerupflow.extensions.generate import GenerateExecutor
         
-        # Check if LLM API key is available
+        # Set LLM key from CLI params (if provided via environment or params)
+        # Priority: params -> LLMKeyConfigManager -> env
+        from aipartnerupflow.core.utils.llm_key_context import (
+            clear_llm_key_context,
+            set_llm_key_from_cli_params
+        )
+        
+        # Clear context at start (security: prevent using stale keys)
+        clear_llm_key_context()
+        
+        # Try to get API key from environment (CLI context)
         api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
-        if not api_key:
-            typer.echo(
-                "Warning: No LLM API key found. Set OPENAI_API_KEY or ANTHROPIC_API_KEY "
-                "environment variable or create a .env file in the project root.",
-                err=True
-            )
-            typer.echo(
-                "\nExample .env file:\n  OPENAI_API_KEY=sk-your-key-here",
-                err=True
-            )
-            raise typer.Exit(1)
+        if api_key:
+            # Set in CLI context for unified access
+            set_llm_key_from_cli_params(api_key, provider=provider)
+        elif not api_key:
+            # Check if key exists via unified getter (will check config and env)
+            from aipartnerupflow.core.utils.llm_key_context import get_llm_key
+            api_key = get_llm_key(user_id=user_id or "cli_user", provider=provider, context="cli")
+            if not api_key:
+                typer.echo(
+                    "Warning: No LLM API key found. Set OPENAI_API_KEY or ANTHROPIC_API_KEY "
+                    "environment variable or create a .env file in the project root.",
+                    err=True
+                )
+                typer.echo(
+                    "\nExample .env file:\n  OPENAI_API_KEY=sk-your-key-here",
+                    err=True
+                )
+                raise typer.Exit(1)
         
         # Create task using generate_executor
         async def generate_task_tree():
@@ -111,6 +128,7 @@ def task_tree(
             task_repository = TaskRepository(db, task_model_class=get_task_model_class())
             
             # Create generate task
+            # Note: api_key can be passed via inputs for CLI context, or executor will get from unified context
             generate_task = await task_repository.create_task(
                 name="generate_executor",
                 user_id=user_id or "cli_user",
@@ -121,6 +139,7 @@ def task_tree(
                     "model": model,
                     "temperature": temperature,
                     "max_tokens": max_tokens,
+                    "api_key": api_key,  # Pass via inputs for CLI context
                 },
                 schemas={"method": "generate_executor"}  # Required for TaskManager to find executor
             )

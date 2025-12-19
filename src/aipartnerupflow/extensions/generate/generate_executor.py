@@ -83,18 +83,28 @@ class GenerateExecutor(BaseTask):
                     "tasks": []
                 }
             
-            user_id = inputs.get("user_id")
+            # Get user_id from task context (via self.user_id property) or fallback to inputs
+            # self.user_id property automatically gets from task.user_id if task is available
+            user_id = self.user_id or inputs.get("user_id")
             llm_provider = inputs.get("llm_provider")
             model = inputs.get("model")
             temperature = inputs.get("temperature", 0.7)
             max_tokens = inputs.get("max_tokens", 4000)
-            api_key = inputs.get("api_key")  # Get API key from inputs (injected by pre-hook)
+            
+            # Get LLM API key with unified priority order:
+            # API context: header -> LLMKeyConfigManager -> env
+            # CLI context: params -> LLMKeyConfigManager -> env
+            from aipartnerupflow.core.utils.llm_key_context import get_llm_key
+            api_key = inputs.get("api_key")  # First check inputs (CLI params)
+            if not api_key:
+                # Get from unified context (header/config/env)
+                api_key = get_llm_key(user_id=user_id, provider=llm_provider, context="auto")
             
             # Create LLM client
             try:
                 llm_client = create_llm_client(
                     provider=llm_provider,
-                    api_key=api_key,  # Pass API key if available (from X-LLM-API-KEY header)
+                    api_key=api_key,  # Pass API key if available
                     model=model
                 )
             except Exception as e:

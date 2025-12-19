@@ -100,6 +100,9 @@ class CrewManager(BaseTask):
         if "agents" not in works or "tasks" not in works:
             raise ValueError("works must contain agents and tasks")
 
+        # Store works as instance attribute for later use (e.g., in execute method)
+        self.works = works
+
         # Create agents and tasks from works
         self.create_agents(works["agents"])
         self.create_tasks(works["tasks"])
@@ -414,6 +417,39 @@ class CrewManager(BaseTask):
             but TaskManager will detect the cancellation after execution and mark the task as cancelled.
             Token usage will still be preserved even if cancelled.
         """
+        # Get LLM API key with unified priority order and inject into environment
+        # This allows CrewAI/LiteLLM to automatically use the key
+        from aipartnerupflow.core.utils.llm_key_context import get_llm_key, get_llm_provider_from_header
+        from aipartnerupflow.core.utils.llm_key_injector import inject_llm_key, detect_provider_from_model
+        
+        # Get user_id from task context (via self.user_id property) or fallback to inputs
+        # self.user_id property automatically gets from task.user_id if task is available
+        user_id = self.user_id or inputs.get("user_id")
+        
+        # Detect provider from works configuration or header
+        detected_provider = get_llm_provider_from_header()
+        if not detected_provider and self.works:
+            # Try to extract model from agents
+            agents = self.works.get("agents", {})
+            for agent_config in agents.values():
+                agent_llm = agent_config.get("llm")
+                if isinstance(agent_llm, str):
+                    detected_provider = detect_provider_from_model(agent_llm)
+                    break
+        
+        # Get LLM key with unified priority order
+        llm_key = get_llm_key(user_id=user_id, provider=detected_provider, context="auto")
+        if llm_key:
+            # Inject into environment variables (CrewAI/LiteLLM reads from env)
+            inject_llm_key(
+                api_key=llm_key,
+                provider=detected_provider,
+                works=self.works,
+                model_name=None
+            )
+            logger.debug(f"Injected LLM key for crew {self.name} (user: {user_id}, provider: {detected_provider or 'auto'})")
+        
+        token_usage = None
         token_usage = None
 
         try:

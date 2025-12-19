@@ -236,7 +236,11 @@ class TaskManager:
             )
             
             # Clear executor reference
-            self._executor_instances.pop(task_id, None)
+            # Clear executor reference and task context to prevent memory leaks
+            executor = self._executor_instances.pop(task_id, None)
+            if executor and hasattr(executor, 'clear_task_context'):
+                executor.clear_task_context()
+                logger.debug(f"Cleared task context for task {task_id} during cancellation")
             
             # Build return result
             result = {
@@ -791,7 +795,11 @@ class TaskManager:
                 logger.info(f"Task {current_task_id} was cancelled during execution, stopping")
                 
                 # Clear executor reference
-                self._executor_instances.pop(current_task_id, None)
+                # Also clear task context to prevent memory leaks
+                executor = self._executor_instances.pop(current_task_id, None)
+                if executor and hasattr(executor, 'clear_task_context'):
+                    executor.clear_task_context()
+                    logger.debug(f"Cleared task context for task {current_task_id} after cancellation")
                 
                 # Don't update to completed, keep cancelled status
                 if self.stream:
@@ -803,7 +811,11 @@ class TaskManager:
                 return
             
             # Clear executor reference after successful execution
-            self._executor_instances.pop(current_task_id, None)
+            # Also clear task context to prevent memory leaks
+            executor = self._executor_instances.pop(current_task_id, None)
+            if executor and hasattr(executor, 'clear_task_context'):
+                executor.clear_task_context()
+                logger.debug(f"Cleared task context for task {current_task_id} after successful execution")
             
             # Update task status using repository
             # Clear error field when task completes successfully (for re-execution scenarios)
@@ -1237,46 +1249,6 @@ class TaskManager:
         if model:
             init_params["model"] = model
         
-        # Inject LLM API key if needed (for CrewAI executors)
-        # Priority: request header > user config
-        # Note: CrewAI/LiteLLM automatically reads provider-specific API keys from environment,
-        # so we set the appropriate env var here if we have a dynamic key from header/config
-        # LLM key is never stored in database (task.params)
-        if executor_id == "crewai_executor":
-            from aipartnerupflow.core.utils.llm_key_context import get_llm_key, get_llm_provider_from_header
-            from aipartnerupflow.core.utils.llm_key_injector import inject_llm_key, detect_provider_from_model
-            
-            # Priority for provider detection:
-            # 1. Provider from request header (parsed from X-LLM-API-KEY format: provider:key)
-            # 2. Provider from works configuration (model name)
-            # 3. Auto-detect from model name
-            works = params.get("works", {})
-            detected_provider = get_llm_provider_from_header()  # First check header (parsed from provider:key format)
-            
-            if not detected_provider:
-                # Detect provider from works configuration
-                if works:
-                    # Try to extract model from agents
-                    agents = works.get("agents", {})
-                    for agent_config in agents.values():
-                        agent_llm = agent_config.get("llm")
-                        if isinstance(agent_llm, str):
-                            detected_provider = detect_provider_from_model(agent_llm)
-                            break
-            
-            # Get LLM key (may be provider-specific)
-            # get_llm_key will use provider from header if available
-            llm_key = get_llm_key(user_id=task.user_id, provider=detected_provider)
-            if llm_key:
-                # Inject LLM key with provider detection
-                # This supports multiple LLM providers (OpenAI, Anthropic, Google, etc.)
-                inject_llm_key(
-                    api_key=llm_key,
-                    provider=detected_provider,
-                    works=works,
-                    model_name=None  # Will be extracted from works if available
-                )
-                logger.debug(f"Injected LLM key for task {task.id} (user: {task.user_id}, provider: {detected_provider or 'auto'})")
         
         # ============================================================
         # 3. create executor instance
@@ -1288,9 +1260,16 @@ class TaskManager:
         
         # Create executor: inputs as inputs parameter, other as **kwargs
         # Note: Input validation is now handled by executor itself (in BaseTask or executor.execute)
+        # Pass task context to executor for full access to task information (including custom fields)
+        # This allows executors to:
+        # - Access all task fields (including custom TaskModel fields)
+        # - Modify task context (e.g., update status, progress, custom fields)
+        # - Share task object efficiently (lifecycle managed by TaskManager)
         executor = registry.create_executor_instance(
             extension_id=executor_id,
             inputs=inputs,  # inputs for execution (will be validated by executor)
+            task=task,  # Pass task context (TaskModel instance) - supports custom TaskModel classes
+            user_id=task.user_id,  # Also pass user_id for backward compatibility
             **init_params,  # initialization parameters (works, name, inputs_schema, etc.)
             cancellation_checker=cancellation_checker
         )
@@ -1406,9 +1385,18 @@ class TaskManager:
                     except Exception as e:
                         logger.warning(f"Post_hook failed for executor {executor_id}: {str(e)}")
             
+            # Explicitly clear task context to prevent memory leaks
+            # This is important for long-running executors and memory management
+            if hasattr(executor, 'clear_task_context'):
+                executor.clear_task_context()
+                logger.debug(f"Cleared task context for executor {executor_id} on task {task.id}")
+            
             return result
         except Exception as e:
             logger.error(f"Error executing task {task.id} with executor {executor.__class__.__name__}: {e}", exc_info=True)
+            # Explicitly clear task context on error to prevent memory leaks
+            if hasattr(executor, 'clear_task_context'):
+                executor.clear_task_context()
             # Clear executor reference on error
             self._executor_instances.pop(task.id, None)
             return {

@@ -494,6 +494,9 @@ class ExtensionRegistry:
         """
         Add hook to an already registered executor
         
+        Note: Each executor can only have one hook of each type (pre_hook or post_hook).
+        If a hook already exists, it will be replaced.
+        
         Args:
             executor_id: Executor ID (e.g., "crewai_executor")
             hook_type: "pre_hook" or "post_hook"
