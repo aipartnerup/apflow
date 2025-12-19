@@ -96,8 +96,13 @@ class BaseRouteHandler:
                     token = auth_header
 
             # Fallback: try cookie (for cookie-based auth)
+            # Support multiple cookie names for flexibility (matching JWTAuthenticationMiddleware)
             if not token:
-                token = request.cookies.get("Authorization")
+                token = (
+                    request.cookies.get("authorization")  # Lowercase (common in web apps)
+                    or request.cookies.get("Authorization")  # Uppercase (less common)
+                    or request.cookies.get("auth_token")  # Alternative name
+                )
 
             if token:
                 try:

@@ -1210,6 +1210,146 @@ class TestHandleTaskGenerate:
 
                 with pytest.raises(ValueError, match="Permission denied"):
                     await task_routes.handle_task_generate(params, mock_request, request_id)
+    
+    @pytest.mark.asyncio
+    async def test_generate_with_jwt_token_user_id_propagation(self, use_test_db_session):
+        """Test that user_id from JWT token is correctly propagated to generated tasks"""
+        import os
+        from unittest.mock import patch, AsyncMock, Mock
+        from aipartnerupflow.api.a2a.server import generate_token, verify_token
+        from aipartnerupflow.api.routes.tasks import TaskRoutes
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from aipartnerupflow.core.config import get_task_model_class
+        
+        # Generate JWT token with user_id
+        secret_key = "test_secret_key_for_user_id_propagation"
+        user_id = "demo_user_4470f5d3f0f60c78"
+        payload = {"user_id": user_id, "sub": user_id}
+        token = generate_token(payload, secret_key)
+        
+        # Create TaskRoutes with JWT verification
+        def verify_token_func(token_str: str):
+            return verify_token(token_str, secret_key)
+        
+        task_routes = TaskRoutes(
+            task_model_class=get_task_model_class(),
+            verify_token_func=verify_token_func,
+            verify_permission_func=None,
+        )
+        
+        # Create mock request with JWT token
+        mock_request = Mock(spec=Request)
+        mock_request.headers = {"Authorization": f"Bearer {token}"}
+        mock_request.cookies = {}
+        mock_request.state = Mock()
+        mock_request.state.user_id = user_id
+        mock_request.state.token_payload = verify_token_func(token)
+        
+        # Mock environment variable for API key
+        with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
+            params = {"requirement": "create a task to check cpu"}
+            request_id = str(uuid.uuid4())
+            
+            # Mock LLM response with wrong user_id (simulating LLM generating "api_user" or "user123")
+            # This simulates what LLM actually generates
+            mock_llm_response = json.dumps([
+                {
+                    "id": "task_1",  # Not UUID format - LLM generates simple IDs
+                    "name": "system_info_executor",
+                    "user_id": "api_user",  # LLM generated wrong value (common mistake)
+                    "inputs": {"resource": "cpu", "timeout": 60},
+                    "priority": 1
+                }
+            ])
+            
+            # Mock TaskRepository
+            mock_repository = Mock(spec=TaskRepository)
+            mock_generate_task = Mock()
+            mock_generate_task.id = "generate-task-id"
+            mock_generate_task.user_id = user_id  # Task should have correct user_id (from JWT token)
+            mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
+            
+            mock_result_task = Mock()
+            mock_result_task.id = "generate-task-id"
+            mock_result_task.status = "completed"
+            mock_result_task.result = {}  # Will be updated by mock_execute_task_tree
+            mock_result_task.error = None
+            mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
+            
+            # Mock TaskExecutor.execute_task_tree to actually call generate_executor
+            # This will test the full flow including _post_process_tasks
+            from aipartnerupflow.core.execution.task_executor import TaskExecutor
+            from aipartnerupflow.core.types import TaskTreeNode
+            from aipartnerupflow.extensions.generate.generate_executor import GenerateExecutor
+            
+            async def mock_execute_task_tree(*args, **kwargs):
+                # Actually execute generate_executor to test _post_process_tasks
+                # This tests the full flow: LLM generates wrong user_id -> _post_process_tasks corrects it
+                executor = GenerateExecutor()
+                executor.task = mock_generate_task  # Set task context (so self.user_id works)
+                
+                # Mock LLM client to return response with wrong user_id
+                mock_llm_client = Mock()
+                mock_llm_client.generate = AsyncMock(return_value=mock_llm_response)
+                
+                with patch('aipartnerupflow.extensions.generate.generate_executor.create_llm_client', return_value=mock_llm_client):
+                    # Execute with user_id in inputs (from handle_task_generate)
+                    result = await executor.execute({
+                        "requirement": "create a task to check cpu",
+                        "user_id": user_id  # This comes from JWT token extraction
+                    })
+                    
+                    # Update mock_result_task with actual result (after _post_process_tasks)
+                    mock_result_task.result = result
+            
+            mock_executor = Mock()
+            mock_executor.execute_task_tree = mock_execute_task_tree
+            
+            with patch(
+                "aipartnerupflow.api.routes.tasks.TaskRepository", return_value=mock_repository
+            ):
+                with patch(
+                    "aipartnerupflow.core.execution.task_executor.TaskExecutor",
+                    return_value=mock_executor,
+                ):
+                    result = await task_routes.handle_task_generate(
+                        params, mock_request, request_id
+                    )
+            
+            # Verify response
+            assert isinstance(result, dict)
+            assert "tasks" in result
+            assert len(result["tasks"]) == 1
+            
+            # CRITICAL: Verify generated task has correct user_id (not "api_user" or None)
+            # This tests that _post_process_tasks correctly overrides LLM-generated wrong user_id
+            generated_task = result["tasks"][0]
+            
+            # Verify user_id is correct (from JWT token, not LLM-generated "api_user")
+            assert generated_task["user_id"] == user_id, \
+                f"Generated task should have user_id='{user_id}' (from JWT token), " \
+                f"got '{generated_task.get('user_id')}'. " \
+                f"This means _post_process_tasks failed to override LLM-generated 'api_user'."
+            assert generated_task["user_id"] != "api_user", \
+                f"Generated task should not have LLM-generated 'api_user', " \
+                f"got '{generated_task.get('user_id')}'. " \
+                f"This means _post_process_tasks did not override the wrong value."
+            assert generated_task["user_id"] is not None, \
+                f"Generated task should not have None user_id, " \
+                f"got '{generated_task.get('user_id')}'. " \
+                f"This means user_id was not properly extracted from JWT token."
+            
+            # Verify task has UUID format ID (not "task_1" from LLM)
+            import re
+            uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$', re.IGNORECASE)
+            assert uuid_pattern.match(generated_task["id"]), \
+                f"Generated task should have UUID format id (not LLM-generated 'task_1'), " \
+                f"got '{generated_task.get('id')}'. " \
+                f"This means _post_process_tasks failed to convert ID to UUID format."
+            assert generated_task["id"] != "task_1", \
+                f"Generated task should not have LLM-generated ID 'task_1', " \
+                f"got '{generated_task.get('id')}'. " \
+                f"This means _post_process_tasks did not convert the ID to UUID."
 
 
 class TestAdminPermission:

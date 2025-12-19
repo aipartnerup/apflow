@@ -273,4 +273,153 @@ class TestGenerateExecutor:
             assert result["status"] == "failed"
             assert "multiple root" in result["error"].lower()
             assert "parent_id" in result["error"].lower()  # Error should mention parent_id
+    
+    def test_post_process_tasks_overrides_llm_generated_user_id(self):
+        """Test that _post_process_tasks overrides LLM-generated user_id with correct one from BaseTask"""
+        executor = GenerateExecutor()
+        
+        # Mock task object with user_id
+        mock_task = Mock()
+        mock_task.user_id = "correct_user_123"
+        executor.task = mock_task  # Set task to enable self.user_id property
+        
+        # Simulate LLM-generated tasks with wrong user_id values
+        llm_generated_tasks = [
+            {
+                "id": "task_1",  # Not UUID format
+                "name": "system_info_executor",
+                "user_id": "api_user",  # LLM generated wrong value
+                "inputs": {"resource": "cpu"}
+            },
+            {
+                "id": "task_2",  # Not UUID format
+                "name": "command_executor",
+                "user_id": "user123",  # LLM generated wrong value
+                "parent_id": "task_1",
+                "dependencies": [{"id": "task_1", "required": True}],
+                "inputs": {"command": "echo test"}
+            }
+        ]
+        
+        # Process tasks
+        processed_tasks = executor._post_process_tasks(llm_generated_tasks)
+        
+        # Verify all tasks have correct user_id
+        for task in processed_tasks:
+            assert task["user_id"] == "correct_user_123", f"Task {task.get('name')} should have user_id='correct_user_123', got '{task.get('user_id')}'"
+        
+        # Verify all tasks have UUID format IDs
+        import re
+        uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$', re.IGNORECASE)
+        for task in processed_tasks:
+            assert "id" in task, f"Task {task.get('name')} should have id"
+            assert uuid_pattern.match(task["id"]), f"Task {task.get('name')} should have UUID format id, got '{task.get('id')}'"
+        
+        # Verify dependencies references are updated if IDs changed
+        # (In this case, IDs should be updated from "task_1" to UUIDs)
+        task_ids = {task["id"] for task in processed_tasks}
+        for task in processed_tasks:
+            if "parent_id" in task:
+                assert task["parent_id"] in task_ids, f"Task {task.get('name')} has invalid parent_id '{task.get('parent_id')}'"
+            if "dependencies" in task:
+                for dep in task["dependencies"]:
+                    if isinstance(dep, dict) and "id" in dep:
+                        assert dep["id"] in task_ids, f"Task {task.get('name')} has invalid dependency id '{dep.get('id')}'"
+    
+    def test_post_process_tasks_uses_parameter_user_id_over_self_user_id(self):
+        """Test that _post_process_tasks prioritizes parameter user_id over self.user_id"""
+        executor = GenerateExecutor()
+        
+        # Mock task object with user_id
+        mock_task = Mock()
+        mock_task.user_id = "self_user_456"
+        executor.task = mock_task
+        
+        # Simulate LLM-generated tasks
+        llm_generated_tasks = [
+            {
+                "id": "550e8400-e29b-41d4-a716-446655440000",  # Valid UUID
+                "name": "system_info_executor",
+                "user_id": "api_user",  # LLM generated wrong value
+                "inputs": {"resource": "cpu"}
+            }
+        ]
+        
+        # Process with parameter user_id (should take priority)
+        processed_tasks = executor._post_process_tasks(llm_generated_tasks, user_id="param_user_789")
+        
+        # Verify parameter user_id is used (not self.user_id)
+        assert processed_tasks[0]["user_id"] == "param_user_789"
+        assert processed_tasks[0]["user_id"] != "self_user_456"
+    
+    def test_post_process_tasks_sets_none_when_no_user_id_available(self):
+        """Test that _post_process_tasks sets user_id to None when no user_id is available"""
+        executor = GenerateExecutor()
+        
+        # No task object set (self.user_id will be None)
+        executor.task = None
+        
+        # Simulate LLM-generated tasks with wrong user_id
+        llm_generated_tasks = [
+            {
+                "id": "550e8400-e29b-41d4-a716-446655440000",
+                "name": "system_info_executor",
+                "user_id": "api_user",  # LLM generated wrong value
+                "inputs": {"resource": "cpu"}
+            }
+        ]
+        
+        # Process without user_id parameter
+        processed_tasks = executor._post_process_tasks(llm_generated_tasks, user_id=None)
+        
+        # Verify user_id is set to None (not kept as "api_user")
+        assert processed_tasks[0]["user_id"] is None, "Should set user_id to None when no user_id available"
+    
+    def test_post_process_tasks_updates_dependencies_when_ids_change(self):
+        """Test that _post_process_tasks updates dependency references when task IDs are converted to UUIDs"""
+        executor = GenerateExecutor()
+        
+        mock_task = Mock()
+        mock_task.user_id = "test_user"
+        executor.task = mock_task
+        
+        # Simulate LLM-generated tasks with non-UUID IDs
+        llm_generated_tasks = [
+            {
+                "id": "task_1",  # Not UUID
+                "name": "system_info_executor",
+                "user_id": "test_user",
+                "inputs": {"resource": "cpu"}
+            },
+            {
+                "id": "task_2",  # Not UUID
+                "name": "command_executor",
+                "user_id": "test_user",
+                "parent_id": "task_1",  # References task_1
+                "dependencies": [{"id": "task_1", "required": True}],  # References task_1
+                "inputs": {"command": "echo test"}
+            }
+        ]
+        
+        # Process tasks
+        processed_tasks = executor._post_process_tasks(llm_generated_tasks)
+        
+        # Verify all IDs are UUIDs
+        import re
+        uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$', re.IGNORECASE)
+        task_id_map = {}
+        for task in processed_tasks:
+            assert uuid_pattern.match(task["id"]), f"Task {task.get('name')} should have UUID format id"
+            task_id_map[task["name"]] = task["id"]
+        
+        # Verify parent_id and dependencies are updated to new UUIDs
+        command_task = next(t for t in processed_tasks if t["name"] == "command_executor")
+        system_task = next(t for t in processed_tasks if t["name"] == "system_info_executor")
+        
+        # parent_id should reference the new UUID of system_info_executor
+        assert command_task["parent_id"] == system_task["id"], "parent_id should reference updated UUID"
+        
+        # dependencies should reference the new UUID
+        assert len(command_task["dependencies"]) == 1
+        assert command_task["dependencies"][0]["id"] == system_task["id"], "dependency id should reference updated UUID"
 

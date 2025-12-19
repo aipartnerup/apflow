@@ -1605,6 +1605,10 @@ class TaskRoutes(BaseRouteHandler):
             if not user_id:
                 # Automatically extract user_id from request (JWT or header)
                 user_id = self._extract_user_id_from_request(request)
+                if user_id:
+                    logger.debug(f"Extracted user_id '{user_id}' from request (JWT token)")
+                else:
+                    logger.debug("No user_id found in request (no JWT token or verify_token_func not available)")
 
             if user_id:
                 # Check permission for specified user_id

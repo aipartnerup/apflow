@@ -422,6 +422,10 @@ class GenerateExecutor(BaseTask):
         # Get user_id from BaseTask if not provided
         if not user_id:
             user_id = self.user_id
+            if user_id:
+                logger.debug(f"Using user_id '{user_id}' from BaseTask.task.user_id")
+            else:
+                logger.debug("No user_id available from BaseTask.task.user_id (task.user_id is None)")
         
         # UUID validation regex (UUID v4 format: 8-4-4-4-12)
         uuid_pattern = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$', re.IGNORECASE)
@@ -445,23 +449,29 @@ class GenerateExecutor(BaseTask):
         for task in tasks:
             # Fix user_id: ALWAYS use BaseTask.user_id (self.user_id) to override any LLM-generated value
             # This ensures generated tasks use the correct user_id from the request context,
-            # not hardcoded values like "api_user" that LLM might generate
-            if user_id:
-                # Use provided user_id (from BaseTask context)
-                task["user_id"] = user_id
-            elif self.user_id:
-                # Fallback to self.user_id if parameter not provided
-                task["user_id"] = self.user_id
-            elif "user_id" not in task:
-                # If no user_id available, set to None (don't use hardcoded "api_user")
-                task["user_id"] = None
+            # not hardcoded values like "api_user" or "user123" that LLM might generate
+            
+            # Determine the correct user_id to use (priority: parameter > self.user_id > None)
+            correct_user_id = user_id or self.user_id
+            
+            if correct_user_id:
+                logger.debug(f"Using correct_user_id '{correct_user_id}' for task '{task.get('name')}' (parameter: {user_id}, self.user_id: {self.user_id})")
+                # Always override LLM-generated user_id with correct one from BaseTask context
+                old_user_id = task.get("user_id")
+                if old_user_id != correct_user_id:
+                    task["user_id"] = correct_user_id
+                    if old_user_id:
+                        logger.debug(f"Overrode LLM-generated user_id '{old_user_id}' with actual user_id '{correct_user_id}' for task '{task.get('name')}'")
             else:
-                # Task has user_id but it might be wrong (e.g., "api_user" from LLM)
-                # If we have self.user_id, use it; otherwise keep existing (but log warning)
-                if self.user_id and task.get("user_id") == "api_user":
-                    # Override "api_user" with actual user_id from BaseTask
-                    task["user_id"] = self.user_id
-                    logger.debug(f"Overrode LLM-generated 'api_user' with actual user_id '{self.user_id}' for task '{task.get('name')}'")
+                # No user_id available from BaseTask context, set to None
+                # Don't keep LLM-generated values like "api_user" or "user123"
+                if task.get("user_id"):
+                    logger.warning(
+                        f"Removed LLM-generated user_id '{task.get('user_id')}' for task '{task.get('name')}' "
+                        f"(no user_id in context: parameter={user_id}, self.user_id={self.user_id}). "
+                        f"This means the request had no JWT token or verify_token_func is not available."
+                    )
+                task["user_id"] = None
             
             # Fix task ID: ensure it's a valid UUID
             old_id = task.get("id")
