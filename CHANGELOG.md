@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] 2025-12-20
+
+### Fixed
+- **DuckDB Custom Path Directory Creation**
+  - Fixed issue where DuckDB would fail when using custom directory paths that don't exist
+  - Added `_ensure_database_directory_exists()` function to automatically create parent directories before creating DuckDB connections
+  - Directory creation is now handled automatically in `create_session()`, `SessionPoolManager.initialize()`, and `PooledSessionContext.__init__()`
+  - Skips directory creation for in-memory databases (`:memory:`) and handles errors gracefully with appropriate logging
+  - Users can now specify custom DuckDB file paths without manually creating directories first
+- **Missing Return Type Annotations**
+  - Added missing return type annotation `-> None` to `check_input_schema()` function in `core/utils/helpers.py`
+  - Added missing return type annotation `-> ParseResult` to `validate_url()` function in `core/utils/helpers.py`
+  - Fixed type checker errors and ensured 100% type annotation compliance as required by code quality rules
+- **Module-Level Resource Creation**
+  - Refactored `core/storage/factory.py` to eliminate module-level global variables for database sessions
+  - Replaced `_default_session` and `_session_pool_manager` module-level globals with `SessionRegistry` class
+  - Session state is now encapsulated in `SessionRegistry` class following dependency injection principles
+  - All session management functions (`get_default_session()`, `set_default_session()`, `reset_default_session()`, `get_session_pool_manager()`, `reset_session_pool_manager()`) now use `SessionRegistry` class methods
+  - Maintains full backward compatibility - all public APIs remain unchanged
+  - Follows code quality rules requiring dependency injection instead of module-level resource creation
+
+
 ## [0.7.0] 2025-12-20
 
 ### Added

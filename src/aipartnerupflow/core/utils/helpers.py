@@ -5,7 +5,7 @@ Helper utilities - demonstrates correct logging usage in utils modules
 import logging
 from typing import Any, Dict, List, Type
 from pydantic import BaseModel, HttpUrl
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse, urlunparse, ParseResult
 
 import random
 
@@ -111,9 +111,9 @@ def _get_json_schema_info(schema: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
         return parameters
 
     
-def check_input_schema(input_schema: Type[BaseModel] | Dict[str, Any] | None, parameters: Dict[str, Any]):
+def check_input_schema(input_schema: Type[BaseModel] | Dict[str, Any] | None, parameters: Dict[str, Any]) -> None:
     if not input_schema:
-        return True
+        return
 
     # 1. validate parameters
     if not validate_input_schema(input_schema, parameters):
@@ -259,11 +259,11 @@ def get_hostname(url: str|HttpUrl) -> str | None:
     parsed = urlparse(str(url))
     return parsed.hostname
 
-def validate_url(url: str|HttpUrl, url_name: str = 'URL'):
+def validate_url(url: str|HttpUrl, url_name: str = 'URL') -> ParseResult:
     if not url:
         raise ValueError(f'{url_name} cannot be empty')
     
-    parsed = None
+    parsed: ParseResult
     
     try:
         parsed = urlparse(str(url))

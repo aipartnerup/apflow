@@ -18,12 +18,83 @@ from aipartnerupflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Global default session instance (lazy loading)
-_default_session: Optional[Union[Session, AsyncSession]] = None
 
-# Global session pool manager instance
-_session_pool_manager: Optional["SessionPoolManager"] = None
-_session_pool_lock = Lock()
+class SessionRegistry:
+    """
+    Registry for managing database sessions and session pool manager.
+    
+    This class encapsulates session state to avoid module-level resource creation,
+    following dependency injection principles.
+    """
+    
+    _default_session: Optional[Union[Session, AsyncSession]] = None
+    _session_pool_manager: Optional["SessionPoolManager"] = None
+    _session_pool_lock = Lock()
+    
+    @classmethod
+    def get_default_session(cls) -> Optional[Union[Session, AsyncSession]]:
+        """Get the default session instance"""
+        return cls._default_session
+    
+    @classmethod
+    def set_default_session(cls, session: Union[Session, AsyncSession]) -> None:
+        """Set the default session instance"""
+        cls._default_session = session
+    
+    @classmethod
+    def reset_default_session(cls) -> None:
+        """Reset the default session instance"""
+        if cls._default_session:
+            if isinstance(cls._default_session, AsyncSession):
+                # Note: close() is async, but this is for testing only
+                pass
+            else:
+                cls._default_session.close()
+        cls._default_session = None
+    
+    @classmethod
+    def get_session_pool_manager(cls) -> Optional["SessionPoolManager"]:
+        """Get the session pool manager instance"""
+        return cls._session_pool_manager
+    
+    @classmethod
+    def set_session_pool_manager(cls, manager: "SessionPoolManager") -> None:
+        """Set the session pool manager instance"""
+        cls._session_pool_manager = manager
+    
+    @classmethod
+    def reset_session_pool_manager(cls) -> None:
+        """Reset the session pool manager instance"""
+        with cls._session_pool_lock:
+            if cls._session_pool_manager is not None:
+                # Dispose engine if exists
+                if cls._session_pool_manager._engine is not None:
+                    try:
+                        if isinstance(cls._session_pool_manager._engine, AsyncEngine):
+                            # For async engines, we can't dispose synchronously
+                            # The engine will be cleaned up when the process ends
+                            pass
+                        else:
+                            cls._session_pool_manager._engine.dispose()
+                    except Exception as e:
+                        logger.warning(f"Error disposing session pool manager engine: {str(e)}")
+                
+                # Clear active sessions
+                cls._session_pool_manager._active_sessions.clear()
+                
+                # Reset state
+                cls._session_pool_manager._engine = None
+                cls._session_pool_manager._sessionmaker = None
+                cls._session_pool_manager._connection_string = None
+                cls._session_pool_manager._path = None
+                cls._session_pool_manager._async_mode = None
+            
+            cls._session_pool_manager = None
+    
+    @classmethod
+    def get_session_pool_lock(cls) -> Lock:
+        """Get the session pool lock"""
+        return cls._session_pool_lock
 
 
 class SessionLimitExceeded(Exception):
@@ -314,17 +385,19 @@ def get_session_pool_manager() -> SessionPoolManager:
     Returns:
         SessionPoolManager instance
     """
-    global _session_pool_manager
+    manager = SessionRegistry.get_session_pool_manager()
     
-    if _session_pool_manager is None:
-        with _session_pool_lock:
-            if _session_pool_manager is None:
-                _session_pool_manager = SessionPoolManager()
+    if manager is None:
+        with SessionRegistry.get_session_pool_lock():
+            manager = SessionRegistry.get_session_pool_manager()
+            if manager is None:
+                manager = SessionPoolManager()
                 # Initialize with default configuration
                 connection_string = _get_database_url_from_env()
-                _session_pool_manager.initialize(connection_string=connection_string)
+                manager.initialize(connection_string=connection_string)
+                SessionRegistry.set_session_pool_manager(manager)
     
-    return _session_pool_manager
+    return manager
 
 
 def reset_session_pool_manager() -> None:
@@ -334,33 +407,7 @@ def reset_session_pool_manager() -> None:
     This function allows tests to reset the session pool manager,
     ensuring clean state between tests.
     """
-    global _session_pool_manager
-    
-    with _session_pool_lock:
-        if _session_pool_manager is not None:
-            # Dispose engine if exists
-            if _session_pool_manager._engine is not None:
-                try:
-                    if isinstance(_session_pool_manager._engine, AsyncEngine):
-                        # For async engines, we can't dispose synchronously
-                        # The engine will be cleaned up when the process ends
-                        pass
-                    else:
-                        _session_pool_manager._engine.dispose()
-                except Exception as e:
-                    logger.warning(f"Error disposing session pool manager engine: {str(e)}")
-            
-            # Clear active sessions
-            _session_pool_manager._active_sessions.clear()
-            
-            # Reset state
-            _session_pool_manager._engine = None
-            _session_pool_manager._sessionmaker = None
-            _session_pool_manager._connection_string = None
-            _session_pool_manager._path = None
-            _session_pool_manager._async_mode = None
-        
-        _session_pool_manager = None
+    SessionRegistry.reset_session_pool_manager()
 
 
 def is_postgresql_url(url: str) -> bool:
@@ -727,24 +774,25 @@ def get_default_session(
         # Use DuckDB file
         session = get_default_session(path="./data/app.duckdb")
     """
-    global _default_session
+    session = SessionRegistry.get_default_session()
     
-    if _default_session is None:
+    if session is None:
         # If connection_string not provided, check environment variable
         if connection_string is None:
             connection_string = _get_database_url_from_env()
         
-        _default_session = create_session(
+        session = create_session(
             connection_string=connection_string,
             path=path,
             async_mode=async_mode,
             **kwargs
         )
+        SessionRegistry.set_default_session(session)
     
-    return _default_session
+    return session
 
 
-def set_default_session(session: Union[Session, AsyncSession]):
+def set_default_session(session: Union[Session, AsyncSession]) -> None:
     """
     Set default session (for testing or library usage)
     
@@ -763,11 +811,10 @@ def set_default_session(session: Union[Session, AsyncSession]):
         )
         set_default_session(session)
     """
-    global _default_session
-    _default_session = session
+    SessionRegistry.set_default_session(session)
 
 
-def reset_default_session():
+def reset_default_session() -> None:
     """
     Reset default session (for testing or reconfiguration)
     
@@ -783,14 +830,7 @@ def reset_default_session():
             connection_string="postgresql+asyncpg://user:password@localhost/dbname"
         )
     """
-    global _default_session
-    if _default_session:
-        if isinstance(_default_session, AsyncSession):
-            # Note: close() is async, but this is for testing only
-            pass
-        else:
-            _default_session.close()
-    _default_session = None
+    SessionRegistry.reset_default_session()
 
 
 def configure_database(
