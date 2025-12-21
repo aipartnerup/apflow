@@ -2284,3 +2284,272 @@ def test_a2a_execute_task_tree_with_use_demo(json_rpc_client):
             # SystemInfoExecutor demo result should have demo_mode or be a demo result
             assert "demo_mode" in result_data or "result" in result_data
 
+
+def test_jsonrpc_tasks_list(json_rpc_client):
+    """Test listing all tasks via JSON-RPC tasks.list endpoint"""
+    # First create a task
+    task_data = {
+        "id": f"list-test-{uuid.uuid4().hex[:8]}",
+        "name": "Task for List Test",
+        "user_id": "test-user",
+        "status": "pending",
+        "priority": 1,
+        "has_children": False,
+        "dependencies": [],
+        "schemas": {
+            "method": "system_info_executor",
+            "type": "stdio"
+        },
+        "inputs": {
+            "resource": "cpu"
+        }
+    }
+    
+    # Create task
+    create_request = {
+        "jsonrpc": "2.0",
+        "id": 500,
+        "method": "tasks.create",
+        "params": [task_data]
+    }
+    
+    create_response = json_rpc_client.post("/tasks", json=create_request)
+    assert create_response.status_code == 200
+    
+    # List tasks
+    list_request = {
+        "jsonrpc": "2.0",
+        "id": 501,
+        "method": "tasks.list",
+        "params": {
+            "user_id": "test-user",
+            "limit": 10,
+            "offset": 0
+        }
+    }
+    
+    response = json_rpc_client.post(
+        "/tasks",
+        json=list_request,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    assert response.status_code == 200
+    result = response.json()
+    
+    assert "jsonrpc" in result
+    assert result["jsonrpc"] == "2.0"
+    assert "id" in result
+    assert result["id"] == 501
+    assert "result" in result
+    # Result should be a list or dict with tasks
+    list_result = result["result"]
+    assert isinstance(list_result, (list, dict))
+    if isinstance(list_result, dict):
+        assert "tasks" in list_result or "items" in list_result
+
+
+def test_jsonrpc_tasks_running_status(json_rpc_client):
+    """Test getting running task status via JSON-RPC tasks.running.status endpoint"""
+    # First create and execute a task
+    task_data = {
+        "id": f"status-test-{uuid.uuid4().hex[:8]}",
+        "name": "Task for Status Test",
+        "user_id": "test-user",
+        "status": "pending",
+        "priority": 1,
+        "has_children": False,
+        "dependencies": [],
+        "schemas": {
+            "method": "system_info_executor",
+            "type": "stdio"
+        },
+        "inputs": {
+            "resource": "cpu"
+        }
+    }
+    
+    # Create task
+    create_request = {
+        "jsonrpc": "2.0",
+        "id": 600,
+        "method": "tasks.create",
+        "params": [task_data]
+    }
+    
+    create_response = json_rpc_client.post("/tasks", json=create_request)
+    assert create_response.status_code == 200
+    created_result = create_response.json()
+    task_id = created_result["result"]["id"]
+    
+    # Get running task status
+    status_request = {
+        "jsonrpc": "2.0",
+        "id": 601,
+        "method": "tasks.running.status",
+        "params": {
+            "task_ids": [task_id]
+        }
+    }
+    
+    response = json_rpc_client.post(
+        "/tasks",
+        json=status_request,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    assert response.status_code == 200
+    result = response.json()
+    
+    assert "jsonrpc" in result
+    assert result["jsonrpc"] == "2.0"
+    assert "id" in result
+    assert result["id"] == 601
+    assert "result" in result
+    # Result should be an array of status information
+    status_result = result["result"]
+    assert isinstance(status_result, list)
+    assert len(status_result) > 0
+    # Check first status entry
+    status_entry = status_result[0]
+    assert isinstance(status_entry, dict)
+    assert "task_id" in status_entry or "status" in status_entry
+
+
+def test_jsonrpc_tasks_running_count(json_rpc_client):
+    """Test counting running tasks via JSON-RPC tasks.running.count endpoint"""
+    count_request = {
+        "jsonrpc": "2.0",
+        "id": 700,
+        "method": "tasks.running.count",
+        "params": {}
+    }
+    
+    response = json_rpc_client.post(
+        "/tasks",
+        json=count_request,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    assert response.status_code == 200
+    result = response.json()
+    
+    assert "jsonrpc" in result
+    assert result["jsonrpc"] == "2.0"
+    assert "id" in result
+    assert result["id"] == 700
+    assert "result" in result
+    # Result should contain count
+    count_result = result["result"]
+    assert isinstance(count_result, dict)
+    assert "count" in count_result
+    assert isinstance(count_result["count"], int)
+    assert count_result["count"] >= 0
+
+
+def test_jsonrpc_tasks_cancel(json_rpc_client):
+    """Test cancelling a task via JSON-RPC tasks.cancel endpoint"""
+    # First create and start executing a task
+    task_data = {
+        "id": f"cancel-test-{uuid.uuid4().hex[:8]}",
+        "name": "Task to Cancel",
+        "user_id": "test-user",
+        "status": "pending",
+        "priority": 1,
+        "has_children": False,
+        "dependencies": [],
+        "schemas": {
+            "method": "system_info_executor",
+            "type": "stdio"
+        },
+        "inputs": {
+            "resource": "cpu"
+        }
+    }
+    
+    # Create task
+    create_request = {
+        "jsonrpc": "2.0",
+        "id": 800,
+        "method": "tasks.create",
+        "params": [task_data]
+    }
+    
+    create_response = json_rpc_client.post("/tasks", json=create_request)
+    assert create_response.status_code == 200
+    created_result = create_response.json()
+    task_id = created_result["result"]["id"]
+    
+    # Cancel task
+    cancel_request = {
+        "jsonrpc": "2.0",
+        "id": 801,
+        "method": "tasks.cancel",
+        "params": {
+            "task_ids": [task_id],
+            "error_message": "Cancelled by test"
+        }
+    }
+    
+    response = json_rpc_client.post(
+        "/tasks",
+        json=cancel_request,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    assert response.status_code == 200
+    result = response.json()
+    
+    assert "jsonrpc" in result
+    assert result["jsonrpc"] == "2.0"
+    assert "id" in result
+    assert result["id"] == 801
+    assert "result" in result
+    # Result should be an array of cancellation results
+    cancel_result = result["result"]
+    assert isinstance(cancel_result, list)
+    assert len(cancel_result) > 0
+    # Check first cancellation result
+    cancel_entry = cancel_result[0]
+    assert isinstance(cancel_entry, dict)
+    assert "status" in cancel_entry
+    assert cancel_entry["status"] in ["cancelled", "failed"]
+
+
+def test_jsonrpc_tasks_generate(json_rpc_client):
+    """Test generating task tree via JSON-RPC tasks.generate endpoint"""
+    # Skip if no LLM API key is available (generate requires LLM)
+    import os
+    if not os.getenv("OPENAI_API_KEY") and not os.getenv("ANTHROPIC_API_KEY"):
+        pytest.skip("No LLM API key available for generate test")
+    
+    generate_request = {
+        "jsonrpc": "2.0",
+        "id": 900,
+        "method": "tasks.generate",
+        "params": {
+            "requirement": "Get system CPU information and process it",
+            "user_id": "test-user"
+        }
+    }
+    
+    response = json_rpc_client.post(
+        "/tasks",
+        json=generate_request,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    assert response.status_code == 200
+    result = response.json()
+    
+    assert "jsonrpc" in result
+    assert result["jsonrpc"] == "2.0"
+    assert "id" in result
+    assert result["id"] == 900
+    # Result may be in result or error field
+    if "result" in result:
+        generate_result = result["result"]
+        assert isinstance(generate_result, dict)
+        # Should contain tasks array
+        assert "tasks" in generate_result or "status" in generate_result
+

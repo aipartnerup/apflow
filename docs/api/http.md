@@ -1947,6 +1947,57 @@ Gets the status of one or more tasks. This method checks both the in-memory task
 }
 ```
 
+**Example Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "status-request-1",
+  "result": [
+    {
+      "task_id": "task-1",
+      "context_id": "task-1",
+      "status": "in_progress",
+      "progress": 0.5,
+      "error": null,
+      "is_running": true,
+      "started_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:01:00Z"
+    },
+    {
+      "task_id": "task-2",
+      "context_id": "task-2",
+      "status": "completed",
+      "progress": 1.0,
+      "error": null,
+      "is_running": false,
+      "started_at": "2024-01-01T00:00:00Z",
+      "updated_at": "2024-01-01T00:02:00Z"
+    }
+  ]
+}
+```
+
+**Response Fields:**
+Returns an array of task status objects, each containing:
+- `task_id` (string): Task ID
+- `context_id` (string): Context ID (same as task_id, for A2A Protocol compatibility)
+- `status` (string): Task status ("pending", "in_progress", "completed", "failed", "cancelled", "not_found", "permission_denied")
+- `progress` (float): Progress value (0.0 to 1.0)
+- `error` (string, nullable): Error message if task failed
+- `is_running` (boolean): Whether task is currently running in memory
+- `started_at` (string, nullable): ISO 8601 timestamp when task started
+- `updated_at` (string, nullable): ISO 8601 timestamp when task was last updated
+
+**Error Cases:**
+- Task not found: Returns status "not_found" for that task
+- Permission denied: Returns status "permission_denied" for that task
+
+**Notes:**
+- This method checks both in-memory task tracker and database
+- Returns status for all requested tasks, even if some are not found
+- Tasks that are not found but are running in memory will have status "in_progress"
+- Use this method to get real-time status of tasks
+
 ### `tasks.running.count`
 
 **Description:**  

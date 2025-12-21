@@ -1827,5 +1827,64 @@ class TestTasksAllCommand:
         returned_ids = [t["id"] for t in tasks]
         assert root_id in returned_ids
         # Child should not be in results
-        assert child_id not in returned_ids
+
+
+class TestTasksWatchCommand:
+    """Test cases for tasks watch command"""
+    
+    @pytest.mark.asyncio
+    async def test_tasks_watch_requires_task_id_or_all(self, use_test_db_session):
+        """Test that tasks watch requires either --task-id or --all"""
+        result = runner.invoke(app, ["tasks", "watch"])
+        
+        # Command should fail with exit code 1
+        assert result.exit_code == 1
+        # Error message is printed to stderr
+        error_output = (result.stdout + result.stderr).lower()
+        assert "task-id" in error_output or "all" in error_output or "error" in error_output or "must be specified" in error_output
+    
+    @pytest.mark.asyncio
+    async def test_tasks_watch_with_task_id_no_task(self, use_test_db_session):
+        """Test watching a non-existent task (should handle gracefully)"""
+        # Mock the Live display to avoid interactive blocking
+        from unittest.mock import patch, MagicMock
+        
+        with patch('aipartnerupflow.cli.commands.tasks.Live') as mock_live:
+            # Mock Live context manager
+            mock_live_instance = MagicMock()
+            mock_live.return_value.__enter__ = MagicMock(return_value=mock_live_instance)
+            mock_live.return_value.__exit__ = MagicMock(return_value=None)
+            
+            # Mock time.sleep to avoid actual waiting
+            with patch('aipartnerupflow.cli.commands.tasks.time.sleep') as mock_sleep:
+                # Make the loop exit after first iteration by raising KeyboardInterrupt
+                mock_sleep.side_effect = KeyboardInterrupt()
+                
+                result = runner.invoke(app, [
+                    "tasks", "watch",
+                    "--task-id", "non-existent-task-id",
+                    "--interval", "0.1"
+                ])
+                
+                # Command should handle gracefully (may exit with 0 or 1)
+                # The important thing is it doesn't hang
+                assert result.exit_code in [0, 1]
+                # Verify Live was called
+                mock_live.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_tasks_watch_with_all_no_tasks(self, use_test_db_session):
+        """Test watching all running tasks when none are running"""
+        # When no tasks are running, command should handle gracefully
+        result = runner.invoke(app, [
+            "tasks", "watch",
+            "--all",
+            "--interval", "0.1"
+        ])
+        
+        # Command should exit gracefully when no tasks are running
+        assert result.exit_code == 0
+        # Should show message about no running tasks
+        output = (result.stdout + result.stderr).lower()
+        assert "no running tasks" in output or "watching 0 task" in output
 

@@ -138,10 +138,10 @@ python src/aipartnerupflow/cli/commands/serve.py start --port 8000 --reload
 
 ```bash
 # Run a flow (standard mode with tasks array)
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"key": "value"}}]'
+aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 
 # Or legacy mode (executor ID + inputs)
-aipartnerupflow run flow executor_id --inputs '{"key": "value"}'
+aipartnerupflow run flow system_info_executor --inputs '{"resource": "cpu"}'
 
 # Start daemon mode
 aipartnerupflow daemon start

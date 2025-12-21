@@ -47,7 +47,7 @@ CLI → Parse tasks (JSON array) → Group by root → TaskExecutor.execute_task
 2. **Standard Mode** (recommended):
    ```bash
    # Execute task array (single task tree)
-   aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor1"}, "inputs": {"key": "value"}}]'
+   aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
    
    # Execute multiple unrelated tasks (multiple root tasks)
    aipartnerupflow run flow --tasks '[{"id": "task1", ...}, {"id": "task2", ...}]'
@@ -130,7 +130,7 @@ Task cancelled: task-123
 #### Standard Mode (Task Array)
 
 ```
-1. User: aipartnerupflow run flow --tasks '[{"id": "task1", "schemas": {"method": "executor1"}, ...}, {"id": "task2", ...}]'
+1. User: aipartnerupflow run flow --tasks '[{"id": "task1", "schemas": {"method": "system_info_executor"}, ...}, {"id": "task2", ...}]'
    ↓
 2. CLI parses tasks JSON array
    ↓
@@ -405,8 +405,8 @@ CLI handles this by:
 ```bash
 # Multiple unrelated tasks
 aipartnerupflow run flow --tasks '[
-  {"id": "task1", "name": "Task 1", "schemas": {"method": "executor1"}, "inputs": {"key": "value"}},
-  {"id": "task2", "name": "Task 2", "schemas": {"method": "executor2"}, "inputs": {"key": "value2"}}
+  {"id": "task1", "name": "Get CPU Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}},
+  {"id": "task2", "name": "Get Memory Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "memory"}}
 ]'
 
 # CLI will:
