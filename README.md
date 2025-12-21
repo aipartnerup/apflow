@@ -25,10 +25,7 @@ The core of `aipartnerupflow` is **task orchestration and execution specificatio
 - **A2A Protocol Server** [a2a]: A2A Protocol Server (A2A Protocol is the standard protocol for agent communication)
 - **CLI Tools** [cli]: Command-line interface
 
-**Protocol Standard:**
-- **A2A Protocol**: The framework adopts **A2A (Agent-to-Agent) Protocol** as the standard protocol for agent communication. A2A Protocol provides mature, production-ready specifications for agent-to-agent communication, including streaming execution, task management, and agent capability descriptions.
-
-**Note**: CrewManager and future executors (like HTTPExecutor) are all implementations of the `ExecutableTask` interface. Each executor handles different types of task execution (LLM, HTTP, etc.).
+**Note**: CrewManager and future executors are all implementations of the `ExecutableTask` interface. Each executor handles different types of task execution (LLM, HTTP, etc.).
 
 ## Core Features
 
@@ -260,14 +257,6 @@ apflow daemon stop
 
 The `[a2a]` extra provides an **A2A (Agent-to-Agent) Protocol** server built on Starlette/FastAPI.
 
-**A2A Protocol is the standard protocol** adopted by aipartnerupflow for agent communication. It provides:
-- Mature, production-ready specifications for agent-to-agent communication
-- Streaming task execution support via EventQueue
-- Agent capability description mechanism (AgentCard, AgentSkill)
-- Multiple transport methods (HTTP, SSE, WebSocket)
-- Task management and status tracking
-- JWT authentication support
-
 ```python
 from aipartnerupflow.api import create_app
 
@@ -287,7 +276,6 @@ include additional FastAPI REST API endpoints for direct HTTP access without the
 ┌─────────────────────────────────────────────────────────────┐
 │              Unified External API Interface Layer            │
 │  - A2A Protocol Server (HTTP/SSE/WebSocket) [a2a]          │
-│  - REST API (Future Extension)                              │
 │  - CLI Tools [cli]                                          │
 └─────────────────────────────────────────────────────────────┘
                           ↓
@@ -371,9 +359,3 @@ Apache-2.0
 - **PyPI**: [aipartnerupflow](https://pypi.org/project/aipartnerupflow/)
 - **Issues**: [GitHub Issues](https://github.com/aipartnerup/aipartnerupflow/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/aipartnerup/aipartnerupflow/discussions)
-
-## Links
-
-- Website: [aipartnerup.com](https://aipartnerup.com)
-- GitHub: [aipartnerup/aipartnerupflow](https://github.com/aipartnerup/aipartnerupflow)
-- PyPI: [aipartnerupflow](https://pypi.org/project/aipartnerupflow/)
