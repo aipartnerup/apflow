@@ -144,6 +144,11 @@ def task_tree(
                 schemas={"method": "generate_executor"}  # Required for TaskManager to find executor
             )
             
+            # Initialize extensions before executing tasks
+            # This ensures all executors (including generate_executor) are registered
+            from aipartnerupflow.api.extensions import initialize_extensions
+            initialize_extensions()
+            
             # Execute generate_executor
             task_tree = TaskTreeNode(generate_task)
             task_executor = TaskExecutor()

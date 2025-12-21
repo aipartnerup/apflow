@@ -216,6 +216,11 @@ def flow(
         
         typer.echo(f"Executing {len(tasks_list)} task(s)...")
         
+        # Initialize extensions before executing tasks
+        # This ensures all executors (including stdio extensions) are registered
+        from aipartnerupflow.api.extensions import initialize_extensions
+        initialize_extensions()
+        
         # Group tasks by root (handle multiple unrelated tasks)
         task_groups = _group_tasks_by_root(tasks_list)
         
