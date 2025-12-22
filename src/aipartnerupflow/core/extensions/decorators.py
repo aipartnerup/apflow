@@ -55,7 +55,7 @@ def _register_extension(
         template = cls(inputs={})
     except Exception as e:
         # If instantiation fails, create a minimal template using class attributes
-        logger.warning(
+        logger.debug(
             f"Could not create template instance for {cls.__name__}: {e}. "
             f"Using class attributes for registration."
         )

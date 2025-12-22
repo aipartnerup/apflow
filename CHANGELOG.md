@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- **CLI: event-loop handling for async database operations**
+  - Ensured async database sessions and repositories are created and closed inside
+    the same event loop to avoid "no running event loop" and "Event loop is closed" errors
+  - Updated `apflow tasks` commands to run async work in a safe context
+  - Added `nest_asyncio` support for nested event loops in test environments
+
+- **Logging: clean CLI output by default**
+  - Default log level for the library is now `ERROR` to keep CLI output clean
+  - Support `LOG_LEVEL` and `DEBUG` environment variables to override logging when needed
+  - Debug logs can be enabled with `LOG_LEVEL=DEBUG apflow ...`
+
+- **Extensions registration noise reduced**
+  - Demoted expected registration instantiation messages to `DEBUG` (no longer printed by default)
+  - This prevents benign initialization messages from appearing during normal CLI runs
+
+- **Miscellaneous**
+  - Added `nest_asyncio` to CLI optional dependencies to improve compatibility in nested-loop contexts
+
 ## [0.7.2] 2025-12-21
 
 ### Fixed

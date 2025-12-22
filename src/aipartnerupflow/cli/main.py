@@ -75,6 +75,8 @@ app = typer.Typer(
 def cli_callback(ctx: typer.Context):
     """
     Global callback for CLI - loads .env file before any command execution
+    
+    To enable debug logging, set environment variable: LOG_LEVEL=DEBUG
     """
     # Load .env file when CLI is invoked (not at module import time)
     _load_env_file()

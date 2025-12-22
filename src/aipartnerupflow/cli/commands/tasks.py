@@ -23,12 +23,11 @@ console = Console()
 
 def run_async_safe(coro: Coroutine[Any, Any, Any]) -> Any:
     """
-    Safely run async coroutine, handling both cases:
-    - No event loop running: use asyncio.run()
-    - Event loop already running: create task and wait
+    Safely run async coroutine in CLI context.
     
-    This is needed for CLI commands that may be called from test environments
-    where an event loop is already running.
+    Handles the case where asyncpg connections need to be created and destroyed
+    within the same event loop. This ensures database connections don't get
+    bound to closed event loops.
     
     Args:
         coro: Coroutine to run
@@ -39,24 +38,13 @@ def run_async_safe(coro: Coroutine[Any, Any, Any]) -> Any:
     try:
         # Check if event loop is already running
         loop = asyncio.get_running_loop()
-        # Event loop is running, we need to run in a new thread or use nest_asyncio
-        # For CLI commands, we'll use a workaround: create a new event loop in a thread
-        import concurrent.futures
-        import threading
-        
-        def run_in_thread():
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
-            try:
-                return new_loop.run_until_complete(coro)
-            finally:
-                new_loop.close()
-        
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(run_in_thread)
-            return future.result()
+        # Event loop is running (e.g., in test environment), use nest_asyncio
+        import nest_asyncio
+        nest_asyncio.apply()
+        return loop.run_until_complete(coro)
     except RuntimeError:
         # No event loop running, safe to use asyncio.run()
+        # This creates and closes an event loop for the entire coroutine operation
         return asyncio.run(coro)
 
 
@@ -905,35 +893,40 @@ def all(
         from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
         from aipartnerupflow.core.config import get_task_model_class
         
-        db_session = get_default_session()
-        task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
-        
         async def get_all_tasks():
-            # Query tasks with filters
-            parent_id_filter = "" if root_only else None
-            tasks = await task_repository.query_tasks(
-                user_id=user_id,
-                status=status,
-                parent_id=parent_id_filter,
-                limit=limit,
-                offset=offset,
-                order_by="created_at",
-                order_desc=True
-            )
+            # Create database session inside async context to ensure proper event loop binding
+            db_session = get_default_session()
+            task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
             
-            # Convert to dictionaries and check if tasks have children
-            task_dicts = []
-            for task in tasks:
-                task_dict = task.to_dict()
+            try:
+                # Query tasks with filters
+                parent_id_filter = "" if root_only else None
+                tasks = await task_repository.query_tasks(
+                    user_id=user_id,
+                    status=status,
+                    parent_id=parent_id_filter,
+                    limit=limit,
+                    offset=offset,
+                    order_by="created_at",
+                    order_desc=True
+                )
                 
-                # Check if task has children (if has_children field is not set or False, check database)
-                if not task_dict.get("has_children"):
-                    children = await task_repository.get_child_tasks_by_parent_id(task.id)
-                    task_dict["has_children"] = len(children) > 0
+                # Convert to dictionaries and check if tasks have children
+                task_dicts = []
+                for task in tasks:
+                    task_dict = task.to_dict()
+                    
+                    # Check if task has children (if has_children field is not set or False, check database)
+                    if not task_dict.get("has_children"):
+                        children = await task_repository.get_child_tasks_by_parent_id(task.id)
+                        task_dict["has_children"] = len(children) > 0
+                    
+                    task_dicts.append(task_dict)
                 
-                task_dicts.append(task_dict)
-            
-            return task_dicts
+                return task_dicts
+            finally:
+                # Ensure session is properly closed
+                await db_session.close()
         
         tasks = run_async_safe(get_all_tasks())
         typer.echo(json.dumps(tasks, indent=2))

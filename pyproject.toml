@@ -54,6 +54,7 @@ cli = [
     "rich>=13.0.0",
     "typer>=0.9.0",
     "python-dotenv>=1.0.0",  # For .env file support
+    "nest_asyncio>=1.5.0",  # For handling nested event loops in async CLI commands
 ]
 
 # PostgreSQL storage (enterprise/distributed scenarios)
