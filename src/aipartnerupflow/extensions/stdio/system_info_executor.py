@@ -194,7 +194,16 @@ class SystemInfoExecutor(BaseTask):
                     if 'Model name' in line:
                         info["brand"] = line.split(':')[1].strip()
                     elif 'CPU(s)' in line:
-                        info["cores"] = int(line.split(':')[1].strip())
+                        cpu_str = line.split(':')[1].strip()
+                        # Handle range format like "0-13" -> 14 cores
+                        if '-' in cpu_str:
+                            try:
+                                parts = cpu_str.split('-')
+                                info["cores"] = int(parts[-1]) - int(parts[0]) + 1
+                            except (ValueError, IndexError):
+                                info["cores"] = int(cpu_str) if cpu_str.isdigit() else None
+                        else:
+                            info["cores"] = int(cpu_str) if cpu_str.isdigit() else None
             return info
         else:  # Windows or other
             return {
