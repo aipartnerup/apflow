@@ -202,7 +202,7 @@ class TestTasksCountCommand:
     @pytest.mark.asyncio
     async def test_tasks_count_empty_db(self, use_test_db_session):
         """Test counting tasks when database is empty"""
-        result = runner.invoke(app, ["tasks", "count"])
+        result = runner.invoke(app, ["tasks", "count", "--format", "json"])
         
         assert result.exit_code == 0
         output = result.stdout
@@ -237,7 +237,7 @@ class TestTasksCountCommand:
             if status != "pending":
                 await task_repository.update_task_status(task_id, status)
         
-        result = runner.invoke(app, ["tasks", "count"])
+        result = runner.invoke(app, ["tasks", "count", "--format", "json"])
         
         assert result.exit_code == 0
         output = result.stdout
@@ -274,7 +274,8 @@ class TestTasksCountCommand:
         
         result = runner.invoke(app, [
             "tasks", "count",
-            "--user-id", "user_1"
+            "--user-id", "user_1",
+            "--format", "json"
         ])
         
         assert result.exit_code == 0
@@ -328,12 +329,12 @@ class TestTasksCountCommand:
             )
         
         # Count all tasks (should include children)
-        result_all = runner.invoke(app, ["tasks", "count"])
+        result_all = runner.invoke(app, ["tasks", "count", "--format", "json"])
         assert result_all.exit_code == 0
         count_all = json.loads(result_all.stdout)
         
         # Count root only (should exclude children)
-        result_root = runner.invoke(app, ["tasks", "count", "--root-only"])
+        result_root = runner.invoke(app, ["tasks", "count", "--root-only", "--format", "json"])
         assert result_root.exit_code == 0
         count_root = json.loads(result_root.stdout)
         
