@@ -1,14 +1,10 @@
----
-description: High-Quality Code Specification – Simplicity, Readability, and Maintainability First
-globs: "**/*.py, **/*.sh, **/*.yml, **/*.md"
-alwaysApply: true
----
+# High-Quality Code Specification – Simplicity, Readability, and Maintainability First
 
 ## Core Principles (Highest Priority)
-- Always choose the simplest, most readable, and maintainable solution, even if it looks “less fancy.”
+- Always choose the simplest, most readable, and maintainable solution, even if it looks "less fancy."
 - Use design patterns reasonably, but strictly forbid premature abstraction, premature optimization, and over-engineering.
 - If a piece of code takes a reader (including future you) more than 10 seconds to understand, it is bad code.
-- If 10 lines of straightforward code can solve the problem, never use 50 lines of “elegant” design patterns.
+- If 10 lines of straightforward code can solve the problem, never use 50 lines of "elegant" design patterns.
 
 ## Python Code Quality Requirements
 
@@ -49,13 +45,6 @@ alwaysApply: true
 - Any code handling user input must consider injection, overflow, XSS, and other security risks.
 - Hard-coding secrets, passwords, or API keys is strictly prohibited; they must come from configuration or secret management systems.
 
-### Things Cursor Must Strictly Obey
-- Never create `.md`, `README`, or any documentation files unless I explicitly request them.
-- Never create `examples/`, `sample/`, `demo.py`, or similar example files unless I explicitly request them.
-- Do not add unnecessary `.pyi` stubs or pollute `__init__.py` with excessive exports.
-- All comments, docstrings, log messages, and error messages must be in English.
-- When modifying the logic of an existing method, always examine the full surrounding context and thoroughly understand the original intent and behavior before making any changes.
-
 ### Code Formatting (MUST Follow)
 - Line length: 100 characters maximum.
 - Use `black` formatting style with `line-length = 100`.
@@ -63,4 +52,14 @@ alwaysApply: true
 - Import order: standard library → third-party → local; sort alphabetically within each group.
 - Use double quotes for strings (black default).
 - Add trailing commas in multi-line collections.
+
+### Strict Rules for Code Generation
+- Never create `.md`, `README`, or any documentation files unless explicitly requested.
+- Never create `examples/`, `sample/`, `demo.py`, or similar example files unless explicitly requested.
+- Do not add unnecessary `.pyi` stubs or pollute `__init__.py` with excessive exports.
+- All comments, docstrings, log messages, and error messages must be in English.
+- When modifying the logic of an existing method, always examine the full surrounding context and thoroughly understand the original intent and behavior before making any changes.
+
+### Code Formatting
 - Strictly adhere to `ruff` + `black` + `pyright` configuration; zero format or type errors allowed.
+- Import order: standard library → third-party → local; sort alphabetically within each group.

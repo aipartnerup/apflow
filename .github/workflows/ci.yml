@@ -43,6 +43,18 @@ jobs:
           pip install -e ".[dev,cli,a2a]"
         fi
 
+    - name: Check code formatting with Black
+      run: |
+        black --check --diff src/ tests/
+
+    - name: Lint with Ruff
+      run: |
+        ruff check src/ tests/
+
+    - name: Type check with mypy
+      run: |
+        mypy src/aipartnerupflow --ignore-missing-imports
+
     - name: Run tests
       run: |
         pytest
