@@ -40,12 +40,21 @@ def _load_env_file():
 
 def _load_cli_plugins(app: typer.Typer):
     """
-    Robustly load CLI extensions from entry points.
-    Directly iterates over distributions to avoid metadata discovery quirks.
+    Robustly load CLI extensions from entry points and registry.
     """
     from importlib.metadata import distributions
+    from aipartnerupflow.cli.decorators import get_cli_registry
+
     seen_plugins = set()
-    
+
+    # First, load from decorator registry
+    for name, plugin_app in get_cli_registry().items():
+        if name not in seen_plugins:
+            app.add_typer(plugin_app, name=name)
+            seen_plugins.add(name)
+            logger.debug(f"Loaded CLI extension from registry: {name}")
+
+    # Then, load from entry points
     for dist in distributions():
         try:
             for ep in dist.entry_points:

@@ -313,11 +313,76 @@ class CancellableExecutor(ExecutableTask):
 
 ## Creating CLI Extensions
 
-CLI extensions allow you to register new subcommand groups to the `apflow` CLI using Python's `entry_points` mechanism.
+CLI extensions allow you to register new subcommand groups to the `apflow` CLI. There are two methods:
 
-### 1. Create your Command Group
+1. **Decorator-based registration** (recommended for internal extensions)
+2. **Entry points registration** (recommended for external packages)
 
-Inherit from `CLIExtension` to ensure consistent UI defaults (like showing help when no arguments are provided).
+### Method 1: Using `@cli_register` Decorator
+
+The `@cli_register()` decorator provides a clean, declarative way to register CLI extensions:
+
+```python
+from aipartnerupflow.cli import CLIExtension, cli_register
+
+@cli_register(name="users", help="Manage and analyze users")
+class UsersCommand(CLIExtension):
+    pass
+
+# Add commands to the registered extension
+from aipartnerupflow.cli import get_cli_registry
+
+users_app = get_cli_registry()["users"]
+
+@users_app.command()
+def stat():
+    """Display user statistics"""
+    print("User Statistics: ...")
+
+@users_app.command()
+def list():
+    """List all users"""
+    print("User list...")
+```
+
+#### Decorator Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `name` | `str` | Command name. If not provided, uses class name in lowercase with `_` converted to `-` |
+| `help` | `str` | Help text for the command |
+| `override` | `bool` | If `True`, allows overriding existing registration (default: `False`) |
+
+#### Auto-naming Examples
+
+```python
+@cli_register()  # name will be "users"
+class Users(CLIExtension):
+    pass
+
+@cli_register()  # name will be "task-manager"
+class TaskManager(CLIExtension):
+    pass
+
+@cli_register()  # name will be "my-custom-command"
+class my_custom_command(CLIExtension):
+    pass
+```
+
+#### Override Existing Registration
+
+```python
+@cli_register(name="users", override=True)
+class EnhancedUsersCommand(CLIExtension):
+    """Override the existing 'users' command"""
+    pass
+```
+
+### Method 2: Using Entry Points (External Packages)
+
+For external packages, register your command group under the `aipartnerupflow.cli_plugins` group in your project's `pyproject.toml`.
+
+#### 1. Create your Command Group
 
 ```python
 from aipartnerupflow.cli import CLIExtension
@@ -336,9 +401,7 @@ def list():
     print("User list...")
 ```
 
-### 2. Register in `pyproject.toml`
-
-Register your command group under the `aipartnerupflow.cli_plugins` group in your project's `pyproject.toml`.
+#### 2. Register in `pyproject.toml`
 
 ```toml
 [project.entry-points."aipartnerupflow.cli_plugins"]
@@ -348,19 +411,29 @@ users = "your_package.cli:users_app"
 - The entry point **key** (`users`) will be the name of the subcommand cluster.
 - The **value** points to the `CLIExtension` (or `typer.Typer`) instance.
 
-### 3. Usage
+### Usage
 
-After installing your package in the same environment as `aipartnerupflow`, the command will be available automatically:
+After registration (via decorator or entry points), the command will be available:
 
 ```bash
 apflow users stat
+apflow users list
 ```
 
 ### Supported Plugin Types
 
-Discovery supports two types of plugin objects:
+Both registration methods support two types of plugin objects:
 1. **`typer.Typer` (or `CLIExtension`)**: Registered as a **subcommand group** (e.g., `apflow users <cmd>`).
 2. **`Callable` (function)**: Registered as a **single command** (e.g., `apflow run-once`).
+
+### CLI Extension API Reference
+
+```python
+from aipartnerupflow.cli import (
+    CLIExtension,      # Base class for CLI extensions (inherits from typer.Typer)
+    cli_register,      # Decorator for registering CLI extensions
+    get_cli_registry,  # Get all registered CLI extensions
+)
 ```
 
 ## Advanced: Streaming Support

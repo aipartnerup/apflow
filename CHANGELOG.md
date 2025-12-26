@@ -8,6 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **CLI Extension Decorator (`cli_register`)**
+  - New `@cli_register()` decorator for registering CLI extensions, similar to `@executor_register()`
+  - Decorator supports `name`, `help`, and `override` parameters
+  - Auto-derives command name from class name (converts `_` to `-`)
+  - New `get_cli_registry()` function to access registered CLI extensions
+  - CLI extensions are loaded from decorator registry before entry_points discovery
+  - Added comprehensive test coverage (18 tests) for CLI extension decorators
+
 - **Exception Handling Architecture**
   - New exception hierarchy based on FastAPI/production framework best practices
   - `ApflowError` base exception for all framework-specific errors
