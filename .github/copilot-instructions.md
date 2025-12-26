@@ -47,11 +47,12 @@
 
 ### Code Formatting (MUST Follow)
 - Line length: 100 characters maximum.
-- Use `black` formatting style with `line-length = 100`.
 - Use `ruff` for linting with `line-length = 100`, `target-version = "py310"`.
 - Import order: standard library → third-party → local; sort alphabetically within each group.
-- Use double quotes for strings (black default).
+- Use double quotes for strings.
 - Add trailing commas in multi-line collections.
+- Strictly adhere to `ruff` configuration; zero lint errors allowed.
+- Type annotations are required for all new code (pyright validation is a goal, not yet enforced in CI).
 
 ### Strict Rules for Code Generation
 - Never create `.md`, `README`, or any documentation files unless explicitly requested.
@@ -61,5 +62,5 @@
 - When modifying the logic of an existing method, always examine the full surrounding context and thoroughly understand the original intent and behavior before making any changes.
 
 ### Code Formatting
-- Strictly adhere to `ruff` + `black` + `pyright` configuration; zero format or type errors allowed.
+- Strictly adhere to `ruff` configuration; zero lint errors allowed.
 - Import order: standard library → third-party → local; sort alphabetically within each group.
