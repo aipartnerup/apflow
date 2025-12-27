@@ -28,6 +28,8 @@ from aipartnerupflow.core import (
     StreamingCallbacks,
     create_session,
     get_default_session,
+    get_hook_session,
+    get_hook_repository,
     # Backward compatibility (deprecated)
     create_storage,
     get_default_storage,
@@ -64,6 +66,8 @@ __all__ = [
     "StreamingCallbacks",
     "create_session",
     "get_default_session",
+    "get_hook_session",
+    "get_hook_repository",
     # Backward compatibility (deprecated)
     "create_storage",
     "get_default_storage",

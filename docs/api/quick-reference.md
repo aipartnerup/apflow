@@ -279,6 +279,8 @@ async def validate_inputs(task):
             task.inputs["url"] = f"https://{url}"
 ```
 
+**Note:** Changes to `task.inputs` are automatically persisted!
+
 ### Post-Execution Hook
 
 ```python
@@ -289,6 +291,32 @@ async def log_results(task, inputs, result):
     """Log results after execution"""
     print(f"Task {task.id} completed: {result}")
 ```
+
+### Hook Database Access
+
+```python
+from aipartnerupflow import register_pre_hook, get_hook_repository
+
+@register_pre_hook
+async def modify_task_with_db(task):
+    """Access database in hook"""
+    # Get repository from hook context
+    repo = get_hook_repository()
+    if repo:
+        # Update task fields
+        await repo.update_task_name(task.id, "New Name")
+        await repo.update_task_priority(task.id, 10)
+        
+        # Query other tasks
+        pending_tasks = await repo.get_tasks_by_status("pending")
+        print(f"Found {len(pending_tasks)} pending tasks")
+```
+
+**Key Features:**
+- Hooks share the same database session as TaskManager
+- No need to create separate sessions
+- Changes are visible across all hooks in the execution
+- Thread-safe context isolation
 
 ### Use Hooks with TaskManager
 

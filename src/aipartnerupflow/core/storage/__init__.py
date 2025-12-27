@@ -21,6 +21,11 @@ from aipartnerupflow.core.storage.factory import (
     get_default_storage,
 )
 
+from aipartnerupflow.core.storage.context import (
+    get_hook_session,
+    get_hook_repository,
+)
+
 __all__ = [
     "create_session",
     "get_default_session",
@@ -33,6 +38,9 @@ __all__ = [
     "get_session_pool_manager",
     "reset_session_pool_manager",
     "SessionLimitExceeded",
+    # Hook execution context
+    "get_hook_session",
+    "get_hook_repository",
     # Backward compatibility (deprecated)
     "create_storage",
     "get_default_storage",

@@ -222,6 +222,8 @@ async def validate_and_transform(task):
     task.inputs["_processed_at"] = datetime.now().isoformat()
 ```
 
+**Note:** Modifications to `task.inputs` in pre-hooks are automatically detected and persisted to the database. No explicit save required!
+
 ### Post-Execution Hooks
 
 Process results after execution:
@@ -239,6 +241,63 @@ async def log_and_notify(task, inputs, result):
     # Send notification (example)
     if result.get("status") == "failed":
         send_alert(f"Task {task.id} failed: {result.get('error')}")
+```
+
+### Accessing Database in Hooks
+
+Hooks can access the database using the same session as TaskManager:
+
+```python
+from aipartnerupflow import register_pre_hook, get_hook_repository
+
+@register_pre_hook
+async def modify_task_fields(task):
+    """Modify task fields using hook repository"""
+    # Get repository from hook context
+    repo = get_hook_repository()
+    if not repo:
+        return  # Not in hook context
+    
+    # Modify task fields explicitly
+    await repo.update_task_name(task.id, "Modified Name")
+    await repo.update_task_priority(task.id, 10)
+    
+    # Query other tasks
+    pending_tasks = await repo.get_tasks_by_status("pending")
+    print(f"Found {len(pending_tasks)} pending tasks")
+    
+    # Modify dependency tasks
+    if task.dependencies:
+        dep_id = task.dependencies[0]["id"]
+        await repo.update_task_priority(dep_id, 100)
+```
+
+**Key Points:**
+- `get_hook_repository()` returns the same repository instance used by TaskManager
+- All hooks in the same execution share the same database session/transaction
+- Changes made by one hook are visible to subsequent hooks
+- No need to open separate database sessions
+- Thread-safe and context-isolated (uses Python's ContextVar)
+
+**Lifecycle and Context:**
+
+Hook database access is managed through a context that spans the entire task tree execution:
+
+1. **Hook Context Lifecycle**: Set at task tree distribution start, cleared in finally block (guaranteed)
+2. **Session Lifecycle**: Shared session created at TaskExecutor entry, used by all hooks and tasks
+3. **Execution Timeline**: `set_hook_context()` → all hooks execute → `clear_hook_context()` (always)
+
+For detailed lifecycle information, see [Task Tree Execution Lifecycle](../architecture/task-tree-lifecycle.md).
+
+**Available Hook Repository Methods:**
+- `update_task_name(task_id, name)` - Update task name
+- `update_task_priority(task_id, priority)` - Update task priority
+- `update_task_status(task_id, status)` - Update task status
+- `update_task_params(task_id, params)` - Update task params
+- `update_task_inputs(task_id, inputs)` - Update task inputs (usually not needed, direct modification is auto-saved)
+- `get_task_by_id(task_id)` - Query task by ID
+- `get_tasks_by_status(status)` - Query tasks by status
+- And all other TaskRepository methods...
 ```
 
 ## Using Custom TaskModel

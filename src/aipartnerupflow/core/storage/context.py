@@ -3,10 +3,12 @@ Database session context management using ContextVar
 
 This module provides request-level database session management using Python's
 ContextVar, allowing automatic session handling across nested function calls.
+
+Also provides hook execution context for accessing session and repository within hooks.
 """
 
 from contextvars import ContextVar
-from typing import Optional, Union, Callable
+from typing import Optional, Union, Callable, TYPE_CHECKING
 from functools import wraps
 from contextlib import asynccontextmanager
 from sqlalchemy.orm import Session
@@ -18,11 +20,19 @@ from aipartnerupflow.core.storage.factory import (
 )
 from aipartnerupflow.core.utils.logger import get_logger
 
+if TYPE_CHECKING:
+    from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
 logger = get_logger(__name__)
 
 # Context variable to store the current request's database session
 _db_session_context: ContextVar[Optional[Union[Session, AsyncSession]]] = ContextVar(
     "db_session", default=None
+)
+
+# Context variable for hook execution context (task repository)
+_hook_context: ContextVar[Optional["TaskRepository"]] = ContextVar(
+    "hook_context", default=None
 )
 
 
@@ -38,8 +48,88 @@ def get_request_session() -> Optional[Union[Session, AsyncSession]]:
         If no session is available (e.g., outside of a request context),
         it returns None. Use this for operations that need the request's
         isolated session.
+        
+        **For hooks**: Use `get_hook_session()` instead to get the task execution session.
     """
     return _db_session_context.get()
+
+
+def get_hook_session() -> Optional[Union[Session, AsyncSession]]:
+    """
+    Get the database session for hook execution context
+    
+    Returns:
+        Database session from hook context if available, None otherwise
+        
+    Usage in hooks:
+        ```python
+        from aipartnerupflow import register_pre_hook, get_hook_session
+        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        
+        @register_pre_hook
+        async def my_hook(task):
+            session = get_hook_session()
+            if session:
+                repo = TaskRepository(session)
+                # Query other tasks, update database, etc.
+                other_task = await repo.get_task_by_id(some_id)
+        ```
+    
+    Note:
+        This session is shared across the entire task tree execution.
+        All hooks within the same task tree share this session.
+        The session is managed by TaskManager and should not be committed/closed in hooks.
+    """
+    repo = _hook_context.get()
+    if repo:
+        return repo.db
+    return None
+
+
+def get_hook_repository() -> Optional["TaskRepository"]:
+    """
+    Get the TaskRepository for hook execution context
+    
+    Returns:
+        TaskRepository from hook context if available, None otherwise
+        
+    Usage in hooks:
+        ```python
+        from aipartnerupflow import register_pre_hook, get_hook_repository
+        
+        @register_pre_hook
+        async def my_hook(task):
+            repo = get_hook_repository()
+            if repo:
+                # Use repository methods directly
+                other_task = await repo.get_task_by_id(some_id)
+                await repo.update_task_status(other_task.id, "pending")
+        ```
+    
+    Note:
+        Prefer this over `get_hook_session()` + manual TaskRepository creation,
+        as it reuses the same repository instance used by TaskManager.
+    """
+    return _hook_context.get()
+
+
+def set_hook_context(repository: "TaskRepository") -> None:
+    """
+    Set the TaskRepository for hook execution context
+    
+    Args:
+        repository: TaskRepository instance to set in context
+        
+    Note:
+        This is called internally by TaskManager.
+        Manual use is generally not needed.
+    """
+    _hook_context.set(repository)
+
+
+def clear_hook_context() -> None:
+    """Clear the hook execution context"""
+    _hook_context.set(None)
 
 
 def set_request_session(session: Union[Session, AsyncSession]) -> None:

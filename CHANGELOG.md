@@ -8,6 +8,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Hook Execution Context for Database Access**
+  - New `get_hook_repository()` function allows hooks to access database within task execution context
+  - New `get_hook_session()` function provides direct access to database session in hooks
+  - Hooks now share the same database session/transaction as TaskManager (no need for separate sessions)
+  - Auto-persistence for `task.inputs` modifications in pre-hooks (detected and saved automatically)
+  - Explicit repository methods available for other field modifications (name, priority, status, etc.)
+  - Thread-safe context isolation using Python's `ContextVar` (similar to Flask/Celery patterns)
+  - Added `set_hook_context()` and `clear_hook_context()` internal functions for context management
+  - Exported to public API: `aipartnerupflow.get_hook_repository` and `aipartnerupflow.get_hook_session`
+  - Added comprehensive test coverage (16 tests):
+    - Hook context basic operations and lifecycle
+    - Multiple hooks sharing same session instance
+    - Hooks sharing transaction context and seeing uncommitted changes
+    - Hooks cooperating via shared session
+    - Auto-persistence of task.inputs modifications
+    - Explicit field updates via repository methods
+
+- **Database Session Safety Enhancements**
+  - Added `flag_modified()` calls for all JSON fields (result, inputs, dependencies, params, schemas) to ensure SQLAlchemy detects in-place modifications
+  - Added `db.refresh()` after critical status updates to ensure fresh data from database
+  - Added concurrent execution protection: same task_tree cannot run multiple times simultaneously
+  - Returns `{"status": "already_running"}` when attempting concurrent execution of same task tree
+  - Added 12 new tests for concurrent protection and JSON field persistence
+
 - **CLI Extension Decorator (`cli_register`)**
   - New `@cli_register()` decorator for registering CLI extensions, similar to `@executor_register()`
   - Decorator supports `name`, `help`, and `override` parameters

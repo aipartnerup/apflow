@@ -11,6 +11,7 @@ from decimal import Decimal
 from inspect import iscoroutinefunction
 from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
 from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from aipartnerupflow.core.storage.context import set_hook_context, clear_hook_context
 from aipartnerupflow.core.execution.streaming_callbacks import StreamingCallbacks
 from aipartnerupflow.core.extensions import get_registry, ExtensionCategory
 from aipartnerupflow.core.types import (
@@ -281,33 +282,40 @@ class TaskManager:
         """
         logger.info(f"Distributing task tree with root task: {task_tree.task.id}")
         
-        root_task = task_tree.task
-        
-        # Call on_tree_created hook
-        await self._call_task_tree_hooks("on_tree_created", root_task, task_tree)
-        
-        # Call on_tree_started hook
-        await self._call_task_tree_hooks("on_tree_started", root_task)
+        # Set hook context for DB access in hooks
+        set_hook_context(self.task_repository)
         
         try:
-            # Execute task tree
-            await self._execute_task_tree_recursive(task_tree, use_callback)
+            root_task = task_tree.task
             
-            # Check final status
-            final_status = task_tree.calculate_status()
+            # Call on_tree_created hook
+            await self._call_task_tree_hooks("on_tree_created", root_task, task_tree)
             
-            # Call on_tree_completed hook
-            if final_status == "completed":
-                await self._call_task_tree_hooks("on_tree_completed", root_task, "completed")
-            else:
-                # Tree finished but not all tasks completed (some failed)
-                await self._call_task_tree_hooks("on_tree_failed", root_task, f"Tree finished with status: {final_status}")
+            # Call on_tree_started hook
+            await self._call_task_tree_hooks("on_tree_started", root_task)
             
-            return task_tree
-        except Exception as e:
-            # Call on_tree_failed hook
-            await self._call_task_tree_hooks("on_tree_failed", root_task, str(e))
-            raise
+            try:
+                # Execute task tree
+                await self._execute_task_tree_recursive(task_tree, use_callback)
+                
+                # Check final status
+                final_status = task_tree.calculate_status()
+                
+                # Call on_tree_completed hook
+                if final_status == "completed":
+                    await self._call_task_tree_hooks("on_tree_completed", root_task, "completed")
+                else:
+                    # Tree finished but not all tasks completed (some failed)
+                    await self._call_task_tree_hooks("on_tree_failed", root_task, f"Tree finished with status: {final_status}")
+                
+                return task_tree
+            except Exception as e:
+                # Call on_tree_failed hook
+                await self._call_task_tree_hooks("on_tree_failed", root_task, str(e))
+                raise
+        finally:
+            # Clear hook context
+            clear_hook_context()
     
     async def distribute_task_tree_with_streaming(
         self,
@@ -323,68 +331,75 @@ class TaskManager:
         """
         logger.info(f"Distributing task tree with streaming, root task: {task_tree.task.id}")
         
-        # Enable streaming mode and set root task ID
-        self.stream = True
-        self.streaming_final = False
-        self.root_task_id = task_tree.task.id
-        
-        root_task = task_tree.task
-        
-        # Call on_tree_created hook
-        await self._call_task_tree_hooks("on_tree_created", root_task, task_tree)
-        
-        # Call on_tree_started hook
-        await self._call_task_tree_hooks("on_tree_started", root_task)
+        # Set hook context for DB access in hooks
+        set_hook_context(self.task_repository)
         
         try:
-            # Send initial status
-            self.streaming_callbacks.progress(task_tree.task.id, 0.0, "Task tree execution started")
+            # Enable streaming mode and set root task ID
+            self.stream = True
+            self.streaming_final = False
+            self.root_task_id = task_tree.task.id
             
-            # Save task IDs before execution to avoid accessing them after session rollback
-            root_task_id = root_task.id
-            task_tree_root_id = task_tree.task.id
+            root_task = task_tree.task
             
-            # Execute task tree with progress streaming
-            await self._execute_task_tree_recursive(task_tree, use_callback)
+            # Call on_tree_created hook
+            await self._call_task_tree_hooks("on_tree_created", root_task, task_tree)
             
-            # Check final status
-            final_progress = task_tree.calculate_progress()
-            final_status = task_tree.calculate_status()
+            # Call on_tree_started hook
+            await self._call_task_tree_hooks("on_tree_started", root_task)
             
-            # Ensure progress is a float
-            if isinstance(final_progress, Decimal):
-                final_progress = float(final_progress)
-            
-            # Send final status if all tasks are completed
-            if final_status == "completed":
-                self.streaming_callbacks.final(
-                    task_tree_root_id,
-                    final_status,
-                    result={"progress": final_progress}
-                )
-                # Call on_tree_completed hook
-                await self._call_task_tree_hooks("on_tree_completed", root_task, "completed")
-            else:
-                # Send progress update
-                self.streaming_callbacks.progress(
-                    task_tree_root_id,
-                    final_progress,
-                    f"Task tree execution {final_status}"
-                )
-                # Call on_tree_failed hook
-                await self._call_task_tree_hooks("on_tree_failed", root_task, f"Tree finished with status: {final_status}")
-                
-        except Exception as e:
-            logger.error(f"Error in distribute_task_tree_with_streaming: {str(e)}")
-            # Use saved task ID to avoid accessing task after session rollback
             try:
-                task_tree_root_id = task_tree.task.id if task_tree and task_tree.task else root_task_id
-            except Exception:
-                task_tree_root_id = root_task_id
-            self.streaming_callbacks.task_failed(task_tree_root_id, str(e))
-            # Call on_tree_failed hook
-            await self._call_task_tree_hooks("on_tree_failed", root_task, str(e))
-            raise
+                # Send initial status
+                self.streaming_callbacks.progress(task_tree.task.id, 0.0, "Task tree execution started")
+                
+                # Save task IDs before execution to avoid accessing them after session rollback
+                root_task_id = root_task.id
+                task_tree_root_id = task_tree.task.id
+                
+                # Execute task tree with progress streaming
+                await self._execute_task_tree_recursive(task_tree, use_callback)
+                
+                # Check final status
+                final_progress = task_tree.calculate_progress()
+                final_status = task_tree.calculate_status()
+                
+                # Ensure progress is a float
+                if isinstance(final_progress, Decimal):
+                    final_progress = float(final_progress)
+                
+                # Send final status if all tasks are completed
+                if final_status == "completed":
+                    self.streaming_callbacks.final(
+                        task_tree_root_id,
+                        final_status,
+                        result={"progress": final_progress}
+                    )
+                    # Call on_tree_completed hook
+                    await self._call_task_tree_hooks("on_tree_completed", root_task, "completed")
+                else:
+                    # Send progress update
+                    self.streaming_callbacks.progress(
+                        task_tree_root_id,
+                        final_progress,
+                        f"Task tree execution {final_status}"
+                    )
+                    # Call on_tree_failed hook
+                    await self._call_task_tree_hooks("on_tree_failed", root_task, f"Tree finished with status: {final_status}")
+                    
+            except Exception as e:
+                logger.error(f"Error in distribute_task_tree_with_streaming: {str(e)}")
+                # Use saved task ID to avoid accessing task after session rollback
+                try:
+                    task_tree_root_id = task_tree.task.id if task_tree and task_tree.task else root_task_id
+                except Exception:
+                    task_tree_root_id = root_task_id
+                self.streaming_callbacks.task_failed(task_tree_root_id, str(e))
+                # Call on_tree_failed hook
+                await self._call_task_tree_hooks("on_tree_failed", root_task, str(e))
+                raise
+        finally:
+            # Clear hook context
+            clear_hook_context()
     
     async def _execute_task_tree_recursive(
         self,

@@ -33,6 +33,14 @@ The core API consists of:
 - **TaskCreator**: Task tree creation from arrays
 - **ExtensionRegistry**: Extension discovery and management
 
+**Understanding Lifecycles:**
+
+For a complete understanding of task execution flow, database session management, and hook context lifecycle, see [Task Tree Execution Lifecycle](../architecture/task-tree-lifecycle.md). This is essential reading for:
+- Implementing hooks that access the database
+- Understanding session scope and transaction boundaries
+- Debugging execution issues
+- Ensuring proper resource cleanup
+
 ## Quick Start Example
 
 ```python
@@ -300,7 +308,29 @@ Task status constants and utilities.
 - `executor_register()`: Decorator to register executors (recommended)
 - `register_pre_hook(hook)`: Register pre-execution hook
 - `register_post_hook(hook)`: Register post-execution hook
+- `register_task_tree_hook(event, hook)`: Register task tree lifecycle hook
 - `get_registry()`: Get extension registry instance
+
+### Hook Database Access
+
+- `get_hook_repository()`: Get TaskRepository instance in hook context (recommended)
+- `get_hook_session()`: Get database session in hook context
+
+Hooks can access the database using the same session as TaskManager:
+
+```python
+from aipartnerupflow import register_pre_hook, get_hook_repository
+
+@register_pre_hook
+async def my_hook(task):
+    # Get repository from hook context
+    repo = get_hook_repository()
+    if repo:
+        # Modify task fields
+        await repo.update_task_priority(task.id, 10)
+        # Query other tasks
+        pending = await repo.get_tasks_by_status("pending")
+```
 
 **See**: `src/aipartnerupflow/core/decorators.py` and `src/aipartnerupflow/core/extensions/registry.py` for implementation.
 

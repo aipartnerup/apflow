@@ -12,6 +12,19 @@ Learn from the experts. This guide covers design patterns, optimization techniqu
 6. [Testing Strategies](#testing-strategies)
 7. [Production Readiness](#production-readiness)
 
+## Understanding Lifecycles
+
+**Important:** Before diving into best practices, understand the execution model:
+
+- **Task Tree Execution Lifecycle**: How tasks are created, distributed, executed, and completed
+- **DB Session Context Hook Lifecycle**: How hooks access the database and share context
+
+See [Task Tree Execution Lifecycle](../architecture/task-tree-lifecycle.md) for comprehensive details on:
+- Session scope and lifetime (spans entire task tree)
+- Hook context setup and cleanup (guaranteed by finally blocks)
+- Execution order and concurrency guarantees
+- Error handling and resource cleanup patterns
+
 ## Task Design
 
 ### 1. Single Responsibility Principle
@@ -317,6 +330,112 @@ data = create_task(name="process_data", priority=NORMAL)
 # Cleanup (low priority)
 cleanup = create_task(name="cleanup", priority=LOW)
 ```
+
+## Hooks Best Practices
+
+### 1. Use Hooks for Cross-Cutting Concerns
+
+**Good use cases:**
+- Validation and transformation of inputs
+- Logging and monitoring
+- Authentication and authorization checks
+- Metrics collection
+- Notification sending
+
+```python
+from aipartnerupflow import register_pre_hook, register_post_hook
+
+@register_pre_hook
+async def validate_and_enrich(task):
+    """Validate inputs and add metadata"""
+    # Validate
+    if task.inputs and "user_id" in task.inputs:
+        if not task.inputs["user_id"]:
+            raise ValueError("user_id is required")
+    
+    # Enrich with metadata
+    task.inputs["_hook_timestamp"] = datetime.now().isoformat()
+    task.inputs["_environment"] = os.getenv("ENV", "production")
+
+@register_post_hook
+async def log_and_metric(task, inputs, result):
+    """Log execution and collect metrics"""
+    duration = (datetime.now() - task.created_at).total_seconds()
+    logger.info(f"Task {task.id} completed in {duration}s")
+    metrics.record("task.duration", duration, tags={"type": task.type})
+```
+
+### 2. Modify Task Fields Using Hook Repository
+
+**For fields other than inputs, use `get_hook_repository()`:**
+
+```python
+from aipartnerupflow import register_pre_hook, get_hook_repository
+
+@register_pre_hook
+async def adjust_priority_by_load(task):
+    """Adjust task priority based on system load"""
+    repo = get_hook_repository()
+    if not repo:
+        return
+    
+    # Query current system load
+    pending_count = len(await repo.get_tasks_by_status("pending"))
+    
+    # Adjust priority if system is overloaded
+    if pending_count > 100:
+        await repo.update_task_priority(task.id, task.priority + 1)
+```
+
+**Remember:**
+- `task.inputs` modifications are auto-persisted (no explicit save needed)
+- Other fields require explicit repository method calls
+- All hooks share the same database session
+- Changes made by one hook are visible to subsequent hooks
+
+### 3. Keep Hooks Fast and Lightweight
+
+**Bad:**
+```python
+@register_pre_hook
+async def slow_hook(task):
+    # Don't do heavy computation in hooks!
+    await expensive_api_call()  # ❌
+    time.sleep(5)  # ❌
+    complex_calculation()  # ❌
+```
+
+**Good:**
+```python
+@register_pre_hook
+async def fast_hook(task):
+    # Quick validation and transformation only
+    if task.inputs:
+        task.inputs["validated"] = True
+    # Heavy work should be in separate tasks
+```
+
+### 4. Handle Hook Failures Gracefully
+
+**Hooks should not crash the entire execution:**
+
+```python
+@register_pre_hook
+async def safe_hook(task):
+    """Hook with proper error handling"""
+    try:
+        # Your hook logic
+        await validate_something(task)
+    except Exception as e:
+        # Log error but don't fail the task
+        logger.error(f"Hook failed for task {task.id}: {e}")
+        # Optionally add error flag to inputs
+        if task.inputs is None:
+            task.inputs = {}
+        task.inputs["_hook_error"] = str(e)
+```
+
+**Note:** The framework already catches hook exceptions and logs them without failing task execution. But adding your own error handling provides more control.
 
 ## Error Handling
 
