@@ -94,12 +94,17 @@ class SystemRoutes(BaseRouteHandler):
 
     async def handle_health(self, params: dict, request_id: str) -> dict:
         """Handle health check"""
+        # Get actual running task count from TaskTracker
+        from aipartnerupflow.core.execution.task_tracker import TaskTracker
+        tracker = TaskTracker()
+        running_count = len(tracker._running_tasks)
+        
         return {
             "status": "healthy",
             "message": "aipartnerupflow is healthy",
-            "version": "0.2.0",
+            "version": "0.9.0",
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "running_tasks_count": 0,  # TODO: Implement actual task count
+            "running_tasks_count": running_count,
         }
 
     async def handle_llm_key_set(self, params: dict, request: Request, request_id: str) -> dict:

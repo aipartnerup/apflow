@@ -99,7 +99,22 @@ class LLMExecutor(BaseTask):
         else:
             stream = inputs.get("stream", False)
 
-        api_key = inputs.get("api_key")
+        # Get LLM API key with unified priority order:
+        # API context: header → LLMKeyConfigManager → environment variables
+        # CLI context: params → LLMKeyConfigManager → environment variables
+        api_key = inputs.get("api_key")  # First check inputs (CLI params)
+        if not api_key:
+            from aipartnerupflow.core.utils.llm_key_context import get_llm_key
+            from aipartnerupflow.core.utils.llm_key_injector import detect_provider_from_model
+            
+            # Get user_id from task context (via self.user_id property) or fallback to inputs
+            user_id = self.user_id or inputs.get("user_id")
+            # Detect provider from model name
+            provider = detect_provider_from_model(model)
+            # Get from unified context (header/config/env)
+            api_key = get_llm_key(user_id=user_id, provider=provider, context="auto")
+            if api_key:
+                logger.debug(f"Retrieved LLM key for user {user_id}, provider {provider}")
         
         # Prepare kwargs
         completion_kwargs = {
