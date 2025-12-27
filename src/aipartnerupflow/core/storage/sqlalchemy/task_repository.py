@@ -6,6 +6,7 @@ for tasks. TaskManager should use TaskRepository instead of directly operating o
 """
 
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING, Type, TypeVar
@@ -631,6 +632,8 @@ class TaskRepository:
                 task.error = None
             if result is not None:
                 task.result = result
+                # Mark JSON field as modified for SQLAlchemy change detection
+                flag_modified(task, "result")
             if progress is not None:
                 task.progress = progress
             if started_at is not None:
@@ -640,8 +643,10 @@ class TaskRepository:
             
             if self.is_async:
                 await self.db.commit()
+                await self.db.refresh(task)
             else:
                 self.db.commit()
+                self.db.refresh(task)
             
             return True
             
@@ -670,6 +675,8 @@ class TaskRepository:
                 return False
             
             task.inputs = inputs
+            # Mark JSON field as modified for SQLAlchemy change detection
+            flag_modified(task, "inputs")
             
             if self.is_async:
                 await self.db.commit()
@@ -711,6 +718,8 @@ class TaskRepository:
                 return False
             
             task.dependencies = dependencies
+            # Mark JSON field as modified for SQLAlchemy change detection
+            flag_modified(task, "dependencies")
             
             if self.is_async:
                 await self.db.commit()
@@ -819,6 +828,8 @@ class TaskRepository:
                 return False
             
             task.params = params
+            # Mark JSON field as modified for SQLAlchemy change detection
+            flag_modified(task, "params")
             
             if self.is_async:
                 await self.db.commit()
@@ -855,6 +866,8 @@ class TaskRepository:
                 return False
             
             task.schemas = schemas
+            # Mark JSON field as modified for SQLAlchemy change detection
+            flag_modified(task, "schemas")
             
             if self.is_async:
                 await self.db.commit()

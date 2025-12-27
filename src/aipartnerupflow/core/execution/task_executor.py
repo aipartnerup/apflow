@@ -184,6 +184,18 @@ class TaskExecutor:
                     db_session=session,
                 )
         
+        # Check if task tree is already running (prevent concurrent execution of same task tree)
+        # This check is done inside execute_task_tree to prevent race conditions
+        # that could occur if only checked at API layer
+        if self.is_task_running(root_task_id):
+            logger.warning(f"Task tree {root_task_id} is already running, rejecting concurrent execution")
+            return {
+                "status": "already_running",
+                "root_task_id": root_task_id,
+                "message": f"Task tree {root_task_id} is already running. "
+                           "Concurrent execution of the same task tree is not allowed.",
+            }
+        
         # Start task tracking
         await self.start_task_tracking(root_task_id)
         
