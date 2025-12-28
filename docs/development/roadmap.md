@@ -289,6 +289,33 @@ protocols = ["aipartnerupflow[graphql,mqtt,websocket-server]"]
 
 ---
 
+## Unified Configuration Management (ConfigManager)
+
+**Goal:**  
+Introduce a project-wide ConfigManager as the single source of truth for all configuration (CLI, daemon, business logic, testing, etc.), replacing scattered config file access and .env reliance.
+
+**Motivation:**  
+- Eliminate configuration pollution and inconsistency between CLI, daemon, and tests.
+- Support dynamic configuration reload, project/global scope, and future API-based config management.
+- Enable type-safe, maintainable, and testable configuration access across the entire codebase.
+
+**Key Steps:**
+1. Implement a ConfigManager singleton with type-safe get/set/reload methods.
+2. Refactor all code (CLI, daemon, business logic, tests) to access configuration exclusively via ConfigManager.
+3. Remove direct reads/writes to config files and .env for business parameters (except for secrets).
+4. Ensure all configuration changes (including duckdb_read_only and future options) are managed through ConfigManager.
+5. For daemon mode, expose configuration management APIs; CLI config commands interact with the daemon via HTTP API when running.
+6. Add unit tests for ConfigManager and all configuration-dependent logic.
+7. Document configuration conventions and migration steps for contributors.
+
+**Benefits:**
+- Consistent configuration state across all entrypoints.
+- Easy support for project/global profiles, plugin configs, and hot-reload.
+- Simplifies testing and avoids cross-test pollution.
+- Lays the foundation for future features like multi-profile, plugin, and remote config management.
+
+---
+
 ## Success Metrics
 
 ### Library-First Success Criteria
