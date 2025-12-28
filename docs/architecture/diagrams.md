@@ -22,7 +22,7 @@ sequenceDiagram
     participant TaskRoutes as TaskRoutes
     participant TaskExecutor as TaskExecutor
     participant TaskManager as TaskManager
-    participant Executor as Executor (CrewManager/HTTP/etc)
+    participant Executor as Executor (CrewaiExecutor/HTTP/etc)
     participant Storage as Storage (Database)
     
     Client->>APIServer: POST /tasks.execute
@@ -260,7 +260,7 @@ flowchart LR
     end
     
     subgraph Execution["Execution Layer"]
-        CrewAI[CrewManager]
+        CrewAI[CrewaiExecutor]
         HTTP[HTTPExecutor]
         Custom[Custom Executors]
     end

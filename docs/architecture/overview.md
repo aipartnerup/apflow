@@ -28,8 +28,8 @@ flowchart TD
     end
     
     subgraph ExecutionLayer["Task Execution Layer"]
-        CrewManager["CrewManager [crewai]<br/>- LLM task execution"]
-        BatchManager["BatchManager [crewai]<br/>- Batch orchestration"]
+        CrewaiExecutor["CrewaiExecutor [crewai]<br/>- LLM task execution"]
+        BatchCrewaiExecutor["BatchCrewaiExecutor [crewai]<br/>- Batch orchestration"]
         CustomTasks["Custom Tasks<br/>- External services<br/>- Automated tasks"]
     end
     
@@ -76,8 +76,8 @@ flowchart TD
 - ExecutableTask: Task execution specification interface
 
 **Task Execution Layer**
-- CrewManager [crewai]: CrewAI (LLM) task execution
-- BatchManager [crewai]: Batch task orchestration
+- CrewaiExecutor [crewai]: CrewAI (LLM) task execution
+- BatchCrewaiExecutor [crewai]: Batch task orchestration
 - Custom Tasks: Traditional external service calls, automated task services, etc.
 
 **Supporting Features Layer**
@@ -116,19 +116,19 @@ utils/             # Utility functions
 ```
 extensions/crewai/
 ├── __init__.py
-├── crew_manager.py     # CrewManager - CrewAI wrapper
-├── batch_manager.py    # BatchManager - batch execution of multiple crews
-└── types.py            # CrewManagerState, BatchState
+├── crewai_executor.py     # CrewaiExecutor - CrewAI wrapper
+├── batch_crewai_executor.py    # BatchCrewaiExecutor - batch execution of multiple crews
+└── types.py            # CrewaiExecutorState, BatchState
 ```
 
 **Installation**: `pip install aipartnerupflow[crewai]`
 
 **Includes**:
-- CrewManager for LLM-based agent crews
-- BatchManager for atomic batch execution of multiple crews
+- CrewaiExecutor for LLM-based agent crews
+- BatchCrewaiExecutor for atomic batch execution of multiple crews
 - Related type definitions
 
-**Note**: BatchManager is part of [crewai] because it's specifically designed for batching multiple CrewAI crews together.
+**Note**: BatchCrewaiExecutor is part of [crewai] because it's specifically designed for batching multiple CrewAI crews together.
 
 #### [http_executor] - HTTP/Remote API Task Execution
 
@@ -213,8 +213,8 @@ pip install aipartnerupflow[crewai]
 ```
 
 **Adds**:
-- CrewManager for LLM-based tasks via CrewAI
-- BatchManager for atomic batch execution of multiple crews
+- CrewaiExecutor for LLM-based tasks via CrewAI
+- BatchCrewaiExecutor for atomic batch execution of multiple crews
 
 **Use case**: Users who want LLM agent capabilities and/or batch execution of multiple crews.
 
@@ -242,13 +242,13 @@ pip install aipartnerupflow[all]
 #### ExecutableTask (`interfaces/executable_task.py`)
 - **Responsibility**: Define task execution specification interface
 - **Implementations**:
-  - `CrewManager` [crewai]: LLM-based tasks (via CrewAI)
+  - `CrewaiExecutor` [crewai]: LLM-based tasks (via CrewAI)
   - Custom tasks: Traditional external service calls, automated task services, etc.
 
 
 ### 2. Task Execution Layer
 
-#### CrewManager (`extensions/crewai/crew_manager.py`) [crewai]
+#### CrewaiExecutor (`extensions/crewai/crewai_executor.py`) [crewai]
 - **Responsibility**: CrewAI (LLM) task execution - **ExecutableTask implementation**
 - **Features**:
   - Wraps CrewAI Crew functionality
@@ -256,7 +256,7 @@ pip install aipartnerupflow[all]
   - Implements ExecutableTask interface
 - **Type**: Task executor (one of many possible implementations)
 
-#### BatchManager (`extensions/crewai/batch_manager.py`) [crewai]
+#### BatchCrewaiExecutor (`extensions/crewai/batch_crewai_executor.py`) [crewai]
 - **Responsibility**: Batch task orchestration for multiple crews (simple merging)
 - **Features**:
   - Atomic execution of multiple crews
@@ -281,7 +281,7 @@ pip install aipartnerupflow[all]
 - **Location**: Users create these in their own codebase
 
 #### Built-in Executors (Features)
-- **CrewManager** [crewai]: LLM-based tasks via CrewAI
+- **CrewaiExecutor** [crewai]: LLM-based tasks via CrewAI
 - **HTTPExecutor** [http]: Remote API calls via HTTP
 - **Future executors**: database executor, queue executor, etc.
 - **Location**: `extensions/` directory
@@ -378,9 +378,9 @@ Task.history           →  Not stored in TaskModel (LLM conversation history, e
 ### 1. LLM Tasks (CrewAI) [crewai]
 ```python
 # Requires: pip install aipartnerupflow[crewai]
-from aipartnerupflow.extensions.crewai import CrewManager
+from aipartnerupflow.extensions.crewai import CrewaiExecutor
 
-crew = CrewManager(
+crew = CrewaiExecutor(
     agents=[{"role": "Analyst", "goal": "Analyze data"}],
     tasks=[{"description": "Analyze input", "agent": "Analyst"}]
 )
@@ -408,7 +408,7 @@ class ScheduledTask(ExecutableTask):
 
 ## Task Orchestration Patterns
 
-### Simple Batch Orchestration (BatchManager) [crewai]
+### Simple Batch Orchestration (BatchCrewaiExecutor) [crewai]
 - Multiple crews execute sequentially, results are merged
 - Atomic operation: failure of any crew causes entire batch to fail
 - Part of [crewai] extra (designed for batching CrewAI crews)

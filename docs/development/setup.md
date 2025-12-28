@@ -318,10 +318,10 @@ pip install -e ".[crewai]"
 Includes:
 - `crewai[tools]` - Core CrewAI orchestration engine
 - `crewai-tools` - CrewAI tools
-- CrewManager for LLM-based agent crews
-- BatchManager for atomic batch execution of multiple crews
+- CrewaiExecutor for LLM-based agent crews
+- BatchCrewaiExecutor for atomic batch execution of multiple crews
 
-**Note**: BatchManager is part of [crewai] because it's specifically designed for batching CrewAI crews together.
+**Note**: BatchCrewaiExecutor is part of [crewai] because it's specifically designed for batching CrewAI crews together.
 
 **Note**: For examples and learning templates, see the test cases in `tests/integration/` and `tests/extensions/`. Test cases serve as comprehensive examples demonstrating real-world usage patterns.
 
@@ -416,10 +416,10 @@ xdg-open htmlcov/index.html  # Linux
 
 **Optional Extension Modules**:
 - **`extensions/crewai/`**: CrewAI LLM task support [crewai extra]
-  - `crew_manager.py`: CrewManager for LLM-based agent crews
-  - `batch_manager.py`: BatchManager for atomic batch execution of multiple crews
-  - `types.py`: CrewManagerState, BatchState
-  - Note: BatchManager is included in [crewai] as it's specifically for batching CrewAI crews
+  - `crewai_executor.py`: CrewaiExecutor for LLM-based agent crews
+  - `batch_crewai_executor.py`: BatchCrewaiExecutor for atomic batch execution of multiple crews
+  - `types.py`: CrewaiExecutorState, BatchState
+  - Note: BatchCrewaiExecutor is included in [crewai] as it's specifically for batching CrewAI crews
 
 **Learning Resources**:
 - **Test cases**: Serve as examples (see `tests/integration/` and `tests/extensions/`)

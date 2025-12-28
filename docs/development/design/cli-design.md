@@ -8,7 +8,7 @@ The CLI is designed to provide the same functionality as the API, but through co
 
 1. **Unified Execution Path**: CLI and API both use `TaskExecutor` to execute tasks
 2. **Task Array Format**: Tasks are represented as JSON arrays (same format as API)
-3. **No Direct Executor Calls**: CLI never directly calls executors (BatchManager, CrewManager, etc.)
+3. **No Direct Executor Calls**: CLI never directly calls executors (BatchCrewaiExecutor, CrewaiExecutor, etc.)
 4. **Database as Source of Truth**: Task status and results come from database
 5. **TaskTracker for Runtime State**: In-memory tracking for running tasks
 
@@ -261,8 +261,8 @@ Return: {
 
 | Executor | `cancelable` | Cancellation Support | Notes |
 |----------|-------------|---------------------|-------|
-| **BatchManager** | `True` | ✅ **Supported** | Checks cancellation before each work. Preserves token_usage from completed works. Can stop before executing remaining works. |
-| **CrewManager** | `False` | ❌ **Not Supported During Execution** | **CrewAI Limitation**: `kickoff()` is a synchronous blocking call with no cancellation support. Cancellation can only be checked before execution starts. If cancelled during execution, the crew will complete normally, then TaskManager will mark it as cancelled. Token_usage is preserved. |
+| **BatchCrewaiExecutor** | `True` | ✅ **Supported** | Checks cancellation before each work. Preserves token_usage from completed works. Can stop before executing remaining works. |
+| **CrewaiExecutor** | `False` | ❌ **Not Supported During Execution** | **CrewAI Limitation**: `kickoff()` is a synchronous blocking call with no cancellation support. Cancellation can only be checked before execution starts. If cancelled during execution, the crew will complete normally, then TaskManager will mark it as cancelled. Token_usage is preserved. |
 | **CommandExecutor** | `False` | ❌ **Not Implemented** | Cancellation checking not implemented. Could be added by checking `cancellation_checker` during subprocess execution. |
 | **SystemInfoExecutor** | `False` | ❌ **Not Supported** | Fast execution (< 1 second), cancellation not needed. |
 | **Other Executors** | `False` (default) | ⚠️ **Varies** | Depends on executor implementation. TaskManager checks before/after execution. Executors can set `cancelable=True` and implement cancellation checking in their own execution loops. |
@@ -277,14 +277,14 @@ Return: {
      - After executor returns
    - If cancelled, stops execution immediately
 
-2. **Executor Level** (Optional, Implemented for BatchManager):
-   - **BatchManager**: Checks cancellation before each work execution (can stop mid-batch)
-   - **CrewManager**: Checks cancellation before execution only (CrewAI limitation: cannot cancel during execution)
+2. **Executor Level** (Optional, Implemented for BatchCrewaiExecutor):
+   - **BatchCrewaiExecutor**: Checks cancellation before each work execution (can stop mid-batch)
+   - **CrewaiExecutor**: Checks cancellation before execution only (CrewAI limitation: cannot cancel during execution)
    - **SystemInfoExecutor**: No cancellation needed (fast execution)
 
 3. **Token Usage Preservation**:
-   - ✅ **BatchManager**: Preserves token_usage from completed works when cancelled
-   - ✅ **CrewManager**: Preserves token_usage even if cancelled
+   - ✅ **BatchCrewaiExecutor**: Preserves token_usage from completed works when cancelled
+   - ✅ **CrewaiExecutor**: Preserves token_usage even if cancelled
    - ✅ All executors: Token_usage is preserved in result even on cancellation
 
 **Limitations**:
@@ -300,8 +300,8 @@ Return: {
 **Implementation Points**:
 - ✅ TaskManager checks cancellation flag at multiple checkpoints
 - ✅ CLI cancel command implemented
-- ✅ BatchManager executor-level cancellation check (before each work, can stop mid-batch)
-- ✅ CrewManager executor-level cancellation check (before execution only)
+- ✅ BatchCrewaiExecutor executor-level cancellation check (before each work, can stop mid-batch)
+- ✅ CrewaiExecutor executor-level cancellation check (before execution only)
 - ✅ Token_usage preservation on cancellation
 - ❌ **CrewAI library limitation**: No cancellation during execution (CrewAI's `kickoff()` is blocking with no cancellation support)
 - ⚠️ Force cancellation (immediate stop via process termination) - not yet implemented

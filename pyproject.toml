@@ -63,7 +63,7 @@ postgres = [
     "psycopg2-binary>=2.9.9",
 ]
 
-# CrewAI LLM task support (includes BatchManager)
+# CrewAI LLM task support (includes BatchCrewaiExecutor)
 crewai = [
     "crewai[tools]>=1.4.1",
     # Fix compatibility issue: aiodns 3.6.0 is incompatible with pycares 5.0.0

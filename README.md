@@ -13,7 +13,7 @@ The core of `aipartnerupflow` is **task orchestration and execution specificatio
 - **NO CrewAI dependency** (available via [crewai] extra)
 
 **Optional features:**
-- **CrewAI Support** [crewai]: LLM-based agent crews via CrewManager (task executor implementation)
+- **CrewAI Support** [crewai]: LLM-based agent crews via CrewaiExecutor (task executor implementation)
 - **HTTP/REST Executor** [http]: Remote API calls via RestExecutor (task executor implementation)
 - **SSH Executor** [ssh]: Remote command execution via SSH (task executor implementation)
 - **Docker Executor** [docker]: Containerized command execution (task executor implementation)
@@ -26,7 +26,7 @@ The core of `aipartnerupflow` is **task orchestration and execution specificatio
 - **A2A Protocol Server** [a2a]: A2A Protocol Server (A2A Protocol is the standard protocol for agent communication)
 - **CLI Tools** [cli]: Command-line interface
 
-**Note**: CrewManager and future executors are all implementations of the `ExecutableTask` interface. Each executor handles different types of task execution (LLM, HTTP, etc.).
+**Note**: CrewaiExecutor and future executors are all implementations of the `ExecutableTask` interface. Each executor handles different types of task execution (LLM, HTTP, etc.).
 
 ## Core Features
 
@@ -39,7 +39,7 @@ The core of `aipartnerupflow` is **task orchestration and execution specificatio
 All task executors implement the `ExecutableTask` interface:
 
 - **Custom Tasks** (core): Users implement `ExecutableTask` for their own task types
-- **CrewManager** [crewai]: LLM-based task execution via CrewAI (built-in executor)
+- **CrewaiExecutor** [crewai]: LLM-based task execution via CrewAI (built-in executor)
 - **RestExecutor** [http]: HTTP/REST API calls with authentication and retry (built-in executor)
 - **SshExecutor** [ssh]: Remote command execution via SSH (built-in executor)
 - **DockerExecutor** [docker]: Containerized command execution (built-in executor)
@@ -49,7 +49,7 @@ All task executors implement the `ExecutableTask` interface:
 - **McpExecutor**: Model Context Protocol executor for accessing external tools and data sources (built-in executor)
 - **GenerateExecutor**: Generate task tree JSON arrays from natural language requirements using LLM (built-in executor)
 - **LLMExecutor** [llm]: Direct LLM interaction via LiteLLM (supports 100+ providers)
-- **BatchManager** [crewai]: Batch orchestration container (batches multiple crews)
+- **BatchCrewaiExecutor** [crewai]: Batch orchestration container (batches multiple crews)
 
 ### Supporting Features
 - **Storage**: Task state persistence (DuckDB default, PostgreSQL optional)
@@ -82,8 +82,8 @@ pip install aipartnerupflow
 ```bash
 # CrewAI LLM task support (includes batch)
 pip install aipartnerupflow[crewai]
-# Includes: CrewManager for LLM-based agent crews
-#           BatchManager for atomic batch execution of multiple crews
+# Includes: CrewaiExecutor for LLM-based agent crews
+#           BatchCrewaiExecutor for atomic batch execution of multiple crews
 
 # A2A Protocol Server (Agent-to-Agent communication protocol)
 pip install aipartnerupflow[a2a]
@@ -196,10 +196,10 @@ class APICallTask(ExecutableTask):
 
 ```python
 # Requires: pip install aipartnerupflow[crewai]
-from aipartnerupflow.extensions.crewai import CrewManager
+from aipartnerupflow.extensions.crewai import CrewaiExecutor
 
 # CrewAI task execution
-crew = CrewManager(
+crew = CrewaiExecutor(
     name="Analysis Crew",
     agents=[{"role": "Analyst", "goal": "Analyze data"}],
     tasks=[{"description": "Analyze input", "agent": "Analyst"}]
@@ -209,14 +209,14 @@ result = await crew.execute(inputs={...})
 
 ### With Batch Support [crewai]
 
-**Using BatchManager to batch multiple crews (atomic operation):**
+**Using BatchCrewaiExecutor to batch multiple crews (atomic operation):**
 
 ```python
 # Requires: pip install aipartnerupflow[crewai]
-from aipartnerupflow.extensions.crewai import BatchManager, CrewManager
+from aipartnerupflow.extensions.crewai import BatchCrewaiExecutor, CrewaiExecutor
 
-# BatchManager is a batch container - executes multiple crews as atomic operation
-batch = BatchManager(
+# BatchCrewaiExecutor is a batch container - executes multiple crews as atomic operation
+batch = BatchCrewaiExecutor(
     id="my_batch",
     name="Batch Analysis",
     works={
@@ -296,8 +296,8 @@ include additional FastAPI REST API endpoints for direct HTTP access without the
 │  - Custom Tasks [core]: ExecutableTask implementations      │
 │    • Traditional external service calls (API, DB, etc.)     │
 │    • Automated task services (scheduled tasks, workflows)  │
-│  - CrewManager [crewai]: CrewAI (LLM) task execution        │
-│  - BatchManager [crewai]: Batch task orchestration           │
+│  - CrewaiExecutor [crewai]: CrewAI (LLM) task execution        │
+│  - BatchCrewaiExecutor [crewai]: Batch task orchestration           │
 └─────────────────────────────────────────────────────────────┘
                           ↓
 ┌─────────────────────────────────────────────────────────────┐
@@ -313,7 +313,7 @@ See [docs/architecture/DIRECTORY_STRUCTURE.md](docs/architecture/DIRECTORY_STRUC
 
 **Installation Strategy**:
 - `pip install aipartnerupflow`: Core library only (execution, base, storage, utils) - **NO CrewAI**
-- `pip install aipartnerupflow[crewai]`: Core + CrewAI support (includes BatchManager)
+- `pip install aipartnerupflow[crewai]`: Core + CrewAI support (includes BatchCrewaiExecutor)
 - `pip install aipartnerupflow[a2a]`: Core + A2A Protocol Server
 - `pip install aipartnerupflow[cli]`: Core + CLI tools
 - `pip install aipartnerupflow[all]`: Full installation (all features)

@@ -31,8 +31,8 @@ pip install aipartnerupflow[crewai]
 ```
 
 **Includes:**
-- CrewManager for LLM-based agent crews
-- BatchManager for atomic batch execution of multiple crews
+- CrewaiExecutor for LLM-based agent crews
+- BatchCrewaiExecutor for atomic batch execution of multiple crews
 
 ### A2A Protocol Server
 

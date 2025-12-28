@@ -59,9 +59,9 @@ Framework extensions are optional features that require extra dependencies and a
 ```
 extensions/crewai/
 ├── __init__.py
-├── crew_manager.py     # CrewManager - CrewAI wrapper
-├── batch_manager.py    # BatchManager - batch execution of multiple crews
-└── types.py            # CrewManagerState, BatchState
+├── crewai_executor.py     # CrewaiExecutor - CrewAI wrapper
+├── batch_crewai_executor.py    # BatchCrewaiExecutor - batch execution of multiple crews
+└── types.py            # CrewaiExecutorState, BatchState
 ```
 
 **Installation**: `pip install aipartnerupflow[crewai]`
@@ -196,8 +196,8 @@ tests/
 │   ├── core/
 │   │   └── test_aggregate_results_executor.py
 │   ├── crewai/
-│   │   ├── test_crew_manager.py
-│   │   └── test_batch_manager.py
+│   │   ├── test_crewai_executor.py
+│   │   └── test_batch_crewai_executor.py
 │   ├── stdio/
 │   │   ├── test_command_executor.py
 │   │   └── test_system_info_executor.py

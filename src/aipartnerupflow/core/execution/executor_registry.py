@@ -77,8 +77,8 @@ class ExecutorRegistry:
             
             # Register with factory function
             def create_crew_executor(inputs):
-                return CrewManager(agents=..., tasks=...)
-            registry.register("crewai", CrewManager, factory=create_crew_executor)
+                return CrewaiExecutor(agents=..., tasks=...)
+            registry.register("crewai", CrewaiExecutor, factory=create_crew_executor)
         """
         # Validate executor class
         if not issubclass(executor_class, ExecutableTask):

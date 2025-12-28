@@ -6,10 +6,10 @@ Provides LLM-based task execution via CrewAI and batch execution capabilities.
 Requires: pip install aipartnerupflow[crewai]
 """
 
-from aipartnerupflow.extensions.crewai.crew_manager import CrewManager
-from aipartnerupflow.extensions.crewai.batch_manager import BatchManager
+from aipartnerupflow.extensions.crewai.crewai_executor import CrewaiExecutor
+from aipartnerupflow.extensions.crewai.batch_crewai_executor import BatchCrewaiExecutor
 from aipartnerupflow.extensions.crewai.types import (
-    CrewManagerState,
+    CrewaiExecutorState,
     BatchState,
     # Backward compatibility aliases
     FlowState,
@@ -28,9 +28,9 @@ from aipartnerupflow.core.tools import (
 crew_tool = tool_register
 
 __all__ = [
-    "CrewManager",
-    "BatchManager",
-    "CrewManagerState",
+    "CrewaiExecutor",
+    "BatchCrewaiExecutor",
+    "CrewaiExecutorState",
     "BatchState",
     # Backward compatibility aliases
     "FlowState",

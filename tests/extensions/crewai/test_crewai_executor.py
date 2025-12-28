@@ -1,5 +1,5 @@
 """
-Test CrewManager functionality
+Test CrewaiExecutor functionality
 
 This module contains both unit tests (with mocks) and integration tests (with real OpenAI API).
 Integration tests require OPENAI_API_KEY environment variable.
@@ -29,13 +29,13 @@ import pytest
 import os
 from unittest.mock import Mock, patch
 
-# Try to import CrewManager, skip tests if not available
+# Try to import CrewaiExecutor, skip tests if not available
 try:
-    from aipartnerupflow.extensions.crewai import CrewManager
+    from aipartnerupflow.extensions.crewai import CrewaiExecutor
     from aipartnerupflow.core.tools import register_tool, resolve_tool
     from crewai import LLM, Agent
 except ImportError:
-    CrewManager = None
+    CrewaiExecutor = None
     LLM = None
     Agent = None
     register_tool = None
@@ -43,9 +43,9 @@ except ImportError:
     pytestmark = pytest.mark.skip("crewai module not available")
 
 
-@pytest.mark.skipif(CrewManager is None, reason="CrewManager not available")
-class TestCrewManager:
-    """Test cases for CrewManager"""
+@pytest.mark.skipif(CrewaiExecutor is None, reason="CrewaiExecutor not available")
+class TestCrewaiExecutor:
+    """Test cases for CrewaiExecutor"""
     
     @pytest.mark.asyncio
     async def test_execute_with_mock(self):
@@ -69,16 +69,16 @@ class TestCrewManager:
         mock_agent = Mock()
         mock_task = Mock()
         
-        # Create CrewManager with all mocks in place
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.CrewAI') as mock_crew_class, \
-             patch('aipartnerupflow.extensions.crewai.crew_manager.Agent') as mock_agent_class, \
-             patch('aipartnerupflow.extensions.crewai.crew_manager.Task') as mock_task_class:
+        # Create CrewaiExecutor with all mocks in place
+        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class, \
+             patch('aipartnerupflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
+             patch('aipartnerupflow.extensions.crewai.crewai_executor.Task') as mock_task_class:
             mock_crew_class.return_value = mock_crew
             mock_agent_class.return_value = mock_agent
             mock_task_class.return_value = mock_task
             
-            # Initialize CrewManager with works format
-            crew_manager = CrewManager(
+            # Initialize CrewaiExecutor with works format
+            crewai_executor = CrewaiExecutor(
                 name="Test Crew",
                 works={
                     "agents": {
@@ -99,10 +99,10 @@ class TestCrewManager:
             )
             
             # Replace the crew instance with our mock
-            crew_manager.crew = mock_crew
+            crewai_executor.crew = mock_crew
             
             # Execute crew
-            result = await crew_manager.execute()
+            result = await crewai_executor.execute()
             
             # Verify result structure
             assert result["status"] == "success"
@@ -125,16 +125,16 @@ class TestCrewManager:
         # Mock Task class
         mock_task = Mock()
         
-        # Create CrewManager with mock crew
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.CrewAI') as mock_crew_class, \
-             patch('aipartnerupflow.extensions.crewai.crew_manager.Task') as mock_task_class, \
-             patch('aipartnerupflow.extensions.crewai.crew_manager.Agent') as mock_agent_class:
+        # Create CrewaiExecutor with mock crew
+        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class, \
+             patch('aipartnerupflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
+             patch('aipartnerupflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class:
             mock_crew_class.return_value = mock_crew
             mock_task_class.return_value = mock_task
             mock_agent_class.return_value = Mock()
             
-            # Initialize CrewManager with works format
-            crew_manager = CrewManager(
+            # Initialize CrewaiExecutor with works format
+            crewai_executor = CrewaiExecutor(
                 name="Test Crew",
                 works={
                     "agents": {
@@ -155,10 +155,10 @@ class TestCrewManager:
             )
             
             # Replace the crew instance with our mock
-            crew_manager.crew = mock_crew
+            crewai_executor.crew = mock_crew
             
             # Execute crew (should handle error gracefully)
-            result = await crew_manager.execute()
+            result = await crewai_executor.execute()
             
             # Verify error result structure
             assert result["status"] == "failed"
@@ -166,14 +166,14 @@ class TestCrewManager:
             assert "Test error" in result["error"]
             assert result["result"] is None
 
-    @pytest.mark.skipif(CrewManager is None or LLM is None, reason="CrewManager or LLM not available")
+    @pytest.mark.skipif(CrewaiExecutor is None or LLM is None, reason="CrewaiExecutor or LLM not available")
     def test_llm_string_conversion(self):
         """Test that string LLM names are converted to LLM objects"""
         # Mock LLM class
         mock_llm_instance = Mock()
         mock_llm_instance.model = "gpt-4"
         
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.LLM') as mock_llm_class:
+        with patch('aipartnerupflow.extensions.crewai.crewai_executor.LLM') as mock_llm_class:
             mock_llm_class.return_value = mock_llm_instance
             
             # Mock Agent, Task and CrewAI
@@ -181,15 +181,15 @@ class TestCrewManager:
             mock_task = Mock()
             mock_crew = Mock()
             
-            with patch('aipartnerupflow.extensions.crewai.crew_manager.Agent') as mock_agent_class, \
-                 patch('aipartnerupflow.extensions.crewai.crew_manager.Task') as mock_task_class, \
-                 patch('aipartnerupflow.extensions.crewai.crew_manager.CrewAI') as mock_crew_class:
+            with patch('aipartnerupflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
+                 patch('aipartnerupflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
+                 patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class:
                 mock_agent_class.return_value = mock_agent
                 mock_task_class.return_value = mock_task
                 mock_crew_class.return_value = mock_crew
                 
-                # Create CrewManager with string LLM in works format
-                CrewManager(
+                # Create CrewaiExecutor with string LLM in works format
+                CrewaiExecutor(
                     name="Test Crew",
                     works={
                         "agents": {
@@ -219,13 +219,13 @@ class TestCrewManager:
                 assert "llm" in call_args.kwargs
                 assert call_args.kwargs["llm"] == mock_llm_instance
     
-    @pytest.mark.skipif(CrewManager is None or LLM is None, reason="CrewManager or LLM not available")
+    @pytest.mark.skipif(CrewaiExecutor is None or LLM is None, reason="CrewaiExecutor or LLM not available")
     def test_model_from_kwargs(self):
-        """Test CrewManager receives model from kwargs (from schemas)"""
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.Agent') as mock_agent_class, \
-             patch('aipartnerupflow.extensions.crewai.crew_manager.Task') as mock_task_class, \
-             patch('aipartnerupflow.extensions.crewai.crew_manager.CrewAI') as mock_crew_class, \
-             patch('aipartnerupflow.extensions.crewai.crew_manager.LLM') as mock_llm_class:
+        """Test CrewaiExecutor receives model from kwargs (from schemas)"""
+        with patch('aipartnerupflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
+             patch('aipartnerupflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
+             patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class, \
+             patch('aipartnerupflow.extensions.crewai.crewai_executor.LLM') as mock_llm_class:
             
             mock_agent = Mock()
             mock_task = Mock()
@@ -237,8 +237,8 @@ class TestCrewManager:
             mock_crew_class.return_value = mock_crew
             mock_llm_class.return_value = mock_llm_instance
             
-            # Create CrewManager with model from kwargs (simulating schemas["model"])
-            crew_manager = CrewManager(
+            # Create CrewaiExecutor with model from kwargs (simulating schemas["model"])
+            crewai_executor = CrewaiExecutor(
                 name="Test Crew",
                 works={
                     "agents": {
@@ -260,13 +260,13 @@ class TestCrewManager:
             )
             
             # Verify model was set to self.llm
-            assert crew_manager.llm == "openai/gpt-4o"
+            assert crewai_executor.llm == "openai/gpt-4o"
             
             # Verify LLM was called with the model name in _initialize_crew
             # (This happens during __init__, so we check the call was made)
             mock_llm_class.assert_called_with(model="openai/gpt-4o")
     
-    @pytest.mark.skipif(CrewManager is None or resolve_tool is None, reason="CrewManager or resolve_tool not available")
+    @pytest.mark.skipif(CrewaiExecutor is None or resolve_tool is None, reason="CrewaiExecutor or resolve_tool not available")
     def test_tools_string_conversion(self):
         """Test that string tool names are converted to callable objects"""
         # Create mock tool
@@ -274,7 +274,7 @@ class TestCrewManager:
         mock_tool.run = Mock(return_value="tool result")
         
         # Mock resolve_tool to return our mock tool
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.resolve_tool') as mock_resolve_tool:
+        with patch('aipartnerupflow.extensions.crewai.crewai_executor.resolve_tool') as mock_resolve_tool:
             mock_resolve_tool.return_value = mock_tool
             
             # Mock Agent, Task and CrewAI
@@ -282,15 +282,15 @@ class TestCrewManager:
             mock_task = Mock()
             mock_crew = Mock()
             
-            with patch('aipartnerupflow.extensions.crewai.crew_manager.Agent') as mock_agent_class, \
-                 patch('aipartnerupflow.extensions.crewai.crew_manager.Task') as mock_task_class, \
-                 patch('aipartnerupflow.extensions.crewai.crew_manager.CrewAI') as mock_crew_class:
+            with patch('aipartnerupflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
+                 patch('aipartnerupflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
+                 patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class:
                 mock_agent_class.return_value = mock_agent
                 mock_task_class.return_value = mock_task
                 mock_crew_class.return_value = mock_crew
                 
-                # Create CrewManager with string tool names in works format
-                CrewManager(
+                # Create CrewaiExecutor with string tool names in works format
+                CrewaiExecutor(
                     name="Test Crew",
                     works={
                         "agents": {
@@ -324,7 +324,7 @@ class TestCrewManager:
                 assert call_args.kwargs["tools"][0] == mock_tool
                 assert call_args.kwargs["tools"][1] == mock_tool
     
-    @pytest.mark.skipif(CrewManager is None or LLM is None or resolve_tool is None, 
+    @pytest.mark.skipif(CrewaiExecutor is None or LLM is None or resolve_tool is None, 
                         reason="Required modules not available")
     def test_llm_and_tools_together(self):
         """Test that both LLM and tools string conversion work together"""
@@ -336,8 +336,8 @@ class TestCrewManager:
         mock_tool = Mock()
         mock_tool.run = Mock(return_value="tool result")
         
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.LLM') as mock_llm_class, \
-             patch('aipartnerupflow.extensions.crewai.crew_manager.resolve_tool') as mock_resolve_tool:
+        with patch('aipartnerupflow.extensions.crewai.crewai_executor.LLM') as mock_llm_class, \
+             patch('aipartnerupflow.extensions.crewai.crewai_executor.resolve_tool') as mock_resolve_tool:
             mock_llm_class.return_value = mock_llm_instance
             mock_resolve_tool.return_value = mock_tool
             
@@ -346,15 +346,15 @@ class TestCrewManager:
             mock_task = Mock()
             mock_crew = Mock()
             
-            with patch('aipartnerupflow.extensions.crewai.crew_manager.Agent') as mock_agent_class, \
-                 patch('aipartnerupflow.extensions.crewai.crew_manager.Task') as mock_task_class, \
-                 patch('aipartnerupflow.extensions.crewai.crew_manager.CrewAI') as mock_crew_class:
+            with patch('aipartnerupflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
+                 patch('aipartnerupflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
+                 patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class:
                 mock_agent_class.return_value = mock_agent
                 mock_task_class.return_value = mock_task
                 mock_crew_class.return_value = mock_crew
 
-                # Create CrewManager with both string LLM and tools in works format
-                CrewManager(
+                # Create CrewaiExecutor with both string LLM and tools in works format
+                CrewaiExecutor(
                     name="Test Crew",
                     works={
                         "agents": {
@@ -407,7 +407,7 @@ class TestCrewManager:
         
         # Create a simple crew for testing
         # LLM is now set at agent level, not crew level
-        crew_manager = CrewManager(
+        crewai_executor = CrewaiExecutor(
             name="Test Research Crew",
             works={
                 "agents": {
@@ -431,7 +431,7 @@ class TestCrewManager:
         )
         
         # Execute crew
-        result = await crew_manager.execute()
+        result = await crewai_executor.execute()
         print("=== result: ===")
         import json
         print(json.dumps(result, indent=2, default=str))

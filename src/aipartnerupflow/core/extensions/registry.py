@@ -89,9 +89,9 @@ class ExtensionRegistry:
             
             # Register with class (for executors that need per-task instantiation)
             registry.register(
-                CrewManagerTemplate(),
-                executor_class=CrewManager,
-                factory=lambda inputs: CrewManager(**inputs)
+                CrewaiExecutorTemplate(),
+                executor_class=CrewaiExecutor,
+                factory=lambda inputs: CrewaiExecutor(**inputs)
             )
         """
         # Validate extension

@@ -1,7 +1,7 @@
 """
-Test BatchManager functionality
+Test BatchCrewaiExecutor functionality
 
-This module contains tests for BatchManager, including:
+This module contains tests for BatchCrewaiExecutor, including:
 - Executor registration via @executor_register() decorator
 - Batch execution of multiple crews
 - Error handling and atomic operation semantics
@@ -12,36 +12,36 @@ import pytest
 import os
 from unittest.mock import Mock, patch, AsyncMock
 
-# Try to import BatchManager, skip tests if not available
+# Try to import BatchCrewaiExecutor, skip tests if not available
 try:
-    from aipartnerupflow.extensions.crewai import BatchManager
-    from aipartnerupflow.extensions.crewai import CrewManager
+    from aipartnerupflow.extensions.crewai import BatchCrewaiExecutor
+    from aipartnerupflow.extensions.crewai import CrewaiExecutor
     from aipartnerupflow.core.extensions import get_registry
 except ImportError:
-    BatchManager = None
-    CrewManager = None
+    BatchCrewaiExecutor = None
+    CrewaiExecutor = None
     get_registry = None
     pytestmark = pytest.mark.skip("crewai module not available")
 
 
-@pytest.mark.skipif(BatchManager is None, reason="BatchManager not available")
-class TestBatchManagerRegistration:
-    """Test BatchManager executor registration"""
+@pytest.mark.skipif(BatchCrewaiExecutor is None, reason="BatchCrewaiExecutor not available")
+class TestBatchCrewaiExecutorRegistration:
+    """Test BatchCrewaiExecutor executor registration"""
     
     def test_executor_register_decorator(self):
-        """Test that BatchManager is registered via @executor_register() decorator"""
-        # Import BatchManager to trigger registration
+        """Test that BatchCrewaiExecutor is registered via @executor_register() decorator"""
+        # Import BatchCrewaiExecutor to trigger registration
         
         # Verify extension was registered
         registry = get_registry()
         
-        # Check if BatchManager is registered by ID
+        # Check if BatchCrewaiExecutor is registered by ID
         assert registry.is_registered("batch_crewai_executor"), \
-            "BatchManager should be registered with id 'batch_crewai_executor'"
+            "BatchCrewaiExecutor should be registered with id 'batch_crewai_executor'"
         
         # Get the registered extension
         extension = registry.get_by_id("batch_crewai_executor")
-        assert extension is not None, "BatchManager extension should be found by ID"
+        assert extension is not None, "BatchCrewaiExecutor extension should be found by ID"
         assert extension.id == "batch_crewai_executor"
         assert extension.name == "Batch CrewAI Executor"
         
@@ -49,25 +49,25 @@ class TestBatchManagerRegistration:
         from aipartnerupflow.core.extensions.types import ExtensionCategory
         assert extension.category == ExtensionCategory.EXECUTOR
     
-    def test_batch_manager_properties(self):
-        """Test BatchManager class properties"""
-        assert BatchManager.id == "batch_crewai_executor"
-        assert BatchManager.name == "Batch CrewAI Executor"
-        assert BatchManager.description == "Batch execution of multiple crews via CrewAI"
+    def test_batch_crewai_executor_properties(self):
+        """Test BatchCrewaiExecutor class properties"""
+        assert BatchCrewaiExecutor.id == "batch_crewai_executor"
+        assert BatchCrewaiExecutor.name == "Batch CrewAI Executor"
+        assert BatchCrewaiExecutor.description == "Batch execution of multiple crews via CrewAI"
         
         # Test type property
-        batch_manager = BatchManager(works={})
-        assert batch_manager.type == "crewai"
+        batch_crewai_executor = BatchCrewaiExecutor(works={})
+        assert batch_crewai_executor.type == "crewai"
     
-    def test_batch_manager_inheritance(self):
-        """Test that BatchManager inherits from BaseTask"""
+    def test_batch_crewai_executor_inheritance(self):
+        """Test that BatchCrewaiExecutor inherits from BaseTask"""
         from aipartnerupflow.core.base import BaseTask
-        assert issubclass(BatchManager, BaseTask)
+        assert issubclass(BatchCrewaiExecutor, BaseTask)
 
 
-@pytest.mark.skipif(BatchManager is None or CrewManager is None, reason="BatchManager or CrewManager not available")
-class TestBatchManagerExecution:
-    """Test BatchManager execution functionality"""
+@pytest.mark.skipif(BatchCrewaiExecutor is None or CrewaiExecutor is None, reason="BatchCrewaiExecutor or CrewaiExecutor not available")
+class TestBatchCrewaiExecutorExecution:
+    """Test BatchCrewaiExecutor execution functionality"""
     
     @pytest.mark.asyncio
     async def test_execute_with_mock_crews(self):
@@ -97,17 +97,17 @@ class TestBatchManagerExecution:
             }
         }
         
-        # Create mock CrewManager instances
-        mock_crew_manager1 = Mock(spec=CrewManager)
-        mock_crew_manager1.execute = AsyncMock(return_value=mock_result1)
-        mock_crew_manager1.set_streaming_context = Mock()
+        # Create mock CrewaiExecutor instances
+        mock_crewai_executor1 = Mock(spec=CrewaiExecutor)
+        mock_crewai_executor1.execute = AsyncMock(return_value=mock_result1)
+        mock_crewai_executor1.set_streaming_context = Mock()
         
-        mock_crew_manager2 = Mock(spec=CrewManager)
-        mock_crew_manager2.execute = AsyncMock(return_value=mock_result2)
-        mock_crew_manager2.set_streaming_context = Mock()
+        mock_crewai_executor2 = Mock(spec=CrewaiExecutor)
+        mock_crewai_executor2.execute = AsyncMock(return_value=mock_result2)
+        mock_crewai_executor2.set_streaming_context = Mock()
         
-        # Create BatchManager with works
-        batch_manager = BatchManager(
+        # Create BatchCrewaiExecutor with works
+        batch_crewai_executor = BatchCrewaiExecutor(
             works={
                 "crew1": {
                     "agents": {
@@ -144,11 +144,11 @@ class TestBatchManagerExecution:
             }
         )
         
-        # Mock CrewManager creation (it's imported inside execute_works method)
+        # Mock CrewaiExecutor creation (it's imported inside execute_works method)
         # Need to patch where it's imported from, not where it's used
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.CrewManager', side_effect=[mock_crew_manager1, mock_crew_manager2]):
+        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewaiExecutor', side_effect=[mock_crewai_executor1, mock_crewai_executor2]):
             # Execute batch
-            result = await batch_manager.execute()
+            result = await batch_crewai_executor.execute()
             
             # Verify result structure
             assert result["status"] == "success"
@@ -179,17 +179,17 @@ class TestBatchManagerExecution:
             "result": None
         }
         
-        # Create mock CrewManager instances
-        mock_crew_manager1 = Mock(spec=CrewManager)
-        mock_crew_manager1.execute = AsyncMock(return_value=mock_result1)
-        mock_crew_manager1.set_streaming_context = Mock()
+        # Create mock CrewaiExecutor instances
+        mock_crewai_executor1 = Mock(spec=CrewaiExecutor)
+        mock_crewai_executor1.execute = AsyncMock(return_value=mock_result1)
+        mock_crewai_executor1.set_streaming_context = Mock()
         
-        mock_crew_manager2 = Mock(spec=CrewManager)
-        mock_crew_manager2.execute = AsyncMock(return_value=mock_result2)
-        mock_crew_manager2.set_streaming_context = Mock()
+        mock_crewai_executor2 = Mock(spec=CrewaiExecutor)
+        mock_crewai_executor2.execute = AsyncMock(return_value=mock_result2)
+        mock_crewai_executor2.set_streaming_context = Mock()
         
-        # Create BatchManager
-        batch_manager = BatchManager(
+        # Create BatchCrewaiExecutor
+        batch_crewai_executor = BatchCrewaiExecutor(
             works={
                 "crew1": {
                     "agents": {"agent1": {"role": "Agent 1", "goal": "Goal 1", "backstory": "Backstory 1"}},
@@ -202,12 +202,12 @@ class TestBatchManagerExecution:
             }
         )
         
-        # Mock CrewManager creation (it's imported inside execute_works method)
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.CrewManager') as mock_crew_class:
-            mock_crew_class.side_effect = [mock_crew_manager1, mock_crew_manager2]
+        # Mock CrewaiExecutor creation (it's imported inside execute_works method)
+        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
+            mock_crew_class.side_effect = [mock_crewai_executor1, mock_crewai_executor2]
             
             # Execute batch - should fail atomically
-            result = await batch_manager.execute()
+            result = await batch_crewai_executor.execute()
             
             # Verify failure result
             assert result["status"] == "failed"
@@ -219,12 +219,12 @@ class TestBatchManagerExecution:
     async def test_execute_with_exception(self):
         """Test batch execution when crew raises exception"""
         # Create mock crew that raises exception
-        mock_crew_manager = Mock(spec=CrewManager)
-        mock_crew_manager.execute = AsyncMock(side_effect=Exception("Crew execution error"))
-        mock_crew_manager.set_streaming_context = Mock()
+        mock_crewai_executor = Mock(spec=CrewaiExecutor)
+        mock_crewai_executor.execute = AsyncMock(side_effect=Exception("Crew execution error"))
+        mock_crewai_executor.set_streaming_context = Mock()
         
-        # Create BatchManager
-        batch_manager = BatchManager(
+        # Create BatchCrewaiExecutor
+        batch_crewai_executor = BatchCrewaiExecutor(
             works={
                 "crew1": {
                     "agents": {"agent1": {"role": "Agent 1", "goal": "Goal 1", "backstory": "Backstory 1"}},
@@ -233,12 +233,12 @@ class TestBatchManagerExecution:
             }
         )
         
-        # Mock CrewManager creation (it's imported inside execute_works method)
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.CrewManager') as mock_crew_class:
-            mock_crew_class.return_value = mock_crew_manager
+        # Mock CrewaiExecutor creation (it's imported inside execute_works method)
+        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
+            mock_crew_class.return_value = mock_crewai_executor
             
             # Execute batch - should handle exception
-            result = await batch_manager.execute()
+            result = await batch_crewai_executor.execute()
             
             # Verify failure result
             assert result["status"] == "failed"
@@ -249,10 +249,10 @@ class TestBatchManagerExecution:
     @pytest.mark.asyncio
     async def test_execute_with_no_works(self):
         """Test batch execution with no works (should fail)"""
-        batch_manager = BatchManager(works={})
+        batch_crewai_executor = BatchCrewaiExecutor(works={})
         
         # Execute batch - should fail
-        result = await batch_manager.execute()
+        result = await batch_crewai_executor.execute()
         
         # Verify failure result
         assert result["status"] == "failed"
@@ -261,36 +261,36 @@ class TestBatchManagerExecution:
     
     def test_get_input_schema(self):
         """Test get_input_schema method"""
-        batch_manager = BatchManager(works={})
-        schema = batch_manager.get_input_schema()
+        batch_crewai_executor = BatchCrewaiExecutor(works={})
+        schema = batch_crewai_executor.get_input_schema()
         
         # Should return a dictionary (can be empty)
         assert isinstance(schema, dict)
     
     def test_set_inputs(self):
         """Test set_inputs method"""
-        batch_manager = BatchManager(works={})
+        batch_crewai_executor = BatchCrewaiExecutor(works={})
         test_inputs = {"key1": "value1", "key2": "value2"}
         
-        batch_manager.set_inputs(test_inputs)
+        batch_crewai_executor.set_inputs(test_inputs)
         
-        assert batch_manager.inputs == test_inputs
+        assert batch_crewai_executor.inputs == test_inputs
     
     def test_set_streaming_context(self):
         """Test set_streaming_context method"""
-        batch_manager = BatchManager(works={})
+        batch_crewai_executor = BatchCrewaiExecutor(works={})
         mock_event_queue = Mock()
         mock_context = Mock()
         
-        batch_manager.set_streaming_context(mock_event_queue, mock_context)
+        batch_crewai_executor.set_streaming_context(mock_event_queue, mock_context)
         
-        assert batch_manager.event_queue == mock_event_queue
-        assert batch_manager.context == mock_context
+        assert batch_crewai_executor.event_queue == mock_event_queue
+        assert batch_crewai_executor.context == mock_context
 
     def test_cancelable_property(self):
-        """Test that BatchManager has cancelable=True"""
-        batch_manager = BatchManager(works={})
-        assert batch_manager.cancelable is True, "BatchManager should support cancellation"
+        """Test that BatchCrewaiExecutor has cancelable=True"""
+        batch_crewai_executor = BatchCrewaiExecutor(works={})
+        assert batch_crewai_executor.cancelable is True, "BatchCrewaiExecutor should support cancellation"
     
     @pytest.mark.asyncio
     async def test_cancellation_before_execution(self):
@@ -298,8 +298,8 @@ class TestBatchManagerExecution:
         # Create cancellation checker that returns True immediately
         cancellation_checker = Mock(return_value=True)
         
-        # Create BatchManager with cancellation checker
-        batch_manager = BatchManager(
+        # Create BatchCrewaiExecutor with cancellation checker
+        batch_crewai_executor = BatchCrewaiExecutor(
             works={
                 "crew1": {
                     "agents": {"agent1": {"role": "Agent 1", "goal": "Goal 1", "backstory": "Backstory 1"}},
@@ -314,7 +314,7 @@ class TestBatchManagerExecution:
         )
         
         # Execute batch - should be cancelled before first work
-        result = await batch_manager.execute()
+        result = await batch_crewai_executor.execute()
         
         # Verify cancellation result
         assert result["status"] == "cancelled"
@@ -361,17 +361,17 @@ class TestBatchManagerExecution:
             # Return True on third call (after first work completes)
             return call_count[0] > 2
         
-        # Create mock CrewManager instances
-        mock_crew_manager1 = Mock(spec=CrewManager)
-        mock_crew_manager1.execute = AsyncMock(return_value=mock_result1)
-        mock_crew_manager1.set_streaming_context = Mock()
+        # Create mock CrewaiExecutor instances
+        mock_crewai_executor1 = Mock(spec=CrewaiExecutor)
+        mock_crewai_executor1.execute = AsyncMock(return_value=mock_result1)
+        mock_crewai_executor1.set_streaming_context = Mock()
         
-        mock_crew_manager2 = Mock(spec=CrewManager)
-        mock_crew_manager2.execute = AsyncMock(return_value=mock_result2)
-        mock_crew_manager2.set_streaming_context = Mock()
+        mock_crewai_executor2 = Mock(spec=CrewaiExecutor)
+        mock_crewai_executor2.execute = AsyncMock(return_value=mock_result2)
+        mock_crewai_executor2.set_streaming_context = Mock()
         
-        # Create BatchManager with cancellation checker
-        batch_manager = BatchManager(
+        # Create BatchCrewaiExecutor with cancellation checker
+        batch_crewai_executor = BatchCrewaiExecutor(
             works={
                 "crew1": {
                     "agents": {"agent1": {"role": "Agent 1", "goal": "Goal 1", "backstory": "Backstory 1"}},
@@ -385,12 +385,12 @@ class TestBatchManagerExecution:
             cancellation_checker=cancellation_checker
         )
         
-        # Mock CrewManager creation
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.CrewManager') as mock_crew_class:
-            mock_crew_class.side_effect = [mock_crew_manager1, mock_crew_manager2]
+        # Mock CrewaiExecutor creation
+        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
+            mock_crew_class.side_effect = [mock_crewai_executor1, mock_crewai_executor2]
             
             # Execute batch - should be cancelled after first work
-            result = await batch_manager.execute()
+            result = await batch_crewai_executor.execute()
             
             # Verify cancellation result
             assert result["status"] == "cancelled"
@@ -399,8 +399,8 @@ class TestBatchManagerExecution:
             assert "1" in result["error"]  # Should mention 1 completed work
             
             # Verify only first crew executed
-            mock_crew_manager1.execute.assert_called_once()
-            mock_crew_manager2.execute.assert_not_called()
+            mock_crewai_executor1.execute.assert_called_once()
+            mock_crewai_executor2.execute.assert_not_called()
             
             # Verify token_usage is preserved from first work
             assert "token_usage" in result
@@ -458,21 +458,21 @@ class TestBatchManagerExecution:
             # Return True on fifth call (after second work completes)
             return call_count[0] > 4
         
-        # Create mock CrewManager instances
-        mock_crew_manager1 = Mock(spec=CrewManager)
-        mock_crew_manager1.execute = AsyncMock(return_value=mock_result1)
-        mock_crew_manager1.set_streaming_context = Mock()
+        # Create mock CrewaiExecutor instances
+        mock_crewai_executor1 = Mock(spec=CrewaiExecutor)
+        mock_crewai_executor1.execute = AsyncMock(return_value=mock_result1)
+        mock_crewai_executor1.set_streaming_context = Mock()
         
-        mock_crew_manager2 = Mock(spec=CrewManager)
-        mock_crew_manager2.execute = AsyncMock(return_value=mock_result2)
-        mock_crew_manager2.set_streaming_context = Mock()
+        mock_crewai_executor2 = Mock(spec=CrewaiExecutor)
+        mock_crewai_executor2.execute = AsyncMock(return_value=mock_result2)
+        mock_crewai_executor2.set_streaming_context = Mock()
         
-        mock_crew_manager3 = Mock(spec=CrewManager)
-        mock_crew_manager3.execute = AsyncMock(return_value=mock_result3)
-        mock_crew_manager3.set_streaming_context = Mock()
+        mock_crewai_executor3 = Mock(spec=CrewaiExecutor)
+        mock_crewai_executor3.execute = AsyncMock(return_value=mock_result3)
+        mock_crewai_executor3.set_streaming_context = Mock()
         
-        # Create BatchManager with 3 works
-        batch_manager = BatchManager(
+        # Create BatchCrewaiExecutor with 3 works
+        batch_crewai_executor = BatchCrewaiExecutor(
             works={
                 "crew1": {
                     "agents": {"agent1": {"role": "Agent 1", "goal": "Goal 1", "backstory": "Backstory 1"}},
@@ -490,12 +490,12 @@ class TestBatchManagerExecution:
             cancellation_checker=cancellation_checker
         )
         
-        # Mock CrewManager creation
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.CrewManager') as mock_crew_class:
-            mock_crew_class.side_effect = [mock_crew_manager1, mock_crew_manager2, mock_crew_manager3]
+        # Mock CrewaiExecutor creation
+        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
+            mock_crew_class.side_effect = [mock_crewai_executor1, mock_crewai_executor2, mock_crewai_executor3]
             
             # Execute batch - should be cancelled after second work
-            result = await batch_manager.execute()
+            result = await batch_crewai_executor.execute()
             
             # Verify cancellation result
             assert result["status"] == "cancelled"
@@ -504,9 +504,9 @@ class TestBatchManagerExecution:
             assert "2" in result["error"]  # Should mention 2 completed works
             
             # Verify first two crews executed, third did not
-            mock_crew_manager1.execute.assert_called_once()
-            mock_crew_manager2.execute.assert_called_once()
-            mock_crew_manager3.execute.assert_not_called()
+            mock_crewai_executor1.execute.assert_called_once()
+            mock_crewai_executor2.execute.assert_called_once()
+            mock_crewai_executor3.execute.assert_not_called()
             
             # Verify token_usage is aggregated from both completed works
             assert "token_usage" in result
@@ -532,13 +532,13 @@ class TestBatchManagerExecution:
             call_count[0] += 1
             return call_count[0] > 2
         
-        # Create mock CrewManager
-        mock_crew_manager1 = Mock(spec=CrewManager)
-        mock_crew_manager1.execute = AsyncMock(return_value=mock_result1)
-        mock_crew_manager1.set_streaming_context = Mock()
+        # Create mock CrewaiExecutor
+        mock_crewai_executor1 = Mock(spec=CrewaiExecutor)
+        mock_crewai_executor1.execute = AsyncMock(return_value=mock_result1)
+        mock_crewai_executor1.set_streaming_context = Mock()
         
-        # Create BatchManager
-        batch_manager = BatchManager(
+        # Create BatchCrewaiExecutor
+        batch_crewai_executor = BatchCrewaiExecutor(
             works={
                 "crew1": {
                     "agents": {"agent1": {"role": "Agent 1", "goal": "Goal 1", "backstory": "Backstory 1"}},
@@ -548,12 +548,12 @@ class TestBatchManagerExecution:
             cancellation_checker=cancellation_checker
         )
         
-        # Mock CrewManager creation
-        with patch('aipartnerupflow.extensions.crewai.crew_manager.CrewManager') as mock_crew_class:
-            mock_crew_class.return_value = mock_crew_manager1
+        # Mock CrewaiExecutor creation
+        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
+            mock_crew_class.return_value = mock_crewai_executor1
             
             # Execute batch - should be cancelled after first work
-            result = await batch_manager.execute()
+            result = await batch_crewai_executor.execute()
             
             # Verify cancellation result
             assert result["status"] == "cancelled"
@@ -566,9 +566,9 @@ class TestBatchManagerExecution:
                 assert isinstance(result["token_usage"], dict)
 
 
-@pytest.mark.skipif(BatchManager is None or CrewManager is None, reason="BatchManager or CrewManager not available")
-class TestBatchManagerRealExecution:
-    """Test BatchManager with real CrewAI execution (integration tests)"""
+@pytest.mark.skipif(BatchCrewaiExecutor is None or CrewaiExecutor is None, reason="BatchCrewaiExecutor or CrewaiExecutor not available")
+class TestBatchCrewaiExecutorRealExecution:
+    """Test BatchCrewaiExecutor with real CrewAI execution (integration tests)"""
     
     @pytest.mark.asyncio
     @pytest.mark.skipif(
@@ -582,9 +582,9 @@ class TestBatchManagerRealExecution:
         if not openai_key:
             pytest.skip("OPENAI_API_KEY is not set")
         
-        # Create BatchManager with multiple crews
+        # Create BatchCrewaiExecutor with multiple crews
         # Each crew will perform a simple task to test batch execution
-        batch_manager = BatchManager(
+        batch_crewai_executor = BatchCrewaiExecutor(
             name="Test Batch Crew",
             works={
                 "research_crew": {
@@ -629,7 +629,7 @@ class TestBatchManagerRealExecution:
         )
         
         # Execute batch
-        result = await batch_manager.execute()
+        result = await batch_crewai_executor.execute()
         
         print("=== Batch Execution Result ===")
         import json
@@ -652,7 +652,7 @@ class TestBatchManagerRealExecution:
             analysis_result = result["result"]["analysis_crew"]
             
             # Results should contain the crew execution results
-            # The structure depends on how CrewManager returns results
+            # The structure depends on how CrewaiExecutor returns results
             assert research_result is not None
             assert analysis_result is not None
             
@@ -685,8 +685,8 @@ class TestBatchManagerRealExecution:
         if not openai_key:
             pytest.skip("OPENAI_API_KEY is not set")
         
-        # Create BatchManager with crews that use input parameters
-        batch_manager = BatchManager(
+        # Create BatchCrewaiExecutor with crews that use input parameters
+        batch_crewai_executor = BatchCrewaiExecutor(
             name="Test Batch with Inputs",
             works={
                 "greeting_crew": {
@@ -732,7 +732,7 @@ class TestBatchManagerRealExecution:
         
         # Execute batch with inputs
         inputs = {"name": "Alice"}
-        result = await batch_manager.execute(inputs=inputs)
+        result = await batch_crewai_executor.execute(inputs=inputs)
         
         print("=== Batch Execution with Inputs Result ===")
         import json
@@ -788,8 +788,8 @@ class TestBatchManagerRealExecution:
         if not openai_key:
             pytest.skip("OPENAI_API_KEY is not set")
         
-        # Create BatchManager with a single crew
-        batch_manager = BatchManager(
+        # Create BatchCrewaiExecutor with a single crew
+        batch_crewai_executor = BatchCrewaiExecutor(
             name="Single Crew Batch",
             works={
                 "single_crew": {
@@ -815,7 +815,7 @@ class TestBatchManagerRealExecution:
         )
         
         # Execute batch
-        result = await batch_manager.execute()
+        result = await batch_crewai_executor.execute()
         
         print("=== Single Crew Batch Result ===")
         import json

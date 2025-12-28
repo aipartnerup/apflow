@@ -17,12 +17,12 @@ class ExecutableTask(Extension, ABC):
     
     This interface extends Extension, so all executors are registered extensions.
     Implementations include:
-    - CrewManager [crewai]: LLM-based agent crews (via CrewAI) - available in extensions/crewai/
+    - CrewaiExecutor [crewai]: LLM-based agent crews (via CrewAI) - available in extensions/crewai/
     - SystemInfoExecutor [stdio]: Safe system information queries - available in extensions/stdio/
     - CommandExecutor [stdio]: Shell command execution - available in extensions/stdio/
     - Custom tasks: Non-LLM tasks (web scraping, API calls, data processing, etc.)
     
-    Note: BatchManager is NOT an ExecutableTask. BatchManager is a container that batches multiple crews
+    Note: BatchCrewaiExecutor is NOT an ExecutableTask. BatchCrewaiExecutor is a container that batches multiple crews
     as an atomic operation (all crews execute, then merge results).
     """
     
@@ -91,7 +91,7 @@ class ExecutableTask(Extension, ABC):
         Note:
             - If executor doesn't implement this method, TaskManager will handle cancellation
               by checking cancellation status and stopping execution at checkpoints
-            - For executors that cannot be cancelled during execution (e.g., CrewManager),
+            - For executors that cannot be cancelled during execution (e.g., CrewaiExecutor),
               this method may return a result indicating cancellation will be checked after execution
         """
         # Default implementation: return not supported

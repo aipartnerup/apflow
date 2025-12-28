@@ -1,7 +1,7 @@
 """
-BatchManager class for atomic execution of multiple crews
+BatchCrewaiExecutor class for atomic execution of multiple crews
 
-BatchManager is NOT an ExecutableTask - it's a container that executes multiple crews
+BatchCrewaiExecutor is NOT an ExecutableTask - it's a container that executes multiple crews
 as an atomic operation. All crews execute, then results are merged.
 This ensures all crews complete together (all-or-nothing semantics).
 
@@ -19,26 +19,26 @@ logger = get_logger(__name__)
 
 
 @executor_register()
-class BatchManager(BaseTask):
+class BatchCrewaiExecutor(BaseTask):
     """
-    BatchManager class for atomic execution of multiple crews (batch container)
+    BatchCrewaiExecutor class for atomic execution of multiple crews (batch container)
     
-    BatchManager coordinates the execution of multiple crews (works) as an atomic operation:
+    BatchCrewaiExecutor coordinates the execution of multiple crews (works) as an atomic operation:
     - All crews execute sequentially
     - Results are collected and merged
     - If any crew fails, the entire batch fails (atomic operation)
     - Final result combines all crew outputs
     
-    This is different from ExecutableTask (which CrewManager implements):
-    - CrewManager: Single executable unit (LLM-based or custom)
-    - BatchManager: Container for multiple crews (ensures atomic execution)
+    This is different from ExecutableTask (which CrewaiExecutor implements):
+    - CrewaiExecutor: Single executable unit (LLM-based or custom)
+    - BatchCrewaiExecutor: Container for multiple crews (ensures atomic execution)
     
     Simple implementation: No CrewAI Flow dependency, just sequential execution and merge.
     """
     
     initial_state = BatchState
     
-    # BatchManager definition properties
+    # BatchCrewaiExecutor definition properties
     id: str = "batch_crewai_executor"
     name: str = "Batch CrewAI Executor"
     description: str = "Batch execution of multiple crews via CrewAI"
@@ -46,7 +46,7 @@ class BatchManager(BaseTask):
     examples: list[str] = ["Execute multiple crews as a batch"]
     works: Dict[str, Any] = {}
     
-    # Cancellation support: BatchManager can be cancelled between works
+    # Cancellation support: BatchCrewaiExecutor can be cancelled between works
     cancelable: bool = True
     _cancelled: bool = False  # Internal flag for cancellation
     
@@ -56,12 +56,12 @@ class BatchManager(BaseTask):
         return "crewai"
     
     def __init__(self, **kwargs: Any):
-        """Initialize BatchManager"""
+        """Initialize BatchCrewaiExecutor"""
         # Initialize BaseTask first
         inputs = kwargs.pop("inputs", {})
         super().__init__(inputs=inputs, **kwargs)
         
-        # Additional BatchManager-specific initialization
+        # Additional BatchCrewaiExecutor-specific initialization
         self.storage = kwargs.get("storage")
         self.works = kwargs.get("works", {})
         
@@ -73,7 +73,7 @@ class BatchManager(BaseTask):
         # Call parent init first to handle common properties
         super().init(**kwargs)
         
-        # Handle BatchManager-specific properties
+        # Handle BatchCrewaiExecutor-specific properties
         if "works" in kwargs:
             self.works = kwargs["works"]
         if "storage" in kwargs:
@@ -133,7 +133,7 @@ class BatchManager(BaseTask):
         Cancel batch execution
         
         This method is called by TaskManager when cancellation is requested.
-        BatchManager can be cancelled between works, preserving partial results and token_usage.
+        BatchCrewaiExecutor can be cancelled between works, preserving partial results and token_usage.
         
         Returns:
             Dictionary with cancellation result:
@@ -224,15 +224,15 @@ class BatchManager(BaseTask):
                 if "agents" not in work or "tasks" not in work:
                     raise ValueError("works must contain agents and tasks")
                 
-                # Import CrewManager here to avoid circular imports
-                from aipartnerupflow.extensions.crewai.crew_manager import CrewManager
+                # Import CrewaiExecutor here to avoid circular imports
+                from aipartnerupflow.extensions.crewai.crewai_executor import CrewaiExecutor
                 
                 # Create crew manager instance using works format
                 # Works format: {"work_name": {"agents": {...}, "tasks": {...}}}
                 # Or direct format: {"agents": {...}, "tasks": {...}}
-                # CrewManager now supports both formats
-                # Pass cancellation_checker to CrewManager for cancellation checking
-                _crew_manager = CrewManager(
+                # CrewaiExecutor now supports both formats
+                # Pass cancellation_checker to CrewaiExecutor for cancellation checking
+                _crewai_executor = CrewaiExecutor(
                     name=work_name,
                     works=work,
                     inputs=fresh_inputs,
@@ -242,10 +242,10 @@ class BatchManager(BaseTask):
                 
                 # Set streaming context if available
                 if self.event_queue and self.context:
-                    _crew_manager.set_streaming_context(self.event_queue, self.context)
+                    _crewai_executor.set_streaming_context(self.event_queue, self.context)
                 
                 # Execute crew
-                result = await _crew_manager.execute(inputs=fresh_inputs)
+                result = await _crewai_executor.execute(inputs=fresh_inputs)
                 
                 # Store result (even if failed, to collect token_usage)
                 data[work_name] = result
@@ -460,7 +460,7 @@ class BatchManager(BaseTask):
     
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
-        Provide demo BatchManager execution result
+        Provide demo BatchCrewaiExecutor execution result
         
         Generates a realistic demo result based on the batch's works definition.
         Simulates execution of multiple crews and aggregates their results.
@@ -479,7 +479,7 @@ class BatchManager(BaseTask):
         if not works and hasattr(task, 'schemas') and task.schemas:
             works = task.schemas.get("works")
         if not works:
-            # Fallback: use self.works if BatchManager was already initialized
+            # Fallback: use self.works if BatchCrewaiExecutor was already initialized
             works = getattr(self, 'works', {})
         
         # If still no works, use default demo structure

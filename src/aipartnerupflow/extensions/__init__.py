@@ -14,7 +14,7 @@ Extensions are automatically registered when imported via type-specific decorato
 """
 
 # Auto-import tools extension to register all tools when extensions module is imported
-# This ensures tools are available for use across all extensions (e.g., CrewManager)
+# This ensures tools are available for use across all extensions (e.g., CrewaiExecutor)
 try:
     import aipartnerupflow.extensions.tools  # noqa: F401
 except ImportError:

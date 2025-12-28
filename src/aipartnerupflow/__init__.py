@@ -95,5 +95,5 @@ __all__ = [
 ]
 
 # Optional features (require extras):
-# from aipartnerupflow.extensions.crewai import CrewManager, BatchManager
+# from aipartnerupflow.extensions.crewai import CrewaiExecutor, BatchCrewaiExecutor
 # Requires: pip install aipartnerupflow[crewai]

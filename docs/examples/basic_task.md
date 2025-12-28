@@ -838,13 +838,13 @@ Create `example_08_crewai.py`:
 
 ```python
 import asyncio
-from aipartnerupflow.extensions.crewai import CrewManager
+from aipartnerupflow.extensions.crewai import CrewaiExecutor
 from aipartnerupflow import TaskManager, TaskTreeNode, create_session
 from aipartnerupflow.core.extensions import get_registry
 
 async def main():
     # Create a CrewAI executor
-    crew = CrewManager(
+    crew = CrewaiExecutor(
         id="simple_analysis_crew",
         name="Simple Analysis Crew",
         description="Analyzes text using AI",
@@ -896,7 +896,7 @@ if __name__ == "__main__":
 
 **Key Points:**
 - CrewAI is optional (requires `[crewai]` extra)
-- CrewManager is a special executor that needs configuration
+- CrewaiExecutor is a special executor that needs configuration
 - Register the configured instance before use
 - LLM API keys are required (OpenAI, Anthropic, etc.)
 

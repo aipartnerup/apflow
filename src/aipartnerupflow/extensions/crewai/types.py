@@ -1,5 +1,5 @@
 """
-Type definitions for CrewAI features (CrewManager and BatchManager)
+Type definitions for CrewAI features (CrewaiExecutor and BatchCrewaiExecutor)
 """
 
 from typing import Dict, Any, Optional
@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field
 from datetime import datetime
 
 
-class CrewManagerState(BaseModel):
-    """State class for CrewManager (LLM-based agent crews)"""
+class CrewaiExecutorState(BaseModel):
+    """State class for CrewaiExecutor (LLM-based agent crews)"""
     
     id: str = Field(default_factory=lambda: str(uuid4()))
     status: str = "pending"
@@ -21,7 +21,7 @@ class CrewManagerState(BaseModel):
 
 
 class BatchState(BaseModel):
-    """State class for BatchManager (batch execution of multiple crews)"""
+    """State class for BatchCrewaiExecutor (batch execution of multiple crews)"""
     
     id: str = Field(default_factory=lambda: str(uuid4()))
     status: str = "pending"
@@ -34,5 +34,5 @@ class BatchState(BaseModel):
 
 # Backward compatibility aliases
 FlowState = BatchState
-CrewState = CrewManagerState
+CrewState = CrewaiExecutorState
 

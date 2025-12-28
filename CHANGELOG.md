@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.0] 2025-12-28
 
 ### Added
 - **Hook Execution Context for Database Access**
@@ -60,6 +60,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Updated executors: `DockerExecutor`, `GrpcExecutor`, `RestExecutor`, `SshExecutor`, `CommandExecutor`, `LLMExecutor`
   - TaskManager now catches all exceptions, marks tasks as failed, and logs appropriately based on exception type
   - `BusinessError` logged without stack trace (clean logs), other exceptions logged with full stack trace
+
+- **CrewAI Executor/Batch Executor Renaming and Test Fixes**
+  - `crewai/crew_manager.py` → `crewai/crewai_executor.py`, with the class name updated to `CrewaiExecutor`
+  - `crewai/batch_manager.py` → `crewai/batch_crewai_executor.py`, with the class name updated to `BatchCrewaiExecutor`
+  - All related test cases (test_crewai_executor.py, test_batch_crewai_executor.py, etc.) have been batch-updated with corrected patch paths, mocks, imports, and class names to align with the new naming
+  - Resolved AttributeError: module 'aipartnerupflow.extensions.crewai' has no attribute 'crew_manager' and similar test failures caused by the renaming
 
 
 ## [0.8.0] 2025-12-25
@@ -200,7 +206,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Unified user_id Access**: BaseTask provides `user_id` property that automatically retrieves from `task.user_id`
     - Executors can use `self.user_id` instead of `inputs.get("user_id")`
     - Falls back to `_user_id` when task is not available (for backward compatibility and testing)
-    - All LLM executors (`generate_executor`, `crew_manager`) now use `self.user_id`
+    - All LLM executors (`generate_executor`, `crewai_executor`) now use `self.user_id`
   - **Unified LLM Key Retrieval**: Centralized LLM key management with context-aware priority order
     - New `get_llm_key()` function with unified priority logic for API and CLI contexts
     - API context priority: header → LLMKeyConfigManager → environment variables
@@ -389,7 +395,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `RestExecutor`, `GenerateExecutor`, `ApiExecutor`
     - `SshExecutor`, `GrpcExecutor`, `WebSocketExecutor`
     - `McpExecutor`, `DockerExecutor`
-    - `CrewManager`, `BatchManager` (CrewAI executors)
+    - `CrewaiExecutor`, `BatchCrewaiExecutor` (CrewAI executors)
   - **Realistic Demo Execution Timing**: All executors include `_demo_sleep` values to simulate real execution time:
     - Network operations (HTTP, SSH, API): 0.2-0.5 seconds
     - Container operations (Docker): 1.0 second
@@ -398,10 +404,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Global Demo Sleep Scale**: Configurable via `AIPARTNERUPFLOW_DEMO_SLEEP_SCALE` environment variable (default: 1.0)
     - Allows adjusting demo execution speed globally (e.g., `0.5` for faster, `2.0` for slower)
     - API: `set_demo_sleep_scale(scale)` and `get_demo_sleep_scale()` functions
-  - **CrewAI Demo Support**: `CrewManager` and `BatchManager` generate realistic demo results:
+  - **CrewAI Demo Support**: `CrewaiExecutor` and `BatchCrewaiExecutor` generate realistic demo results:
     - Based on `works` definition (agents and tasks) from task params or schemas
     - Includes simulated `token_usage` matching real LLM execution patterns
-    - `BatchManager` aggregates token usage across multiple works
+    - `BatchCrewaiExecutor` aggregates token usage across multiple works
   - Demo mode helps developers test workflows without external dependencies
 
 - **TaskModel Customization Improvements**
@@ -411,7 +417,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Supports `__table_args__ = {'extend_existing': True}` for extending existing table definitions
   - Better support for user-defined `MyTaskModel(TaskModel)` with additional fields
 
-- **Documentation for Hook Types**
+  - **Documentation for Hook Types**
   - Added comprehensive documentation explaining differences between hook types
   - `pre_hook` / `post_hook`: Task-level hooks for individual task execution
   - `task_tree_hook`: Task tree-level hooks for tree lifecycle events
@@ -424,7 +430,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - API Routes: `params["llm_model"]` → `params["model"]`
     - CLI: `--model` parameter remains unchanged (internal mapping updated)
   - **New Feature**: Support for `schemas["model"]` configuration for CrewAI executor
-    - Model configuration can now be specified in task schemas and will be passed to CrewManager
+    - Model configuration can now be specified in task schemas and will be passed to CrewaiExecutor
     - Priority: `schemas["model"]` > `params.works.agents[].llm` (CrewAI standard)
   - **Impact**: Only affects generate functionality introduced in 0.5.0, minimal breaking change
   - **Migration**: Update any code using `llm_model` parameter to use `model` instead
@@ -636,7 +642,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Unified A2A Protocol Task Management**
   - All task management operations now fully supported through A2A Protocol `/` route
-  - Standardized method naming: `tasks.execute`, `tasks.create`, `tasks.get`, `tasks.update`, `tasks.delete`, `tasks.detail`, `tasks.tree`, `tasks.list`, `tasks.children`, `tasks.running.list`, `tasks.running.status`, `tasks.running.count`, `tasks.cancel`, `tasks.copy`, `tasks.generate`
+  - Standardized method naming: `tasks.execute`, `tasks.create`, `tasks.get`, `tasks.update`, `tasks.delete`, `tasks.detail`, `tasks.tree`, `tasks.children`, `tasks.running.list`, `tasks.running.status`, `tasks.running.count`, `tasks.cancel`, `tasks.copy`, `tasks.generate`
   - `TaskRoutesAdapter` component bridges A2A Protocol `RequestContext`/`EventQueue` with existing `TaskRoutes` handlers
   - Automatic conversion between A2A Protocol format and internal task representation
   - Real-time task status updates via `TaskStatusUpdateEvent` for all task management operations
@@ -954,8 +960,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `AggregateResultsExecutor`: Aggregates dependency task results into structured format
   - `SystemInfoExecutor`: Safe system resource queries (CPU, memory, disk) with predefined commands
   - `CommandExecutor`: Shell command execution (stdio extension)
-  - `CrewManager`: LLM-based agent crew execution via CrewAI with token usage tracking
-  - `BatchManager`: Atomic batch execution of multiple crews with result merging
+  - `CrewaiExecutor`: LLM-based agent crew execution via CrewAI with token usage tracking
+  - `BatchCrewaiExecutor`: Atomic batch execution of multiple crews with result merging
 
 ### Infrastructure
 - Project structure with `src-layout`

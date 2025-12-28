@@ -363,10 +363,10 @@ pip install aipartnerupflow[crewai]
 
 2. Create a crew:
 ```python
-from aipartnerupflow.extensions.crewai import CrewManager
+from aipartnerupflow.extensions.crewai import CrewaiExecutor
 from aipartnerupflow.core.extensions import get_registry
 
-crew = CrewManager(
+crew = CrewaiExecutor(
     id="my_crew",
     name="My Crew",
     agents=[{"role": "Analyst", "goal": "Analyze data"}],

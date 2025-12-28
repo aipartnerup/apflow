@@ -35,7 +35,7 @@ except ImportError:
     pass  # Extension not available, tests will handle this
 
 try:
-    from aipartnerupflow.extensions.crewai import CrewManager, BatchManager  # noqa: F401
+    from aipartnerupflow.extensions.crewai import CrewaiExecutor, BatchCrewaiExecutor  # noqa: F401
 except ImportError:
     pass  # Extension not available, tests will handle this
 
@@ -529,9 +529,9 @@ def ensure_executors_registered():
         pass
     
     try:
-        from aipartnerupflow.extensions.crewai import CrewManager, BatchManager
-        ensure_registered(CrewManager, "crewai_executor")
-        ensure_registered(BatchManager, "batch_crewai_executor")
+        from aipartnerupflow.extensions.crewai import CrewaiExecutor, BatchCrewaiExecutor
+        ensure_registered(CrewaiExecutor, "crewai_executor")
+        ensure_registered(BatchCrewaiExecutor, "batch_crewai_executor")
     except ImportError:
         pass
     

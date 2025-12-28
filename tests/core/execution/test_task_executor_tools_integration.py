@@ -42,7 +42,7 @@ class TestTaskExecutorToolsIntegration:
         
         This test verifies:
         1. Tools are auto-imported when extensions are imported
-        2. TaskExecutor can execute tasks using tools through CrewManager
+        2. TaskExecutor can execute tasks using tools through CrewaiExecutor
         3. The full execution flow works correctly
         """
         # Check if OpenAI API key is available
@@ -63,9 +63,9 @@ class TestTaskExecutorToolsIntegration:
         except ImportError:
             pytest.skip("Extensions or tools module not available")
         
-        # Create task tree that uses CrewManager with LimitedScrapeWebsiteTool
+        # Create task tree that uses CrewaiExecutor with LimitedScrapeWebsiteTool
         # This simulates how users would actually use the system
-        # Note: method="crewai_executor" (CrewManager's id) is sufficient, type is optional
+        # Note: method="crewai_executor" (CrewaiExecutor's id) is sufficient, type is optional
         # works should be in params, not inputs
         # Use unique task ID to avoid conflicts with other tests
         import uuid
@@ -195,8 +195,8 @@ class TestTaskExecutorToolsIntegration:
         registry = get_tool_registry()
         assert "TextProcessorTool" in registry.list_tools(), "TextProcessorTool should be registered"
         
-        # Create task tree that uses CrewManager with TextProcessorTool
-        # Note: method="crewai_executor" (CrewManager's id) is sufficient, type is optional
+        # Create task tree that uses CrewaiExecutor with TextProcessorTool
+        # Note: method="crewai_executor" (CrewaiExecutor's id) is sufficient, type is optional
         # works should be in params, not inputs
         # Use unique task ID to avoid conflicts with other tests
         import uuid

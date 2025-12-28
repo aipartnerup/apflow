@@ -27,7 +27,7 @@ EXTENSION_CONFIG: dict[str, dict[str, Any]] = {
     "crewai": {
         "dependencies": ["crewai"],  # From [crewai] extra
         "module": "aipartnerupflow.extensions.crewai",
-        "classes": [("CrewManager", "crewai_executor")],
+        "classes": [("CrewaiExecutor", "crewai_executor")],
     },
     "http": {
         "dependencies": ["httpx"],  # From [a2a] extra

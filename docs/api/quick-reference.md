@@ -637,10 +637,10 @@ executor_instance = registry.create_executor_instance(
 ### Create Crew
 
 ```python
-from aipartnerupflow.extensions.crewai import CrewManager
+from aipartnerupflow.extensions.crewai import CrewaiExecutor
 from aipartnerupflow.core.extensions import get_registry
 
-crew = CrewManager(
+crew = CrewaiExecutor(
     id="my_crew",
     name="My Crew",
     description="Does AI analysis",

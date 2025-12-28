@@ -1,7 +1,7 @@
 """
-CrewManager class for defining agent crews (LLM-based via CrewAI)
+CrewaiExecutor class for defining agent crews (LLM-based via CrewAI)
 
-CrewManager implements ExecutableTask interface and can be used:
+CrewaiExecutor implements ExecutableTask interface and can be used:
 1. Standalone: Execute a single crew directly
 2. In Batch: As part of a batch operation (multiple crews executed atomically)
 """
@@ -21,11 +21,11 @@ logger = get_logger(__name__)
 
 
 @executor_register()
-class CrewManager(BaseTask):
+class CrewaiExecutor(BaseTask):
     """
-    CrewManager class for executing agent crews (LLM-based via CrewAI)
+    CrewaiExecutor class for executing agent crews (LLM-based via CrewAI)
 
-    Implements ExecutableTask interface (via BaseTask), so CrewManager can be:
+    Implements ExecutableTask interface (via BaseTask), so CrewaiExecutor can be:
     - Executed standalone as a single task
     - Used within a Batch for atomic batch execution (with other crews)
 
@@ -57,7 +57,7 @@ class CrewManager(BaseTask):
         **kwargs: Any,
     ):
         """
-        Initialize CrewManager
+        Initialize CrewaiExecutor
 
         Args:
             name: Crew name
@@ -88,7 +88,7 @@ class CrewManager(BaseTask):
         model = kwargs.get("model")
         if model:
             self.llm = model
-            logger.debug(f"CrewManager initialized with model from kwargs: {model}")
+            logger.debug(f"CrewaiExecutor initialized with model from kwargs: {model}")
 
         # Process works parameter (required)
         if not works:
@@ -272,7 +272,7 @@ class CrewManager(BaseTask):
         Uses cancellation_checker callback (provided by TaskManager) to check cancellation status.
         Executor doesn't access database directly - cancellation state is managed by TaskManager.
 
-        Note: CrewManager is not cancelable during execution (cancelable=False), so this method
+        Note: CrewaiExecutor is not cancelable during execution (cancelable=False), so this method
         is only useful for checking cancellation before execution starts.
 
         Returns:
@@ -293,7 +293,7 @@ class CrewManager(BaseTask):
 
         This method is called by TaskManager when cancellation is requested.
 
-        Note: CrewManager cannot be cancelled during execution (CrewAI's kickoff() is blocking).
+        Note: CrewaiExecutor cannot be cancelled during execution (CrewAI's kickoff() is blocking).
         If cancellation is requested during execution, this method will return a result indicating
         that cancellation will be checked after execution completes.
 
@@ -307,7 +307,7 @@ class CrewManager(BaseTask):
         """
         logger.info(f"Cancelling crew execution: {self.name}")
 
-        # CrewManager cannot be cancelled during execution (CrewAI limitation)
+        # CrewaiExecutor cannot be cancelled during execution (CrewAI limitation)
         # TaskManager will check cancellation after execution completes
         cancel_result = {
             "status": "cancelled",
@@ -704,7 +704,7 @@ class CrewManager(BaseTask):
         if not works and hasattr(task, "schemas") and task.schemas:
             works = task.schemas.get("works")
         if not works:
-            # Fallback: try to get from self.works if CrewManager was already initialized
+            # Fallback: try to get from self.works if CrewaiExecutor was already initialized
             if hasattr(self, "task_config") and self.task_config:
                 # Reconstruct works from stored config
                 agents = {}
