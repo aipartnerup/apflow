@@ -373,7 +373,7 @@ The following are **NOT core features** and will **NOT be implemented in the lib
 - ❌ **Multi-Tenancy** - Application-level concern
 - ❌ **RBAC** - Application-level concern
 - ❌ **Audit Logging** - Application-level concern (observability hooks enable this)
-- ❌ **Dashboard UI** - Separate project (future: aipartnerupflow-ui)
+- ✅ **Dashboard UI** - Separate project (aipartnerupflow-webapp)
 - ❌ **Secret Management** - Use external solutions (Vault, AWS Secrets Manager)
 
 **Rationale:** These are application/business concerns, not orchestration concerns. Users should implement these in their own projects (like `aipartnerupflow-demo`) using the extension system.
