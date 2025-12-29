@@ -257,25 +257,29 @@ async def execute_task_tree(
 - Shared by ALL operations within the task tree execution
 - Managed by `create_pooled_session()` async context manager
 
-**Session Lifetime**:
+
+**Session Lifetime & Hook Context**:
 ```
 TaskExecutor.execute_task_tree (session created)
 ├── TaskManager.distribute_task_tree
-│   ├── _call_task_tree_hooks("on_tree_created")  [shares session]
-│   ├── _call_task_tree_hooks("on_tree_started")  [shares session]
+│   ├── set_hook_context(self.task_repository)  [ContextVar active, shares session]
+│   ├── on_tree_created hooks
+│   ├── on_tree_started hooks
 │   ├── _execute_task_tree_recursive
-│   │   ├── _execute_single_task (task 1)         [shares session]
+│   │   ├── _execute_single_task (task 1)
 │   │   │   ├── update_task_status
 │   │   │   ├── resolve_task_dependencies
-│   │   │   ├── _execute_pre_hooks                [shares session]
-│   │   │   ├── _execute_task_with_schemas
+│   │   │   ├── pre-hooks (can modify task.inputs)
+│   │   │   ├── execute task
 │   │   │   ├── update_task_status
-│   │   │   └── _execute_post_hooks               [shares session]
-│   │   ├── _execute_single_task (task 2)         [shares session]
+│   │   │   └── post-hooks
+│   │   ├── _execute_single_task (task 2)
 │   │   └── ...
-│   └── _call_task_tree_hooks("on_tree_completed") [shares session]
+│   ├── on_tree_completed/failed hooks
+│   └── clear_hook_context()  [ContextVar cleared]
 └── (session automatically committed/rolled back)
 ```
+*All hooks and task executions within a tree share the same session and ContextVar context. See also: Hook Context Lifecycle Timeline below.*
 
 ### 2.2 Commit Strategy
 
@@ -364,36 +368,10 @@ def get_hook_repository() -> TaskRepository:
     return context["task_repository"]
 ```
 
+
 ### 3.2 Hook Context Lifecycle Timeline
 
-**Setup Phase** (distribute_task_tree line 283):
-```python
-set_hook_context(self.task_repository)
-```
-
-**Active Phase** (entire task tree execution):
-```
-set_hook_context(task_repository)  ← Context becomes active
-├── on_tree_created hooks           [can access: get_hook_repository(), get_hook_session()]
-├── on_tree_started hooks           [can access: get_hook_repository(), get_hook_session()]
-├── Task 1 execution
-│   ├── pre_hooks                   [can access: get_hook_repository(), get_hook_session()]
-│   ├── executor execution
-│   └── post_hooks                  [can access: get_hook_repository(), get_hook_session()]
-├── Task 2 execution
-│   ├── pre_hooks                   [can access: get_hook_repository(), get_hook_session()]
-│   ├── executor execution
-│   └── post_hooks                  [can access: get_hook_repository(), get_hook_session()]
-├── ... (all tasks in tree)
-└── on_tree_completed/failed hooks  [can access: get_hook_repository(), get_hook_session()]
-clear_hook_context()  ← Context cleared (guaranteed by finally block)
-```
-
-**Cleanup Phase** (distribute_task_tree line 313):
-```python
-finally:
-    clear_hook_context()  # ALWAYS executes
-```
+*See the unified diagram above under Session Lifetime & Hook Context. All hooks (on_tree_created, on_tree_started, pre-hooks, post-hooks, on_tree_completed/failed) share the same session and ContextVar context, which is set at the start of distribute_task_tree and cleared in the finally block.*
 
 ### 3.3 Hook Context Guarantees
 

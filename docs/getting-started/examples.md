@@ -48,47 +48,15 @@ Examples are also available in the test cases:
 - Integration tests: `tests/integration/`
 - Extension tests: `tests/extensions/`
 
-## Example: Custom Task
-
-```python
-from aipartnerupflow import ExecutableTask
-from typing import Dict, Any
-
-class MyCustomTask(ExecutableTask):
-    id = "my_custom_task"
-    name = "My Custom Task"
-    description = "A custom task example"
-    
-    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        # Your task logic here
-        return {"result": "success"}
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
             "properties": {
-                "input_field": {"type": "string"}
-            }
-        }
-```
+# Examples
 
-## Example: Task Tree
+> **Note:** Built-in demo tasks have moved to the [aipartnerupflow-demo](https://github.com/aipartnerup/aipartnerupflow-demo) project. For full demo task initialization and validation, please use that repository.
 
-```python
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
-
-db = create_session()
-task_manager = TaskManager(db)
-
-# Create tasks
-root = await task_manager.task_repository.create_task(
-    name="root",
-    user_id="user_123"
-)
-
-child1 = await task_manager.task_repository.create_task(
-    name="child1",
-    user_id="user_123",
+For in-project runnable examples and patterns, see:
+- [Basic Task Examples](../examples/basic_task.md)
+- [Real-World Examples](../examples/real-world.md)
+- [Task Tree Examples](../examples/task-tree.md)
     parent_id=root.id
 )
 

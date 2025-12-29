@@ -1,5 +1,7 @@
 # Custom Tasks Guide
 
+> **For contributors:** See [Extending aipartnerupflow](../development/extending.md) for advanced extension patterns and framework internals. This guide is focused on user-level custom executor development.
+
 Learn how to create your own custom executors (tasks) in aipartnerupflow. This guide will walk you through everything from simple tasks to advanced patterns.
 
 ## What You'll Learn

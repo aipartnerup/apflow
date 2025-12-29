@@ -1,5 +1,7 @@
 # Installation
 
+> **Looking for a step-by-step beginner tutorial?** See the [Quick Start Guide](quick-start.md) for a hands-on introduction. This page lists all installation options and extras.
+
 aipartnerupflow can be installed with different feature sets depending on your needs.
 
 ## Core Library (Minimum)

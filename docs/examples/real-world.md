@@ -1,5 +1,9 @@
 # Real-World Examples
 
+> **See also:**
+> - [Basic Task Examples](basic_task.md) for simple, copy-paste patterns
+> - [Task Tree Examples](task-tree.md) for dependency and execution order patterns
+
 Complete, runnable examples for common real-world use cases. These examples demonstrate how to use aipartnerupflow in production scenarios.
 
 ## Table of Contents

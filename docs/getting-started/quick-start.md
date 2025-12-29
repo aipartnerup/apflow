@@ -1,5 +1,7 @@
 # Quick Start Guide
 
+> **Need more installation options?** See the [Installation Guide](installation.md) for advanced and optional feature setups. This page is for new users to get started quickly.
+
 Get started with aipartnerupflow in 10 minutes. This guide will walk you through creating and executing your first task.
 
 ## Prerequisites

@@ -1,5 +1,7 @@
 # API Quick Reference
 
+> **Need more detailed explanations or advanced usage?** See the [Python API Reference](python.md) for in-depth documentation and examples. This page is a concise cheat sheet for common patterns.
+
 Quick reference cheat sheet for aipartnerupflow APIs. Perfect for when you know what you need but need the exact syntax.
 
 ## Table of Contents

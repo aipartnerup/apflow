@@ -1,5 +1,7 @@
 # Python API Reference
 
+> **Looking for a quick syntax lookup?** See the [API Quick Reference](quick-reference.md) for concise code patterns and usage. This document provides detailed explanations and examples.
+
 Complete reference for aipartnerupflow's Python API. This document lists all available APIs and how to use them.
 
 **For detailed implementation details, see:**

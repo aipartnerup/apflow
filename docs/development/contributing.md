@@ -1,5 +1,13 @@
 # Contributing to aipartnerupflow
 
+## Documentation Maintenance
+
+- Before adding new documentation, check for existing files to avoid duplication.
+- Use cross-links instead of repeating content across files.
+- Major changes or new sections should be reviewed by a maintainer.
+- Keep code snippets and API references up to date with the latest codebase.
+- For large changes, update the Table of Contents and cross-references as needed.
+
 Thank you for your interest in contributing to aipartnerupflow! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct

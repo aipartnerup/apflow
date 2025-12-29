@@ -1,5 +1,7 @@
 # Extending aipartnerupflow
 
+> **For end users:** See the [Custom Tasks Guide](../guides/custom-tasks.md) for a step-by-step tutorial on creating your own executors. This document is focused on contributors and advanced extension patterns.
+
 This guide explains how to extend aipartnerupflow by creating custom executors, extensions, tools, and hooks.
 
 ## Overview
