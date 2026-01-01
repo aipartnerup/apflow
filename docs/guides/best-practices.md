@@ -1,6 +1,6 @@
 # Best Practices Guide
 
-Learn from the experts. This guide covers design patterns, optimization techniques, and best practices for building robust applications with aipartnerupflow.
+Learn from the experts. This guide covers design patterns, optimization techniques, and best practices for building robust applications with apflow.
 
 ## Table of Contents
 
@@ -343,7 +343,7 @@ cleanup = create_task(name="cleanup", priority=LOW)
 - Notification sending
 
 ```python
-from aipartnerupflow import register_pre_hook, register_post_hook
+from apflow import register_pre_hook, register_post_hook
 
 @register_pre_hook
 async def validate_and_enrich(task):
@@ -370,7 +370,7 @@ async def log_and_metric(task, inputs, result):
 **For fields other than inputs, use `get_hook_repository()`:**
 
 ```python
-from aipartnerupflow import register_pre_hook, get_hook_repository
+from apflow import register_pre_hook, get_hook_repository
 
 @register_pre_hook
 async def adjust_priority_by_load(task):
@@ -835,7 +835,7 @@ async def test_api_executor_with_mock():
 **Log important events.**
 
 ```python
-from aipartnerupflow.core.utils.logger import get_logger
+from apflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 

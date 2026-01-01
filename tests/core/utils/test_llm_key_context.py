@@ -3,7 +3,7 @@ Tests for LLM key context management
 """
 
 from unittest.mock import patch
-from aipartnerupflow.core.utils.llm_key_context import (
+from apflow.core.utils.llm_key_context import (
     get_llm_key,
     get_llm_provider_from_header,
     set_llm_key_from_header,

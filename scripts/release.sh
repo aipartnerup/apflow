@@ -1,5 +1,5 @@
 #!/bin/bash
-# Interactive release script for aipartnerupflow
+# Interactive release script for apflow
 # Usage: ./scripts/release.sh [version]
 # Example: ./scripts/release.sh 0.2.0
 
@@ -26,10 +26,10 @@ else
 fi
 
 TAG="v${VERSION}"
-PROJECT_NAME="aipartnerupflow"
+PROJECT_NAME="apflow"
 
 echo -e "${CYAN}╔══════════════════════════════════════════════════════════╗${NC}"
-echo -e "${CYAN}║  aipartnerupflow Release Script v${VERSION}              ║${NC}"
+echo -e "${CYAN}║  apflow Release Script v${VERSION}              ║${NC}"
 echo -e "${CYAN}╚══════════════════════════════════════════════════════════╝${NC}"
 echo ""
 

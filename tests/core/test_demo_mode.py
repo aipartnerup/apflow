@@ -3,11 +3,11 @@ Test demo mode functionality (use_demo parameter)
 """
 import pytest
 from typing import Dict, Any, Optional
-from aipartnerupflow.core.base import BaseTask
-from aipartnerupflow.core.execution.task_manager import TaskManager
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow import executor_register, clear_config
-from aipartnerupflow.core.extensions import get_registry
+from apflow.core.base import BaseTask
+from apflow.core.execution.task_manager import TaskManager
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow import executor_register, clear_config
+from apflow.core.extensions import get_registry
 
 
 class TestDemoMode:
@@ -258,7 +258,7 @@ class TestDemoMode:
     async def test_demo_mode_with_sleep_scale(self, sync_db_session):
         """Test demo mode with sleep scale factor"""
         import time
-        from aipartnerupflow.core.config import set_demo_sleep_scale, get_demo_sleep_scale
+        from apflow.core.config import set_demo_sleep_scale, get_demo_sleep_scale
         
         @executor_register()
         class TestExecutor(BaseTask):
@@ -336,7 +336,7 @@ class TestDemoMode:
     async def test_demo_mode_no_executor_sleep(self, sync_db_session):
         """Test demo mode when executor doesn't specify _demo_sleep (no sleep)"""
         import time
-        from aipartnerupflow.core.config import set_demo_sleep_scale
+        from apflow.core.config import set_demo_sleep_scale
         
         @executor_register()
         class TestExecutor(BaseTask):

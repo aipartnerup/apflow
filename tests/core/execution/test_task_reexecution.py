@@ -5,9 +5,9 @@ Tests the re-execution of failed tasks and their dependencies.
 """
 
 import pytest
-from aipartnerupflow.core.execution.task_executor import TaskExecutor
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow.core.config import get_task_model_class
+from apflow.core.execution.task_executor import TaskExecutor
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.config import get_task_model_class
 
 
 class TestTaskReexecution:

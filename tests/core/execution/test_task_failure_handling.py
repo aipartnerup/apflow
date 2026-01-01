@@ -9,10 +9,10 @@ Verifies that:
 """
 
 import pytest
-from aipartnerupflow.core.execution.task_manager import TaskManager
-from aipartnerupflow.core.execution.errors import BusinessError, ValidationError, ConfigurationError
-from aipartnerupflow.core.base import BaseTask
-from aipartnerupflow.core.extensions import get_registry
+from apflow.core.execution.task_manager import TaskManager
+from apflow.core.execution.errors import BusinessError, ValidationError, ConfigurationError
+from apflow.core.base import BaseTask
+from apflow.core.extensions import get_registry
 from typing import Dict, Any
 
 

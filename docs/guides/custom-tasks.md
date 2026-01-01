@@ -1,8 +1,8 @@
 # Custom Tasks Guide
 
-> **For contributors:** See [Extending aipartnerupflow](../development/extending.md) for advanced extension patterns and framework internals. This guide is focused on user-level custom executor development.
+> **For contributors:** See [Extending apflow](../development/extending.md) for advanced extension patterns and framework internals. This guide is focused on user-level custom executor development.
 
-Learn how to create your own custom executors (tasks) in aipartnerupflow. This guide will walk you through everything from simple tasks to advanced patterns.
+Learn how to create your own custom executors (tasks) in apflow. This guide will walk you through everything from simple tasks to advanced patterns.
 
 ## What You'll Learn
 
@@ -31,7 +31,7 @@ Learn how to create your own custom executors (tasks) in aipartnerupflow. This g
 The fastest way to create a custom executor:
 
 ```python
-from aipartnerupflow import BaseTask, executor_register
+from apflow import BaseTask, executor_register
 from typing import Dict, Any
 
 @executor_register()
@@ -100,7 +100,7 @@ An **executor** is a piece of code that performs a specific task. Think of it as
 
 **BaseTask**: Recommended base class (simpler, includes registration)
 ```python
-from aipartnerupflow import BaseTask, executor_register
+from apflow import BaseTask, executor_register
 
 @executor_register()
 class MyTask(BaseTask):
@@ -110,7 +110,7 @@ class MyTask(BaseTask):
 
 **ExecutableTask**: Lower-level interface (more control)
 ```python
-from aipartnerupflow import ExecutableTask
+from apflow import ExecutableTask
 
 class MyTask(ExecutableTask):
     @property
@@ -130,7 +130,7 @@ Let's create a complete, working example step by step.
 Create a file `greeting_executor.py`:
 
 ```python
-from aipartnerupflow import BaseTask, executor_register
+from apflow import BaseTask, executor_register
 from typing import Dict, Any
 
 @executor_register()
@@ -184,7 +184,7 @@ Create a file `use_greeting.py`:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 # Import to register the executor
 from greeting_executor import GreetingExecutor
 
@@ -554,7 +554,7 @@ async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
 
 ```python
 import aiohttp
-from aipartnerupflow import BaseTask, executor_register
+from apflow import BaseTask, executor_register
 from typing import Dict, Any
 
 @executor_register()
@@ -609,7 +609,7 @@ class APICallExecutor(BaseTask):
 ### Pattern 2: Data Processing
 
 ```python
-from aipartnerupflow import BaseTask, executor_register
+from apflow import BaseTask, executor_register
 from typing import Dict, Any
 
 @executor_register()
@@ -676,7 +676,7 @@ class DataProcessor(BaseTask):
 
 ```python
 import aiofiles
-from aipartnerupflow import BaseTask, executor_register
+from apflow import BaseTask, executor_register
 from typing import Dict, Any
 
 @executor_register()
@@ -736,7 +736,7 @@ class FileReader(BaseTask):
 ### Pattern 4: Database Query
 
 ```python
-from aipartnerupflow import BaseTask, executor_register
+from apflow import BaseTask, executor_register
 from typing import Dict, Any
 
 @executor_register()
@@ -969,7 +969,7 @@ Test with TaskManager:
 
 ```python
 import pytest
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 from my_executors import GreetingExecutor
 
 @pytest.mark.asyncio
@@ -998,7 +998,7 @@ async def test_executor_integration():
 
 ## Built-in Executors
 
-aipartnerupflow provides several built-in executors for common use cases. These executors are automatically registered and can be used directly in your tasks.
+apflow provides several built-in executors for common use cases. These executors are automatically registered and can be used directly in your tasks.
 
 ### HTTP/REST API Executor
 
@@ -1007,7 +1007,7 @@ Execute HTTP requests to external APIs, webhooks, and HTTP-based services.
 **Installation:**
 ```bash
 # httpx is included in a2a extra
-pip install aipartnerupflow[a2a]
+pip install apflow[a2a]
 ```
 
 **Usage:**
@@ -1038,7 +1038,7 @@ Execute commands on remote servers via SSH.
 
 **Installation:**
 ```bash
-pip install aipartnerupflow[ssh]
+pip install apflow[ssh]
 ```
 
 **Usage:**
@@ -1069,7 +1069,7 @@ Execute commands in isolated Docker containers.
 
 **Installation:**
 ```bash
-pip install aipartnerupflow[docker]
+pip install apflow[docker]
 ```
 
 **Usage:**
@@ -1101,7 +1101,7 @@ Call gRPC services and microservices.
 
 **Installation:**
 ```bash
-pip install aipartnerupflow[grpc]
+pip install apflow[grpc]
 ```
 
 **Usage:**
@@ -1133,7 +1133,7 @@ Bidirectional WebSocket communication.
 **Installation:**
 ```bash
 # websockets is included in a2a extra
-pip install aipartnerupflow[a2a]
+pip install apflow[a2a]
 ```
 
 **Usage:**
@@ -1157,14 +1157,14 @@ pip install aipartnerupflow[a2a]
 - Configurable response waiting
 - Connection timeout handling
 
-### aipartnerupflow API Executor
+### apflow API Executor
 
-Call other aipartnerupflow API instances for distributed execution.
+Call other apflow API instances for distributed execution.
 
 **Installation:**
 ```bash
 # httpx is included in a2a extra
-pip install aipartnerupflow[a2a]
+pip install apflow[a2a]
 ```
 
 **Usage:**
@@ -1204,7 +1204,7 @@ Interact with MCP servers to access external tools and data sources through the 
 ```bash
 # MCP executor uses standard library for stdio mode
 # For HTTP mode, httpx is included in a2a extra
-pip install aipartnerupflow[a2a]  # For HTTP transport
+pip install apflow[a2a]  # For HTTP transport
 # Or just use stdio mode (no additional dependencies)
 ```
 
@@ -1342,7 +1342,7 @@ Direct LLM interaction via LiteLLM, supporting over 100+ providers including Ope
 
 **Installation:**
 ```bash
-pip install aipartnerupflow[llm]
+pip install apflow[llm]
 ```
 
 **Features:**
@@ -1414,8 +1414,8 @@ pip install anthropic
 
 **Configuration:**
 - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`: LLM API key (environment variable)
-- `AIPARTNERUPFLOW_LLM_PROVIDER`: Provider selection (default: "openai")
-- `AIPARTNERUPFLOW_LLM_MODEL`: Model name (optional)
+- `APFLOW_LLM_PROVIDER`: Provider selection (default: "openai")
+- `APFLOW_LLM_MODEL`: Model name (optional)
 
 **Output:**
 Returns a JSON array of task objects that can be used with `TaskCreator.create_task_tree_from_array()`:

@@ -10,19 +10,19 @@ from unittest.mock import patch, MagicMock
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from aipartnerupflow.core.storage.context import (
+from apflow.core.storage.context import (
     with_db_session_context,
     get_request_session,
     set_request_session,
     clear_request_session,
 )
-from aipartnerupflow.core.storage.factory import (
+from apflow.core.storage.factory import (
     get_default_session,
     reset_default_session,
     reset_session_pool_manager,
 )
-from aipartnerupflow.core.storage.sqlalchemy.models import Base, TaskModel
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.storage.sqlalchemy.models import Base, TaskModel
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
 
 class TestWithDbSessionContext:
@@ -44,7 +44,7 @@ class TestWithDbSessionContext:
     
     def _ensure_clean_metadata(self):
         """Ensure Base.metadata is clean"""
-        from aipartnerupflow.core.storage.sqlalchemy.models import TASK_TABLE_NAME
+        from apflow.core.storage.sqlalchemy.models import TASK_TABLE_NAME
         if TASK_TABLE_NAME in Base.metadata.tables:
             table = Base.metadata.tables[TASK_TABLE_NAME]
             # Remove any custom columns that might have been added in previous tests
@@ -60,7 +60,7 @@ class TestWithDbSessionContext:
         connection_string = f"duckdb:///{db_path}"
         
         # Create tables first
-        from aipartnerupflow.core.storage.factory import create_session
+        from apflow.core.storage.factory import create_session
         test_session = create_session(connection_string=connection_string)
         Base.metadata.create_all(test_session.bind)
         test_session.close()
@@ -68,7 +68,7 @@ class TestWithDbSessionContext:
         # Verify that create_pooled_session is called when use_pool=True
         # Use AsyncMock for proper async context manager support
         from unittest.mock import AsyncMock
-        with patch('aipartnerupflow.core.storage.context.create_pooled_session') as mock_create_pooled:
+        with patch('apflow.core.storage.context.create_pooled_session') as mock_create_pooled:
             mock_session = MagicMock(spec=Session)
             mock_context = AsyncMock()
             mock_context.__aenter__.return_value = mock_session
@@ -91,7 +91,7 @@ class TestWithDbSessionContext:
         default_session = get_default_session()
         
         # Verify that get_default_session is used when use_pool=False
-        with patch('aipartnerupflow.core.storage.context.get_default_session') as mock_get_default:
+        with patch('apflow.core.storage.context.get_default_session') as mock_get_default:
             mock_get_default.return_value = default_session
             
             async with with_db_session_context(use_pool=False) as session:
@@ -132,7 +132,7 @@ class TestWithDbSessionContext:
         connection_string = f"duckdb:///{db_path}"
         
         # Create tables first
-        from aipartnerupflow.core.storage.factory import create_session
+        from apflow.core.storage.factory import create_session
         test_session = create_session(connection_string=connection_string)
         Base.metadata.create_all(test_session.bind)
         test_session.close()
@@ -180,7 +180,7 @@ class TestWithDbSessionContext:
         connection_string = f"duckdb:///{db_path}"
         
         # Create tables first
-        from aipartnerupflow.core.storage.factory import create_session
+        from apflow.core.storage.factory import create_session
         test_session = create_session(connection_string=connection_string)
         Base.metadata.create_all(test_session.bind)
         test_session.close()
@@ -223,7 +223,7 @@ class TestWithDbSessionContext:
         task_id = f"test-task-loop-{uuid.uuid4().hex[:8]}"
         
         # Create tables first
-        from aipartnerupflow.core.storage.factory import create_session
+        from apflow.core.storage.factory import create_session
         test_session = create_session(connection_string=connection_string)
         Base.metadata.create_all(test_session.bind)
         test_session.close()
@@ -258,7 +258,7 @@ class TestWithDbSessionContext:
         connection_string = f"duckdb:///{db_path}"
         
         # Create tables first
-        from aipartnerupflow.core.storage.factory import create_session
+        from apflow.core.storage.factory import create_session
         test_session = create_session(connection_string=connection_string)
         Base.metadata.create_all(test_session.bind)
         test_session.close()

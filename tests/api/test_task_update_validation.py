@@ -11,9 +11,9 @@ import uuid
 from unittest.mock import Mock
 from starlette.requests import Request
 
-from aipartnerupflow.api.routes.tasks import TaskRoutes
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow.core.config import get_task_model_class
+from apflow.api.routes.tasks import TaskRoutes
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.config import get_task_model_class
 
 
 @pytest.fixture

@@ -1,19 +1,19 @@
-# aipartnerupflow Architecture Design Document
+# apflow Architecture Design Document
 
 ## Core Positioning
 
-**The core of aipartnerupflow is task orchestration and execution specifications**
+**The core of apflow is task orchestration and execution specifications**
 
 This is a **task orchestration framework library** that provides:
 1. **Task Orchestration Specifications**: Task tree construction, dependency management, priority scheduling
 2. **Task Execution Specifications**: Unified execution interface supporting multiple task types
 3. **Supporting Features**: Storage, unified external API interfaces
 
-aipartnerupflow is a reusable **framework library**.
+apflow is a reusable **framework library**.
 
 ## Architecture Layers
 
-The aipartnerupflow architecture consists of four main layers:
+The apflow architecture consists of four main layers:
 
 ```mermaid
 flowchart TD
@@ -57,7 +57,7 @@ flowchart TD
 
 ### Protocol Standard
 
-**A2A (Agent-to-Agent) Protocol** is the standard protocol adopted by aipartnerupflow for agent communication.
+**A2A (Agent-to-Agent) Protocol** is the standard protocol adopted by apflow for agent communication.
 
 **Why A2A Protocol?**
 - **Mature Standard**: A2A Protocol is a mature, production-ready specification designed specifically for AI Agent systems
@@ -86,7 +86,7 @@ flowchart TD
 
 ## Module Organization
 
-### Core (pip install aipartnerupflow)
+### Core (pip install apflow)
 
 **Pure task orchestration framework - NO CrewAI dependency**
 
@@ -121,7 +121,7 @@ extensions/crewai/
 └── types.py            # CrewaiExecutorState, BatchState
 ```
 
-**Installation**: `pip install aipartnerupflow[crewai]`
+**Installation**: `pip install apflow[crewai]`
 
 **Includes**:
 - CrewaiExecutor for LLM-based agent crews
@@ -140,7 +140,7 @@ extensions/http_executor/
 └── types.py            # HTTPExecutorState, RequestConfig, ResponseConfig
 ```
 
-**Installation**: `pip install aipartnerupflow[http]`
+**Installation**: `pip install apflow[http]`
 
 **Purpose**: Execute tasks by calling remote HTTP/HTTPS APIs.
 
@@ -195,7 +195,7 @@ cli/                   # Command-line interface
 ### Core Only
 
 ```bash
-pip install aipartnerupflow
+pip install apflow
 ```
 
 **Includes**:
@@ -209,7 +209,7 @@ pip install aipartnerupflow
 ### With CrewAI Support
 
 ```bash
-pip install aipartnerupflow[crewai]
+pip install apflow[crewai]
 ```
 
 **Adds**:
@@ -221,7 +221,7 @@ pip install aipartnerupflow[crewai]
 ### Full Installation
 
 ```bash
-pip install aipartnerupflow[all]
+pip install apflow[all]
 ```
 
 **Includes**: Core + crewai + batch + api + cli + examples + postgres
@@ -352,7 +352,7 @@ Task.history           →  Not stored in TaskModel (LLM conversation history, e
 
 3. **Table Name**:
    - Default table name: `apflow_tasks` (prefixed to distinguish from A2A Protocol's `tasks` table)
-   - Configurable via `AIPARTNERUPFLOW_TASK_TABLE_NAME` environment variable
+   - Configurable via `APFLOW_TASK_TABLE_NAME` environment variable
    - See [Configuration](configuration.md) for details
 
 4. **Storage Bridge**:
@@ -377,8 +377,8 @@ Task.history           →  Not stored in TaskModel (LLM conversation history, e
 
 ### 1. LLM Tasks (CrewAI) [crewai]
 ```python
-# Requires: pip install aipartnerupflow[crewai]
-from aipartnerupflow.extensions.crewai import CrewaiExecutor
+# Requires: pip install apflow[crewai]
+from apflow.extensions.crewai import CrewaiExecutor
 
 crew = CrewaiExecutor(
     agents=[{"role": "Analyst", "goal": "Analyze data"}],
@@ -389,7 +389,7 @@ result = await crew.execute(inputs={...})
 
 ### 2. Traditional External Service Calls
 ```python
-from aipartnerupflow.core.interfaces.plugin import ExecutableTask
+from apflow.core.interfaces.plugin import ExecutableTask
 
 class APICallTask(ExecutableTask):
     async def execute(self, inputs):

@@ -5,7 +5,7 @@ Test GenerateExecutor
 import pytest
 import json
 from unittest.mock import Mock, AsyncMock, patch
-from aipartnerupflow.extensions.generate.generate_executor import GenerateExecutor
+from apflow.extensions.generate.generate_executor import GenerateExecutor
 
 
 class TestGenerateExecutor:
@@ -190,7 +190,7 @@ class TestGenerateExecutor:
         mock_llm_client = Mock()
         mock_llm_client.generate = AsyncMock(return_value='[{"name": "test_executor", "inputs": {}}]')
         
-        with patch('aipartnerupflow.extensions.generate.generate_executor.create_llm_client', return_value=mock_llm_client):
+        with patch('apflow.extensions.generate.generate_executor.create_llm_client', return_value=mock_llm_client):
             result = await executor.execute({
                 "requirement": "Test requirement",
                 "user_id": "user123"
@@ -220,7 +220,7 @@ class TestGenerateExecutor:
         ])
         mock_llm_client.generate = AsyncMock(return_value=mock_response)
         
-        with patch('aipartnerupflow.extensions.generate.generate_executor.create_llm_client', return_value=mock_llm_client):
+        with patch('apflow.extensions.generate.generate_executor.create_llm_client', return_value=mock_llm_client):
             result = await executor.execute({
                 "requirement": "Get system info then run a command",
                 "user_id": "user123"
@@ -263,7 +263,7 @@ class TestGenerateExecutor:
         ])
         mock_llm_client.generate = AsyncMock(return_value=mock_response)
         
-        with patch('aipartnerupflow.extensions.generate.generate_executor.create_llm_client', return_value=mock_llm_client):
+        with patch('apflow.extensions.generate.generate_executor.create_llm_client', return_value=mock_llm_client):
             result = await executor.execute({
                 "requirement": "Get system info from multiple sources",
                 "user_id": "user123"

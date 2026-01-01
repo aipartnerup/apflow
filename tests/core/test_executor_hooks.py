@@ -2,13 +2,13 @@
 Test executor-specific pre/post hooks functionality
 """
 import pytest
-from aipartnerupflow import (
+from apflow import (
     executor_register,
     clear_config,
 )
-from aipartnerupflow.core.base import BaseTask
-from aipartnerupflow.core.extensions.registry import add_executor_hook
-from aipartnerupflow.core.extensions import get_registry
+from apflow.core.base import BaseTask
+from apflow.core.extensions.registry import add_executor_hook
+from apflow.core.extensions import get_registry
 
 
 class TestExecutorHooks:
@@ -16,7 +16,7 @@ class TestExecutorHooks:
     
     def setup_method(self):
         """Clear extension registry before each test"""
-        from aipartnerupflow.core.extensions import get_registry
+        from apflow.core.extensions import get_registry
         registry = get_registry()
         registry._executor_classes.clear()
         registry._factory_functions.clear()

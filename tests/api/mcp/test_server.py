@@ -6,7 +6,7 @@ Tests for MCP server main entry point.
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from aipartnerupflow.api.mcp.server import McpServer
+from apflow.api.mcp.server import McpServer
 
 
 class TestMcpServer:

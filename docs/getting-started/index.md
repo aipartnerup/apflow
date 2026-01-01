@@ -1,6 +1,6 @@
-# Getting Started with aipartnerupflow
+# Getting Started with apflow
 
-Welcome to aipartnerupflow! This guide will help you get started quickly, whether you're new to task orchestration or an experienced developer.
+Welcome to apflow! This guide will help you get started quickly, whether you're new to task orchestration or an experienced developer.
 
 ## Problems We Solve
 
@@ -16,21 +16,21 @@ You might be struggling with these common challenges:
 
 - **Real-time Monitoring Requires Custom Solutions**: You need to show progress to users, but building real-time monitoring with polling, WebSocket connections, or custom streaming solutions takes weeks. Your users wait without feedback, and you struggle to debug long-running workflows.
 
-## Why aipartnerupflow?
+## Why apflow?
 
-Here's what makes aipartnerupflow the right choice for your orchestration needs:
+Here's what makes apflow the right choice for your orchestration needs:
 
 - **One Unified Interface for Everything**: Stop managing multiple orchestration systems. One framework handles traditional tasks, HTTP/REST APIs, SSH commands, Docker containers, gRPC services, WebSocket communication, MCP tools, and AI agents—all through the same ExecutableTask interface. No more switching between different libraries and patterns.
 
-- **Start Simple, Scale Up Gradually**: Begin with a lightweight, dependency-free core that handles traditional task orchestration. Add AI capabilities, A2A server, CLI tools, or PostgreSQL storage only when you need them. Unlike frameworks that force you to install everything upfront, aipartnerupflow lets you start minimal and grow incrementally. This modular approach means you only pay for what you use and keep deployments lean.
+- **Start Simple, Scale Up Gradually**: Begin with a lightweight, dependency-free core that handles traditional task orchestration. Add AI capabilities, A2A server, CLI tools, or PostgreSQL storage only when you need them. Unlike frameworks that force you to install everything upfront, apflow lets you start minimal and grow incrementally. This modular approach means you only pay for what you use and keep deployments lean.
 
-- **Language-Agnostic Protocol**: Built on the AI Partner Up Flow Protocol, ensuring interoperability across Python, Go, Rust, JavaScript, and more. Different language implementations work together seamlessly. The protocol provides complete specifications for building compatible libraries, making it future-proof and vendor-independent.
+- **Language-Agnostic Protocol**: Built on the AI Partner Up Flow Protocol (APFlow Protocol), ensuring interoperability across Python, Go, Rust, JavaScript, and more. Different language implementations work together seamlessly. The protocol provides complete specifications for building compatible libraries, making it future-proof and vendor-independent.
 
 - **Production-Ready from Day One**: Built-in storage (DuckDB or PostgreSQL), real-time streaming, automatic retries, state persistence, and comprehensive monitoring—all included. No need to build these from scratch. The framework handles error recovery, checkpointing, and workflow resumption automatically. Focus on your business logic, not infrastructure.
 
 - **Extensive Executor Ecosystem**: Choose from HTTP/REST APIs (with authentication), SSH remote execution, Docker containers, gRPC services, WebSocket communication, MCP integration, and LLM-based task tree generation. All executors support the same interface, making it easy to mix and match execution methods in a single workflow.
 
-## What Happens When You Use aipartnerupflow?
+## What Happens When You Use apflow?
 
 Here's the real impact of using our framework:
 
@@ -46,9 +46,9 @@ Here's the real impact of using our framework:
 
 - **You Scale with Confidence**: Before: Worrying about resource usage, dependency management at scale, and coordinating hundreds of concurrent workflows manually. After: Production-ready from day one. Built-in storage, streaming architecture, and efficient resource management. Handle hundreds of concurrent workflows with confidence.
 
-## What is aipartnerupflow?
+## What is apflow?
 
-**aipartnerupflow** is a Python framework for orchestrating and executing tasks. Think of it as a conductor for your application's tasks - it manages when tasks run, how they depend on each other, and ensures everything executes in the right order.
+**apflow** is a Python framework for orchestrating and executing tasks. Think of it as a conductor for your application's tasks - it manages when tasks run, how they depend on each other, and ensures everything executes in the right order.
 
 ### Key Benefits
 
@@ -60,7 +60,7 @@ Here's the real impact of using our framework:
 
 ## Quick Navigation
 
-### 🚀 New to aipartnerupflow?
+### 🚀 New to apflow?
 
 Start here if you're completely new:
 
@@ -96,7 +96,7 @@ Jump to what you need:
                           │
                           ▼
 ┌─────────────────────────────────────────────────────────┐
-│              aipartnerupflow Framework                   │
+│              apflow Framework                   │
 │                                                          │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
 │  │   Task 1     │  │   Task 2     │  │   Task 3     │ │
@@ -127,29 +127,29 @@ Choose your installation based on what you need:
 
 ```bash
 # Minimal: Core orchestration only
-pip install aipartnerupflow
+pip install apflow
 
 # With LLM support (CrewAI)
-pip install aipartnerupflow[crewai]
+pip install apflow[crewai]
 
 # With API server
-pip install aipartnerupflow[a2a]
+pip install apflow[a2a]
 
 # With CLI tools
-pip install aipartnerupflow[cli]
+pip install apflow[cli]
 
 # Everything
-pip install aipartnerupflow[all]
+pip install apflow[all]
 ```
 
 See [Installation Guide](installation.md) for details.
 
 ## Your First 5 Minutes
 
-Here's the fastest way to see aipartnerupflow in action:
+Here's the fastest way to see apflow in action:
 
 ```python
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 import asyncio
 
 async def main():
@@ -215,7 +215,7 @@ A: Yes! The core framework has no AI dependencies. LLM support is optional via `
 A: Yes! It includes storage, error handling, streaming, and API support out of the box.
 
 **Q: How is this different from Celery/Airflow?**  
-A: aipartnerupflow focuses on simplicity and flexibility. It's designed for both simple workflows and complex AI agent orchestration.
+A: apflow focuses on simplicity and flexibility. It's designed for both simple workflows and complex AI agent orchestration.
 
 ## Next Steps
 

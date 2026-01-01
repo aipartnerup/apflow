@@ -7,9 +7,9 @@ dependency task results in a real execution environment.
 
 import pytest
 import json
-from aipartnerupflow.core.execution.task_executor import TaskExecutor
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow.core.config import get_task_model_class
+from apflow.core.execution.task_executor import TaskExecutor
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.config import get_task_model_class
 
 
 class TestAggregateResultsIntegration:
@@ -32,7 +32,7 @@ class TestAggregateResultsIntegration:
         db_session = use_test_db_session
         
         # Define task tree structure
-        # This is the same format you would use in CLI: aipartnerupflow run flow --tasks '[...]'
+        # This is the same format you would use in CLI: apflow run flow --tasks '[...]'
         tasks = [
             # Root task: Aggregate all system resource information
             {

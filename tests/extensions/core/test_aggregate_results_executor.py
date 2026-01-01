@@ -5,7 +5,7 @@ Tests the aggregate_results_executor functionality in isolation and with real ex
 """
 
 import pytest
-from aipartnerupflow.extensions.core.aggregate_results_executor import AggregateResultsExecutor
+from apflow.extensions.core.aggregate_results_executor import AggregateResultsExecutor
 
 
 class TestAggregateResultsExecutor:
@@ -190,7 +190,7 @@ class TestAggregateResultsExecutor:
         """
         # Import system_info_executor
         try:
-            from aipartnerupflow.extensions.stdio import SystemInfoExecutor
+            from apflow.extensions.stdio import SystemInfoExecutor
         except ImportError:
             pytest.skip("SystemInfoExecutor not available")
         

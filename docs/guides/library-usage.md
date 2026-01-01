@@ -1,6 +1,6 @@
-# Using aipartnerupflow as a Library
+# Using apflow as a Library
 
-This guide shows how to use `aipartnerupflow` as a library in your own project (e.g., `aipartnerupflow-demo`) and customize it with your own routes, middleware, and configurations.
+This guide shows how to use `apflow` as a library in your own project (e.g., `apflow-demo`) and customize it with your own routes, middleware, and configurations.
 
 ## Table of Contents
 
@@ -14,11 +14,11 @@ This guide shows how to use `aipartnerupflow` as a library in your own project (
 
 ## Understanding main.py
 
-When using `aipartnerupflow` as a library, you need to understand what `main.py` does and why:
+When using `apflow` as a library, you need to understand what `main.py` does and why:
 
 ### What main.py Does
 
-The `main.py` file in aipartnerupflow provides two main functions for library usage:
+The `main.py` file in apflow provides two main functions for library usage:
 
 1. **`create_runnable_app()`** - Creates a fully initialized application instance
    - Loads `.env` file from the calling project's directory (not library's directory)
@@ -45,7 +45,7 @@ Instead of manually implementing all these steps, use the provided functions:
 
 ```python
 # Option 1: Complete solution (recommended for most cases)
-from aipartnerupflow.api.main import main
+from apflow.api.main import main
 
 # This handles everything and runs the server
 if __name__ == "__main__":
@@ -54,7 +54,7 @@ if __name__ == "__main__":
 
 ```python
 # Option 2: Get app instance and run server yourself
-from aipartnerupflow.api.main import create_runnable_app
+from apflow.api.main import create_runnable_app
 import uvicorn
 
 # This handles initialization and returns the app
@@ -70,13 +70,13 @@ If you need more control, you can manually call each step (see Option B in Basic
 
 ### 1. Install as Dependency
 
-Add `aipartnerupflow` to your project's dependencies:
+Add `apflow` to your project's dependencies:
 
 ```bash
-# In your project (e.g., aipartnerupflow-demo)
-pip install aipartnerupflow[a2a]
+# In your project (e.g., apflow-demo)
+pip install apflow[a2a]
 # Or with all features
-pip install aipartnerupflow[all]
+pip install apflow[all]
 ```
 
 ### 2. Create Your Application
@@ -86,8 +86,8 @@ pip install aipartnerupflow[all]
 The `main()` function handles all initialization steps and runs the server automatically:
 
 ```python
-from aipartnerupflow.api.main import main
-from aipartnerupflow.core.storage.factory import configure_database
+from apflow.api.main import main
+from apflow.core.storage.factory import configure_database
 
 # Configure database (optional, can use DATABASE_URL env var instead)
 configure_database(
@@ -104,8 +104,8 @@ if __name__ == "__main__":
 If you need the app object but want to run the server yourself:
 
 ```python
-from aipartnerupflow.api.main import create_runnable_app
-from aipartnerupflow.core.storage.factory import configure_database
+from apflow.api.main import create_runnable_app
+from apflow.core.storage.factory import configure_database
 import uvicorn
 
 # Configure database
@@ -131,9 +131,9 @@ If you need more control, you can manually handle initialization:
 import os
 import warnings
 from pathlib import Path
-from aipartnerupflow.api.app import create_app_by_protocol
-from aipartnerupflow.api.extensions import initialize_extensions, _load_custom_task_model
-from aipartnerupflow.core.storage.factory import configure_database
+from apflow.api.app import create_app_by_protocol
+from apflow.api.extensions import initialize_extensions, _load_custom_task_model
+from apflow.core.storage.factory import configure_database
 import uvicorn
 
 # 1. Load .env file (optional)
@@ -182,11 +182,11 @@ if __name__ == "__main__":
 Create a `.env` file in your project root:
 
 ```bash
-# .env (in your project root, e.g., aipartnerupflow-demo/.env)
+# .env (in your project root, e.g., apflow-demo/.env)
 DATABASE_URL=postgresql+asyncpg://user:password@localhost/dbname?sslmode=require
 ```
 
-**Important**: When using aipartnerupflow as a library, the `.env` file should be in **your project's root directory**, not in the library's installation directory. The library will automatically look for `.env` in:
+**Important**: When using apflow as a library, the `.env` file should be in **your project's root directory**, not in the library's installation directory. The library will automatically look for `.env` in:
 
 1. Current working directory (where you run the script)
 2. Directory of the main script (where your `main.py` or entry script is located)
@@ -197,7 +197,7 @@ This ensures that your project's `.env` file is loaded, not the library's `.env`
 ### Using Code
 
 ```python
-from aipartnerupflow.core.storage.factory import configure_database
+from apflow.core.storage.factory import configure_database
 
 # PostgreSQL with SSL
 configure_database(
@@ -218,7 +218,7 @@ Add your own API routes to extend the application:
 from starlette.routing import Route
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from aipartnerupflow.api.main import main
+from apflow.api.main import main
 
 # Define custom route handlers
 async def health_check(request: Request) -> JSONResponse:
@@ -250,7 +250,7 @@ if __name__ == "__main__":
 **Using `create_runnable_app()`:**
 
 ```python
-from aipartnerupflow.api.main import create_runnable_app
+from apflow.api.main import create_runnable_app
 
 # Create app with custom routes
 app = create_runnable_app(
@@ -270,7 +270,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 import time
-from aipartnerupflow.api.main import main
+from apflow.api.main import main
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Custom middleware to log all requests"""
@@ -321,7 +321,7 @@ if __name__ == "__main__":
 **Using `create_runnable_app()`:**
 
 ```python
-from aipartnerupflow.api.main import create_runnable_app
+from apflow.api.main import create_runnable_app
 
 app = create_runnable_app(
     protocol="a2a",
@@ -339,10 +339,10 @@ app = create_runnable_app(
 Extend TaskRoutes to customize task management behavior:
 
 ```python
-from aipartnerupflow.api.routes.tasks import TaskRoutes
+from apflow.api.routes.tasks import TaskRoutes
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from aipartnerupflow.api.app import create_app_by_protocol
+from apflow.api.app import create_app_by_protocol
 
 class MyCustomTaskRoutes(TaskRoutes):
     """Custom TaskRoutes with additional functionality"""
@@ -384,7 +384,7 @@ python app.py
 
 Middleware is added in the following order:
 
-1. **Default middleware** (added by aipartnerupflow):
+1. **Default middleware** (added by apflow):
    - CORS middleware
    - LLM API key middleware
    - JWT authentication middleware (if enabled)
@@ -408,7 +408,7 @@ This means your custom middleware runs **after** the default middleware, so it c
 
 ## Quick Reference: What main.py Does
 
-For reference, here's what `aipartnerupflow.api.main.main()` and `create_runnable_app()` do:
+For reference, here's what `apflow.api.main.main()` and `create_runnable_app()` do:
 
 1. ✅ Loads `.env` file (from calling project's directory when used as library)
 2. ✅ Sets up development environment (only when running library's own main.py directly)
@@ -428,9 +428,9 @@ Here's a complete example combining all features:
 
 ```python
 """
-Complete example: Using aipartnerupflow as a library in your own project
+Complete example: Using apflow as a library in your own project
 
-This example shows how to use aipartnerupflow as a library with custom routes,
+This example shows how to use apflow as a library with custom routes,
 middleware, and configurations. All initialization steps are handled automatically
 by create_runnable_app() or main().
 """
@@ -444,7 +444,7 @@ from starlette.responses import JSONResponse
 # ============================================================================
 # Step 1: Configure database (REQUIRED)
 # ============================================================================
-from aipartnerupflow.core.storage.factory import configure_database
+from apflow.core.storage.factory import configure_database
 
 # Option A: Use environment variable (recommended)
 # Set DATABASE_URL in .env file or environment variable
@@ -513,7 +513,7 @@ custom_middleware = [
 # Step 4: Create application (Option A - Recommended: Using main())
 # ============================================================================
 # Option A: Using main() - Simplest approach, handles everything automatically
-from aipartnerupflow.api.main import main
+from apflow.api.main import main
 
 if __name__ == "__main__":
     # main() handles all initialization and runs the server
@@ -530,7 +530,7 @@ if __name__ == "__main__":
 # Step 4: Create application (Option B - Using create_runnable_app())
 # ============================================================================
 # Option B: Using create_runnable_app() - Get app instance and run server yourself
-# from aipartnerupflow.api.main import create_runnable_app
+# from apflow.api.main import create_runnable_app
 # import uvicorn
 #
 # if __name__ == "__main__":
@@ -558,7 +558,7 @@ if __name__ == "__main__":
 # ============================================================================
 # 1. ✅ Loads .env file from your project's directory
 # 2. ✅ Initializes extensions (executors, hooks, storage backends)
-# 3. ✅ Loads custom TaskModel if specified in AIPARTNERUPFLOW_TASK_MODEL_CLASS
+# 3. ✅ Loads custom TaskModel if specified in APFLOW_TASK_MODEL_CLASS
 # 4. ✅ Auto-initializes examples if database is empty
 # 5. ✅ Creates the API application with proper configuration
 # 6. ✅ (main() only) Runs the uvicorn server

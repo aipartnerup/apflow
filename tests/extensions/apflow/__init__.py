@@ -1,2 +1,2 @@
-"""Tests for aipartnerupflow API executor"""
+"""Tests for apflow API executor"""
 

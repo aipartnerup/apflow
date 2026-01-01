@@ -2,12 +2,12 @@
 Test task tree lifecycle hooks functionality
 """
 import pytest
-from aipartnerupflow import (
+from apflow import (
     register_task_tree_hook,
     get_task_tree_hooks,
     clear_config,
 )
-from aipartnerupflow.core.types import TaskTreeNode
+from apflow.core.types import TaskTreeNode
 
 
 class TestTaskTreeHooks:
@@ -91,8 +91,8 @@ class TestTaskTreeHooks:
     @pytest.mark.asyncio
     async def test_task_tree_hooks_integration(self, sync_db_session):
         """Test task tree hooks with TaskManager"""
-        from aipartnerupflow.core.execution.task_manager import TaskManager
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.execution.task_manager import TaskManager
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         hook_events = []
         

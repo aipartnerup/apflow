@@ -8,7 +8,7 @@ The `TaskModel` table name is configurable via environment variable to avoid con
 
 **Default**: `apflow_tasks`
 
-The table name uses the prefix `apflow_` (short for "aipartnerupflow") to distinguish it from:
+The table name uses the prefix `apflow_` (short for "apflow") to distinguish it from:
 - A2A Protocol's default `tasks` table (for execution instances)
 - Other frameworks that might use `tasks` table
 
@@ -16,20 +16,20 @@ The table name uses the prefix `apflow_` (short for "aipartnerupflow") to distin
 
 ### Environment Variable
 
-Set the `AIPARTNERUPFLOW_TASK_TABLE_NAME` environment variable to customize the table name:
+Set the `APFLOW_TASK_TABLE_NAME` environment variable to customize the table name:
 
 ```bash
-export AIPARTNERUPFLOW_TASK_TABLE_NAME="my_custom_tasks"
+export APFLOW_TASK_TABLE_NAME="my_custom_tasks"
 ```
 
 ### Example Usage
 
 ```python
 import os
-os.environ["AIPARTNERUPFLOW_TASK_TABLE_NAME"] = "my_custom_tasks"
+os.environ["APFLOW_TASK_TABLE_NAME"] = "my_custom_tasks"
 
 # Import after setting environment variable
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.storage.sqlalchemy.models import TaskModel
 
 # TaskModel will use "my_custom_tasks" as table name
 print(TaskModel.__tablename__)  # Output: "my_custom_tasks"
@@ -71,16 +71,16 @@ ALTER TABLE tasks RENAME TO my_custom_tasks;
 
 ### Development
 ```bash
-export AIPARTNERUPFLOW_TASK_TABLE_NAME="apflow_tasks_dev"
+export APFLOW_TASK_TABLE_NAME="apflow_tasks_dev"
 ```
 
 ### Production
 ```bash
-export AIPARTNERUPFLOW_TASK_TABLE_NAME="apflow_tasks_prod"
+export APFLOW_TASK_TABLE_NAME="apflow_tasks_prod"
 ```
 
 ### Multi-tenant
 ```bash
-export AIPARTNERUPFLOW_TASK_TABLE_NAME="apflow_tasks_tenant_1"
+export APFLOW_TASK_TABLE_NAME="apflow_tasks_tenant_1"
 ```
 

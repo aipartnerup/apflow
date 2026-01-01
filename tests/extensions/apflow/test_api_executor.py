@@ -1,13 +1,13 @@
 """
 Test ApFlowApiExecutor
 
-Tests for aipartnerupflow API executor functionality.
+Tests for apflow API executor functionality.
 """
 
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 import httpx
-from aipartnerupflow.extensions.apflow.api_executor import ApFlowApiExecutor
+from apflow.extensions.apflow.api_executor import ApFlowApiExecutor
 
 
 class TestApFlowApiExecutor:

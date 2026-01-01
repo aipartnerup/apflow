@@ -15,14 +15,14 @@ from a2a.server.events import EventQueue
 from a2a.types import Message, DataPart, Task, TaskState, TaskStatus
 from a2a.utils import new_agent_text_message
 
-from aipartnerupflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow.core.utils.logger import get_logger
+from apflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.utils.logger import get_logger
 
 # Import executors to trigger @executor_register decorator
 # This ensures the executors are registered before tests run
 try:
-    from aipartnerupflow.extensions.stdio import SystemInfoExecutor, CommandExecutor  # noqa: F401
+    from apflow.extensions.stdio import SystemInfoExecutor, CommandExecutor  # noqa: F401
 except ImportError:
     # If stdio extension is not available, tests will fail appropriately
     SystemInfoExecutor = None
@@ -38,8 +38,8 @@ class TestAgentExecutor:
     def executor(self):
         """Create AIPartnerUpFlowAgentExecutor instance"""
         # Create executor with mocked TaskRoutes for testing
-        from aipartnerupflow.api.routes.tasks import TaskRoutes
-        from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+        from apflow.api.routes.tasks import TaskRoutes
+        from apflow.core.storage.sqlalchemy.models import TaskModel
         
         task_routes = TaskRoutes(
             task_model_class=TaskModel,
@@ -228,7 +228,7 @@ class TestAgentExecutor:
         # Mock TaskExecutor and get_default_session
         # Use patch to ensure mock is properly cleaned up after test
         # This is important because TaskExecutor is a singleton, and mocks can leak to other tests
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
              patch.object(executor.task_executor, 'execute_tasks') as mock_execute_tasks:
             mock_get_session.return_value = Mock()
             
@@ -259,8 +259,8 @@ class TestAgentExecutor:
     @pytest.mark.asyncio
     async def test_execute_simple_mode_with_copy_execution(self, executor, mock_event_queue):
         """Test simple mode execution with copy_execution=True"""
-        from aipartnerupflow.core.types import TaskTreeNode
-        from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+        from apflow.core.types import TaskTreeNode
+        from apflow.core.storage.sqlalchemy.models import TaskModel
         
         original_task_id = "original-task-id"
         copied_task_id = "copied-task-id"
@@ -302,9 +302,9 @@ class TestAgentExecutor:
         copied_tree.task = copied_task
         copied_tree.children = []
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch('aipartnerupflow.api.a2a.agent_executor.TaskRepository') as mock_repo_class, \
-             patch('aipartnerupflow.api.a2a.agent_executor.TaskCreator') as mock_creator_class, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch('apflow.api.a2a.agent_executor.TaskRepository') as mock_repo_class, \
+             patch('apflow.api.a2a.agent_executor.TaskCreator') as mock_creator_class, \
              patch.object(executor.task_executor, 'execute_tasks') as mock_execute_tasks:
             
             mock_get_session.return_value = Mock()
@@ -348,8 +348,8 @@ class TestAgentExecutor:
     @pytest.mark.asyncio
     async def test_execute_simple_mode_with_copy_execution_and_children(self, executor, mock_event_queue):
         """Test simple mode execution with copy_execution=True and copy_children=True"""
-        from aipartnerupflow.core.types import TaskTreeNode
-        from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+        from apflow.core.types import TaskTreeNode
+        from apflow.core.storage.sqlalchemy.models import TaskModel
         
         original_task_id = "original-task-id"
         copied_task_id = "copied-task-id"
@@ -385,9 +385,9 @@ class TestAgentExecutor:
         copied_tree.task = copied_task
         copied_tree.children = []
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch('aipartnerupflow.api.a2a.agent_executor.TaskRepository') as mock_repo_class, \
-             patch('aipartnerupflow.api.a2a.agent_executor.TaskCreator') as mock_creator_class, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch('apflow.api.a2a.agent_executor.TaskRepository') as mock_repo_class, \
+             patch('apflow.api.a2a.agent_executor.TaskCreator') as mock_creator_class, \
              patch.object(executor.task_executor, 'execute_tasks') as mock_execute_tasks:
             
             mock_get_session.return_value = Mock()
@@ -429,7 +429,7 @@ class TestAgentExecutor:
         
         context = self._create_request_context([], metadata=metadata)
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session:
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session:
             mock_get_session.return_value = Mock()
             
             with pytest.raises(ValueError, match="task_id is required"):
@@ -438,8 +438,8 @@ class TestAgentExecutor:
     @pytest.mark.asyncio
     async def test_execute_streaming_mode_with_copy_execution(self, executor, mock_event_queue):
         """Test streaming mode execution with copy_execution=True"""
-        from aipartnerupflow.core.types import TaskTreeNode
-        from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+        from apflow.core.types import TaskTreeNode
+        from apflow.core.storage.sqlalchemy.models import TaskModel
         
         original_task_id = "original-task-id"
         copied_task_id = "copied-task-id"
@@ -477,10 +477,10 @@ class TestAgentExecutor:
         copied_tree.task = copied_task
         copied_tree.children = []
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch('aipartnerupflow.api.a2a.agent_executor.TaskRepository') as mock_repo_class, \
-             patch('aipartnerupflow.api.a2a.agent_executor.TaskCreator') as mock_creator_class, \
-             patch('aipartnerupflow.api.a2a.agent_executor.EventQueueBridge') as mock_bridge_class, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+             patch('apflow.api.a2a.agent_executor.TaskRepository') as mock_repo_class, \
+             patch('apflow.api.a2a.agent_executor.TaskCreator') as mock_creator_class, \
+             patch('apflow.api.a2a.agent_executor.EventQueueBridge') as mock_bridge_class, \
              patch.object(executor.task_executor, 'execute_tasks') as mock_execute_tasks:
             
             mock_get_session.return_value = Mock()
@@ -525,8 +525,8 @@ class TestAgentExecutor:
     @pytest.mark.asyncio
     async def test_tree_node_to_tasks_array(self, executor):
         """Test converting TaskTreeNode to tasks array format"""
-        from aipartnerupflow.core.types import TaskTreeNode
-        from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+        from apflow.core.types import TaskTreeNode
+        from apflow.core.storage.sqlalchemy.models import TaskModel
         
         # Create root task
         root_task = Mock(spec=TaskModel)
@@ -592,7 +592,7 @@ class TestAgentExecutor:
         Parent task uses aggregate_results_executor to merge all child results.
         """
         # Clear any existing hooks from previous tests
-        from aipartnerupflow import clear_config
+        from apflow import clear_config
         clear_config()
         
         # Track hook calls for verification
@@ -600,7 +600,7 @@ class TestAgentExecutor:
         post_hook_calls = []
         
         # Register pre-hook using decorator
-        from aipartnerupflow import register_pre_hook
+        from apflow import register_pre_hook
         
         @register_pre_hook
         async def test_pre_hook(task):
@@ -616,7 +616,7 @@ class TestAgentExecutor:
             task.inputs["_pre_hook_timestamp"] = "test-timestamp"
         
         # Register post-hook using decorator
-        from aipartnerupflow import register_post_hook
+        from apflow import register_post_hook
         
         @register_post_hook
         async def test_post_hook(task, inputs, result):
@@ -630,8 +630,8 @@ class TestAgentExecutor:
             })
         
         # Create executor AFTER registering hooks
-        from aipartnerupflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
-        from aipartnerupflow.core.execution.task_executor import TaskExecutor
+        from apflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
+        from apflow.core.execution.task_executor import TaskExecutor
         executor = AIPartnerUpFlowAgentExecutor()
         TaskExecutor().refresh_config()
         
@@ -712,7 +712,7 @@ class TestAgentExecutor:
         context = self._create_request_context(tasks)
         
         # Execute in simple mode with real database
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session_agent:
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session_agent:
             mock_get_session_agent.return_value = sync_db_session
             
             # Execute using executor
@@ -799,7 +799,7 @@ class TestAgentExecutor:
         Parent task uses aggregate_results_executor to merge all child results.
         """
         # Clear any existing hooks from previous tests
-        from aipartnerupflow import clear_config
+        from apflow import clear_config
         clear_config()
         
         # Track hook calls for verification
@@ -807,7 +807,7 @@ class TestAgentExecutor:
         post_hook_calls = []
         
         # Register pre-hook using decorator (real usage pattern)
-        from aipartnerupflow import register_pre_hook
+        from apflow import register_pre_hook
         
         @register_pre_hook
         async def test_pre_hook(task):
@@ -824,7 +824,7 @@ class TestAgentExecutor:
             task.inputs["_pre_hook_timestamp"] = "test-timestamp"
         
         # Register post-hook using decorator (real usage pattern)
-        from aipartnerupflow import register_post_hook
+        from apflow import register_post_hook
         
         @register_post_hook
         async def test_post_hook(task, inputs, result):
@@ -841,8 +841,8 @@ class TestAgentExecutor:
         # In production, hooks are registered at application startup before executor creation
         # For testing, we register hooks first, then create executor to match production pattern
         # Since TaskExecutor is singleton, we need to refresh its config to pick up newly registered hooks
-        from aipartnerupflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
-        from aipartnerupflow.core.execution.task_executor import TaskExecutor
+        from apflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
+        from apflow.core.execution.task_executor import TaskExecutor
         executor = AIPartnerUpFlowAgentExecutor()
         # Refresh TaskExecutor singleton's hooks to pick up newly registered hooks
         # This is only needed for testing; in production, hooks are registered before executor creation
@@ -925,7 +925,7 @@ class TestAgentExecutor:
         context = self._create_request_context(tasks)
         
         # Execute in simple mode with real database
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session_agent:
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session_agent:
             mock_get_session_agent.return_value = sync_db_session
             
             # Execute using executor with hooks
@@ -1103,7 +1103,7 @@ class TestAgentExecutor:
             "message": "Task cancelled successfully"
         }
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
              patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
@@ -1139,7 +1139,7 @@ class TestAgentExecutor:
             "message": "Task cancelled successfully"
         }
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
              patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
@@ -1164,7 +1164,7 @@ class TestAgentExecutor:
             "message": "Task cancelled successfully"
         }
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
              patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
@@ -1188,7 +1188,7 @@ class TestAgentExecutor:
             "message": "Task cancelled successfully"
         }
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
              patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
@@ -1216,7 +1216,7 @@ class TestAgentExecutor:
             "message": error_message
         }
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
              patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
@@ -1245,7 +1245,7 @@ class TestAgentExecutor:
             }
         }
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
              patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
@@ -1273,7 +1273,7 @@ class TestAgentExecutor:
             }
         }
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
              patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
@@ -1298,7 +1298,7 @@ class TestAgentExecutor:
             "error": "Task not found"
         }
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
              patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
@@ -1326,7 +1326,7 @@ class TestAgentExecutor:
             "current_status": "completed"
         }
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
              patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
@@ -1363,7 +1363,7 @@ class TestAgentExecutor:
         task_id = "task-with-exception"
         context = self._create_cancel_context(task_id=task_id)
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
              patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.side_effect = Exception("Database connection error")
@@ -1393,7 +1393,7 @@ class TestAgentExecutor:
             "message": "Task cancelled successfully"
         }
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
              patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
@@ -1427,7 +1427,7 @@ class TestAgentExecutor:
             "error": None  # Should not be included if None
         }
         
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
              patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result

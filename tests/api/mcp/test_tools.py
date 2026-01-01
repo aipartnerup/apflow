@@ -6,8 +6,8 @@ Tests for MCP tools registry and tool calling.
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from aipartnerupflow.api.mcp.tools import McpToolsRegistry, McpTool
-from aipartnerupflow.api.mcp.adapter import TaskRoutesAdapter
+from apflow.api.mcp.tools import McpToolsRegistry, McpTool
+from apflow.api.mcp.adapter import TaskRoutesAdapter
 
 
 class TestMcpTool:

@@ -3,7 +3,7 @@ Additional tests for TaskRepository to increase coverage
 """
 
 import pytest
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
 
 class TestTaskRepositoryAdditional:

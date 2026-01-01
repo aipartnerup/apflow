@@ -22,7 +22,7 @@ Execute tasks one after another:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -75,7 +75,7 @@ Execute multiple tasks in parallel, then merge results:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -139,7 +139,7 @@ Use priorities to control execution order:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -198,7 +198,7 @@ Combination of sequential and parallel execution:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -296,7 +296,7 @@ Use optional dependencies for fallback scenarios:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -357,7 +357,7 @@ Create task tree from array format:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskCreator, create_session
+from apflow import TaskManager, TaskCreator, create_session
 
 async def main():
     db = create_session()

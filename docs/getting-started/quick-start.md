@@ -2,7 +2,7 @@
 
 > **Need more installation options?** See the [Installation Guide](installation.md) for advanced and optional feature setups. This page is for new users to get started quickly.
 
-Get started with aipartnerupflow in 10 minutes. This guide will walk you through creating and executing your first task.
+Get started with apflow in 10 minutes. This guide will walk you through creating and executing your first task.
 
 ## Prerequisites
 
@@ -15,7 +15,7 @@ Get started with aipartnerupflow in 10 minutes. This guide will walk you through
 ### Minimal Installation (Core Only)
 
 ```bash
-pip install aipartnerupflow
+pip install apflow
 ```
 
 This installs the core orchestration framework with no optional dependencies.
@@ -28,7 +28,7 @@ This installs the core orchestration framework with no optional dependencies.
 ### Full Installation (All Features)
 
 ```bash
-pip install aipartnerupflow[all]
+pip install apflow[all]
 ```
 
 This includes everything:
@@ -98,7 +98,7 @@ apflow run flow system_info_executor --inputs '{"resource": "all"}'
 4. **Task executed**: The executor ran and collected CPU information
 5. **Result returned**: The result was displayed in JSON format
 
-**That's it!** You just executed your first task with aipartnerupflow! 🎉
+**That's it!** You just executed your first task with apflow! 🎉
 
 ### Understanding the Command
 
@@ -108,7 +108,7 @@ Let's break down the command:
 apflow run flow system_info_executor --inputs '{"resource": "cpu"}'
 ```
 
-- `apflow`: The CLI command (short for `aipartnerupflow`)
+- `apflow`: The CLI command (short for `apflow`)
 - `run flow`: Execute a task flow
 - `system_info_executor`: The executor ID (built-in executor)
 - `--inputs`: Task input parameters (JSON format)
@@ -262,7 +262,7 @@ Let's break down what happened in more detail:
 For advanced use cases, you can use `TaskManager` directly in Python code:
 
 ```python
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 db = create_session()
 task_manager = TaskManager(db)
@@ -273,7 +273,7 @@ task_manager = TaskManager(db)
 
 ## Step 4: Task Dependencies
 
-Now let's create multiple tasks where one depends on another. This is where aipartnerupflow really shines!
+Now let's create multiple tasks where one depends on another. This is where apflow really shines!
 
 ### Example: Sequential Tasks via CLI
 
@@ -437,7 +437,7 @@ Now let's create a custom executor. This is where you add your own business logi
 Create a file `my_executor.py`:
 
 ```python
-from aipartnerupflow import BaseTask, executor_register
+from apflow import BaseTask, executor_register
 from typing import Dict, Any
 
 @executor_register()
@@ -558,14 +558,14 @@ Start the API server (make sure executor is imported):
 
 ```bash
 # In a Python script that imports your executor
-python -c "from my_executor import GreetingTask; import aipartnerupflow.api.main; aipartnerupflow.api.main.main()"
+python -c "from my_executor import GreetingTask; import apflow.api.main; apflow.api.main.main()"
 ```
 
 Or create `api_server.py`:
 
 ```python
 from my_executor import GreetingTask  # Import to register
-from aipartnerupflow.api.main import main
+from apflow.api.main import main
 
 if __name__ == "__main__":
     main()
@@ -778,7 +778,7 @@ apflow run flow --tasks-file parallel_tasks.json
 **Solutions:**
 
 1. **For built-in executors**: Built-in executors are automatically available. If you get this error:
-   - Make sure you've installed the required extension: `pip install aipartnerupflow[extension_name]`
+   - Make sure you've installed the required extension: `pip install apflow[extension_name]`
    - Check that the executor ID is correct (e.g., `system_info_executor`, not `system_info`)
 
 2. **For custom executors**: Make sure you:
@@ -833,20 +833,20 @@ curl http://localhost:8000/api/tasks/<task_id>
 
 ### Problem: CLI Command Not Found
 
-**Error:** `command not found: apflow` or `command not found: aipartnerupflow`
+**Error:** `command not found: apflow` or `command not found: apflow`
 
 **Solution:**
 ```bash
 # Install with CLI support
-pip install aipartnerupflow[cli]
+pip install apflow[cli]
 
 # Or install everything
-pip install aipartnerupflow[all]
+pip install apflow[all]
 
 # Verify installation
 apflow --version
 # Or
-aipartnerupflow --version
+apflow --version
 ```
 
 ### Problem: API Server Won't Start
@@ -871,7 +871,7 @@ kill -9 <PID>
 **Error:** Database connection issues
 
 **Solution:**
-- **DuckDB (default)**: No setup needed! It just works. Database file is created automatically at `~/.aipartnerup/data/aipartnerupflow.duckdb`
+- **DuckDB (default)**: No setup needed! It just works. Database file is created automatically at `~/.aipartnerup/data/apflow.duckdb`
 - **PostgreSQL**: Set environment variable:
   ```bash
   export DATABASE_URL="postgresql+asyncpg://user:password@localhost/dbname"
@@ -879,7 +879,7 @@ kill -9 <PID>
 - **Check database connection:**
   ```bash
   # For DuckDB, check if file exists
-  ls ~/.aipartnerup/data/aipartnerupflow.duckdb
+  ls ~/.aipartnerup/data/apflow.duckdb
   
   # For PostgreSQL, test connection
   psql $DATABASE_URL -c "SELECT 1;"
@@ -915,15 +915,15 @@ Create a Python script that imports the executor and then calls the CLI with tas
 
 ### Problem: Import Error
 
-**Error:** `ModuleNotFoundError: No module named 'aipartnerupflow'`
+**Error:** `ModuleNotFoundError: No module named 'apflow'`
 
 **Solution:**
 ```bash
-pip install aipartnerupflow
+pip install apflow
 
 # Or with specific features
-pip install aipartnerupflow[cli]
-pip install aipartnerupflow[all]
+pip install apflow[cli]
+pip install apflow[all]
 ```
 
 ## Try It Yourself
@@ -951,8 +951,8 @@ Create a pipeline: fetch data → process data → save results (each step depen
 - **Stuck?** Check the [FAQ](../guides/faq.md)
 - **Need examples?** See [Basic Examples](../examples/basic_task.md)
 - **Want to understand concepts?** Read [Core Concepts](concepts.md)
-- **Found a bug?** [Report it on GitHub](https://github.com/aipartnerup/aipartnerupflow/issues)
-- **Have questions?** [Ask on Discussions](https://github.com/aipartnerup/aipartnerupflow/discussions)
+- **Found a bug?** [Report it on GitHub](https://github.com/aipartnerup/apflow/issues)
+- **Have questions?** [Ask on Discussions](https://github.com/aipartnerup/apflow/discussions)
 
 ---
 

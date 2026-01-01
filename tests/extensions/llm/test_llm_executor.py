@@ -3,8 +3,8 @@ import os
 import pytest
 from unittest.mock import MagicMock, AsyncMock, patch
 
-from aipartnerupflow.extensions.llm.llm_executor import LLMExecutor, LITELLM_AVAILABLE
-from aipartnerupflow.core.extensions import get_registry
+from apflow.extensions.llm.llm_executor import LLMExecutor, LITELLM_AVAILABLE
+from apflow.core.extensions import get_registry
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 @pytest.fixture
 def mock_litellm_module():
     """Patch the litellm module"""
-    with patch("aipartnerupflow.extensions.llm.llm_executor.litellm") as mock_mod:
+    with patch("apflow.extensions.llm.llm_executor.litellm") as mock_mod:
         mock_mod.acompletion = AsyncMock()
         yield mock_mod
 

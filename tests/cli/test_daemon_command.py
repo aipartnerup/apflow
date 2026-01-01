@@ -9,8 +9,8 @@ Tests the daemon command as documented in README.md
 import pytest
 from unittest.mock import patch, MagicMock
 from typer.testing import CliRunner
-from aipartnerupflow.cli.main import app
-from aipartnerupflow.cli.commands.daemon import (
+from apflow.cli.main import app
+from apflow.cli.commands.daemon import (
     get_pid_file,
     get_log_file,
     read_pid,
@@ -74,7 +74,7 @@ class TestDaemonCommand:
         assert result.exit_code == 0
         assert "not running" in result.stdout.lower() or "no pid" in result.stdout.lower()
     
-    @patch('aipartnerupflow.cli.commands.daemon.subprocess.Popen')
+    @patch('apflow.cli.commands.daemon.subprocess.Popen')
     def test_daemon_start_mocked(self, mock_popen, cleanup_daemon_files):
         """Test daemon start with port and protocol (mocked)"""
         mock_process = MagicMock()
@@ -95,8 +95,8 @@ class TestDaemonCommand:
         assert "mcp" in result.stdout.lower()
         assert read_pid() == 12345
     
-    @patch('aipartnerupflow.cli.commands.daemon.is_process_running')
-    @patch('aipartnerupflow.cli.commands.daemon.os.kill')
+    @patch('apflow.cli.commands.daemon.is_process_running')
+    @patch('apflow.cli.commands.daemon.os.kill')
     def test_daemon_stop_mocked(self, mock_kill, mock_is_running, cleanup_daemon_files):
         """Test daemon stop with process running (mocked)"""
         write_pid(99999)
@@ -109,8 +109,8 @@ class TestDaemonCommand:
         assert mock_kill.called
         assert read_pid() is None
     
-    @patch('aipartnerupflow.cli.commands.daemon.is_process_running')
-    @patch('aipartnerupflow.cli.commands.daemon.os.kill')
+    @patch('apflow.cli.commands.daemon.is_process_running')
+    @patch('apflow.cli.commands.daemon.os.kill')
     def test_daemon_stop_with_sigkill_fallback_mocked(self, mock_kill, mock_is_running, cleanup_daemon_files):
         """Test daemon stop with SIGKILL fallback (mocked)"""
         write_pid(99998)
@@ -123,7 +123,7 @@ class TestDaemonCommand:
         assert "stopped successfully" in result.stdout.lower()
         assert mock_kill.called
     
-    @patch('aipartnerupflow.cli.commands.daemon.is_process_running')
+    @patch('apflow.cli.commands.daemon.is_process_running')
     def test_daemon_status_when_running_mocked(self, mock_is_running, cleanup_daemon_files):
         """Test daemon status when running (mocked)"""
         write_pid(55555)

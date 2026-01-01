@@ -5,7 +5,7 @@ Tests that CLI commands load .env file from appropriate location when executed.
 """
 import os
 from typer.testing import CliRunner
-from aipartnerupflow.cli.main import app, _load_env_file
+from apflow.cli.main import app, _load_env_file
 
 runner = CliRunner()
 
@@ -52,10 +52,10 @@ class TestCliEnvLoading:
         """Test that CLI commands execute after .env loading"""
         # Create .env with a variable that might be used by commands
         cwd_env = tmp_path / ".env"
-        cwd_env.write_text("AIPARTNERUPFLOW_API_PROTOCOL=mcp\n")
+        cwd_env.write_text("APFLOW_API_PROTOCOL=mcp\n")
         
         monkeypatch.chdir(tmp_path)
-        monkeypatch.delenv("AIPARTNERUPFLOW_API_PROTOCOL", raising=False)
+        monkeypatch.delenv("APFLOW_API_PROTOCOL", raising=False)
         
         # Invoke a command that might use env vars
         result = runner.invoke(app, ["version"])
@@ -80,5 +80,5 @@ class TestCliEnvLoading:
         
         # Help should work
         assert result.exit_code == 0
-        assert "aipartnerupflow" in result.stdout.lower()
+        assert "apflow" in result.stdout.lower()
 

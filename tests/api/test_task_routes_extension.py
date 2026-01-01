@@ -3,7 +3,7 @@ Test TaskRoutes extension mechanism
 """
 import pytest
 from unittest.mock import Mock
-from aipartnerupflow.api.routes.tasks import TaskRoutes
+from apflow.api.routes.tasks import TaskRoutes
 
 
 class CustomTaskRoutes(TaskRoutes):
@@ -30,7 +30,7 @@ class TestTaskRoutesExtension:
     async def test_create_a2a_server_with_custom_task_routes(self):
         """Test creating A2A server with custom TaskRoutes class"""
         try:
-            from aipartnerupflow.api.a2a.server import create_a2a_server
+            from apflow.api.a2a.server import create_a2a_server
         except ImportError:
             pytest.skip("a2a module not available")
             return
@@ -51,7 +51,7 @@ class TestTaskRoutesExtension:
     async def test_create_a2a_server_default_task_routes(self):
         """Test that default TaskRoutes is used when not specified"""
         try:
-            from aipartnerupflow.api.a2a.server import create_a2a_server
+            from apflow.api.a2a.server import create_a2a_server
         except ImportError:
             pytest.skip("a2a module not available")
             return
@@ -70,7 +70,7 @@ class TestTaskRoutesExtension:
     def test_custom_starlette_app_with_task_routes_class(self):
         """Test CustomA2AStarletteApplication with custom TaskRoutes class"""
         try:
-            from aipartnerupflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication
+            from apflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication
             from a2a.server.apps.jsonrpc.starlette_app import AgentCard
             from a2a.server.request_handlers import DefaultRequestHandler
         except ImportError:
@@ -98,7 +98,7 @@ class TestTaskRoutesExtension:
     def test_custom_starlette_app_with_custom_routes(self):
         """Test CustomA2AStarletteApplication with custom routes"""
         try:
-            from aipartnerupflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication
+            from apflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication
             from starlette.routing import Route
             from starlette.responses import JSONResponse
             from a2a.server.apps.jsonrpc.starlette_app import AgentCard

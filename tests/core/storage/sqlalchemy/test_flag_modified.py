@@ -8,7 +8,7 @@ These tests verify that:
 """
 
 import pytest
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
 
 class TestFlagModifiedJsonFields:

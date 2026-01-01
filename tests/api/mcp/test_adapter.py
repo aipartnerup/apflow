@@ -6,7 +6,7 @@ Tests for MCP adapter that bridges TaskRoutes with MCP protocol.
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from aipartnerupflow.api.mcp.adapter import TaskRoutesAdapter
+from apflow.api.mcp.adapter import TaskRoutesAdapter
 
 
 class TestTaskRoutesAdapter:

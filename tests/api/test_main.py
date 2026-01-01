@@ -4,13 +4,13 @@ Test main.py API functions: initialize_extensions and create_app_by_protocol
 import os
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
-from aipartnerupflow.api.extensions import (
+from apflow.api.extensions import (
     initialize_extensions,
     _is_package_installed,
     _get_extension_enablement_from_env,
 )
-from aipartnerupflow.api.app import create_app_by_protocol
-from aipartnerupflow.core.extensions import get_registry
+from apflow.api.app import create_app_by_protocol
+from apflow.core.extensions import get_registry
 
 
 class TestInitializeExtensions:
@@ -113,7 +113,7 @@ class TestInitializeExtensions:
         except Exception as e:
             pytest.fail(f"initialize_extensions() should handle missing extensions gracefully, but raised: {e}")
     
-    @patch.dict(os.environ, {"AIPARTNERUPFLOW_TASK_MODEL_CLASS": ""}, clear=False)
+    @patch.dict(os.environ, {"APFLOW_TASK_MODEL_CLASS": ""}, clear=False)
     def test_initialize_extensions_loads_custom_task_model(self):
         """Test that initialize_extensions() loads custom TaskModel when specified"""
         # This test verifies the function doesn't crash when custom TaskModel env var is set
@@ -122,7 +122,7 @@ class TestInitializeExtensions:
             initialize_extensions(load_custom_task_model=True)
         except Exception as e:
             # Should only fail if the module path is invalid, not if env var is empty
-            if "AIPARTNERUPFLOW_TASK_MODEL_CLASS" in str(e):
+            if "APFLOW_TASK_MODEL_CLASS" in str(e):
                 pass  # Expected if env var is set but invalid
             else:
                 raise
@@ -202,7 +202,7 @@ class TestCustomA2AStarletteApplicationASGI:
     def setup_method(self):
         """Setup for each test"""
         try:
-            from aipartnerupflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication  # noqa: F401
+            from apflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication  # noqa: F401
             from a2a.server.apps.jsonrpc.starlette_app import AgentCard  # noqa: F401
             from a2a.server.request_handlers import DefaultRequestHandler  # noqa: F401
         except ImportError:
@@ -211,7 +211,7 @@ class TestCustomA2AStarletteApplicationASGI:
     def test_custom_a2a_app_is_asgi_callable(self):
         """Test that CustomA2AStarletteApplication is directly ASGI callable"""
         try:
-            from aipartnerupflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication
+            from apflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication
             from a2a.server.apps.jsonrpc.starlette_app import AgentCard
             from a2a.server.request_handlers import DefaultRequestHandler
         except ImportError:
@@ -241,7 +241,7 @@ class TestCustomA2AStarletteApplicationASGI:
     def test_custom_a2a_app_build_caches_result(self):
         """Test that build() method caches the result"""
         try:
-            from aipartnerupflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication
+            from apflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication
             from a2a.server.apps.jsonrpc.starlette_app import AgentCard
             from a2a.server.request_handlers import DefaultRequestHandler
         except ImportError:
@@ -273,7 +273,7 @@ class TestCustomA2AStarletteApplicationASGI:
     async def test_custom_a2a_app_call_auto_builds(self):
         """Test that __call__ automatically calls build() if needed"""
         try:
-            from aipartnerupflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication
+            from apflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication
             from a2a.server.apps.jsonrpc.starlette_app import AgentCard
             from a2a.server.request_handlers import DefaultRequestHandler
         except ImportError:
@@ -338,7 +338,7 @@ class TestEnvironmentVariableParsing:
     
     def test_get_extension_enablement_from_env_comma_separated(self):
         """Test parsing comma-separated extension list"""
-        with patch.dict(os.environ, {"AIPARTNERUPFLOW_EXTENSIONS": "stdio,http,crewai"}):
+        with patch.dict(os.environ, {"APFLOW_EXTENSIONS": "stdio,http,crewai"}):
             result = _get_extension_enablement_from_env()
             
             assert result["stdio"] is True
@@ -348,13 +348,13 @@ class TestEnvironmentVariableParsing:
             assert result["docker"] is False  # Not in list
     
     def test_get_extension_enablement_from_env_individual_flags(self):
-        """Test parsing individual AIPARTNERUPFLOW_ENABLE_* flags"""
+        """Test parsing individual APFLOW_ENABLE_* flags"""
         with patch.dict(
             os.environ,
             {
-                "AIPARTNERUPFLOW_ENABLE_CREWAI": "true",
-                "AIPARTNERUPFLOW_ENABLE_SSH": "1",
-                "AIPARTNERUPFLOW_ENABLE_DOCKER": "false",
+                "APFLOW_ENABLE_CREWAI": "true",
+                "APFLOW_ENABLE_SSH": "1",
+                "APFLOW_ENABLE_DOCKER": "false",
             },
         ):
             result = _get_extension_enablement_from_env()
@@ -435,9 +435,9 @@ class TestDynamicExtensionInitialization:
         # Stdio should be registered
         assert registry.is_registered("system_info_executor") or registry.is_registered("command_executor")
     
-    @patch.dict(os.environ, {"AIPARTNERUPFLOW_EXTENSIONS": "stdio,http"})
+    @patch.dict(os.environ, {"APFLOW_EXTENSIONS": "stdio,http"})
     def test_initialize_extensions_respects_env_var_comma_list(self):
-        """Test that AIPARTNERUPFLOW_EXTENSIONS env var is respected"""
+        """Test that APFLOW_EXTENSIONS env var is respected"""
         registry = get_registry()
         
         # Clear registry
@@ -456,9 +456,9 @@ class TestDynamicExtensionInitialization:
         # But we verify the function completed without error
         assert True  # Function completed
     
-    @patch.dict(os.environ, {"AIPARTNERUPFLOW_ENABLE_CREWAI": "false"})
+    @patch.dict(os.environ, {"APFLOW_ENABLE_CREWAI": "false"})
     def test_initialize_extensions_respects_env_var_individual_flag(self):
-        """Test that AIPARTNERUPFLOW_ENABLE_* env vars are respected"""
+        """Test that APFLOW_ENABLE_* env vars are respected"""
         registry = get_registry()
         
         # Clear registry
@@ -486,7 +486,7 @@ class TestDynamicExtensionInitialization:
         registry._factory_functions.clear()
         
         # Set env var to disable stdio
-        with patch.dict(os.environ, {"AIPARTNERUPFLOW_ENABLE_STDIO": "false"}):
+        with patch.dict(os.environ, {"APFLOW_ENABLE_STDIO": "false"}):
             # But function param says enable
             initialize_extensions(include_stdio=True)
             

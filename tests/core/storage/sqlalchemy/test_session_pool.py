@@ -10,15 +10,15 @@ import time
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from aipartnerupflow.core.storage.factory import (
+from apflow.core.storage.factory import (
     SessionPoolManager,
     create_task_tree_session,
     get_session_pool_manager,
     reset_session_pool_manager,
     SessionLimitExceeded,
 )
-from aipartnerupflow.core.storage.sqlalchemy.models import Base, TaskModel
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.storage.sqlalchemy.models import Base, TaskModel
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
 
 
@@ -81,7 +81,7 @@ class TestSessionPoolManager:
     def test_session_limit_enforcement(self, tmp_path, monkeypatch):
         """Test that session limit is enforced"""
         # Set a low limit for testing
-        monkeypatch.setenv("AIPARTNERUPFLOW_MAX_SESSIONS", "2")
+        monkeypatch.setenv("APFLOW_MAX_SESSIONS", "2")
         
         db_path = tmp_path / "test.duckdb"
         manager = SessionPoolManager()
@@ -111,7 +111,7 @@ class TestSessionPoolManager:
     def test_expired_session_cleanup(self, tmp_path, monkeypatch):
         """Test that expired sessions are cleaned up"""
         # Set a very short timeout for testing
-        monkeypatch.setenv("AIPARTNERUPFLOW_SESSION_TIMEOUT", "1")
+        monkeypatch.setenv("APFLOW_SESSION_TIMEOUT", "1")
         
         db_path = tmp_path / "test.duckdb"
         manager = SessionPoolManager()
@@ -202,7 +202,7 @@ class TestTaskTreeSession:
         """Test TaskTreeSession with default path"""
         # Set a test database path
         test_db_path = tmp_path / "default.duckdb"
-        monkeypatch.setenv("AIPARTNERUPFLOW_DB_PATH", str(test_db_path))
+        monkeypatch.setenv("APFLOW_DB_PATH", str(test_db_path))
         
         async with create_task_tree_session() as session:
             assert session is not None
@@ -212,7 +212,7 @@ class TestTaskTreeSession:
     async def test_task_tree_session_error_handling(self, tmp_path, monkeypatch):
         """Test TaskTreeSession error handling for session limit"""
         # Set a very low limit
-        monkeypatch.setenv("AIPARTNERUPFLOW_MAX_SESSIONS", "1")
+        monkeypatch.setenv("APFLOW_MAX_SESSIONS", "1")
         
         db_path = tmp_path / "test.duckdb"
         connection_string = f"duckdb:///{db_path}"
@@ -274,9 +274,9 @@ class TestSessionPoolWithTaskExecutor:
     async def test_task_executor_with_task_tree_session(self, tmp_path):
         """Test TaskExecutor.execute_task_tree() with TaskTreeSession"""
         import uuid
-        from aipartnerupflow.core.execution.task_executor import TaskExecutor
-        from aipartnerupflow.core.types import TaskTreeNode
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.execution.task_executor import TaskExecutor
+        from apflow.core.types import TaskTreeNode
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         db_path = tmp_path / "test.duckdb"
         connection_string = f"duckdb:///{db_path}"
@@ -284,7 +284,7 @@ class TestSessionPoolWithTaskExecutor:
         
         # Create tables and a task in the database
         # Re-import TaskModel to ensure we use the latest clean version
-        from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel as CleanTaskModel
+        from apflow.core.storage.sqlalchemy.models import TaskModel as CleanTaskModel
         async with create_task_tree_session(connection_string=connection_string) as session:
             Base.metadata.create_all(session.bind)
             repo = TaskRepository(session, task_model_class=CleanTaskModel)
@@ -322,8 +322,8 @@ class TestSessionPoolWithTaskExecutor:
     async def test_concurrent_task_tree_execution(self, tmp_path):
         """Test concurrent execution of multiple task trees"""
         import uuid
-        from aipartnerupflow.core.execution.task_executor import TaskExecutor
-        from aipartnerupflow.core.types import TaskTreeNode
+        from apflow.core.execution.task_executor import TaskExecutor
+        from apflow.core.types import TaskTreeNode
         
         db_path = tmp_path / "test.duckdb"
         connection_string = f"duckdb:///{db_path}"
@@ -383,7 +383,7 @@ class TestSessionPoolWithTaskExecutor:
     async def test_session_isolation_between_task_trees(self, tmp_path):
         """Test that different task trees use isolated sessions"""
         import uuid
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         db_path = tmp_path / "test.duckdb"
         connection_string = f"duckdb:///{db_path}"
@@ -431,11 +431,11 @@ class TestSessionPoolWithTaskExecutor:
     async def test_concurrent_execution_with_session_limit(self, tmp_path, monkeypatch):
         """Test concurrent execution respects session limit"""
         import uuid
-        from aipartnerupflow.core.execution.task_executor import TaskExecutor
-        from aipartnerupflow.core.types import TaskTreeNode
+        from apflow.core.execution.task_executor import TaskExecutor
+        from apflow.core.types import TaskTreeNode
         
         # Set a low session limit
-        monkeypatch.setenv("AIPARTNERUPFLOW_MAX_SESSIONS", "2")
+        monkeypatch.setenv("APFLOW_MAX_SESSIONS", "2")
         
         db_path = tmp_path / "test.duckdb"
         connection_string = f"duckdb:///{db_path}"
@@ -493,12 +493,12 @@ class TestSessionPoolWithTaskExecutor:
     async def test_concurrent_execution_no_data_conflicts(self, tmp_path):
         """Test that concurrent executions don't cause data conflicts"""
         import uuid
-        from aipartnerupflow.core.execution.task_executor import TaskExecutor
-        from aipartnerupflow.core.types import TaskTreeNode
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.execution.task_executor import TaskExecutor
+        from apflow.core.types import TaskTreeNode
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         # Use default TaskModel - setup_method already ensures clean metadata
-        from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel as CleanTaskModel, Base as CleanBase
+        from apflow.core.storage.sqlalchemy.models import TaskModel as CleanTaskModel, Base as CleanBase
         
         db_path = tmp_path / "test.duckdb"
         connection_string = f"duckdb:///{db_path}"
@@ -558,8 +558,8 @@ class TestSessionPoolWithTaskExecutor:
     async def test_session_cleanup_after_execution(self, tmp_path):
         """Test that sessions are properly cleaned up after execution"""
         import uuid
-        from aipartnerupflow.core.execution.task_executor import TaskExecutor
-        from aipartnerupflow.core.types import TaskTreeNode
+        from apflow.core.execution.task_executor import TaskExecutor
+        from apflow.core.types import TaskTreeNode
         
         db_path = tmp_path / "test.duckdb"
         connection_string = f"duckdb:///{db_path}"
@@ -570,7 +570,7 @@ class TestSessionPoolWithTaskExecutor:
         
         # Create tables and a task in the database
         # Re-import TaskModel to ensure we use the latest clean version
-        from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel as CleanTaskModel
+        from apflow.core.storage.sqlalchemy.models import TaskModel as CleanTaskModel
         async with create_task_tree_session(connection_string=connection_string) as session:
             Base.metadata.create_all(session.bind)
             repo = TaskRepository(session, task_model_class=CleanTaskModel)

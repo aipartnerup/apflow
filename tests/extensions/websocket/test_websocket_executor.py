@@ -7,7 +7,7 @@ Tests for WebSocket communication functionality.
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, patch
-from aipartnerupflow.extensions.websocket.websocket_executor import WebSocketExecutor, WEBSOCKETS_AVAILABLE
+from apflow.extensions.websocket.websocket_executor import WebSocketExecutor, WEBSOCKETS_AVAILABLE
 
 
 class TestWebSocketExecutor:
@@ -84,7 +84,7 @@ class TestWebSocketExecutor:
     @pytest.mark.asyncio
     async def test_execute_websockets_not_available(self):
         """Test behavior when websockets is not installed"""
-        with patch("aipartnerupflow.extensions.websocket.websocket_executor.WEBSOCKETS_AVAILABLE", False):
+        with patch("apflow.extensions.websocket.websocket_executor.WEBSOCKETS_AVAILABLE", False):
             executor = WebSocketExecutor()
             result = await executor.execute({
                 "url": "ws://example.com/ws",

@@ -1,6 +1,6 @@
 # Task Orchestration Guide
 
-Master task orchestration in aipartnerupflow. Learn how to create complex workflows, manage dependencies, and optimize execution.
+Master task orchestration in apflow. Learn how to create complex workflows, manage dependencies, and optimize execution.
 
 ## What You'll Learn
 
@@ -188,7 +188,7 @@ The simplest possible tree - a single task:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -914,10 +914,10 @@ message = Message(
 #### Using Copy Execution (Python API)
 
 ```python
-from aipartnerupflow.core.execution.task_creator import TaskCreator
-from aipartnerupflow.core.storage import create_pooled_session
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow.core.execution.task_executor import TaskExecutor
+from apflow.core.execution.task_creator import TaskCreator
+from apflow.core.storage import create_pooled_session
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.execution.task_executor import TaskExecutor
 
 # Get the original task
 async with create_pooled_session() as db_session:

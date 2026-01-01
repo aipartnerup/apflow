@@ -3,13 +3,13 @@ Test hook execution context for database access in hooks
 """
 
 import pytest
-from aipartnerupflow.core.storage.context import (
+from apflow.core.storage.context import (
     get_hook_session,
     get_hook_repository,
     set_hook_context,
     clear_hook_context,
 )
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
 
 @pytest.mark.asyncio

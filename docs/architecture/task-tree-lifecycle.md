@@ -14,7 +14,7 @@ Task tree execution involves multiple layers of coordination between TaskExecuto
 
 ### 1.1 Entry Point: TaskExecutor.execute_task_tree()
 
-**File**: `src/aipartnerupflow/core/execution/task_executor.py` (lines 151-250)
+**File**: `src/apflow/core/execution/task_executor.py` (lines 151-250)
 
 ```python
 async def execute_task_tree(
@@ -85,7 +85,7 @@ async def execute_task_tree(
 
 ### 1.2 Task Manager: distribute_task_tree()
 
-**File**: `src/aipartnerupflow/core/execution/task_manager.py` (lines 268-318)
+**File**: `src/apflow/core/execution/task_manager.py` (lines 268-318)
 
 **Key Steps**:
 
@@ -134,7 +134,7 @@ async def execute_task_tree(
 
 ### 1.3 Recursive Task Tree Execution
 
-**File**: `src/aipartnerupflow/core/execution/task_manager.py` (lines 415-605)
+**File**: `src/apflow/core/execution/task_manager.py` (lines 415-605)
 
 **Key Steps**:
 
@@ -174,7 +174,7 @@ async def execute_task_tree(
 
 ### 1.4 Single Task Execution
 
-**File**: `src/aipartnerupflow/core/execution/task_manager.py` (lines 627-897)
+**File**: `src/apflow/core/execution/task_manager.py` (lines 627-897)
 
 **Key Steps**:
 
@@ -332,7 +332,7 @@ if self.is_task_running(root_task_id):
 
 ### 3.1 ContextVar-Based Context Management
 
-**File**: `src/aipartnerupflow/core/storage/context.py` (lines 10-108)
+**File**: `src/apflow/core/storage/context.py` (lines 10-108)
 
 **Design Pattern**:
 - Uses Python 3.7+ ContextVar (not thread-local)
@@ -418,7 +418,7 @@ finally:
 
 **Pattern 1: Auto-Persisted task.inputs** (pre-hooks only):
 ```python
-from aipartnerupflow import register_pre_hook
+from apflow import register_pre_hook
 
 @register_pre_hook
 async def validate_inputs(task):
@@ -432,7 +432,7 @@ async def validate_inputs(task):
 
 **Pattern 2: Explicit Field Updates** (all hooks):
 ```python
-from aipartnerupflow import register_post_hook, get_hook_repository
+from apflow import register_post_hook, get_hook_repository
 
 @register_post_hook
 async def update_metadata(task, inputs, result):
@@ -447,7 +447,7 @@ async def update_metadata(task, inputs, result):
 
 **Pattern 3: Query Other Tasks**:
 ```python
-from aipartnerupflow import register_task_tree_hook, get_hook_repository
+from apflow import register_task_tree_hook, get_hook_repository
 
 @register_task_tree_hook("on_tree_completed")
 async def aggregate_results(root_task, status):

@@ -9,7 +9,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from aipartnerupflow.api.mcp.transport_http import HttpTransport
+from apflow.api.mcp.transport_http import HttpTransport
 
 
 class TestHttpTransport:

@@ -1,10 +1,10 @@
 # Directory Structure
 
-This document describes the directory structure of the `aipartnerupflow` project.
+This document describes the directory structure of the `apflow` project.
 
 ## Core Framework (`core/`)
 
-The core framework provides task orchestration and execution specifications. All core modules are always included when installing `aipartnerupflow`.
+The core framework provides task orchestration and execution specifications. All core modules are always included when installing `apflow`.
 
 ```
 core/
@@ -64,7 +64,7 @@ extensions/crewai/
 └── types.py            # CrewaiExecutorState, BatchState
 ```
 
-**Installation**: `pip install aipartnerupflow[crewai]`
+**Installation**: `pip install apflow[crewai]`
 
 ### [stdio] - Stdio Executors
 
@@ -130,7 +130,7 @@ Unified external API service layer supporting multiple network protocols.
 
 **Future Extensions**: May include additional protocols such as REST API endpoints
 
-**Installation**: `pip install aipartnerupflow[a2a]`
+**Installation**: `pip install apflow[a2a]`
 
 ```
 api/
@@ -174,7 +174,7 @@ These handlers are designed to be protocol-agnostic, allowing them to be reused 
 
 Command-line interface for task management.
 
-**Installation**: `pip install aipartnerupflow[cli]`
+**Installation**: `pip install apflow[cli]`
 
 ## Test Suite (`tests/`)
 

@@ -61,7 +61,7 @@ Quick start guides and tutorials for new users.
 
 ### Guides (`docs/guides/`)
 
-Comprehensive user guides for using aipartnerupflow.
+Comprehensive user guides for using apflow.
 
 **Purpose**: Detailed guides for using library features and tools
 

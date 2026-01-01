@@ -1,6 +1,6 @@
 # Frequently Asked Questions (FAQ)
 
-Common questions and answers about aipartnerupflow.
+Common questions and answers about apflow.
 
 ## Table of Contents
 
@@ -12,21 +12,21 @@ Common questions and answers about aipartnerupflow.
 
 ## Getting Started
 
-### Q: How do I install aipartnerupflow?
+### Q: How do I install apflow?
 
 **A:** Use pip:
 
 ```bash
 # Minimal installation (core only)
-pip install aipartnerupflow
+pip install apflow
 
 # Full installation (all features)
-pip install aipartnerupflow[all]
+pip install apflow[all]
 
 # Specific features
-pip install aipartnerupflow[crewai]  # LLM support
-pip install aipartnerupflow[cli]      # CLI tools
-pip install aipartnerupflow[a2a]      # A2A Protocol server
+pip install apflow[crewai]  # LLM support
+pip install apflow[cli]      # CLI tools
+pip install apflow[a2a]      # A2A Protocol server
 ```
 
 ### Q: Do I need to set up a database?
@@ -67,7 +67,7 @@ export DATABASE_URL="postgresql+asyncpg://user:password@localhost/dbname"
 **A:** Use `BaseTask` with `@executor_register()`:
 
 ```python
-from aipartnerupflow import BaseTask, executor_register
+from apflow import BaseTask, executor_register
 from typing import Dict, Any
 
 @executor_register()
@@ -141,26 +141,26 @@ class MyExecutor(BaseTask):
 - `aggregate_results_executor` - Aggregate results from multiple tasks
 
 **Remote Execution Executors**:
-- `rest_executor` - HTTP/REST API calls (requires `pip install aipartnerupflow[http]`)
-- `ssh_executor` - Remote command execution via SSH (requires `pip install aipartnerupflow[ssh]`)
-- `grpc_executor` - gRPC service calls (requires `pip install aipartnerupflow[grpc]`)
+- `rest_executor` - HTTP/REST API calls (requires `pip install apflow[http]`)
+- `ssh_executor` - Remote command execution via SSH (requires `pip install apflow[ssh]`)
+- `grpc_executor` - gRPC service calls (requires `pip install apflow[grpc]`)
 - `websocket_executor` - Bidirectional WebSocket communication
-- `apflow_api_executor` - Call other aipartnerupflow API instances
+- `apflow_api_executor` - Call other apflow API instances
 - `mcp_executor` - Model Context Protocol executor (stdio: no dependencies, HTTP: requires `[a2a]`)
 
 **MCP Server:**
-- MCP Server exposes aipartnerupflow task orchestration as MCP tools and resources
-- Start with: `AIPARTNERUPFLOW_API_PROTOCOL=mcp python -m aipartnerupflow.api.main`
+- MCP Server exposes apflow task orchestration as MCP tools and resources
+- Start with: `APFLOW_API_PROTOCOL=mcp python -m apflow.api.main`
 - Provides 8 MCP tools: execute_task, create_task, get_task, update_task, delete_task, list_tasks, get_task_status, cancel_task
 - Provides 2 MCP resources: task://{task_id}, tasks://
 - Supports both HTTP and stdio transport modes
 
 **Container Executors**:
-- `docker_executor` - Containerized command execution (requires `pip install aipartnerupflow[docker]`)
+- `docker_executor` - Containerized command execution (requires `pip install apflow[docker]`)
 
 **AI Executors** (optional):
-- `crewai_executor` - LLM-based agents (requires `pip install aipartnerupflow[crewai]`)
-- `batch_crewai_executor` - Batch execution of multiple crews (requires `pip install aipartnerupflow[crewai]`)
+- `crewai_executor` - LLM-based agents (requires `pip install apflow[crewai]`)
+- `batch_crewai_executor` - Batch execution of multiple crews (requires `pip install apflow[crewai]`)
 
 **Generation Executors**:
 - `generate_executor` - Generate task tree JSON arrays from natural language requirements using LLM (requires `pip install openai` or `pip install anthropic`)
@@ -272,7 +272,7 @@ print(f"Dependencies: {task.dependencies}")
 **Solutions:**
 1. **For built-in executors**: Make sure you've imported the extension:
 ```python
-import aipartnerupflow.extensions.stdio  # Registers built-in executors
+import apflow.extensions.stdio  # Registers built-in executors
 ```
 
 2. **For custom executors**: 
@@ -293,11 +293,11 @@ export DATABASE_URL="postgresql+asyncpg://user:password@localhost/dbname"
 
 ### Q: Import error
 
-**Error:** `ModuleNotFoundError: No module named 'aipartnerupflow'`
+**Error:** `ModuleNotFoundError: No module named 'apflow'`
 
 **Solution:**
 ```bash
-pip install aipartnerupflow
+pip install apflow
 ```
 
 ### Q: Task stays in "in_progress" forever
@@ -358,13 +358,13 @@ print(f"Dependency error: {dependency.error}")
 
 1. Install:
 ```bash
-pip install aipartnerupflow[crewai]
+pip install apflow[crewai]
 ```
 
 2. Create a crew:
 ```python
-from aipartnerupflow.extensions.crewai import CrewaiExecutor
-from aipartnerupflow.core.extensions import get_registry
+from apflow.extensions.crewai import CrewaiExecutor
+from apflow.core.extensions import get_registry
 
 crew = CrewaiExecutor(
     id="my_crew",
@@ -480,7 +480,7 @@ Or use the API server with SSE (Server-Sent Events).
 
 **Pre-execution hook:**
 ```python
-from aipartnerupflow import register_pre_hook
+from apflow import register_pre_hook
 
 @register_pre_hook
 async def validate_inputs(task):
@@ -493,7 +493,7 @@ async def validate_inputs(task):
 
 **Post-execution hook:**
 ```python
-from aipartnerupflow import register_post_hook
+from apflow import register_post_hook
 
 @register_post_hook
 async def log_results(task, inputs, result):
@@ -507,8 +507,8 @@ async def log_results(task, inputs, result):
 **A:** 
 
 ```python
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
-from aipartnerupflow import set_task_model_class
+from apflow.core.storage.sqlalchemy.models import TaskModel
+from apflow import set_task_model_class
 from sqlalchemy import Column, String
 
 class CustomTaskModel(TaskModel):
@@ -534,10 +534,10 @@ task = await task_manager.task_repository.create_task(
 - **[Documentation Index](../index.md)** - Browse all documentation
 - **[Quick Start Guide](../getting-started/quick-start.md)** - Get started quickly
 - **[Examples](../examples/basic_task.md)** - See practical examples
-- **[GitHub Issues](https://github.com/aipartnerup/aipartnerupflow/issues)** - Report bugs
-- **[GitHub Discussions](https://github.com/aipartnerup/aipartnerupflow/discussions)** - Ask questions
+- **[GitHub Issues](https://github.com/aipartnerup/apflow/issues)** - Report bugs
+- **[GitHub Discussions](https://github.com/aipartnerup/apflow/discussions)** - Ask questions
 
 ---
 
-**Found an issue?** [Report it on GitHub](https://github.com/aipartnerup/aipartnerupflow/issues)
+**Found an issue?** [Report it on GitHub](https://github.com/aipartnerup/apflow/issues)
 

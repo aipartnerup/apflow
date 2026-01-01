@@ -5,7 +5,7 @@ Tests the serve command as documented in README.md
 """
 
 from typer.testing import CliRunner
-from aipartnerupflow.cli.main import app
+from apflow.cli.main import app
 
 runner = CliRunner()
 

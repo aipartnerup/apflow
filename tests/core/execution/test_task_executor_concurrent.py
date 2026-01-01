@@ -8,9 +8,9 @@ These tests verify that:
 
 import pytest
 
-from aipartnerupflow.core.execution.task_executor import TaskExecutor
-from aipartnerupflow.core.types import TaskTreeNode
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.execution.task_executor import TaskExecutor
+from apflow.core.types import TaskTreeNode
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
 
 class TestTaskExecutorConcurrentProtection:

@@ -48,14 +48,14 @@ Instead of importing `ExecutableTask` for type checks, we use `ExecutorLike` pro
 
 ```python
 # ✅ Good: No circular dependency
-from aipartnerupflow.core.extensions.protocol import ExecutorLike
+from apflow.core.extensions.protocol import ExecutorLike
 
 if hasattr(extension, 'execute') and hasattr(extension, 'get_input_schema'):
     # It's an executor-like object
     ...
 
 # ❌ Bad: Would cause circular import
-from aipartnerupflow.core.interfaces.executable_task import ExecutableTask
+from apflow.core.interfaces.executable_task import ExecutableTask
 if isinstance(extension, ExecutableTask):  # Circular!
     ...
 ```
@@ -81,7 +81,7 @@ This works because:
 Type hints use Protocol for better IDE support:
 
 ```python
-from aipartnerupflow.core.extensions.protocol import ExecutorFactory
+from apflow.core.extensions.protocol import ExecutorFactory
 
 _factory_functions: Dict[str, ExecutorFactory] = {}
 ```
@@ -112,7 +112,7 @@ _factory_functions: Dict[str, ExecutorFactory] = {}
 
 ```python
 # 1. Define executor (implements ExecutableTask which extends Extension)
-from aipartnerupflow.core.base import BaseTask
+from apflow.core.base import BaseTask
 
 class MyExecutor(BaseTask):
     id = "my_executor"
@@ -125,14 +125,14 @@ class MyExecutor(BaseTask):
         return {}
 
 # 2. Register (automatically via decorator)
-from aipartnerupflow.core.extensions.decorators import extension_register
+from apflow.core.extensions.decorators import extension_register
 
 @extension_register()
 class MyExecutor(BaseTask):
     ...
 
 # 3. Use in registry (no ExecutableTask import needed)
-from aipartnerupflow.core.extensions import get_registry
+from apflow.core.extensions import get_registry
 
 registry = get_registry()
 executor = registry.create_executor_instance("my_executor", inputs={})
@@ -145,7 +145,7 @@ executor = registry.create_executor_instance("my_executor", inputs={})
 
 ```python
 # registry.py
-from aipartnerupflow.core.interfaces.executable_task import ExecutableTask  # ❌
+from apflow.core.interfaces.executable_task import ExecutableTask  # ❌
 
 if isinstance(extension, ExecutableTask):  # Circular!
     ...
@@ -162,7 +162,7 @@ class ExecutorLike(Protocol):
     def get_input_schema(self): ...
 
 # registry.py
-from aipartnerupflow.core.extensions.protocol import ExecutorLike  # ✅
+from apflow.core.extensions.protocol import ExecutorLike  # ✅
 
 if hasattr(extension, 'execute') and hasattr(extension, 'get_input_schema'):
     # No circular dependency!
@@ -175,10 +175,10 @@ All imports work without circular dependencies:
 
 ```python
 # ✅ All these imports work simultaneously
-from aipartnerupflow.core.extensions import ExtensionRegistry
-from aipartnerupflow.core.interfaces import ExecutableTask
-from aipartnerupflow.core.extensions.protocol import ExecutorLike
-from aipartnerupflow.extensions.stdio import StdioExecutor
+from apflow.core.extensions import ExtensionRegistry
+from apflow.core.interfaces import ExecutableTask
+from apflow.core.extensions.protocol import ExecutorLike
+from apflow.extensions.stdio import StdioExecutor
 ```
 
 ## Future Extensions

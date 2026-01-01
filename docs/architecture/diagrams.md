@@ -1,6 +1,6 @@
 # Architecture Diagrams
 
-This document contains visual diagrams that illustrate the architecture, execution flows, and key processes of aipartnerupflow.
+This document contains visual diagrams that illustrate the architecture, execution flows, and key processes of apflow.
 
 ## Table of Contents
 

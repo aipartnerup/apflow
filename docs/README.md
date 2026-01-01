@@ -1,6 +1,6 @@
-# aipartnerupflow Documentation
+# apflow Documentation
 
-Welcome to the aipartnerupflow documentation! This is your complete guide to building task orchestration workflows.
+Welcome to the apflow documentation! This is your complete guide to building task orchestration workflows.
 
 ## Problems We Solve
 
@@ -16,21 +16,21 @@ You might be struggling with these common challenges:
 
 - **Real-time Monitoring**: You need to show progress to users, but building real-time monitoring with polling, WebSocket connections, or custom streaming solutions takes weeks. Your users wait without feedback, and you struggle to debug long-running workflows.
 
-## Why aipartnerupflow?
+## Why apflow?
 
-Here's what makes aipartnerupflow the right choice:
+Here's what makes apflow the right choice:
 
 - **One Unified Interface for Everything**: Stop managing multiple orchestration systems. One framework handles traditional tasks, HTTP/REST APIs, SSH commands, Docker containers, gRPC services, WebSocket communication, MCP tools, and AI agents—all through the same ExecutableTask interface.
 
-- **Start Simple, Scale Up Gradually**: Begin with a lightweight, dependency-free core that handles traditional task orchestration. Add AI capabilities, A2A server, CLI tools, or PostgreSQL storage only when you need them. Unlike frameworks that force you to install everything upfront, aipartnerupflow lets you start minimal and grow incrementally.
+- **Start Simple, Scale Up Gradually**: Begin with a lightweight, dependency-free core that handles traditional task orchestration. Add AI capabilities, A2A server, CLI tools, or PostgreSQL storage only when you need them. Unlike frameworks that force you to install everything upfront, apflow lets you start minimal and grow incrementally.
 
-- **Language-Agnostic Protocol**: Built on the AI Partner Up Flow Protocol, ensuring interoperability across Python, Go, Rust, JavaScript, and more. Different language implementations work together seamlessly.
+- **Language-Agnostic Protocol**: Built on the AI Partner Up Flow Protocol (APFlow Protocol), ensuring interoperability across Python, Go, Rust, JavaScript, and more. Different language implementations work together seamlessly.
 
 - **Production-Ready from Day One**: Built-in storage (DuckDB or PostgreSQL), real-time streaming, automatic retries, state persistence, and comprehensive monitoring—all included. No need to build these from scratch.
 
 - **Extensive Executor Ecosystem**: Choose from HTTP/REST APIs (with authentication), SSH remote execution, Docker containers, gRPC services, WebSocket communication, MCP integration, and LLM-based task tree generation.
 
-## What Happens When You Use aipartnerupflow?
+## What Happens When You Use apflow?
 
 - **You Build Workflows Faster**: Before: Weeks of custom coordination code. After: Define task trees with dependencies in days, not weeks. The framework handles coordination, error recovery, and state management automatically.
 
@@ -44,7 +44,7 @@ Here's what makes aipartnerupflow the right choice:
 
 - **You Scale with Confidence**: Before: Worrying about resource usage and dependency management at scale. After: Production-ready from day one. Handle hundreds of concurrent workflows with confidence.
 
-## 🚀 New to aipartnerupflow?
+## 🚀 New to apflow?
 
 **Start here if you're new:**
 
@@ -55,7 +55,7 @@ Here's what makes aipartnerupflow the right choice:
 
 **Quick Installation:**
 ```bash
-pip install aipartnerupflow
+pip install apflow
 ```
 
 ## 📚 Documentation Structure
@@ -188,9 +188,9 @@ For contributors:
 ## 🔗 External Resources
 
 - **Main README**: [../README.md](../README.md) - Project overview
-- **GitHub Repository**: [aipartnerup/aipartnerupflow](https://github.com/aipartnerup/aipartnerupflow)
-- **Issues**: [GitHub Issues](https://github.com/aipartnerup/aipartnerupflow/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/aipartnerup/aipartnerupflow/discussions)
+- **GitHub Repository**: [aipartnerup/apflow](https://github.com/aipartnerup/apflow)
+- **Issues**: [GitHub Issues](https://github.com/aipartnerup/apflow/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/aipartnerup/apflow/discussions)
 
 ## 💡 Learning Path
 
@@ -246,8 +246,8 @@ For contributors:
 ## 📝 Documentation Updates
 
 This documentation is actively maintained. If you find issues or have suggestions:
-- [Report Issues](https://github.com/aipartnerup/aipartnerupflow/issues)
-- [Start Discussion](https://github.com/aipartnerup/aipartnerupflow/discussions)
+- [Report Issues](https://github.com/aipartnerup/apflow/issues)
+- [Start Discussion](https://github.com/aipartnerup/apflow/discussions)
 - [Contribute](development/contributing.md)
 
 ---

@@ -19,11 +19,11 @@ Key questions answered:
 """
 
 import pytest
-from aipartnerupflow import register_pre_hook, register_post_hook, clear_config
-from aipartnerupflow.core.storage.context import get_hook_repository
-from aipartnerupflow.core.execution.task_manager import TaskManager
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow.core.types import TaskTreeNode
+from apflow import register_pre_hook, register_post_hook, clear_config
+from apflow.core.storage.context import get_hook_repository
+from apflow.core.execution.task_manager import TaskManager
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.types import TaskTreeNode
 
 
 @pytest.mark.asyncio

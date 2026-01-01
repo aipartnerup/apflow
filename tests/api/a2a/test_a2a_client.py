@@ -13,7 +13,7 @@ import pytest_asyncio
 import uuid
 from a2a.client import ClientFactory, ClientConfig
 from a2a.types import Message, DataPart, Role, AgentCard
-from aipartnerupflow.api.a2a.server import create_a2a_server
+from apflow.api.a2a.server import create_a2a_server
 import json
 
 
@@ -84,7 +84,7 @@ async def test_a2a_agent_card(a2a_client):
     card = await a2a_client.get_card()
     
     # Verify agent card structure
-    assert card.name == "aipartnerupflow"
+    assert card.name == "apflow"
     assert card.description is not None
     assert card.capabilities is not None
     assert card.skills is not None
@@ -309,7 +309,7 @@ async def test_a2a_client_integration(a2a_client):
     """Integration test: Full A2A client workflow"""
     # Step 1: Get agent card
     card = await a2a_client.get_card()
-    assert card.name == "aipartnerupflow"
+    assert card.name == "apflow"
     
     # Step 2: Execute a task
     task_data = {

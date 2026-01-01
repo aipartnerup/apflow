@@ -1,10 +1,10 @@
 # API Reference
 
-This document provides a complete reference for the aipartnerupflow API, which implements the **A2A (Agent-to-Agent) Protocol** standard.
+This document provides a complete reference for the apflow API, which implements the **A2A (Agent-to-Agent) Protocol** standard.
 
 ## Overview
 
-The aipartnerupflow API server provides:
+The apflow API server provides:
 - **A2A Protocol Server**: Standard agent-to-agent communication protocol
 - **Task Management**: Create, read, update, and delete tasks
 - **Task Execution**: Execute task trees with dependency management
@@ -37,7 +37,7 @@ Returns a JSON object containing agent metadata:
 
 ```json
 {
-  "name": "aipartnerupflow",
+  "name": "apflow",
   "description": "Agent workflow orchestration and execution platform",
   "url": "http://localhost:8000",
   "version": "0.2.0",
@@ -74,7 +74,7 @@ curl http://localhost:8000/.well-known/agent-card
 **Example Response:**
 ```json
 {
-  "name": "aipartnerupflow",
+  "name": "apflow",
   "description": "Agent workflow orchestration and execution platform",
   "url": "http://localhost:8000",
   "version": "0.2.0",
@@ -1192,8 +1192,8 @@ Generates a valid task tree JSON array from a natural language requirement using
 **Parameters:**
 - `requirement` (string, required): Natural language description of the desired task tree. Should describe the workflow, data flow, and operations needed.
 - `user_id` (string, optional): User ID for the generated tasks. If not provided and JWT is enabled, uses authenticated user's ID. If not provided and JWT is disabled, uses default user ID.
-- `llm_provider` (string, optional): LLM provider to use. Valid values: `"openai"`, `"anthropic"`. Default: `"openai"` or from environment variable `AIPARTNERUPFLOW_LLM_PROVIDER`.
-- `model` (string, optional): Specific LLM model name. Examples: `"gpt-4o"`, `"claude-3-5-sonnet-20241022"`. Default: Provider-specific default or from environment variable `AIPARTNERUPFLOW_LLM_MODEL`.
+- `llm_provider` (string, optional): LLM provider to use. Valid values: `"openai"`, `"anthropic"`. Default: `"openai"` or from environment variable `APFLOW_LLM_PROVIDER`.
+- `model` (string, optional): Specific LLM model name. Examples: `"gpt-4o"`, `"claude-3-5-sonnet-20241022"`. Default: Provider-specific default or from environment variable `APFLOW_LLM_MODEL`.
 - `temperature` (float, optional): LLM temperature for generation (0.0 to 2.0). Higher values make output more creative, lower values more deterministic. Default: `0.7`.
 - `max_tokens` (integer, optional): Maximum number of tokens in LLM response. Default: `4000`.
 - `save` (boolean, optional): If `true`, automatically saves the generated tasks to the database using `TaskCreator.create_task_tree_from_array()`. When `true`, the response includes `root_task_id` of the saved task tree. Default: `false`.
@@ -2184,7 +2184,7 @@ None
   "id": "health-request-1",
   "result": {
     "status": "healthy",
-    "message": "aipartnerupflow is healthy",
+    "message": "apflow is healthy",
     "version": "0.2.0",
     "timestamp": "2024-01-01T00:00:00Z",
     "running_tasks_count": 0
@@ -2380,7 +2380,7 @@ Deletes an LLM API key for a user. This method removes the stored API key for a 
 
 The API supports optional JWT authentication. To enable:
 
-1. Set environment variable `AIPARTNERUPFLOW_JWT_SECRET_KEY`
+1. Set environment variable `APFLOW_JWT_SECRET_KEY`
 2. Include JWT token in request headers or cookies
 
 **Token Sources (Priority Order):**
@@ -2410,7 +2410,7 @@ Cookie: Authorization=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 You can generate JWT tokens using the `generate_token()` function:
 
 ```python
-from aipartnerupflow.api.a2a.server import generate_token
+from apflow.api.a2a.server import generate_token
 
 # Generate token with user_id
 payload = {"user_id": "user123", "roles": ["admin"]}
@@ -2812,7 +2812,7 @@ This architecture allows the same route handlers to be used by different protoco
 ### Initialization
 
 ```python
-from aipartnerupflow.api.a2a.server import create_a2a_server
+from apflow.api.a2a.server import create_a2a_server
 
 # Create A2A server with custom routes enabled (default)
 app = create_a2a_server(
@@ -2833,7 +2833,7 @@ app = create_a2a_server(
 The custom application supports optional JWT authentication via middleware:
 
 ```python
-from aipartnerupflow.api.a2a.server import create_a2a_server, generate_token, verify_token
+from apflow.api.a2a.server import create_a2a_server, generate_token, verify_token
 
 # Generate JWT token
 payload = {"user_id": "user123", "roles": ["admin"]}
@@ -3208,7 +3208,7 @@ The streaming events will include `original_task_id` in the metadata:
 
 ## A2A Client SDK Usage
 
-The A2A protocol provides an official client SDK for easy integration. This section demonstrates how to use the A2A client SDK to interact with aipartnerupflow.
+The A2A protocol provides an official client SDK for easy integration. This section demonstrates how to use the A2A client SDK to interact with apflow.
 
 ### Installation
 

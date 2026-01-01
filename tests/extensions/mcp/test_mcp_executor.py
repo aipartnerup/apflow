@@ -8,7 +8,7 @@ import pytest
 import json
 import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
-from aipartnerupflow.extensions.mcp.mcp_executor import McpExecutor
+from apflow.extensions.mcp.mcp_executor import McpExecutor
 
 
 class TestMcpExecutor:
@@ -191,7 +191,7 @@ class TestMcpExecutor:
         """Test error when url is missing for http transport"""
         executor = McpExecutor()
         
-        with patch("aipartnerupflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", True):
+        with patch("apflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", True):
             result = await executor.execute({
                 "transport": "http",
                 "operation": "list_tools"
@@ -339,7 +339,7 @@ class TestMcpExecutor:
             }
         }
         
-        with patch("aipartnerupflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", True), \
+        with patch("apflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", True), \
              patch("httpx.AsyncClient") as mock_client:
             mock_client_instance = AsyncMock()
             mock_client.return_value.__aenter__.return_value = mock_client_instance
@@ -372,7 +372,7 @@ class TestMcpExecutor:
             }
         }
         
-        with patch("aipartnerupflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", True), \
+        with patch("apflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", True), \
              patch("httpx.AsyncClient") as mock_client:
             mock_client_instance = AsyncMock()
             mock_client.return_value.__aenter__.return_value = mock_client_instance
@@ -407,7 +407,7 @@ class TestMcpExecutor:
             }
         }
         
-        with patch("aipartnerupflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", True), \
+        with patch("apflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", True), \
              patch("httpx.AsyncClient") as mock_client:
             mock_client_instance = AsyncMock()
             mock_client.return_value.__aenter__.return_value = mock_client_instance
@@ -432,7 +432,7 @@ class TestMcpExecutor:
         """Test handling non-200 HTTP status"""
         executor = McpExecutor()
         
-        with patch("aipartnerupflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", True), \
+        with patch("apflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", True), \
              patch("httpx.AsyncClient") as mock_client:
             mock_client_instance = AsyncMock()
             mock_client.return_value.__aenter__.return_value = mock_client_instance
@@ -458,7 +458,7 @@ class TestMcpExecutor:
         
         import httpx
         
-        with patch("aipartnerupflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", True), \
+        with patch("apflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", True), \
              patch("httpx.AsyncClient") as mock_client:
             mock_client_instance = AsyncMock()
             mock_client.return_value.__aenter__.return_value = mock_client_instance
@@ -477,7 +477,7 @@ class TestMcpExecutor:
     @pytest.mark.asyncio
     async def test_execute_http_not_available(self):
         """Test behavior when httpx is not installed"""
-        with patch("aipartnerupflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", False):
+        with patch("apflow.extensions.mcp.mcp_executor.HTTPX_AVAILABLE", False):
             executor = McpExecutor()
             result = await executor.execute({
                 "transport": "http",

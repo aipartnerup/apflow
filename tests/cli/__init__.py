@@ -1,4 +1,4 @@
 """
-CLI tests for aipartnerupflow
+CLI tests for apflow
 """
 

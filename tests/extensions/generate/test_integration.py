@@ -3,9 +3,9 @@ Integration tests for generate executor
 """
 
 import pytest
-from aipartnerupflow import TaskManager
-from aipartnerupflow.core.types import TaskTreeNode
-from aipartnerupflow.extensions.generate import GenerateExecutor
+from apflow import TaskManager
+from apflow.core.types import TaskTreeNode
+from apflow.extensions.generate import GenerateExecutor
 
 
 @pytest.mark.asyncio
@@ -17,7 +17,7 @@ async def test_generate_executor_registration():
     assert executor.id == "generate_executor"
     
     # Check it's registered in extension registry
-    from aipartnerupflow.core.extensions.registry import get_registry
+    from apflow.core.extensions.registry import get_registry
     registry = get_registry()
     extension = registry.get_by_id("generate_executor")
     assert extension is not None

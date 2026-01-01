@@ -2,7 +2,7 @@
 
 > **Need more detailed explanations or advanced usage?** See the [Python API Reference](python.md) for in-depth documentation and examples. This page is a concise cheat sheet for common patterns.
 
-Quick reference cheat sheet for aipartnerupflow APIs. Perfect for when you know what you need but need the exact syntax.
+Quick reference cheat sheet for apflow APIs. Perfect for when you know what you need but need the exact syntax.
 
 ## Table of Contents
 
@@ -19,7 +19,7 @@ Quick reference cheat sheet for aipartnerupflow APIs. Perfect for when you know 
 ### Import Core Components
 
 ```python
-from aipartnerupflow import (
+from apflow import (
     TaskManager,
     TaskTreeNode,
     create_session,
@@ -132,7 +132,7 @@ tasks = await task_manager.task_repository.list_tasks(
 ### Basic Executor Template
 
 ```python
-from aipartnerupflow import BaseTask, executor_register
+from apflow import BaseTask, executor_register
 from typing import Dict, Any
 
 @executor_register()
@@ -270,7 +270,7 @@ result = await task_manager.cancel_task(
 ### Pre-Execution Hook
 
 ```python
-from aipartnerupflow import register_pre_hook
+from apflow import register_pre_hook
 
 @register_pre_hook
 async def validate_inputs(task):
@@ -286,7 +286,7 @@ async def validate_inputs(task):
 ### Post-Execution Hook
 
 ```python
-from aipartnerupflow import register_post_hook
+from apflow import register_post_hook
 
 @register_post_hook
 async def log_results(task, inputs, result):
@@ -297,7 +297,7 @@ async def log_results(task, inputs, result):
 ### Hook Database Access
 
 ```python
-from aipartnerupflow import register_pre_hook, get_hook_repository
+from apflow import register_pre_hook, get_hook_repository
 
 @register_pre_hook
 async def modify_task_with_db(task):
@@ -323,7 +323,7 @@ async def modify_task_with_db(task):
 ### Use Hooks with TaskManager
 
 ```python
-from aipartnerupflow import TaskPreHook, TaskPostHook
+from apflow import TaskPreHook, TaskPostHook
 
 pre_hooks = [validate_inputs]
 post_hooks = [log_results]
@@ -340,8 +340,8 @@ task_manager = TaskManager(
 ### Custom TaskModel
 
 ```python
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
-from aipartnerupflow import set_task_model_class
+from apflow.core.storage.sqlalchemy.models import TaskModel
+from apflow import set_task_model_class
 from sqlalchemy import Column, String
 
 class CustomTaskModel(TaskModel):
@@ -476,7 +476,7 @@ elif task.status == "completed":
 ### Pattern 6: Using TaskExecutor
 
 ```python
-from aipartnerupflow.core.execution.task_executor import TaskExecutor
+from apflow.core.execution.task_executor import TaskExecutor
 
 # Get singleton instance
 executor = TaskExecutor()
@@ -503,9 +503,9 @@ result = await executor.execute_tasks(
 **Python API Usage:**
 
 ```python
-from aipartnerupflow import TaskManager, TaskCreator, create_session
-from aipartnerupflow.core.types import TaskTreeNode
-from aipartnerupflow.extensions.generate import GenerateExecutor
+from apflow import TaskManager, TaskCreator, create_session
+from apflow.core.types import TaskTreeNode
+from apflow.extensions.generate import GenerateExecutor
 
 db = create_session()
 task_manager = TaskManager(db)
@@ -604,7 +604,7 @@ apflow generate task-tree "Your requirement" --save --user-id user123
 ### Get Registry
 
 ```python
-from aipartnerupflow.core.extensions import get_registry
+from apflow.core.extensions import get_registry
 
 registry = get_registry()
 ```
@@ -612,7 +612,7 @@ registry = get_registry()
 ### List Executors
 
 ```python
-from aipartnerupflow.core.extensions import ExtensionCategory
+from apflow.core.extensions import ExtensionCategory
 
 executors = registry.list_by_category(ExtensionCategory.EXECUTOR)
 for executor in executors:
@@ -639,8 +639,8 @@ executor_instance = registry.create_executor_instance(
 ### Create Crew
 
 ```python
-from aipartnerupflow.extensions.crewai import CrewaiExecutor
-from aipartnerupflow.core.extensions import get_registry
+from apflow.extensions.crewai import CrewaiExecutor
+from apflow.core.extensions import get_registry
 
 crew = CrewaiExecutor(
     id="my_crew",
@@ -681,36 +681,36 @@ task = await task_manager.task_repository.create_task(
 
 ```bash
 # Execute tasks from file
-aipartnerupflow run flow --tasks-file tasks.json
+apflow run flow --tasks-file tasks.json
 
 # Execute single task
-aipartnerupflow run task --task-id task_123
+apflow run task --task-id task_123
 ```
 
 ### Start Server
 
 ```bash
 # Start API server
-aipartnerupflow serve start --port 8000
+apflow serve start --port 8000
 
 # Start with specific host
-aipartnerupflow serve start --host 0.0.0.0 --port 8000
+apflow serve start --host 0.0.0.0 --port 8000
 ```
 
 ### Task Management
 
 ```bash
 # List tasks from database
-aipartnerupflow tasks list --user-id user123
+apflow tasks list --user-id user123
 
 # Get task statistics
-aipartnerupflow tasks count
+apflow tasks count
 
 # Get task status
-aipartnerupflow tasks status task_123
+apflow tasks status task_123
 
 # Watch task progress
-aipartnerupflow tasks watch --task-id task_123
+apflow tasks watch --task-id task_123
 ```
 
 ## Common Input Schema Patterns

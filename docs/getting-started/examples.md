@@ -1,25 +1,25 @@
 # Examples
 
-This page contains examples and use cases for aipartnerupflow.
+This page contains examples and use cases for apflow.
 
 ## Demo Task Initialization
 
-> **Note:** The built-in examples module has been removed from aipartnerupflow core library.
-> For demo task initialization, please use the **aipartnerupflow-demo** project instead.
+> **Note:** The built-in examples module has been removed from apflow core library.
+> For demo task initialization, please use the **apflow-demo** project instead.
 
-The **aipartnerupflow-demo** project provides:
+The **apflow-demo** project provides:
 - Complete demo tasks for all executors
 - Per-user demo task initialization
 - Demo task validation against executor schemas
 
-For more information, see the [aipartnerupflow-demo](https://github.com/aipartnerup/aipartnerupflow-demo) repository.
+For more information, see the [apflow-demo](https://github.com/aipartnerup/apflow-demo) repository.
 
 ## Executor Metadata API
 
-aipartnerupflow provides utilities to query executor metadata for demo task generation:
+apflow provides utilities to query executor metadata for demo task generation:
 
 ```python
-from aipartnerupflow.core.extensions import (
+from apflow.core.extensions import (
     get_executor_metadata,
     validate_task_format,
     get_all_executor_metadata
@@ -51,7 +51,7 @@ Examples are also available in the test cases:
             "properties": {
 # Examples
 
-> **Note:** Built-in demo tasks have moved to the [aipartnerupflow-demo](https://github.com/aipartnerup/aipartnerupflow-demo) project. For full demo task initialization and validation, please use that repository.
+> **Note:** Built-in demo tasks have moved to the [apflow-demo](https://github.com/aipartnerup/apflow-demo) project. For full demo task initialization and validation, please use that repository.
 
 For in-project runnable examples and patterns, see:
 - [Basic Task Examples](../examples/basic_task.md)

@@ -9,8 +9,8 @@ import pytest
 import json
 import uuid
 from starlette.testclient import TestClient
-from aipartnerupflow.api.a2a.server import create_a2a_server
-from aipartnerupflow.core.storage import get_default_session
+from apflow.api.a2a.server import create_a2a_server
+from apflow.core.storage import get_default_session
 
 
 @pytest.fixture(scope="function")
@@ -949,8 +949,8 @@ def test_jsonrpc_tasks_execute_with_use_demo(json_rpc_client):
     time.sleep(0.5)
     
     # Verify task was executed with demo mode by checking task result
-    from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-    from aipartnerupflow.core.config import get_task_model_class
+    from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+    from apflow.core.config import get_task_model_class
     
     db_session = get_default_session()
     task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
@@ -1135,7 +1135,7 @@ def test_jsonrpc_tasks_execute_with_webhook(json_rpc_client):
     }
     
     # Mock httpx.AsyncClient to capture webhook calls
-    with patch("aipartnerupflow.api.routes.tasks.httpx.AsyncClient") as mock_client_class:
+    with patch("apflow.api.routes.tasks.httpx.AsyncClient") as mock_client_class:
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=mock_post)
         mock_client.put = AsyncMock(side_effect=mock_post)
@@ -2250,8 +2250,8 @@ def test_a2a_execute_task_tree_with_use_demo(json_rpc_client):
     time.sleep(0.5)
     
     # Verify task was executed with demo mode by checking task result
-    from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-    from aipartnerupflow.core.config import get_task_model_class
+    from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+    from apflow.core.config import get_task_model_class
     
     db_session = get_default_session()
     task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())

@@ -2,10 +2,10 @@
 
 > **Looking for a quick syntax lookup?** See the [API Quick Reference](quick-reference.md) for concise code patterns and usage. This document provides detailed explanations and examples.
 
-Complete reference for aipartnerupflow's Python API. This document lists all available APIs and how to use them.
+Complete reference for apflow's Python API. This document lists all available APIs and how to use them.
 
 **For detailed implementation details, see:**
-- Source code: `src/aipartnerupflow/` (well-documented with docstrings)
+- Source code: `src/apflow/` (well-documented with docstrings)
 - Test cases: `tests/` (comprehensive examples of all features)
 
 ## Table of Contents
@@ -47,7 +47,7 @@ For a complete understanding of task execution flow, database session management
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     # Create database session
@@ -82,7 +82,7 @@ The main class for orchestrating and executing task trees.
 ### Initialization
 
 ```python
-from aipartnerupflow import TaskManager, create_session
+from apflow import TaskManager, create_session
 
 db = create_session()
 task_manager = TaskManager(
@@ -94,7 +94,7 @@ task_manager = TaskManager(
 )
 ```
 
-**See**: `src/aipartnerupflow/core/execution/task_manager.py` for full implementation details.
+**See**: `src/apflow/core/execution/task_manager.py` for full implementation details.
 
 ### Main Methods
 
@@ -138,7 +138,7 @@ result = await task_manager.cancel_task(
 - `task_repository` (TaskRepository): Access to task repository for database operations
 - `streaming_callbacks` (StreamingCallbacks): Streaming callbacks instance
 
-**See**: Source code in `src/aipartnerupflow/core/execution/task_manager.py` for all available methods and detailed documentation.
+**See**: Source code in `src/apflow/core/execution/task_manager.py` for all available methods and detailed documentation.
 
 ## BaseTask
 
@@ -147,7 +147,7 @@ Recommended base class for creating custom executors. Provides automatic registr
 ### Usage
 
 ```python
-from aipartnerupflow import BaseTask, executor_register
+from apflow import BaseTask, executor_register
 from typing import Dict, Any
 
 @executor_register()
@@ -187,7 +187,7 @@ Abstract base class for all task executors. Use `BaseTask` for simplicity, or `E
 
 - `cancel()`: Cancel task execution (optional)
 
-**See**: `src/aipartnerupflow/core/interfaces/executable_task.py` for full interface definition.
+**See**: `src/apflow/core/interfaces/executable_task.py` for full interface definition.
 
 ## TaskTreeNode
 
@@ -204,7 +204,7 @@ Represents a node in a task tree structure.
 - `task` (TaskModel): The task model instance
 - `children` (List[TaskTreeNode]): List of child nodes
 
-**See**: `src/aipartnerupflow/core/types.py` for full implementation and `tests/core/execution/test_task_manager.py` for usage examples.
+**See**: `src/apflow/core/types.py` for full implementation and `tests/core/execution/test_task_manager.py` for usage examples.
 
 ## TaskRepository
 
@@ -228,7 +228,7 @@ Database operations for tasks.
 - `find_dependent_tasks(task_id)`: Find all tasks that depend on a given task (reverse dependencies)
 - `list_tasks(...)`: List tasks with filters
 
-**See**: `src/aipartnerupflow/core/storage/sqlalchemy/task_repository.py` for all methods and `tests/core/storage/sqlalchemy/test_task_repository.py` for examples.
+**See**: `src/apflow/core/storage/sqlalchemy/task_repository.py` for all methods and `tests/core/storage/sqlalchemy/test_task_repository.py` for examples.
 
 **Note on Task Updates:**
 - Critical fields (`parent_id`, `user_id`, `dependencies`) are validated strictly:
@@ -262,7 +262,7 @@ Create task trees from task arrays.
   - **Returns**: `TaskTreeNode` when `save=True`, or `List[Dict[str, Any]]` (task array) when `save=False`.
   - **Note**: All copied tasks receive new UUIDs for clear task tree relationships. Dependencies correctly reference new task IDs within the copied tree.
 
-**See**: `src/aipartnerupflow/core/execution/task_creator.py` for implementation and `tests/core/execution/test_task_creator.py` for examples.
+**See**: `src/apflow/core/execution/task_creator.py` for implementation and `tests/core/execution/test_task_creator.py` for examples.
 
 ## TaskModel
 
@@ -280,7 +280,7 @@ Database model for tasks.
 
 - `to_dict()`: Convert model to dictionary
 
-**See**: `src/aipartnerupflow/core/storage/sqlalchemy/models.py` for full model definition.
+**See**: `src/apflow/core/storage/sqlalchemy/models.py` for full model definition.
 
 ## TaskStatus
 
@@ -295,7 +295,7 @@ Task status constants and utilities.
 - `is_terminal(status)`: Check if status is terminal
 - `is_active(status)`: Check if status is active
 
-**See**: `src/aipartnerupflow/core/storage/sqlalchemy/models.py` for implementation.
+**See**: `src/apflow/core/storage/sqlalchemy/models.py` for implementation.
 
 ## Utility Functions
 
@@ -321,7 +321,7 @@ Task status constants and utilities.
 Hooks can access the database using the same session as TaskManager:
 
 ```python
-from aipartnerupflow import register_pre_hook, get_hook_repository
+from apflow import register_pre_hook, get_hook_repository
 
 @register_pre_hook
 async def my_hook(task):
@@ -334,14 +334,14 @@ async def my_hook(task):
         pending = await repo.get_tasks_by_status("pending")
 ```
 
-**See**: `src/aipartnerupflow/core/decorators.py` and `src/aipartnerupflow/core/extensions/registry.py` for implementation.
+**See**: `src/apflow/core/decorators.py` and `src/apflow/core/extensions/registry.py` for implementation.
 
 ### Type Definitions
 
 - `TaskPreHook`: Type alias for pre-execution hook functions
 - `TaskPostHook`: Type alias for post-execution hook functions
 
-**See**: `src/aipartnerupflow/core/extensions/types.py` for type definitions.
+**See**: `src/apflow/core/extensions/types.py` for type definitions.
 
 ## Error Handling
 
@@ -369,7 +369,7 @@ Tasks that fail return:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -503,7 +503,7 @@ for child in task_tree.children:
 ### Pattern 5: Using TaskExecutor
 
 ```python
-from aipartnerupflow.core.execution.task_executor import TaskExecutor
+from apflow.core.execution.task_executor import TaskExecutor
 
 # Get singleton instance
 executor = TaskExecutor()
@@ -539,7 +539,7 @@ print(f"Execution result: {result}")
 ### Pattern 6: Custom Executor with Error Handling
 
 ```python
-from aipartnerupflow import BaseTask, executor_register
+from apflow import BaseTask, executor_register
 from typing import Dict, Any
 
 @executor_register()
@@ -594,11 +594,11 @@ class RobustExecutor(BaseTask):
 
 ## A2A Protocol Integration
 
-aipartnerupflow implements the A2A (Agent-to-Agent) Protocol standard, allowing seamless integration with other A2A-compatible agents and services.
+apflow implements the A2A (Agent-to-Agent) Protocol standard, allowing seamless integration with other A2A-compatible agents and services.
 
 ### Using A2A Client SDK
 
-The A2A protocol provides an official client SDK for easy integration. Here's how to use it with aipartnerupflow:
+The A2A protocol provides an official client SDK for easy integration. Here's how to use it with apflow:
 
 #### Installation
 

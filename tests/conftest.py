@@ -1,5 +1,5 @@
 """
-Test configuration and fixtures for aipartnerupflow
+Test configuration and fixtures for apflow
 """
 import pytest
 import pytest_asyncio
@@ -30,35 +30,35 @@ except ImportError:
 # This ensures extensions are registered before tests run
 # Must be imported before other modules that use the registry
 try:
-    from aipartnerupflow.extensions.stdio import SystemInfoExecutor, CommandExecutor  # noqa: F401
+    from apflow.extensions.stdio import SystemInfoExecutor, CommandExecutor  # noqa: F401
 except ImportError:
     pass  # Extension not available, tests will handle this
 
 try:
-    from aipartnerupflow.extensions.crewai import CrewaiExecutor, BatchCrewaiExecutor  # noqa: F401
+    from apflow.extensions.crewai import CrewaiExecutor, BatchCrewaiExecutor  # noqa: F401
 except ImportError:
     pass  # Extension not available, tests will handle this
 
 try:
-    from aipartnerupflow.extensions.core import AggregateResultsExecutor  # noqa: F401
+    from apflow.extensions.core import AggregateResultsExecutor  # noqa: F401
 except ImportError:
     pass  # Extension not available, tests will handle this
 
 try:
-    from aipartnerupflow.extensions.generate import GenerateExecutor  # noqa: F401
+    from apflow.extensions.generate import GenerateExecutor  # noqa: F401
 except ImportError:
     pass  # Extension not available, tests will handle this
 
 try:
-    from aipartnerupflow.extensions.llm import LLMExecutor  # noqa: F401
+    from apflow.extensions.llm import LLMExecutor  # noqa: F401
 except ImportError:
     pass  # Extension not available, tests will handle this
 
 from sqlalchemy import create_engine, text  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker  # noqa: E402
-from aipartnerupflow.core.storage.sqlalchemy.models import Base, TASK_TABLE_NAME  # noqa: E402
-from aipartnerupflow.core.storage.factory import (  # noqa: E402
+from apflow.core.storage.sqlalchemy.models import Base, TASK_TABLE_NAME  # noqa: E402
+from apflow.core.storage.factory import (  # noqa: E402
     create_session,
     get_default_session,
     reset_default_session,
@@ -66,7 +66,7 @@ from aipartnerupflow.core.storage.factory import (  # noqa: E402
     is_postgresql_url,
     normalize_postgresql_url,
 )
-from aipartnerupflow.core.utils.logger import get_logger  # noqa: E402
+from apflow.core.utils.logger import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -485,8 +485,8 @@ def ensure_executors_registered():
     The fixture explicitly re-registers executors using override=True to ensure
     they are available even if registry was cleared by previous tests.
     """
-    from aipartnerupflow.core.extensions import get_registry
-    from aipartnerupflow.core.extensions.types import ExtensionCategory
+    from apflow.core.extensions import get_registry
+    from apflow.core.extensions.types import ExtensionCategory
     
     registry = get_registry()
     
@@ -522,33 +522,33 @@ def ensure_executors_registered():
     
     # Ensure all required executors are registered
     try:
-        from aipartnerupflow.extensions.stdio import SystemInfoExecutor, CommandExecutor
+        from apflow.extensions.stdio import SystemInfoExecutor, CommandExecutor
         ensure_registered(SystemInfoExecutor, "system_info_executor")
         ensure_registered(CommandExecutor, "command_executor")
     except ImportError:
         pass
     
     try:
-        from aipartnerupflow.extensions.crewai import CrewaiExecutor, BatchCrewaiExecutor
+        from apflow.extensions.crewai import CrewaiExecutor, BatchCrewaiExecutor
         ensure_registered(CrewaiExecutor, "crewai_executor")
         ensure_registered(BatchCrewaiExecutor, "batch_crewai_executor")
     except ImportError:
         pass
     
     try:
-        from aipartnerupflow.extensions.core import AggregateResultsExecutor
+        from apflow.extensions.core import AggregateResultsExecutor
         ensure_registered(AggregateResultsExecutor, "aggregate_results_executor")
     except ImportError:
         pass
     
     try:
-        from aipartnerupflow.extensions.generate import GenerateExecutor
+        from apflow.extensions.generate import GenerateExecutor
         ensure_registered(GenerateExecutor, "generate_executor")
     except ImportError:
         pass
     
     try:
-        from aipartnerupflow.extensions.llm import LLMExecutor
+        from apflow.extensions.llm import LLMExecutor
         ensure_registered(LLMExecutor, "llm_executor")
     except ImportError:
         pass
@@ -589,9 +589,9 @@ def use_test_db_session(sync_db_session):
         yield sync_db_session
         
     # Patch both the factory function and the import in routes and executor
-    with patch('aipartnerupflow.core.storage.factory.create_pooled_session', side_effect=mock_create_pooled_session), \
-         patch('aipartnerupflow.api.routes.tasks.create_pooled_session', side_effect=mock_create_pooled_session), \
-         patch('aipartnerupflow.core.execution.task_executor.create_pooled_session', side_effect=mock_create_pooled_session):
+    with patch('apflow.core.storage.factory.create_pooled_session', side_effect=mock_create_pooled_session), \
+         patch('apflow.api.routes.tasks.create_pooled_session', side_effect=mock_create_pooled_session), \
+         patch('apflow.core.execution.task_executor.create_pooled_session', side_effect=mock_create_pooled_session):
         yield sync_db_session
         
     reset_default_session()
@@ -711,7 +711,7 @@ def fresh_db_session(temp_db_path):
 @pytest.fixture(autouse=True)
 def mock_logger():
     """Mock logger for testing"""
-    with patch('aipartnerupflow.core.utils.logger.get_logger') as mock_logger:
+    with patch('apflow.core.utils.logger.get_logger') as mock_logger:
         logger = Mock()
         logger.info = Mock()
         logger.debug = Mock()

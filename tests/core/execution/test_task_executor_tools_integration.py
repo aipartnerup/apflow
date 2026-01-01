@@ -15,8 +15,8 @@ import os
 
 # Try to import required modules
 try:
-    from aipartnerupflow.core.execution.task_executor import TaskExecutor
-    from aipartnerupflow.core.tools import get_tool_registry, tool_register, BaseTool
+    from apflow.core.execution.task_executor import TaskExecutor
+    from apflow.core.tools import get_tool_registry, tool_register, BaseTool
     from pydantic import BaseModel, Field  # noqa: F401
     from typing import Type  # noqa: F401
 except ImportError:
@@ -54,7 +54,7 @@ class TestTaskExecutorToolsIntegration:
         # So tools should already be registered when TaskExecutor is imported
         # Verify tool is registered
         try:
-            from aipartnerupflow.core.tools import get_tool_registry
+            from apflow.core.tools import get_tool_registry
             registry = get_tool_registry()
             
             # Verify tool is registered (should be auto-registered via TaskExecutor import)
@@ -160,7 +160,7 @@ class TestTaskExecutorToolsIntegration:
             pytest.skip("OPENAI_API_KEY is not set")
         
         try:
-            from aipartnerupflow.core.tools import tool_register, get_tool_registry, BaseTool
+            from apflow.core.tools import tool_register, get_tool_registry, BaseTool
             from pydantic import BaseModel, Field
             from typing import Type
         except ImportError:

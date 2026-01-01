@@ -2,7 +2,7 @@
 Test executor_info module
 """
 
-from aipartnerupflow.extensions.generate.executor_info import (
+from apflow.extensions.generate.executor_info import (
     get_available_executors,
     get_executor_schema,
     format_executors_for_llm

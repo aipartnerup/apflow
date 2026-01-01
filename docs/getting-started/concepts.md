@@ -1,6 +1,6 @@
 # Core Concepts
 
-Understanding these core concepts will help you use aipartnerupflow effectively. Don't worry - we'll explain everything in simple terms!
+Understanding these core concepts will help you use apflow effectively. Don't worry - we'll explain everything in simple terms!
 
 ## Why These Concepts Matter
 
@@ -19,7 +19,7 @@ Before diving into the technical details, let's understand why these concepts ex
 - Track state and progress
 - Manage different execution methods (HTTP, SSH, Docker, etc.)
 
-**With aipartnerupflow**, these concepts provide a unified way to solve all these problems. The framework handles the complexity, so you can focus on your business logic.
+**With apflow**, these concepts provide a unified way to solve all these problems. The framework handles the complexity, so you can focus on your business logic.
 
 Now let's learn the core concepts that make this possible!
 
@@ -65,7 +65,7 @@ Without orchestration, you'd have to manually manage:
 - ✅ What happens if one fails
 - ✅ How to track progress
 
-With aipartnerupflow, the **TaskManager** handles all of this automatically!
+With apflow, the **TaskManager** handles all of this automatically!
 
 ## What is a Task Tree?
 
@@ -186,7 +186,7 @@ An **executor** is the code that actually runs a task. It's like a worker that k
 
 ### Types of Executors
 
-1. **Built-in Executors**: Provided by aipartnerupflow
+1. **Built-in Executors**: Provided by apflow
    - **Core Executors** (always available):
      - `system_info_executor`: Get system information
      - `command_executor`: Run shell commands
@@ -196,7 +196,7 @@ An **executor** is the code that actually runs a task. It's like a worker that k
      - `ssh_executor`: Remote command execution via SSH (requires `[ssh]`)
      - `grpc_executor`: gRPC service calls (requires `[grpc]`)
      - `websocket_executor`: Bidirectional WebSocket communication
-     - `apflow_api_executor`: Call other aipartnerupflow API instances
+     - `apflow_api_executor`: Call other apflow API instances
      - `mcp_executor`: Model Context Protocol executor (stdio mode: no dependencies, HTTP mode: requires `[a2a]`)
    - **Protocol Servers**:
      - `a2a`: A2A Protocol Server (default)
@@ -225,7 +225,7 @@ Think of executors as specialized workers:
 ### In Code
 
 ```python
-from aipartnerupflow import BaseTask, executor_register
+from apflow import BaseTask, executor_register
 
 @executor_register()
 class MyCustomExecutor(BaseTask):

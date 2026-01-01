@@ -15,7 +15,7 @@ The CLI is designed to provide the same functionality as the API, but through co
 ## CLI Structure
 
 ```
-aipartnerupflow/
+apflow/
 ├── cli/
 │   ├── main.py              # Main entry point, registers all commands
 │   ├── commands/
@@ -41,19 +41,19 @@ CLI → Parse tasks (JSON array) → Group by root → TaskExecutor.execute_task
 1. **Legacy Mode** (backward compatible):
    ```bash
    # Execute single executor
-   aipartnerupflow run flow example_executor --inputs '{"data": "test"}'
+   apflow run flow example_executor --inputs '{"data": "test"}'
    ```
 
 2. **Standard Mode** (recommended):
    ```bash
    # Execute task array (single task tree)
-   aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
+   apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
    
    # Execute multiple unrelated tasks (multiple root tasks)
-   aipartnerupflow run flow --tasks '[{"id": "task1", ...}, {"id": "task2", ...}]'
+   apflow run flow --tasks '[{"id": "task1", ...}, {"id": "task2", ...}]'
    
    # With tasks file
-   aipartnerupflow run flow --tasks-file tasks.json --output result.json
+   apflow run flow --tasks-file tasks.json --output result.json
    ```
 
 **Implementation**:
@@ -92,13 +92,13 @@ CLI → Parse tasks (JSON array) → Group by root → TaskExecutor.execute_task
 **Example**:
 ```bash
 # List all running tasks
-aipartnerupflow tasks list
+apflow tasks list
 
 # Check status of specific tasks
-aipartnerupflow tasks status task-123 task-456
+apflow tasks status task-123 task-456
 
 # Count running tasks
-aipartnerupflow tasks count --user-id user-123
+apflow tasks count --user-id user-123
 ```
 
 ### 3. Interactive Mode (Future)
@@ -108,7 +108,7 @@ aipartnerupflow tasks count --user-id user-123
 **Design**:
 ```bash
 # Start interactive mode
-aipartnerupflow interactive
+apflow interactive
 
 # In interactive mode:
 > run flow executor_id --inputs '{"data": "test"}'
@@ -130,7 +130,7 @@ Task cancelled: task-123
 #### Standard Mode (Task Array)
 
 ```
-1. User: aipartnerupflow run flow --tasks '[{"id": "task1", "schemas": {"method": "system_info_executor"}, ...}, {"id": "task2", ...}]'
+1. User: apflow run flow --tasks '[{"id": "task1", "schemas": {"method": "system_info_executor"}, ...}, {"id": "task2", ...}]'
    ↓
 2. CLI parses tasks JSON array
    ↓
@@ -160,7 +160,7 @@ Task cancelled: task-123
 #### Legacy Mode (Executor ID + Inputs)
 
 ```
-1. User: aipartnerupflow run flow example_executor --inputs '{"key": "value"}'
+1. User: apflow run flow example_executor --inputs '{"key": "value"}'
    ↓
 2. CLI creates single task:
    [
@@ -321,7 +321,7 @@ Return: {
 import cmd
 
 class InteractiveShell(cmd.Cmd):
-    prompt = 'aipartnerupflow> '
+    prompt = 'apflow> '
     
     def do_run(self, args):
         # Parse and execute run command
@@ -341,10 +341,10 @@ class InteractiveShell(cmd.Cmd):
 **Option 3: Watch Mode**
 ```bash
 # Watch task status in real-time
-aipartnerupflow tasks watch task-123
+apflow tasks watch task-123
 
 # Watch all tasks
-aipartnerupflow tasks watch --all
+apflow tasks watch --all
 ```
 
 ## Development Guidelines
@@ -361,7 +361,7 @@ aipartnerupflow tasks watch --all
 ```python
 # cli/commands/my_command.py
 import typer
-from aipartnerupflow.core.execution.task_executor import TaskExecutor
+from apflow.core.execution.task_executor import TaskExecutor
 
 app = typer.Typer(name="mycommand")
 
@@ -404,7 +404,7 @@ CLI handles this by:
 
 ```bash
 # Multiple unrelated tasks
-aipartnerupflow run flow --tasks '[
+apflow run flow --tasks '[
   {"id": "task1", "name": "Get CPU Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}},
   {"id": "task2", "name": "Get Memory Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "memory"}}
 ]'

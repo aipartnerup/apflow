@@ -1,11 +1,11 @@
 # Tutorial 1: First Steps
 
-This is a complete beginner-friendly tutorial. If you're new to aipartnerupflow, start here!
+This is a complete beginner-friendly tutorial. If you're new to apflow, start here!
 
 ## What You'll Learn
 
 By the end of this tutorial, you'll be able to:
-- ✅ Install and set up aipartnerupflow
+- ✅ Install and set up apflow
 - ✅ Create and execute your first task
 - ✅ Understand the basic workflow
 - ✅ Use built-in executors
@@ -21,10 +21,10 @@ By the end of this tutorial, you'll be able to:
 
 ## Part 1: Installation and Setup
 
-### Step 1: Install aipartnerupflow
+### Step 1: Install apflow
 
 ```bash
-pip install aipartnerupflow
+pip install apflow
 ```
 
 That's it! No database setup needed - DuckDB works out of the box.
@@ -32,15 +32,15 @@ That's it! No database setup needed - DuckDB works out of the box.
 ### Step 2: Verify Installation
 
 ```python
-import aipartnerupflow
-print(aipartnerupflow.__version__)
+import apflow
+print(apflow.__version__)
 ```
 
 If you see a version number, you're good to go!
 
 ## Part 2: Your Very First Task
 
-Let's create the simplest possible task to see aipartnerupflow in action.
+Let's create the simplest possible task to see apflow in action.
 
 ### The Goal
 
@@ -52,10 +52,10 @@ Create a file `tutorial_01.py`:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
-    print("🚀 Starting aipartnerupflow tutorial...")
+    print("🚀 Starting apflow tutorial...")
     
     # Step 1: Create database session
     # DuckDB is used by default - no configuration needed!
@@ -117,7 +117,7 @@ python tutorial_01.py
 ### Expected Output
 
 ```
-🚀 Starting aipartnerupflow tutorial...
+🚀 Starting apflow tutorial...
 📦 Creating database session...
 🎯 Creating TaskManager...
 📝 Creating task...
@@ -134,7 +134,7 @@ python tutorial_01.py
 
 ### What Happened?
 
-1. **Created a task**: We told aipartnerupflow "get CPU info"
+1. **Created a task**: We told apflow "get CPU info"
 2. **TaskManager found the executor**: It automatically found `system_info_executor`
 3. **Task executed**: The executor ran and collected CPU information
 4. **Result saved**: The result was stored in the database
@@ -257,7 +257,7 @@ Create a file `tutorial_01_multiple.py`:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -345,7 +345,7 @@ A: Check `task.status` - it will be "failed". Check `task.error` for the error m
 **Q: How do I know which executors are available?**  
 A: Built-in executors are automatically registered. Check the [API Reference](../api/python.md) or use the registry:
 ```python
-from aipartnerupflow.core.extensions import get_registry
+from apflow.core.extensions import get_registry
 registry = get_registry()
 executors = registry.list_by_category(ExtensionCategory.EXECUTOR)
 print(executors)
@@ -354,7 +354,7 @@ print(executors)
 ## Summary
 
 In this tutorial, you learned:
-- ✅ How to install aipartnerupflow
+- ✅ How to install apflow
 - ✅ How to create and execute tasks
 - ✅ How to use built-in executors
 - ✅ How to check task status and results

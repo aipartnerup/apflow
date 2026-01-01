@@ -1,4 +1,4 @@
-# Contributing to aipartnerupflow
+# Contributing to apflow
 
 ## Documentation Maintenance
 
@@ -8,7 +8,7 @@
 - Keep code snippets and API references up to date with the latest codebase.
 - For large changes, update the Table of Contents and cross-references as needed.
 
-Thank you for your interest in contributing to aipartnerupflow! This document provides guidelines and instructions for contributing.
+Thank you for your interest in contributing to apflow! This document provides guidelines and instructions for contributing.
 
 ## Code of Conduct
 
@@ -21,7 +21,7 @@ Thank you for your interest in contributing to aipartnerupflow! This document pr
 
 ### Reporting Bugs
 
-1. **Check existing issues**: Search [GitHub Issues](https://github.com/aipartnerup/aipartnerupflow/issues) to see if the bug is already reported
+1. **Check existing issues**: Search [GitHub Issues](https://github.com/aipartnerup/apflow/issues) to see if the bug is already reported
 2. **Create a new issue**: If not found, create a new issue with:
    - Clear title and description
    - Steps to reproduce
@@ -31,7 +31,7 @@ Thank you for your interest in contributing to aipartnerupflow! This document pr
 
 ### Suggesting Features
 
-1. **Check existing discussions**: Search [GitHub Discussions](https://github.com/aipartnerup/aipartnerupflow/discussions)
+1. **Check existing discussions**: Search [GitHub Discussions](https://github.com/aipartnerup/apflow/discussions)
 2. **Create a feature request**: Include:
    - Use case and motivation
    - Proposed solution
@@ -57,8 +57,8 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for detailed setup instructions.
 **Quick Setup:**
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/aipartnerupflow.git
-cd aipartnerupflow
+git clone https://github.com/YOUR_USERNAME/apflow.git
+cd apflow
 
 # Create virtual environment
 python3.10+ -m venv .venv
@@ -127,7 +127,7 @@ ruff check src/ tests/
    from pydantic import BaseModel
    
    # Local
-   from aipartnerupflow import ExecutableTask
+   from apflow import ExecutableTask
    ```
 
 ## Testing
@@ -139,7 +139,7 @@ ruff check src/ tests/
 pytest
 
 # Run with coverage
-pytest --cov=src/aipartnerupflow --cov-report=html
+pytest --cov=src/apflow --cov-report=html
 
 # Run specific test file
 pytest tests/core/execution/test_task_manager.py
@@ -159,7 +159,7 @@ pytest -v
 **Example:**
 ```python
 import pytest
-from aipartnerupflow import TaskManager, create_session
+from apflow import TaskManager, create_session
 
 @pytest.mark.asyncio
 async def test_task_creation():
@@ -185,7 +185,7 @@ When writing tests that use the extension registry or other global state:
    @pytest.fixture(autouse=True)
    def ensure_executor_registered():
        """Ensure custom executor is registered before each test"""
-       from aipartnerupflow.core.extensions import get_registry
+       from apflow.core.extensions import get_registry
        
        registry = get_registry()
        if not registry.is_registered("custom_executor"):
@@ -199,7 +199,7 @@ When writing tests that use the extension registry or other global state:
 
 2. **Skip tests when optional dependencies are unavailable**:
    ```python
-   from aipartnerupflow.extensions.llm.llm_executor import LITELLM_AVAILABLE
+   from apflow.extensions.llm.llm_executor import LITELLM_AVAILABLE
    
    @pytest.mark.skipif(not LITELLM_AVAILABLE, reason="litellm not installed")
    @pytest.mark.asyncio
@@ -301,8 +301,8 @@ Brief description of changes
 ## Project Structure
 
 ```
-aipartnerupflow/
-├── src/aipartnerupflow/    # Source code
+apflow/
+├── src/apflow/    # Source code
 │   ├── core/               # Core framework
 │   ├── extensions/          # Extensions (crewai, stdio, etc.)
 │   ├── api/                # API server
@@ -337,8 +337,8 @@ Look for issues tagged with `good-first-issue` on GitHub.
 ## Questions?
 
 - **Documentation**: Check [docs/](../README.md)
-- **Discussions**: [GitHub Discussions](https://github.com/aipartnerup/aipartnerupflow/discussions)
-- **Issues**: [GitHub Issues](https://github.com/aipartnerup/aipartnerupflow/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/aipartnerup/apflow/discussions)
+- **Issues**: [GitHub Issues](https://github.com/aipartnerup/apflow/issues)
 
 ## License
 
@@ -351,5 +351,5 @@ Contributors will be:
 - Acknowledged in release notes for significant contributions
 - Thanked in the project README
 
-Thank you for contributing to aipartnerupflow! 🎉
+Thank you for contributing to apflow! 🎉
 

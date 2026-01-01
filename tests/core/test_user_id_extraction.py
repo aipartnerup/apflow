@@ -4,9 +4,9 @@ Test automatic user_id extraction functionality
 
 from unittest.mock import Mock
 from starlette.requests import Request
-from aipartnerupflow.api.routes.base import BaseRouteHandler
-from aipartnerupflow.api.a2a.server import generate_token, verify_token
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.api.routes.base import BaseRouteHandler
+from apflow.api.a2a.server import generate_token, verify_token
+from apflow.core.storage.sqlalchemy.models import TaskModel
 
 
 class TestUserIDExtraction:

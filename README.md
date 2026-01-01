@@ -1,10 +1,10 @@
-# aipartnerupflow
+# apflow
 
 **Task Orchestration and Execution Framework**
 
 ## Core Positioning
 
-The core of `aipartnerupflow` is **task orchestration and execution specifications**. It provides a unified task orchestration framework that supports execution of multiple task types. The core is **pure orchestration** with no LLM dependencies - CrewAI support is optional.
+The core of `apflow` is **task orchestration and execution specifications**. It provides a unified task orchestration framework that supports execution of multiple task types. The core is **pure orchestration** with no LLM dependencies - CrewAI support is optional.
 
 **Core includes:**
 - Task orchestration specifications (TaskManager)
@@ -19,7 +19,7 @@ The core of `aipartnerupflow` is **task orchestration and execution specificatio
 - **Docker Executor** [docker]: Containerized command execution (task executor implementation)
 - **gRPC Executor** [grpc]: gRPC service calls (task executor implementation)
 - **WebSocket Executor**: Bidirectional WebSocket communication (task executor implementation)
-- **aipartnerupflow API Executor**: Inter-instance API calls for distributed execution (task executor implementation)
+- **apflow API Executor**: Inter-instance API calls for distributed execution (task executor implementation)
 - **MCP Executor**: Model Context Protocol executor for accessing external tools and data sources (task executor implementation)
 - **MCP Server** [a2a]: MCP (Model Context Protocol) server exposing task orchestration as MCP tools and resources
 - **LLM Executor** [llm]: Direct LLM interaction via LiteLLM (supports OpenAI, Anthropic, Gemini, etc.)
@@ -71,7 +71,7 @@ All task executors implement the `ExecutableTask` interface:
 ### Core Library (Minimum - Pure Orchestration Framework)
 
 ```bash
-pip install aipartnerupflow
+pip install apflow
 ```
 
 **Includes**: Task orchestration specifications, core interfaces, storage (DuckDB)
@@ -81,50 +81,50 @@ pip install aipartnerupflow
 
 ```bash
 # CrewAI LLM task support (includes batch)
-pip install aipartnerupflow[crewai]
+pip install apflow[crewai]
 # Includes: CrewaiExecutor for LLM-based agent crews
 #           BatchCrewaiExecutor for atomic batch execution of multiple crews
 
 # A2A Protocol Server (Agent-to-Agent communication protocol)
-pip install aipartnerupflow[a2a]
-# Run A2A server: python -m aipartnerupflow.api.main
-# Or: aipartnerupflow-server (CLI command)
+pip install apflow[a2a]
+# Run A2A server: python -m apflow.api.main
+# Or: apflow-server (CLI command)
 
 # CLI tools
-pip install aipartnerupflow[cli]
-# Run CLI: aipartnerupflow or apflow
+pip install apflow[cli]
+# Run CLI: apflow or apflow
 
 # PostgreSQL storage
-pip install aipartnerupflow[postgres]
+pip install apflow[postgres]
 
 # SSH executor (remote command execution)
-pip install aipartnerupflow[ssh]
+pip install apflow[ssh]
 
 # Docker executor (containerized execution)
-pip install aipartnerupflow[docker]
+pip install apflow[docker]
 
 # gRPC executor (gRPC service calls)
-pip install aipartnerupflow[grpc]
+pip install apflow[grpc]
 
 # LLM support (LiteLLM, supports 100+ providers)
-pip install aipartnerupflow[llm]
+pip install apflow[llm]
 
 # Everything (includes all extras)
-pip install aipartnerupflow[all]
+pip install apflow[all]
 ```
 
 ## 🚀 Quick Start
 
-Get started with aipartnerupflow in minutes!
+Get started with apflow in minutes!
 
 ### Installation
 
 ```bash
 # Minimal installation (core only)
-pip install aipartnerupflow
+pip install apflow
 
 # With all features
-pip install aipartnerupflow[all]
+pip install apflow[all]
 ```
 
 ### As a Library (Pure Core)
@@ -132,7 +132,7 @@ pip install aipartnerupflow[all]
 **Using Task Orchestration Specifications:**
 
 ```python
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 # Create database session and task manager (core)
 db = create_session()  # or: db = get_default_session()
@@ -163,7 +163,7 @@ result = await task_manager.distribute_task_tree(task_tree)
 **Creating Custom Tasks (Traditional External Service Calls):**
 
 ```python
-from aipartnerupflow import ExecutableTask
+from apflow import ExecutableTask
 from typing import Dict, Any
 import aiohttp
 
@@ -195,8 +195,8 @@ class APICallTask(ExecutableTask):
 **Executing CrewAI (LLM) Tasks:**
 
 ```python
-# Requires: pip install aipartnerupflow[crewai]
-from aipartnerupflow.extensions.crewai import CrewaiExecutor
+# Requires: pip install apflow[crewai]
+from apflow.extensions.crewai import CrewaiExecutor
 
 # CrewAI task execution
 crew = CrewaiExecutor(
@@ -212,8 +212,8 @@ result = await crew.execute(inputs={...})
 **Using BatchCrewaiExecutor to batch multiple crews (atomic operation):**
 
 ```python
-# Requires: pip install aipartnerupflow[crewai]
-from aipartnerupflow.extensions.crewai import BatchCrewaiExecutor, CrewaiExecutor
+# Requires: pip install apflow[crewai]
+from apflow.extensions.crewai import BatchCrewaiExecutor, CrewaiExecutor
 
 # BatchCrewaiExecutor is a batch container - executes multiple crews as atomic operation
 batch = BatchCrewaiExecutor(
@@ -240,7 +240,7 @@ result = await batch.execute(inputs={...})
 
 ```bash
 # Run tasks (standard mode - recommended)
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"key": "value"}}]'
+apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"key": "value"}}]'
 
 # Or use the shorthand
 apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"key": "value"}}]'
@@ -263,13 +263,13 @@ apflow daemon stop
 The `[a2a]` extra provides an **A2A (Agent-to-Agent) Protocol** server built on Starlette/FastAPI.
 
 ```python
-from aipartnerupflow.api import create_app
+from apflow.api import create_app
 
 # Create A2A protocol server app
 app = create_app()
 
 # Run with: uvicorn app:app --port 8000
-# Or use the entry point: aipartnerupflow-server
+# Or use the entry point: apflow-server
 ```
 
 **Note**: The current `[a2a]` extra focuses on A2A protocol support. Future versions may
@@ -312,11 +312,11 @@ include additional FastAPI REST API endpoints for direct HTTP access without the
 See [docs/architecture/DIRECTORY_STRUCTURE.md](docs/architecture/DIRECTORY_STRUCTURE.md) for detailed directory structure and module descriptions.
 
 **Installation Strategy**:
-- `pip install aipartnerupflow`: Core library only (execution, base, storage, utils) - **NO CrewAI**
-- `pip install aipartnerupflow[crewai]`: Core + CrewAI support (includes BatchCrewaiExecutor)
-- `pip install aipartnerupflow[a2a]`: Core + A2A Protocol Server
-- `pip install aipartnerupflow[cli]`: Core + CLI tools
-- `pip install aipartnerupflow[all]`: Full installation (all features)
+- `pip install apflow`: Core library only (execution, base, storage, utils) - **NO CrewAI**
+- `pip install apflow[crewai]`: Core + CrewAI support (includes BatchCrewaiExecutor)
+- `pip install apflow[a2a]`: Core + A2A Protocol Server
+- `pip install apflow[cli]`: Core + CLI tools
+- `pip install apflow[all]`: Full installation (all features)
 
 **Note**: For examples and learning templates, see the test cases in `tests/integration/` and `tests/extensions/`.
 
@@ -360,7 +360,7 @@ Apache-2.0
 
 - **Documentation**: [docs/index.md](docs/index.md) - Complete documentation
 - **Website**: [aipartnerup.com](https://aipartnerup.com)
-- **GitHub**: [aipartnerup/aipartnerupflow](https://github.com/aipartnerup/aipartnerupflow)
-- **PyPI**: [aipartnerupflow](https://pypi.org/project/aipartnerupflow/)
-- **Issues**: [GitHub Issues](https://github.com/aipartnerup/aipartnerupflow/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/aipartnerup/aipartnerupflow/discussions)
+- **GitHub**: [aipartnerup/apflow](https://github.com/aipartnerup/apflow)
+- **PyPI**: [apflow](https://pypi.org/project/apflow/)
+- **Issues**: [GitHub Issues](https://github.com/aipartnerup/apflow/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/aipartnerup/apflow/discussions)

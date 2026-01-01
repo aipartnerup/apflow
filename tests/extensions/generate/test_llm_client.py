@@ -5,7 +5,7 @@ Test LLM client module
 import pytest
 import os
 from unittest.mock import Mock, patch, AsyncMock
-from aipartnerupflow.extensions.generate.llm_client import (
+from apflow.extensions.generate.llm_client import (
     OpenAIClient,
     AnthropicClient,
     create_llm_client

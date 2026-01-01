@@ -2,14 +2,14 @@
 
 > **Looking for a step-by-step beginner tutorial?** See the [Quick Start Guide](quick-start.md) for a hands-on introduction. This page lists all installation options and extras.
 
-aipartnerupflow can be installed with different feature sets depending on your needs.
+apflow can be installed with different feature sets depending on your needs.
 
 ## Core Library (Minimum)
 
 The core library provides pure task orchestration without any LLM dependencies:
 
 ```bash
-pip install aipartnerupflow
+pip install apflow
 ```
 
 **Includes:**
@@ -29,7 +29,7 @@ pip install aipartnerupflow
 ### CrewAI Support
 
 ```bash
-pip install aipartnerupflow[crewai]
+pip install apflow[crewai]
 ```
 
 **Includes:**
@@ -39,7 +39,7 @@ pip install aipartnerupflow[crewai]
 ### A2A Protocol Server
 
 ```bash
-pip install aipartnerupflow[a2a]
+pip install apflow[a2a]
 ```
 
 **Includes:**
@@ -49,16 +49,16 @@ pip install aipartnerupflow[a2a]
 **Usage:**
 ```bash
 # Run A2A server
-python -m aipartnerupflow.api.main
+python -m apflow.api.main
 
 # Or use the CLI command
-aipartnerupflow-server
+apflow-server
 ```
 
 ### CLI Tools
 
 ```bash
-pip install aipartnerupflow[cli]
+pip install apflow[cli]
 ```
 
 **Includes:**
@@ -67,7 +67,7 @@ pip install aipartnerupflow[cli]
 **Usage:**
 ```bash
 # Run CLI
-aipartnerupflow
+apflow
 
 # Or use the shorthand
 apflow
@@ -76,7 +76,7 @@ apflow
 ### PostgreSQL Storage
 
 ```bash
-pip install aipartnerupflow[postgres]
+pip install apflow[postgres]
 ```
 
 **Includes:**
@@ -85,7 +85,7 @@ pip install aipartnerupflow[postgres]
 ### SSH Executor
 
 ```bash
-pip install aipartnerupflow[ssh]
+pip install apflow[ssh]
 ```
 
 **Includes:**
@@ -95,7 +95,7 @@ pip install aipartnerupflow[ssh]
 ### Docker Executor
 
 ```bash
-pip install aipartnerupflow[docker]
+pip install apflow[docker]
 ```
 
 **Includes:**
@@ -105,7 +105,7 @@ pip install aipartnerupflow[docker]
 ### gRPC Executor
 
 ```bash
-pip install aipartnerupflow[grpc]
+pip install apflow[grpc]
 ```
 
 **Includes:**
@@ -115,7 +115,7 @@ pip install aipartnerupflow[grpc]
 ### Everything
 
 ```bash
-pip install aipartnerupflow[all]
+pip install apflow[all]
 ```
 
 **Includes:**
@@ -133,8 +133,8 @@ For development, install with development dependencies:
 
 ```bash
 # Clone the repository
-git clone https://github.com/aipartnerup/aipartnerupflow.git
-cd aipartnerupflow
+git clone https://github.com/aipartnerup/apflow.git
+cd apflow
 
 # Create virtual environment
 python -m venv .venv
@@ -149,8 +149,8 @@ pip install -e ".[all,dev]"
 After installation, verify the installation:
 
 ```python
-import aipartnerupflow
-print(aipartnerupflow.__version__)
+import apflow
+print(apflow.__version__)
 ```
 
 Or using the CLI (if installed with `[cli]`):

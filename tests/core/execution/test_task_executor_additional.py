@@ -3,9 +3,9 @@ Additional tests for TaskExecutor to increase coverage
 """
 
 import pytest
-from aipartnerupflow.core.execution.task_executor import TaskExecutor
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow.core.types import TaskTreeNode
+from apflow.core.execution.task_executor import TaskExecutor
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.types import TaskTreeNode
 
 
 class TestTaskExecutorAdditional:

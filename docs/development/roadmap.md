@@ -2,7 +2,7 @@
 
 ## Core Philosophy
 
-**aipartnerupflow** = Pure orchestration library + Optional framework components
+**apflow** = Pure orchestration library + Optional framework components
 
 - **Core:** Zero framework dependencies, embeddable in any project
 - **Optional:** A2A/MCP servers, CLI tools, protocol adapters
@@ -18,7 +18,7 @@
 
 **Implementation:**
 ```python
-# New file: src/aipartnerupflow/core/builders.py
+# New file: src/apflow/core/builders.py
 result = await (
     TaskBuilder(manager, "rest_executor")
     .with_name("fetch_data")
@@ -48,7 +48,7 @@ result = await (
 
 **Implementation:**
 ```python
-# New module: src/aipartnerupflow/core/protocols/
+# New module: src/apflow/core/protocols/
 class ProtocolAdapter(Protocol):
     async def handle_execute_request(self, request: dict) -> dict: ...
     async def handle_status_request(self, request: dict) -> dict: ...
@@ -74,7 +74,7 @@ class ProtocolAdapter(Protocol):
 
 **Implementation:**
 ```python
-# New: src/aipartnerupflow/core/protocols/graphql.py
+# New: src/apflow/core/protocols/graphql.py
 # Optional dependency: strawberry-graphql
 schema = create_graphql_schema()
 # Users integrate with any GraphQL server
@@ -106,7 +106,7 @@ graphql = ["strawberry-graphql>=0.219.0"]
 
 **Implementation:**
 ```python
-# New: src/aipartnerupflow/core/protocols/mqtt.py
+# New: src/apflow/core/protocols/mqtt.py
 mqtt_adapter = MQTTProtocolAdapter(task_manager)
 result = await mqtt_adapter.handle_mqtt_message(topic, payload)
 ```
@@ -137,7 +137,7 @@ mqtt = ["paho-mqtt>=1.6.1"]
 
 **Implementation:**
 ```python
-# New: src/aipartnerupflow/core/observability/
+# New: src/apflow/core/observability/
 class MetricsCollector(Protocol):
     async def record_task_start(self, task_id: str) -> None: ...
     async def record_task_complete(self, task_id: str, duration: float) -> None: ...
@@ -166,7 +166,7 @@ tracer.register_collector(PrometheusCollector())  # User provides
 
 **Implementation:**
 ```python
-# New: src/aipartnerupflow/patterns/
+# New: src/apflow/patterns/
 result = await map_reduce(
     items=urls,
     map_executor="rest_executor",
@@ -213,7 +213,7 @@ result = await map_reduce(
 
 **Implementation:**
 ```python
-# New: src/aipartnerupflow/testing/
+# New: src/apflow/testing/
 mocker = TaskMocker()
 mocker.mock_executor("rest_executor", return_value={"status": "ok"})
 result = await simulate_workflow(task_tree, speed_factor=10.0)
@@ -239,7 +239,7 @@ result = await simulate_workflow(task_tree, speed_factor=10.0)
 
 **Implementation:**
 ```python
-# New: src/aipartnerupflow/dev/
+# New: src/apflow/dev/
 apflow dev --watch src/tasks/
 # Auto-reloads when task files change
 ```
@@ -264,7 +264,7 @@ apflow dev --watch src/tasks/
 
 **Implementation:**
 ```python
-# New: src/aipartnerupflow/core/protocols/websocket_server.py
+# New: src/apflow/core/protocols/websocket_server.py
 # Enables peer-to-peer agent networks
 ```
 
@@ -284,7 +284,7 @@ apflow dev --watch src/tasks/
 ```toml
 [project.optional-dependencies]
 websocket-server = ["websockets>=12.0"]
-protocols = ["aipartnerupflow[graphql,mqtt,websocket-server]"]
+protocols = ["apflow[graphql,mqtt,websocket-server]"]
 ```
 
 ---
@@ -348,7 +348,7 @@ mqtt = ["paho-mqtt>=1.6.1"]
 websocket-server = ["websockets>=12.0"]
 
 # Protocol development bundle
-protocols = ["aipartnerupflow[graphql,mqtt,websocket-server]"]
+protocols = ["apflow[graphql,mqtt,websocket-server]"]
 
 # Observability (user chooses backend)
 observability = [
@@ -358,7 +358,7 @@ observability = [
 
 # Updated all
 all = [
-    "aipartnerupflow[crewai,a2a,cli,postgres,llm-key-config,ssh,docker,grpc,mcp,llm,protocols,observability]",
+    "apflow[crewai,a2a,cli,postgres,llm-key-config,ssh,docker,grpc,mcp,llm,protocols,observability]",
 ]
 ```
 
@@ -373,10 +373,10 @@ The following are **NOT core features** and will **NOT be implemented in the lib
 - ❌ **Multi-Tenancy** - Application-level concern
 - ❌ **RBAC** - Application-level concern
 - ❌ **Audit Logging** - Application-level concern (observability hooks enable this)
-- ✅ **Dashboard UI** - Separate project (aipartnerupflow-webapp)
+- ✅ **Dashboard UI** - Separate project (apflow-webapp)
 - ❌ **Secret Management** - Use external solutions (Vault, AWS Secrets Manager)
 
-**Rationale:** These are application/business concerns, not orchestration concerns. Users should implement these in their own projects (like `aipartnerupflow-demo`) using the extension system.
+**Rationale:** These are application/business concerns, not orchestration concerns. Users should implement these in their own projects (like `apflow-demo`) using the extension system.
 
 **How Users Add These:**
 - Extend TaskRoutes naturally (demo project shows pattern)
@@ -392,7 +392,7 @@ The following are **NOT core features** and will **NOT be implemented in the lib
 1. **"Library-First Architecture"** - Philosophy and design principles
 2. **"Protocol Adapter Guide"** - Building custom protocol adapters
 3. **"Fluent API Reference"** - TaskBuilder complete guide
-4. **"Embedding Guide"** - Using aipartnerupflow in your project
+4. **"Embedding Guide"** - Using apflow in your project
 
 ### Protocol Documentation
 5. **"GraphQL Integration"** - Schema reference and examples
@@ -443,4 +443,4 @@ The following are **NOT core features** and will **NOT be implemented in the lib
 
 ---
 
-This roadmap focuses on what makes aipartnerupflow unique: **protocol-first, library-first AI agent orchestration** that can be embedded anywhere and extended naturally.
+This roadmap focuses on what makes apflow unique: **protocol-first, library-first AI agent orchestration** that can be embedded anywhere and extended naturally.

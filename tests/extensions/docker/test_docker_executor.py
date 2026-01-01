@@ -7,7 +7,7 @@ Tests for Docker container execution functionality.
 import pytest
 import asyncio
 from unittest.mock import patch, MagicMock
-from aipartnerupflow.extensions.docker.docker_executor import DockerExecutor, DOCKER_AVAILABLE
+from apflow.extensions.docker.docker_executor import DockerExecutor, DOCKER_AVAILABLE
 
 
 class TestDockerExecutor:
@@ -43,7 +43,7 @@ class TestDockerExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_image(self):
         """Test error when image is missing"""
-        from aipartnerupflow.core.execution.errors import ValidationError
+        from apflow.core.execution.errors import ValidationError
         executor = DockerExecutor()
         
         with pytest.raises(ValidationError, match="image is required"):
@@ -55,7 +55,7 @@ class TestDockerExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_command(self):
         """Test error when command is missing"""
-        from aipartnerupflow.core.execution.errors import ValidationError
+        from apflow.core.execution.errors import ValidationError
         executor = DockerExecutor()
         
         with pytest.raises(ValidationError, match="command is required"):
@@ -66,8 +66,8 @@ class TestDockerExecutor:
     @pytest.mark.asyncio
     async def test_execute_docker_not_available(self):
         """Test behavior when docker is not installed"""
-        from aipartnerupflow.core.execution.errors import ConfigurationError
-        with patch("aipartnerupflow.extensions.docker.docker_executor.DOCKER_AVAILABLE", False):
+        from apflow.core.execution.errors import ConfigurationError
+        with patch("apflow.extensions.docker.docker_executor.DOCKER_AVAILABLE", False):
             executor = DockerExecutor()
             with pytest.raises(ConfigurationError, match="docker is not installed"):
                 await executor.execute({

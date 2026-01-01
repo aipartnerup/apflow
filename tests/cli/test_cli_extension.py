@@ -6,8 +6,8 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from aipartnerupflow.cli.decorators import cli_register, get_cli_registry, _cli_registry
-from aipartnerupflow.cli.extension import CLIExtension
+from apflow.cli.decorators import cli_register, get_cli_registry, _cli_registry
+from apflow.cli.extension import CLIExtension
 
 
 runner = CliRunner()

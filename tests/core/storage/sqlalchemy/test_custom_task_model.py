@@ -9,13 +9,13 @@ Run these tests explicitly with: pytest -m no_auto_run
 """
 import pytest
 from sqlalchemy import Column, String, Integer
-from aipartnerupflow import (
+from apflow import (
     set_task_model_class,
     get_task_model_class,
     task_model_register,
     clear_config,
 )
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.storage.sqlalchemy.models import TaskModel
 
 
 
@@ -144,8 +144,8 @@ class TestCustomTaskModelWithRepository:
         for the custom model to avoid conflicts.
         """
         import uuid
-        from aipartnerupflow.core.storage.sqlalchemy.models import TASK_TABLE_NAME
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.models import TASK_TABLE_NAME
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         from sqlalchemy import (
             Column, String, Integer, JSON, Text, Numeric, 
             Boolean, DateTime, func
@@ -268,15 +268,15 @@ class TestCustomTaskModelWithAgentExecutor:
         This verifies that all decorator features work together in a real execution environment.
         """
         # Clear any existing configuration
-        from aipartnerupflow import clear_config, set_task_model_class
+        from apflow import clear_config, set_task_model_class
         clear_config()
         
         # ========================================================================
         # Step 1: Define and set custom TaskModel with additional field
         # ========================================================================
         from sqlalchemy import Column, String, text
-        from aipartnerupflow.core.storage.sqlalchemy.models import TASK_TABLE_NAME, TaskModel
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.models import TASK_TABLE_NAME, TaskModel
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         # Add project_id column to existing table (if not exists)
         # In production, this would be done via Alembic migrations
@@ -310,7 +310,7 @@ class TestCustomTaskModelWithAgentExecutor:
         pre_hook_calls = []
         post_hook_calls = []
         
-        from aipartnerupflow import register_pre_hook, register_post_hook
+        from apflow import register_pre_hook, register_post_hook
         
         @register_pre_hook
         async def custom_pre_hook(task):
@@ -355,8 +355,8 @@ class TestCustomTaskModelWithAgentExecutor:
         # In production, hooks and TaskModel are registered at application startup before executor creation
         # For testing, we register hooks and set TaskModel first, then create executor to match production pattern
         # Since TaskExecutor is singleton, we need to refresh its config to pick up newly registered hooks and model
-        from aipartnerupflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
-        from aipartnerupflow.core.execution.task_executor import TaskExecutor
+        from apflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
+        from apflow.core.execution.task_executor import TaskExecutor
         from unittest.mock import patch
         
         executor = AIPartnerUpFlowAgentExecutor()
@@ -406,7 +406,7 @@ class TestCustomTaskModelWithAgentExecutor:
         context = self._create_request_context(tasks, metadata={"require_existing_tasks": True})
         
         # Execute with real database and custom model
-        with patch('aipartnerupflow.api.a2a.agent_executor.get_default_session') as mock_get_session_agent:
+        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session_agent:
             mock_get_session_agent.return_value = sync_db_session
             
             # Execute using executor with custom config
@@ -471,7 +471,7 @@ class TestCustomTaskModelWithAgentExecutor:
             # or by checking what post-hook received
             
             import json
-            from aipartnerupflow.core.utils.logger import get_logger
+            from apflow.core.utils.logger import get_logger
             logger = get_logger(__name__)
             
             logger.info("==Custom TaskModel Test Results==")

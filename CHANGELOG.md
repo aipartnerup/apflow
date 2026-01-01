@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [0.10.0] 2026-01-01
+
+### Changed
+- **Refactor import paths from aipartnerupflow to apflow across test files**
+  - Updated import statements in various test files to reflect the new module structure under apflow.
+  - Ensured all references to aipartnerupflow are replaced with apflow in test modules related to extensions, including but not limited to:
+    - crewai
+    - docker
+    - generate
+    - grpc
+    - http
+    - llm
+    - mcp
+    - ssh
+    - stdio
+    - websocket
+  - Adjusted integration tests to align with the new import paths.
+
 ## [0.9.0] 2025-12-28
 
 ### Added
@@ -16,7 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Explicit repository methods available for other field modifications (name, priority, status, etc.)
   - Thread-safe context isolation using Python's `ContextVar` (similar to Flask/Celery patterns)
   - Added `set_hook_context()` and `clear_hook_context()` internal functions for context management
-  - Exported to public API: `aipartnerupflow.get_hook_repository` and `aipartnerupflow.get_hook_session`
+  - Exported to public API: `apflow.get_hook_repository` and `apflow.get_hook_session`
   - Added comprehensive test coverage (16 tests):
     - Hook context basic operations and lifecycle
     - Multiple hooks sharing same session instance
@@ -65,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `crewai/crew_manager.py` → `crewai/crewai_executor.py`, with the class name updated to `CrewaiExecutor`
   - `crewai/batch_manager.py` → `crewai/batch_crewai_executor.py`, with the class name updated to `BatchCrewaiExecutor`
   - All related test cases (test_crewai_executor.py, test_batch_crewai_executor.py, etc.) have been batch-updated with corrected patch paths, mocks, imports, and class names to align with the new naming
-  - Resolved AttributeError: module 'aipartnerupflow.extensions.crewai' has no attribute 'crew_manager' and similar test failures caused by the renaming
+  - Resolved AttributeError: module 'apflow.extensions.crewai' has no attribute 'crew_manager' and similar test failures caused by the renaming
 
 
 ## [0.8.0] 2025-12-25
@@ -81,8 +100,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **CLI: Plugin Mechanism for Extensions**
   - Added `CLIExtension` class to facilitate creating CLI subcommands in external projects.
-  - Implemented dynamic subcommands discovery using Python `entry_points` (`aipartnerupflow.cli_plugins`).
-  - Allows projects like `aipartnerupflow-demo` to register commands (e.g., `apflow users stat`) without modifying the core library.
+  - Implemented dynamic subcommands discovery using Python `entry_points` (`apflow.cli_plugins`).
+  - Allows projects like `apflow-demo` to register commands (e.g., `apflow users stat`) without modifying the core library.
   - Supports both full `typer.Typer` apps and single-command callables as plugins.
 
 - **CLI: Improved Task Count Output**
@@ -250,11 +269,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `api/protocols.py`: Protocol management module with protocol selection and dependency checking
   - New `api/app.py`: Application creation module with `create_app_by_protocol()` and protocol-specific server creation functions
   - `api/main.py` now contains library-friendly entry points (`main()` and `create_runnable_app()` functions)
-  - **Benefits**: Better separation of concerns, easier to use in external projects like aipartnerupflow-demo
+  - **Benefits**: Better separation of concerns, easier to use in external projects like apflow-demo
   - **Migration**: Import paths updated:
-    - `from aipartnerupflow.api.extensions import initialize_extensions`
-    - `from aipartnerupflow.api.protocols import get_protocol_from_env, check_protocol_dependency`
-    - `from aipartnerupflow.api.app import create_app_by_protocol, create_a2a_server, create_mcp_server`
+    - `from apflow.api.extensions import initialize_extensions`
+    - `from apflow.api.protocols import get_protocol_from_env, check_protocol_dependency`
+    - `from apflow.api.app import create_app_by_protocol, create_a2a_server, create_mcp_server`
   - All existing imports from `api/main` continue to work via re-exports for backward compatibility
 
 - **Enhanced Library Usage Support in `api/main.py`**
@@ -263,12 +282,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Handles all initialization steps: .env loading, extension initialization, custom TaskModel loading, examples initialization
     - Supports custom routes, middleware, and TaskRoutes class via `**kwargs`
     - Can be used when you need the app object but want to run the server yourself
-    - Usage: `from aipartnerupflow.api.main import create_runnable_app; app = create_runnable_app()`
+    - Usage: `from apflow.api.main import create_runnable_app; app = create_runnable_app()`
   - **Enhanced `main()` function**: Now fully supports library usage
     - Can be called directly from external projects with custom configuration
     - Separates application configuration (passed to `create_runnable_app()`) from server configuration (uvicorn parameters)
     - Supports all uvicorn parameters: `host`, `port`, `workers`, `loop`, `limit_concurrency`, `limit_max_requests`, `access_log`
-    - Usage: `from aipartnerupflow.api.main import main; main(custom_routes=[...], port=8080)`
+    - Usage: `from apflow.api.main import main; main(custom_routes=[...], port=8080)`
   - **Smart .env File Loading**: New `_load_env_file()` function with priority-based discovery
     - Priority order: 1) Current working directory, 2) Main script's directory, 3) Library's own directory (development only)
     - Ensures that when used as a library, it loads `.env` from the consuming project, not from the library's installation directory
@@ -289,31 +308,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Default: `False` (backward compatible)
   - Added `task_routes_class` parameter to `create_app_by_protocol()` and server creation functions
   - Supports custom `TaskRoutes` class injection throughout the server creation chain
-  - Enables aipartnerupflow-demo to use standard API functions directly without workarounds
+  - Enables apflow-demo to use standard API functions directly without workarounds
   - All new parameters are optional with safe defaults for backward compatibility
 
 - **Executor Metadata API**
   - New `get_executor_metadata(executor_id)` function to query executor metadata
   - New `validate_task_format(task, executor_id)` function to validate tasks against executor schemas
   - New `get_all_executor_metadata()` function to get metadata for all executors
-  - Located in `aipartnerupflow.core.extensions.executor_metadata`
+  - Located in `apflow.core.extensions.executor_metadata`
   - Used by demo applications to generate accurate demo tasks
   - Returns: id, name, description, input_schema, examples, tags
 
 ### Removed
 - **Examples Module Deprecation**
-  - Removed `aipartnerupflow.examples` module from core library
-  - Removed `examples` CLI command (`aipartnerupflow examples init`)
+  - Removed `apflow.examples` module from core library
+  - Removed `examples` CLI command (`apflow examples init`)
   - Removed `examples = []` optional dependency from `pyproject.toml`
-  - **Migration**: Demo task initialization has been moved to the **aipartnerupflow-demo** project
+  - **Migration**: Demo task initialization has been moved to the **apflow-demo** project
   - Demo task definitions are now managed separately from the core library
   - This keeps the core library focused on orchestration functionality
-  - For demo tasks, please use [aipartnerupflow-demo](https://github.com/aipartnerup/aipartnerupflow-demo)
+  - For demo tasks, please use [apflow-demo](https://github.com/aipartnerup/apflow-demo)
 
 - **Examples API Methods**
   - Removed `examples.init` and `examples.status` API methods from system routes
   - These methods are no longer available in the API
-  - **Migration**: Use aipartnerupflow-demo for demo task initialization
+  - **Migration**: Use apflow-demo for demo task initialization
 
 ### Changed
 - **Session Management Refactoring**
@@ -333,11 +352,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - **JWT Token Generation Support**
-  - New `generate_token()` function in `aipartnerupflow.api.a2a.server` for generating JWT tokens
+  - New `generate_token()` function in `apflow.api.a2a.server` for generating JWT tokens
   - Supports custom payload, secret key, algorithm (default: HS256), and expiration (default: 30 days)
   - Uses `python-jose[cryptography]` for token generation and verification
   - Complements existing `verify_token()` function for complete JWT token lifecycle management
-  - Usage: `from aipartnerupflow.api.a2a.server import generate_token; token = generate_token({"user_id": "user123"}, secret_key)`
+  - Usage: `from apflow.api.a2a.server import generate_token; token = generate_token({"user_id": "user123"}, secret_key)`
 
 - **Cookie-based JWT Authentication**
   - Support for JWT token extraction from `request.cookies.get("Authorization")` in addition to Authorization header
@@ -401,7 +420,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Container operations (Docker): 1.0 second
     - LLM operations (CrewAI, Generate): 1.0-1.5 seconds
     - Local operations (SystemInfo, Command, Aggregate): 0.05-0.1 seconds
-  - **Global Demo Sleep Scale**: Configurable via `AIPARTNERUPFLOW_DEMO_SLEEP_SCALE` environment variable (default: 1.0)
+  - **Global Demo Sleep Scale**: Configurable via `APFLOW_DEMO_SLEEP_SCALE` environment variable (default: 1.0)
     - Allows adjusting demo execution speed globally (e.g., `0.5` for faster, `2.0` for slower)
     - API: `set_demo_sleep_scale(scale)` and `get_demo_sleep_scale()` functions
   - **CrewAI Demo Support**: `CrewaiExecutor` and `BatchCrewaiExecutor` generate realistic demo results:
@@ -437,8 +456,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Removed
 - **Redundant decorators.py file**
-  - Removed `src/aipartnerupflow/decorators.py` as it was no longer used
-  - Functionality superseded by `src/aipartnerupflow/core/decorators.py`
+  - Removed `src/apflow/decorators.py` as it was no longer used
+  - Functionality superseded by `src/apflow/core/decorators.py`
   - No impact on existing code (file was not imported by any other modules)
 
 
@@ -497,8 +516,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Cancellation support
     - Full test coverage with 13+ test cases
   
-  - **aipartnerupflow API Executor** (`apflow_api_executor`)
-    - Call other aipartnerupflow API instances for distributed execution
+  - **apflow API Executor** (`apflow_api_executor`)
+    - Call other apflow API instances for distributed execution
     - Support for all task management methods (tasks.execute, tasks.create, tasks.get, etc.)
     - Authentication via JWT tokens
     - Task completion polling with production-grade retry logic:
@@ -543,7 +562,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Full test coverage with 20+ test cases
 
 - **MCP (Model Context Protocol) Server** (`api/mcp/`)
-  - Expose aipartnerupflow task orchestration capabilities as MCP tools and resources
+  - Expose apflow task orchestration capabilities as MCP tools and resources
   - Support for stdio and HTTP/SSE transport modes
   - MCP Tools (8 tools):
     - `execute_task` - Execute tasks or task trees
@@ -563,7 +582,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - stdio mode: Standalone process for local integration
   - Comprehensive error handling with proper HTTP status codes
   - Full test coverage with 45+ test cases across all components
-  - Protocol selection via `AIPARTNERUPFLOW_API_PROTOCOL=mcp` environment variable
+  - Protocol selection via `APFLOW_API_PROTOCOL=mcp` environment variable
   - CLI protocol selection: `--protocol` parameter for `serve` and `daemon` commands
     - Default protocol: `a2a`
     - Supported protocols: `a2a`, `mcp`
@@ -593,8 +612,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Comprehensive test command examples in documentation
   - Configuration via environment variables or input parameters:
     - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for LLM authentication
-    - `AIPARTNERUPFLOW_LLM_PROVIDER` for provider selection (default: openai)
-    - `AIPARTNERUPFLOW_LLM_MODEL` for model selection
+    - `APFLOW_LLM_PROVIDER` for provider selection (default: openai)
+    - `APFLOW_LLM_MODEL` for model selection
   - Full test coverage with 28+ executor test cases and 8 API endpoint test cases
   - Usage examples:
     ```python
@@ -845,8 +864,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CORS Support**
   - Added CORS middleware to API server for cross-origin requests
   - Default configuration allows `localhost:3000`, `localhost:3001` and common development ports
-  - Configurable via `AIPARTNERUPFLOW_CORS_ORIGINS` environment variable (comma-separated list)
-  - Development mode: `AIPARTNERUPFLOW_CORS_ALLOW_ALL=true` to allow all origins
+  - Configurable via `APFLOW_CORS_ORIGINS` environment variable (comma-separated list)
+  - Development mode: `APFLOW_CORS_ALLOW_ALL=true` to allow all origins
   - Supports credentials, all HTTP methods, and all headers
 
 - **API Architecture Refactoring**
@@ -924,12 +943,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Task management APIs: `/system/task_create`, `/system/task_get`, `/system/task_update`, `/system/task_delete`
   - Optional JWT authentication middleware
   - Support for custom TaskModel via `task_model_class` parameter
-  - Environment variable support for custom TaskModel loading (`AIPARTNERUPFLOW_TASK_MODEL_CLASS`)
+  - Environment variable support for custom TaskModel loading (`APFLOW_TASK_MODEL_CLASS`)
 
 - **Storage Module**
   - SQLAlchemy-based storage with DuckDB (default) and PostgreSQL support
   - Automatic table creation on first use
-  - Configurable table name via `AIPARTNERUPFLOW_TASK_TABLE_NAME` (default: `apflow_tasks`)
+  - Configurable table name via `APFLOW_TASK_TABLE_NAME` (default: `apflow_tasks`)
   - Session factory with sync/async support
 
 - **Custom TaskModel Support**

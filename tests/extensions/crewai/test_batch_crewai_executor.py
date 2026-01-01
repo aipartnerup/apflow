@@ -14,9 +14,9 @@ from unittest.mock import Mock, patch, AsyncMock
 
 # Try to import BatchCrewaiExecutor, skip tests if not available
 try:
-    from aipartnerupflow.extensions.crewai import BatchCrewaiExecutor
-    from aipartnerupflow.extensions.crewai import CrewaiExecutor
-    from aipartnerupflow.core.extensions import get_registry
+    from apflow.extensions.crewai import BatchCrewaiExecutor
+    from apflow.extensions.crewai import CrewaiExecutor
+    from apflow.core.extensions import get_registry
 except ImportError:
     BatchCrewaiExecutor = None
     CrewaiExecutor = None
@@ -46,7 +46,7 @@ class TestBatchCrewaiExecutorRegistration:
         assert extension.name == "Batch CrewAI Executor"
         
         # Verify it's registered as an executor
-        from aipartnerupflow.core.extensions.types import ExtensionCategory
+        from apflow.core.extensions.types import ExtensionCategory
         assert extension.category == ExtensionCategory.EXECUTOR
     
     def test_batch_crewai_executor_properties(self):
@@ -61,7 +61,7 @@ class TestBatchCrewaiExecutorRegistration:
     
     def test_batch_crewai_executor_inheritance(self):
         """Test that BatchCrewaiExecutor inherits from BaseTask"""
-        from aipartnerupflow.core.base import BaseTask
+        from apflow.core.base import BaseTask
         assert issubclass(BatchCrewaiExecutor, BaseTask)
 
 
@@ -146,7 +146,7 @@ class TestBatchCrewaiExecutorExecution:
         
         # Mock CrewaiExecutor creation (it's imported inside execute_works method)
         # Need to patch where it's imported from, not where it's used
-        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewaiExecutor', side_effect=[mock_crewai_executor1, mock_crewai_executor2]):
+        with patch('apflow.extensions.crewai.crewai_executor.CrewaiExecutor', side_effect=[mock_crewai_executor1, mock_crewai_executor2]):
             # Execute batch
             result = await batch_crewai_executor.execute()
             
@@ -203,7 +203,7 @@ class TestBatchCrewaiExecutorExecution:
         )
         
         # Mock CrewaiExecutor creation (it's imported inside execute_works method)
-        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
+        with patch('apflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
             mock_crew_class.side_effect = [mock_crewai_executor1, mock_crewai_executor2]
             
             # Execute batch - should fail atomically
@@ -234,7 +234,7 @@ class TestBatchCrewaiExecutorExecution:
         )
         
         # Mock CrewaiExecutor creation (it's imported inside execute_works method)
-        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
+        with patch('apflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
             mock_crew_class.return_value = mock_crewai_executor
             
             # Execute batch - should handle exception
@@ -386,7 +386,7 @@ class TestBatchCrewaiExecutorExecution:
         )
         
         # Mock CrewaiExecutor creation
-        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
+        with patch('apflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
             mock_crew_class.side_effect = [mock_crewai_executor1, mock_crewai_executor2]
             
             # Execute batch - should be cancelled after first work
@@ -491,7 +491,7 @@ class TestBatchCrewaiExecutorExecution:
         )
         
         # Mock CrewaiExecutor creation
-        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
+        with patch('apflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
             mock_crew_class.side_effect = [mock_crewai_executor1, mock_crewai_executor2, mock_crewai_executor3]
             
             # Execute batch - should be cancelled after second work
@@ -549,7 +549,7 @@ class TestBatchCrewaiExecutorExecution:
         )
         
         # Mock CrewaiExecutor creation
-        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
+        with patch('apflow.extensions.crewai.crewai_executor.CrewaiExecutor') as mock_crew_class:
             mock_crew_class.return_value = mock_crewai_executor1
             
             # Execute batch - should be cancelled after first work

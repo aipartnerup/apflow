@@ -8,7 +8,7 @@ Tests for the unified decorators system (Flask-style API):
 - executor_register
 """
 import pytest
-from aipartnerupflow import (
+from apflow import (
     register_pre_hook,
     register_post_hook,
     set_task_model_class,
@@ -16,9 +16,9 @@ from aipartnerupflow import (
     clear_config,
     executor_register,
 )
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
-from aipartnerupflow.core.extensions.types import ExtensionCategory
-from aipartnerupflow.core.utils.logger import get_logger
+from apflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.extensions.types import ExtensionCategory
+from apflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -39,7 +39,7 @@ class TestConfigDecorators:
             hook_called.append(task.id)
         
         # Verify hook was registered
-        from aipartnerupflow.core.config import get_pre_hooks
+        from apflow.core.config import get_pre_hooks
         hooks = get_pre_hooks()
         assert len(hooks) == 1
         assert hooks[0] == my_pre_hook
@@ -58,7 +58,7 @@ class TestConfigDecorators:
         register_pre_hook(my_pre_hook)
         
         # Verify hook was registered
-        from aipartnerupflow.core.config import get_pre_hooks
+        from apflow.core.config import get_pre_hooks
         hooks = get_pre_hooks()
         assert len(hooks) == 1
         assert hooks[0] == my_pre_hook
@@ -72,7 +72,7 @@ class TestConfigDecorators:
             hook_called.append((task.id, result))
         
         # Verify hook was registered
-        from aipartnerupflow.core.config import get_post_hooks
+        from apflow.core.config import get_post_hooks
         hooks = get_post_hooks()
         assert len(hooks) == 1
         assert hooks[0] == my_post_hook
@@ -91,7 +91,7 @@ class TestConfigDecorators:
         register_post_hook(my_post_hook)
         
         # Verify hook was registered
-        from aipartnerupflow.core.config import get_post_hooks
+        from apflow.core.config import get_post_hooks
         hooks = get_post_hooks()
         assert len(hooks) == 1
         assert hooks[0] == my_post_hook
@@ -110,7 +110,7 @@ class TestConfigDecorators:
         async def hook3(task):
             pass
         
-        from aipartnerupflow.core.config import get_pre_hooks
+        from apflow.core.config import get_pre_hooks
         hooks = get_pre_hooks()
         assert len(hooks) == 3
         assert hooks == [hook1, hook2, hook3]
@@ -125,7 +125,7 @@ class TestConfigDecorators:
         async def hook2(task, inputs, result):
             pass
         
-        from aipartnerupflow.core.config import get_post_hooks
+        from apflow.core.config import get_post_hooks
         hooks = get_post_hooks()
         assert len(hooks) == 2
         assert hooks == [hook1, hook2]
@@ -140,7 +140,7 @@ class TestConfigDecorators:
         def sync_post_hook(task, inputs, result):
             pass
         
-        from aipartnerupflow.core.config import get_pre_hooks, get_post_hooks
+        from apflow.core.config import get_pre_hooks, get_post_hooks
         assert len(get_pre_hooks()) == 1
         assert len(get_post_hooks()) == 1
     
@@ -173,7 +173,7 @@ class TestConfigDecorators:
     async def test_hooks_with_agent_executor(self):
         """Test that hooks registered via decorators work with AgentExecutor"""
         try:
-            from aipartnerupflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
+            from apflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
         except ImportError:
             pytest.skip("a2a module not available, skipping AgentExecutor test")
             return
@@ -202,7 +202,7 @@ class TestConfigDecorators:
     async def test_hooks_with_a2a_server(self):
         """Test that hooks registered via decorators work with create_a2a_server"""
         try:
-            from aipartnerupflow.api.a2a.server import create_a2a_server
+            from apflow.api.a2a.server import create_a2a_server
         except ImportError:
             pytest.skip("a2a module not available, skipping create_a2a_server test")
             return
@@ -228,7 +228,7 @@ class TestExtensionDecorator:
     
     def setup_method(self):
         """Clear extension registry before each test"""
-        from aipartnerupflow.core.extensions import get_registry
+        from apflow.core.extensions import get_registry
         registry = get_registry()
         # Clear all registrations
         registry._executor_classes.clear()
@@ -238,7 +238,7 @@ class TestExtensionDecorator:
     
     def test_executor_register_decorator(self):
         """Test @executor_register decorator"""
-        from aipartnerupflow.core.base import BaseTask
+        from apflow.core.base import BaseTask
         
         @executor_register()
         class TestExecutor(BaseTask):
@@ -257,7 +257,7 @@ class TestExtensionDecorator:
                 return {"type": "object"}
         
         # Verify extension was registered
-        from aipartnerupflow.core.extensions import get_registry
+        from apflow.core.extensions import get_registry
         registry = get_registry()
         
         # Check if executor can be retrieved
@@ -271,7 +271,7 @@ class TestExtensionDecorator:
     
     def test_executor_register_with_factory(self):
         """Test @executor_register with custom factory"""
-        from aipartnerupflow.core.base import BaseTask
+        from apflow.core.base import BaseTask
         
         def custom_factory(inputs):
             executor = TestExecutorWithFactory(inputs=inputs)
@@ -296,7 +296,7 @@ class TestExtensionDecorator:
                 return {"type": "object"}
         
         # Verify extension was registered with custom factory
-        from aipartnerupflow.core.extensions import get_registry
+        from apflow.core.extensions import get_registry
         registry = get_registry()
         
         executor_instance = registry.create_executor_instance(
@@ -318,7 +318,7 @@ class TestDecoratorIntegration:
     async def test_full_decorator_workflow(self):
         """Test complete workflow using all decorators"""
         try:
-            from aipartnerupflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
+            from apflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
         except ImportError:
             pytest.skip("a2a module not available, skipping full workflow test")
             return
@@ -357,7 +357,7 @@ class TestDecoratorIntegration:
     def test_decorator_imports(self):
         """Test that all decorators can be imported from main package"""
         # Test that decorators are available from main package
-        from aipartnerupflow import (
+        from apflow import (
             register_pre_hook,
             register_post_hook,
             set_task_model_class,
@@ -388,7 +388,7 @@ class TestConfigRegistryIsolation:
             pass
         
         # Verify it's registered
-        from aipartnerupflow.core.config import get_pre_hooks
+        from apflow.core.config import get_pre_hooks
         assert len(get_pre_hooks()) == 1
         
         # Clear config

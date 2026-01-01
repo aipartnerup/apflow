@@ -16,10 +16,10 @@ from unittest.mock import Mock, AsyncMock, patch
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
-from aipartnerupflow.api.routes.tasks import TaskRoutes
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow.core.config import get_task_model_class
-from aipartnerupflow.core.execution.task_tracker import TaskTracker
+from apflow.api.routes.tasks import TaskRoutes
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.config import get_task_model_class
+from apflow.core.execution.task_tracker import TaskTracker
 
 
 @pytest.fixture
@@ -74,7 +74,7 @@ class TestHandleTaskExecute:
 
         # Mock TaskExecutor to avoid actual execution
         with patch(
-            "aipartnerupflow.core.execution.task_executor.TaskExecutor"
+            "apflow.core.execution.task_executor.TaskExecutor"
         ) as mock_executor_class:
             mock_executor = Mock()
             mock_executor.execute_task_by_id = AsyncMock(
@@ -84,7 +84,7 @@ class TestHandleTaskExecute:
 
             # Mock TaskTracker
             with patch(
-                "aipartnerupflow.core.execution.task_tracker.TaskTracker"
+                "apflow.core.execution.task_tracker.TaskTracker"
             ) as mock_tracker_class:
                 mock_tracker = Mock()
                 mock_tracker.is_task_running = Mock(return_value=False)
@@ -123,7 +123,7 @@ class TestHandleTaskExecute:
 
         # Mock TaskExecutor to avoid actual execution
         with patch(
-            "aipartnerupflow.core.execution.task_executor.TaskExecutor"
+            "apflow.core.execution.task_executor.TaskExecutor"
         ) as mock_executor_class:
             mock_executor = Mock()
             mock_executor.execute_task_by_id = AsyncMock(
@@ -133,7 +133,7 @@ class TestHandleTaskExecute:
 
             # Mock TaskTracker
             with patch(
-                "aipartnerupflow.core.execution.task_tracker.TaskTracker"
+                "apflow.core.execution.task_tracker.TaskTracker"
             ) as mock_tracker_class:
                 mock_tracker = Mock()
                 mock_tracker.is_task_running = Mock(return_value=False)
@@ -167,7 +167,7 @@ class TestHandleTaskExecute:
 
         # Mock TaskExecutor to avoid actual execution
         with patch(
-            "aipartnerupflow.core.execution.task_executor.TaskExecutor"
+            "apflow.core.execution.task_executor.TaskExecutor"
         ) as mock_executor_class:
             mock_executor = Mock()
             mock_executor.execute_task_by_id = AsyncMock(
@@ -177,7 +177,7 @@ class TestHandleTaskExecute:
 
             # Mock TaskTracker
             with patch(
-                "aipartnerupflow.core.execution.task_tracker.TaskTracker"
+                "apflow.core.execution.task_tracker.TaskTracker"
             ) as mock_tracker_class:
                 mock_tracker = Mock()
                 mock_tracker.is_task_running = Mock(return_value=False)
@@ -185,7 +185,7 @@ class TestHandleTaskExecute:
 
                 # Mock get_task_streaming_events to return empty list initially
                 with patch(
-                    "aipartnerupflow.api.routes.tasks.get_task_streaming_events",
+                    "apflow.api.routes.tasks.get_task_streaming_events",
                     new_callable=AsyncMock,
                 ) as mock_get_events:
                     mock_get_events.return_value = []
@@ -218,7 +218,7 @@ class TestHandleTaskExecute:
 
         # Mock TaskExecutor to avoid actual execution
         with patch(
-            "aipartnerupflow.core.execution.task_executor.TaskExecutor"
+            "apflow.core.execution.task_executor.TaskExecutor"
         ) as mock_executor_class:
             mock_executor = Mock()
             mock_executor.execute_task_by_id = AsyncMock(
@@ -228,7 +228,7 @@ class TestHandleTaskExecute:
 
             # Mock TaskTracker
             with patch(
-                "aipartnerupflow.core.execution.task_tracker.TaskTracker"
+                "apflow.core.execution.task_tracker.TaskTracker"
             ) as mock_tracker_class:
                 mock_tracker = Mock()
                 mock_tracker.is_task_running = Mock(return_value=False)
@@ -236,7 +236,7 @@ class TestHandleTaskExecute:
 
                 # Mock get_task_streaming_events to return empty list initially
                 with patch(
-                    "aipartnerupflow.api.routes.tasks.get_task_streaming_events",
+                    "apflow.api.routes.tasks.get_task_streaming_events",
                     new_callable=AsyncMock,
                 ) as mock_get_events:
                     mock_get_events.return_value = []
@@ -267,7 +267,7 @@ class TestHandleTaskExecute:
         request_id = str(uuid.uuid4())
 
         # Mock TaskTracker to return True for is_task_running
-        with patch("aipartnerupflow.core.execution.task_tracker.TaskTracker") as mock_tracker_class:
+        with patch("apflow.core.execution.task_tracker.TaskTracker") as mock_tracker_class:
             mock_tracker = Mock()
             mock_tracker.is_task_running = Mock(return_value=True)
             mock_tracker_class.return_value = mock_tracker
@@ -303,7 +303,7 @@ class TestHandleTaskExecute:
         request_id = str(uuid.uuid4())
 
         # Import TaskTracker to patch its instance method
-        from aipartnerupflow.core.execution.task_tracker import TaskTracker
+        from apflow.core.execution.task_tracker import TaskTracker
 
         # Patch TaskTracker.is_task_running on the instance (not the class)
         # This avoids the singleton super() issue
@@ -311,7 +311,7 @@ class TestHandleTaskExecute:
             # Mock TaskExecutor to avoid actual execution, but allow code to continue
             # The error should occur when creating WebhookStreamingContext
             with patch(
-                "aipartnerupflow.core.execution.task_executor.TaskExecutor"
+                "apflow.core.execution.task_executor.TaskExecutor"
             ) as mock_executor_class:
                 mock_executor = Mock()
                 mock_executor.execute_task_by_id = AsyncMock()
@@ -327,7 +327,7 @@ class TestHandleTaskExecute:
         request_id = str(uuid.uuid4())
 
         # Mock TaskCreator.create_task_copy
-        with patch("aipartnerupflow.api.routes.tasks.TaskCreator") as mock_creator_class:
+        with patch("apflow.api.routes.tasks.TaskCreator") as mock_creator_class:
             mock_creator = Mock()
             mock_copied_task = Mock()
             mock_copied_task.id = "copied-task-id"
@@ -362,7 +362,7 @@ class TestHandleTaskExecute:
 
                 # Mock TaskExecutor
                 with patch(
-                    "aipartnerupflow.core.execution.task_executor.TaskExecutor"
+                    "apflow.core.execution.task_executor.TaskExecutor"
                 ) as mock_executor_class:
                     mock_executor = Mock()
                     mock_executor.execute_task_by_id = AsyncMock(
@@ -407,7 +407,7 @@ class TestHandleTaskExecute:
         request_id = str(uuid.uuid4())
 
         # Mock TaskCreator.create_task_copy
-        with patch("aipartnerupflow.api.routes.tasks.TaskCreator") as mock_creator_class:
+        with patch("apflow.api.routes.tasks.TaskCreator") as mock_creator_class:
             mock_creator = Mock()
             mock_copied_task = Mock()
             mock_copied_task.id = "copied-task-id"
@@ -436,7 +436,7 @@ class TestHandleTaskExecute:
 
                 # Mock TaskExecutor
                 with patch(
-                    "aipartnerupflow.core.execution.task_executor.TaskExecutor"
+                    "apflow.core.execution.task_executor.TaskExecutor"
                 ) as mock_executor_class:
                     mock_executor = Mock()
                     mock_executor.execute_task_by_id = AsyncMock(
@@ -471,7 +471,7 @@ class TestHandleTaskExecute:
         request_id = str(uuid.uuid4())
 
         # Mock TaskCreator.create_task_copy
-        with patch("aipartnerupflow.api.routes.tasks.TaskCreator") as mock_creator_class:
+        with patch("apflow.api.routes.tasks.TaskCreator") as mock_creator_class:
             mock_creator = Mock()
             mock_copied_task = Mock()
             mock_copied_task.id = "copied-task-id"
@@ -500,7 +500,7 @@ class TestHandleTaskExecute:
 
                 # Mock TaskExecutor
                 with patch(
-                    "aipartnerupflow.core.execution.task_executor.TaskExecutor"
+                    "apflow.core.execution.task_executor.TaskExecutor"
                 ) as mock_executor_class:
                     mock_executor = Mock()
                     mock_executor.execute_task_by_id = AsyncMock(
@@ -850,10 +850,10 @@ class TestHandleTaskGenerate:
             mock_executor.execute_task_tree = mock_execute_task_tree
 
             with patch(
-                "aipartnerupflow.api.routes.tasks.TaskRepository", return_value=mock_repository
+                "apflow.api.routes.tasks.TaskRepository", return_value=mock_repository
             ):
                 with patch(
-                    "aipartnerupflow.core.execution.task_executor.TaskExecutor",
+                    "apflow.core.execution.task_executor.TaskExecutor",
                     return_value=mock_executor,
                 ):
                     result = await task_routes.handle_task_generate(
@@ -924,14 +924,14 @@ class TestHandleTaskGenerate:
             mock_creator.create_task_tree_from_array = AsyncMock(return_value=mock_task_tree)
 
             with patch(
-                "aipartnerupflow.api.routes.tasks.TaskRepository", return_value=mock_repository
+                "apflow.api.routes.tasks.TaskRepository", return_value=mock_repository
             ):
                 with patch(
-                    "aipartnerupflow.core.execution.task_executor.TaskExecutor",
+                    "apflow.core.execution.task_executor.TaskExecutor",
                     return_value=mock_executor,
                 ):
                     with patch(
-                        "aipartnerupflow.api.routes.tasks.TaskCreator", return_value=mock_creator
+                        "apflow.api.routes.tasks.TaskCreator", return_value=mock_creator
                     ):
                         result = await task_routes.handle_task_generate(
                             params, mock_request, request_id
@@ -959,7 +959,7 @@ class TestHandleTaskGenerate:
         """Test error handling when LLM API key is missing"""
         import os
         from unittest.mock import patch
-        from aipartnerupflow.core.utils.llm_key_context import clear_llm_key_context
+        from apflow.core.utils.llm_key_context import clear_llm_key_context
 
         # Clear context and ensure no API key in environment
         clear_llm_key_context()
@@ -975,7 +975,7 @@ class TestHandleTaskGenerate:
         """Test task generation using X-LLM-API-KEY header"""
         import os
         from unittest.mock import patch, AsyncMock, Mock
-        from aipartnerupflow.core.utils.llm_key_context import set_llm_key_from_header, clear_llm_key_context
+        from apflow.core.utils.llm_key_context import set_llm_key_from_header, clear_llm_key_context
 
         # Clear context first, then set header key
         clear_llm_key_context()
@@ -1012,10 +1012,10 @@ class TestHandleTaskGenerate:
             mock_executor.execute_task_tree = mock_execute_task_tree
 
             with patch(
-                "aipartnerupflow.api.routes.tasks.TaskRepository", return_value=mock_repository
+                "apflow.api.routes.tasks.TaskRepository", return_value=mock_repository
             ):
                 with patch(
-                    "aipartnerupflow.core.execution.task_executor.TaskExecutor",
+                    "apflow.core.execution.task_executor.TaskExecutor",
                     return_value=mock_executor,
                 ):
                     result = await task_routes.handle_task_generate(
@@ -1076,10 +1076,10 @@ class TestHandleTaskGenerate:
             mock_executor.execute_task_tree = mock_execute_task_tree
 
             with patch(
-                "aipartnerupflow.api.routes.tasks.TaskRepository", return_value=mock_repository
+                "apflow.api.routes.tasks.TaskRepository", return_value=mock_repository
             ):
                 with patch(
-                    "aipartnerupflow.core.execution.task_executor.TaskExecutor",
+                    "apflow.core.execution.task_executor.TaskExecutor",
                     return_value=mock_executor,
                 ):
                     await task_routes.handle_task_generate(
@@ -1129,10 +1129,10 @@ class TestHandleTaskGenerate:
             mock_executor.execute_task_tree = mock_execute_task_tree
 
             with patch(
-                "aipartnerupflow.api.routes.tasks.TaskRepository", return_value=mock_repository
+                "apflow.api.routes.tasks.TaskRepository", return_value=mock_repository
             ):
                 with patch(
-                    "aipartnerupflow.core.execution.task_executor.TaskExecutor",
+                    "apflow.core.execution.task_executor.TaskExecutor",
                     return_value=mock_executor,
                 ):
                     with pytest.raises(ValueError, match="Task generation failed"):
@@ -1174,10 +1174,10 @@ class TestHandleTaskGenerate:
             mock_executor.execute_task_tree = mock_execute_task_tree
 
             with patch(
-                "aipartnerupflow.api.routes.tasks.TaskRepository", return_value=mock_repository
+                "apflow.api.routes.tasks.TaskRepository", return_value=mock_repository
             ):
                 with patch(
-                    "aipartnerupflow.core.execution.task_executor.TaskExecutor",
+                    "apflow.core.execution.task_executor.TaskExecutor",
                     return_value=mock_executor,
                 ):
                     with pytest.raises(ValueError, match="No tasks were generated"):
@@ -1214,10 +1214,10 @@ class TestHandleTaskGenerate:
         """Test that user_id from JWT token is correctly propagated to generated tasks"""
         import os
         from unittest.mock import patch, AsyncMock, Mock
-        from aipartnerupflow.api.a2a.server import generate_token, verify_token
-        from aipartnerupflow.api.routes.tasks import TaskRoutes
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from aipartnerupflow.core.config import get_task_model_class
+        from apflow.api.a2a.server import generate_token, verify_token
+        from apflow.api.routes.tasks import TaskRoutes
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.config import get_task_model_class
         
         # Generate JWT token with user_id
         secret_key = "test_secret_key_for_user_id_propagation"
@@ -1276,7 +1276,7 @@ class TestHandleTaskGenerate:
             
             # Mock TaskExecutor.execute_task_tree to actually call generate_executor
             # This will test the full flow including _post_process_tasks
-            from aipartnerupflow.extensions.generate.generate_executor import GenerateExecutor
+            from apflow.extensions.generate.generate_executor import GenerateExecutor
             
             async def mock_execute_task_tree(*args, **kwargs):
                 # Actually execute generate_executor to test _post_process_tasks
@@ -1288,7 +1288,7 @@ class TestHandleTaskGenerate:
                 mock_llm_client = Mock()
                 mock_llm_client.generate = AsyncMock(return_value=mock_llm_response)
                 
-                with patch('aipartnerupflow.extensions.generate.generate_executor.create_llm_client', return_value=mock_llm_client):
+                with patch('apflow.extensions.generate.generate_executor.create_llm_client', return_value=mock_llm_client):
                     # Execute with user_id in inputs (from handle_task_generate)
                     result = await executor.execute({
                         "requirement": "create a task to check cpu",
@@ -1302,10 +1302,10 @@ class TestHandleTaskGenerate:
             mock_executor.execute_task_tree = mock_execute_task_tree
             
             with patch(
-                "aipartnerupflow.api.routes.tasks.TaskRepository", return_value=mock_repository
+                "apflow.api.routes.tasks.TaskRepository", return_value=mock_repository
             ):
                 with patch(
-                    "aipartnerupflow.core.execution.task_executor.TaskExecutor",
+                    "apflow.core.execution.task_executor.TaskExecutor",
                     return_value=mock_executor,
                 ):
                     result = await task_routes.handle_task_generate(
@@ -1354,10 +1354,10 @@ class TestAdminPermission:
     @pytest.mark.asyncio
     async def test_regular_user_can_only_see_own_tasks(self, use_test_db_session):
         """Test that regular user without user_id param can only see their own tasks"""
-        from aipartnerupflow.api.routes.tasks import TaskRoutes
-        from aipartnerupflow.api.a2a.server import generate_token, verify_token
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from aipartnerupflow.core.config import get_task_model_class
+        from apflow.api.routes.tasks import TaskRoutes
+        from apflow.api.a2a.server import generate_token, verify_token
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.config import get_task_model_class
 
         # Setup: Create tasks for different users
         task_repository = TaskRepository(
@@ -1418,10 +1418,10 @@ class TestAdminPermission:
     @pytest.mark.asyncio
     async def test_admin_user_can_see_all_tasks(self, use_test_db_session):
         """Test that admin user without user_id param can see all tasks"""
-        from aipartnerupflow.api.routes.tasks import TaskRoutes
-        from aipartnerupflow.api.a2a.server import generate_token, verify_token
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from aipartnerupflow.core.config import get_task_model_class
+        from apflow.api.routes.tasks import TaskRoutes
+        from apflow.api.a2a.server import generate_token, verify_token
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.config import get_task_model_class
 
         # Setup: Create tasks for different users
         task_repository = TaskRepository(
@@ -1482,10 +1482,10 @@ class TestAdminPermission:
     @pytest.mark.asyncio
     async def test_admin_user_can_query_specific_user_tasks(self, use_test_db_session):
         """Test that admin user can query tasks for any specific user_id"""
-        from aipartnerupflow.api.routes.tasks import TaskRoutes
-        from aipartnerupflow.api.a2a.server import generate_token, verify_token
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from aipartnerupflow.core.config import get_task_model_class
+        from apflow.api.routes.tasks import TaskRoutes
+        from apflow.api.a2a.server import generate_token, verify_token
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.config import get_task_model_class
 
         # Setup: Create tasks for different users
         task_repository = TaskRepository(
@@ -1569,7 +1569,7 @@ class TestHandleTaskExecuteUseDemo:
 
         # Mock TaskExecutor to avoid actual execution
         with patch(
-            "aipartnerupflow.core.execution.task_executor.TaskExecutor"
+            "apflow.core.execution.task_executor.TaskExecutor"
         ) as mock_executor_class:
             mock_executor = Mock()
             mock_execute_task_by_id = AsyncMock(
@@ -1580,7 +1580,7 @@ class TestHandleTaskExecuteUseDemo:
 
             # Mock TaskTracker
             with patch(
-                "aipartnerupflow.core.execution.task_tracker.TaskTracker"
+                "apflow.core.execution.task_tracker.TaskTracker"
             ) as mock_tracker_class:
                 mock_tracker = Mock()
                 mock_tracker.is_task_running = Mock(return_value=False)
@@ -1621,7 +1621,7 @@ class TestHandleTaskExecuteUseDemo:
 
         # Mock TaskExecutor to avoid actual execution
         with patch(
-            "aipartnerupflow.core.execution.task_executor.TaskExecutor"
+            "apflow.core.execution.task_executor.TaskExecutor"
         ) as mock_executor_class:
             mock_executor = Mock()
             mock_execute_tasks = AsyncMock(

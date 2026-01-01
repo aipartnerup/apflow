@@ -4,12 +4,12 @@
 > - [Real-World Examples](real-world.md) for advanced, production scenarios
 > - [Task Tree Examples](task-tree.md) for dependency and execution order patterns
 
-This document provides practical, copy-paste ready examples for common use cases with aipartnerupflow. Each example is complete and runnable.
+This document provides practical, copy-paste ready examples for common use cases with apflow. Each example is complete and runnable.
 
 ## Before You Start
 
 **Prerequisites:**
-- aipartnerupflow installed: `pip install aipartnerupflow`
+- apflow installed: `pip install apflow`
 - Python 3.10+ with async/await support
 - Basic understanding of Python
 
@@ -32,7 +32,7 @@ Create `example_01_builtin.py`:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     # Step 1: Setup
@@ -109,7 +109,7 @@ Create `example_02_custom.py`:
 
 ```python
 import asyncio
-from aipartnerupflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
+from apflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
 from typing import Dict, Any
 
 # Step 1: Define your custom executor
@@ -173,7 +173,7 @@ async def main():
         name="text_processor",  # Must match executor ID
         user_id="example_user",
         inputs={
-            "text": "Hello, aipartnerupflow!",
+            "text": "Hello, apflow!",
             "operation": "count"
         }
     )
@@ -199,7 +199,7 @@ python example_02_custom.py
 ### Expected Output
 
 ```
-Result: {'operation': 'count', 'input_text': 'Hello, aipartnerupflow!', 'result': 2}
+Result: {'operation': 'count', 'input_text': 'Hello, apflow!', 'result': 2}
 ```
 
 ### Understanding the Code
@@ -229,7 +229,7 @@ Create `example_03_api.py`:
 ```python
 import asyncio
 import aiohttp
-from aipartnerupflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
+from apflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
 from typing import Dict, Any
 
 @executor_register()
@@ -369,7 +369,7 @@ Create `example_04_dependencies.py`:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -462,7 +462,7 @@ Create `example_05_parallel.py`:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -546,7 +546,7 @@ Create `example_06_pipeline.py`:
 
 ```python
 import asyncio
-from aipartnerupflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
+from apflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
 from typing import Dict, Any
 
 # Step 1: Fetch data executor
@@ -718,7 +718,7 @@ Create `example_07_errors.py`:
 
 ```python
 import asyncio
-from aipartnerupflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
+from apflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
 from typing import Dict, Any
 
 @executor_register()
@@ -833,7 +833,7 @@ if __name__ == "__main__":
 ### Prerequisites
 
 ```bash
-pip install aipartnerupflow[crewai]
+pip install apflow[crewai]
 ```
 
 ### Complete Runnable Code
@@ -842,9 +842,9 @@ Create `example_08_crewai.py`:
 
 ```python
 import asyncio
-from aipartnerupflow.extensions.crewai import CrewaiExecutor
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
-from aipartnerupflow.core.extensions import get_registry
+from apflow.extensions.crewai import CrewaiExecutor
+from apflow import TaskManager, TaskTreeNode, create_session
+from apflow.core.extensions import get_registry
 
 async def main():
     # Create a CrewAI executor
@@ -925,7 +925,7 @@ Create `example_09_priorities.py`:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -1008,7 +1008,7 @@ Create `example_10_complete.py`:
 
 ```python
 import asyncio
-from aipartnerupflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
+from apflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
 from typing import Dict, Any
 
 # Executor 1: Data fetcher

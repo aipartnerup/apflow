@@ -7,7 +7,7 @@ Tests for SSH remote execution functionality.
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, patch, MagicMock
-from aipartnerupflow.extensions.ssh.ssh_executor import SshExecutor, ASYNCSSH_AVAILABLE
+from apflow.extensions.ssh.ssh_executor import SshExecutor, ASYNCSSH_AVAILABLE
 
 
 class TestSshExecutor:
@@ -80,7 +80,7 @@ class TestSshExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_host(self):
         """Test error when host is missing"""
-        from aipartnerupflow.core.execution.errors import ValidationError
+        from apflow.core.execution.errors import ValidationError
         executor = SshExecutor()
         
         with pytest.raises(ValidationError, match="host is required"):
@@ -92,7 +92,7 @@ class TestSshExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_username(self):
         """Test error when username is missing"""
-        from aipartnerupflow.core.execution.errors import ValidationError
+        from apflow.core.execution.errors import ValidationError
         executor = SshExecutor()
         
         with pytest.raises(ValidationError, match="username is required"):
@@ -104,7 +104,7 @@ class TestSshExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_command(self):
         """Test error when command is missing"""
-        from aipartnerupflow.core.execution.errors import ValidationError
+        from apflow.core.execution.errors import ValidationError
         executor = SshExecutor()
         
         with pytest.raises(ValidationError, match="command is required"):
@@ -116,9 +116,9 @@ class TestSshExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_auth(self):
         """Test error when neither password nor key_file is provided"""
-        from aipartnerupflow.core.execution.errors import ValidationError
+        from apflow.core.execution.errors import ValidationError
         # Mock ASYNCSSH_AVAILABLE = True to test authentication validation logic
-        with patch("aipartnerupflow.extensions.ssh.ssh_executor.ASYNCSSH_AVAILABLE", True):
+        with patch("apflow.extensions.ssh.ssh_executor.ASYNCSSH_AVAILABLE", True):
             executor = SshExecutor()
             
             with pytest.raises(ValidationError, match="Either password or key_file"):
@@ -131,8 +131,8 @@ class TestSshExecutor:
     @pytest.mark.asyncio
     async def test_execute_asyncssh_not_available(self):
         """Test behavior when asyncssh is not installed"""
-        from aipartnerupflow.core.execution.errors import ConfigurationError
-        with patch("aipartnerupflow.extensions.ssh.ssh_executor.ASYNCSSH_AVAILABLE", False):
+        from apflow.core.execution.errors import ConfigurationError
+        with patch("apflow.extensions.ssh.ssh_executor.ASYNCSSH_AVAILABLE", False):
             executor = SshExecutor()
             with pytest.raises(ConfigurationError, match="asyncssh is not installed"):
                 await executor.execute({

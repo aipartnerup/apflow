@@ -5,7 +5,7 @@ This replaces test_task_model.py as it's more appropriate to test the repository
 layer that provides actual functionality, rather than just the model layer.
 """
 import pytest
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
 
 class TestTaskRepository:

@@ -44,15 +44,15 @@ pip install -e ".[all]"
 ```bash
 # Execute a task (no API server needed)
 # Standard mode (recommended):
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
+apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 # Or legacy mode:
-aipartnerupflow run flow system_info_executor --inputs '{"resource": "cpu"}'
+apflow run flow system_info_executor --inputs '{"resource": "cpu"}'
 
 # Query task status (no API server needed)
-aipartnerupflow tasks status task-123
+apflow tasks status task-123
 
 # List tasks from database (not just running)
-aipartnerupflow tasks list
+apflow tasks list
 ```
 
 ## Usage Scenarios
@@ -63,19 +63,19 @@ aipartnerupflow tasks list
 
 ```bash
 # 1. Execute tasks (standard mode - recommended)
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
+apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 
 # Or legacy mode (backward compatible)
-aipartnerupflow run flow system_info_executor --inputs '{"resource": "cpu"}'
+apflow run flow system_info_executor --inputs '{"resource": "cpu"}'
 
 # 2. Check status (in another terminal or after execution)
-aipartnerupflow tasks status <task_id>
+apflow tasks status <task_id>
 
 # 3. List tasks (not just running)
-aipartnerupflow tasks list
+apflow tasks list
 
 # 4. Cancel a task if needed
-aipartnerupflow tasks cancel <task_id>
+apflow tasks cancel <task_id>
 ```
 
 **Advantages**:
@@ -95,10 +95,10 @@ aipartnerupflow tasks cancel <task_id>
 
 ```bash
 # 1. Start API server (default: A2A protocol)
-aipartnerupflow serve start --host 0.0.0.0 --port 8000
+apflow serve start --host 0.0.0.0 --port 8000
 
 # Or start with MCP protocol
-aipartnerupflow serve start --host 0.0.0.0 --port 8000 --protocol mcp
+apflow serve start --host 0.0.0.0 --port 8000 --protocol mcp
 
 # 2. Use HTTP API or A2A protocol to execute tasks
 curl -X POST http://localhost:8000/api/tasks \
@@ -121,16 +121,16 @@ curl http://localhost:8000/api/tasks/task-123/status
 
 ```bash
 # Terminal 1: Start API server (default: A2A protocol)
-aipartnerupflow serve start --port 8000
+apflow serve start --port 8000
 
 # Or start with MCP protocol
-aipartnerupflow serve start --port 8000 --protocol mcp
+apflow serve start --port 8000 --protocol mcp
 
 # Terminal 2: Use CLI to execute tasks
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
+apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 
 # Terminal 2: Query via CLI (faster, direct DB access)
-aipartnerupflow tasks status <task_id>
+apflow tasks status <task_id>
 
 # Or query via API (for testing API endpoints)
 curl http://localhost:8000/api/tasks/<task_id>/status
@@ -148,13 +148,13 @@ curl http://localhost:8000/api/tasks/<task_id>/status
 
 ```bash
 # Step 1: Execute tasks in background (standard mode)
-aipartnerupflow run flow \
+apflow run flow \
   --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]' \
   --background \
   --watch
 
 # Or legacy mode
-aipartnerupflow run flow executor_id \
+apflow run flow executor_id \
   --inputs '{"data": "test"}' \
   --background \
   --watch
@@ -165,17 +165,17 @@ aipartnerupflow run flow executor_id \
 # Watching task status...
 
 # Step 2: (Optional) In another terminal, check status
-aipartnerupflow tasks status abc-123-def-456
+apflow tasks status abc-123-def-456
 
 # Step 3: (Optional) Cancel if needed
-aipartnerupflow tasks cancel abc-123-def-456
+apflow tasks cancel abc-123-def-456
 ```
 
 ### Workflow 2: Execute and Query Later
 
 ```bash
 # Step 1: Execute tasks (foreground, wait for completion)
-aipartnerupflow run flow \
+apflow run flow \
   --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]' \
   --output result.json
 
@@ -183,14 +183,14 @@ aipartnerupflow run flow \
 cat result.json
 
 # Step 3: (If needed) Query task details
-aipartnerupflow tasks status <task_id_from_result>
+apflow tasks status <task_id_from_result>
 ```
 
 ### Workflow 3: Monitor Multiple Tasks
 
 ```bash
 # Step 1: Start multiple unrelated tasks in one command
-aipartnerupflow run flow \
+apflow run flow \
   --tasks '[
     {"id": "task1", "name": "Get CPU Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}},
     {"id": "task2", "name": "Get Memory Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "memory"}},
@@ -199,34 +199,34 @@ aipartnerupflow run flow \
   --background
 
 # Or start separately (legacy mode)
-aipartnerupflow run flow executor1 --inputs '{}' --background
-aipartnerupflow run flow executor2 --inputs '{}' --background
-aipartnerupflow run flow executor3 --inputs '{}' --background
+apflow run flow executor1 --inputs '{}' --background
+apflow run flow executor2 --inputs '{}' --background
+apflow run flow executor3 --inputs '{}' --background
 
 # Step 2: Monitor all running tasks
-aipartnerupflow tasks watch --all
+apflow tasks watch --all
 
 # Step 3: Check specific tasks
-aipartnerupflow tasks status task1-id task2-id task3-id
+apflow tasks status task1-id task2-id task3-id
 
 # Step 4: Cancel specific tasks
-aipartnerupflow tasks cancel task1-id task2-id
+apflow tasks cancel task1-id task2-id
 ```
 
 ### Workflow 4: Development with API Server
 
 ```bash
 # Terminal 1: Start API server (development mode, default: A2A protocol)
-aipartnerupflow serve start --port 8000 --reload
+apflow serve start --port 8000 --reload
 
 # Or start with MCP protocol
-aipartnerupflow serve start --port 8000 --reload --protocol mcp
+apflow serve start --port 8000 --reload --protocol mcp
 
 # Terminal 2: Execute via CLI (standard mode)
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
+apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 
 # Terminal 2: Query via CLI (direct DB, fast)
-aipartnerupflow tasks list
+apflow tasks list
 
 # Terminal 3: Test API endpoints
 curl http://localhost:8000/api/tasks
@@ -241,47 +241,47 @@ curl http://localhost:8000/api/tasks/<task_id>/status
 
 ```bash
 # Execute single task (task array with one task)
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
+apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 
 # Execute task tree (parent-child relationships)
-aipartnerupflow run flow --tasks '[
+apflow run flow --tasks '[
   {"id": "root", "name": "Get System Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}},
   {"id": "child1", "name": "Process Info", "parent_id": "root", "schemas": {"method": "command_executor"}, "inputs": {"command": "echo Processing"}]
 ]'
 
 # Execute multiple unrelated tasks (multiple root tasks)
-aipartnerupflow run flow --tasks '[
+apflow run flow --tasks '[
   {"id": "task1", "name": "Get CPU Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}},
   {"id": "task2", "name": "Get Memory Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "memory"}}
 ]'
 
 # With tasks file
-aipartnerupflow run flow --tasks-file tasks.json
+apflow run flow --tasks-file tasks.json
 
 # Background execution
-aipartnerupflow run flow --tasks '[{...}]' --background
+apflow run flow --tasks '[{...}]' --background
 
 # Background with real-time monitoring
-aipartnerupflow run flow --tasks '[{...}]' --background --watch
+apflow run flow --tasks '[{...}]' --background --watch
 
 # Save result to file
-aipartnerupflow run flow --tasks '[{...}]' --output result.json
+apflow run flow --tasks '[{...}]' --output result.json
 ```
 
 #### Legacy Mode (Backward Compatible): Executor ID + Inputs
 
 ```bash
 # Execute single executor (legacy mode)
-aipartnerupflow run flow <executor_id> --inputs '{"key": "value"}'
+apflow run flow <executor_id> --inputs '{"key": "value"}'
 
 # With input file
-aipartnerupflow run flow <executor_id> --inputs-file inputs.json
+apflow run flow <executor_id> --inputs-file inputs.json
 
 # Background execution
-aipartnerupflow run flow <executor_id> --inputs '{"key": "value"}' --background
+apflow run flow <executor_id> --inputs '{"key": "value"}' --background
 
 # Custom user ID
-aipartnerupflow run flow <executor_id> --inputs '{"key": "value"}' --user-id my-user
+apflow run flow <executor_id> --inputs '{"key": "value"}' --user-id my-user
 ```
 
 **Note**: Legacy mode is for backward compatibility. Use standard mode (--tasks) for new code.
@@ -292,49 +292,49 @@ aipartnerupflow run flow <executor_id> --inputs '{"key": "value"}' --user-id my-
 
 ```bash
 # List all tasks from database (defaults to root tasks)
-aipartnerupflow tasks list
+apflow tasks list
 
 # List with user filter
-aipartnerupflow tasks list --user-id my-user
+apflow tasks list --user-id my-user
 
 # Filter by status
-aipartnerupflow tasks list --status completed
+apflow tasks list --status completed
 
 # Show all tasks including children
-aipartnerupflow tasks list --all-tasks
+apflow tasks list --all-tasks
 
 # Limit number of results and pagination
-aipartnerupflow tasks list --limit 50 --offset 0
+apflow tasks list --limit 50 --offset 0
 ```
 
 #### Get Task Details
 
 ```bash
 # Get details of a specific task
-aipartnerupflow tasks get task-123
+apflow tasks get task-123
 ```
 
 #### Check Task Status
 
 ```bash
 # Check status of specific tasks
-aipartnerupflow tasks status task-123 task-456
+apflow tasks status task-123 task-456
 ```
 
 #### Count Tasks
 
 ```bash
 # Get task statistics by status from database (default)
-aipartnerupflow tasks count
+apflow tasks count
 
 # Count with user filter
-aipartnerupflow tasks count --user-id my-user
+apflow tasks count --user-id my-user
 
 # Count only root tasks
-aipartnerupflow tasks count --root-only
+apflow tasks count --root-only
 
 # JSON format output
-aipartnerupflow tasks count --format json
+apflow tasks count --format json
 ```
 
 
@@ -343,46 +343,46 @@ aipartnerupflow tasks count --format json
 
 ```bash
 # Get task tree structure starting from a task
-aipartnerupflow tasks tree task-123
+apflow tasks tree task-123
 
 # If task is a child, returns the root tree
-aipartnerupflow tasks tree child-task-456
+apflow tasks tree child-task-456
 ```
 
 #### Get Child Tasks
 
 ```bash
 # Get children of a parent task
-aipartnerupflow tasks children --parent-id task-123
+apflow tasks children --parent-id task-123
 
 # Alternative: use --task-id (same as --parent-id)
-aipartnerupflow tasks children --task-id task-123
+apflow tasks children --task-id task-123
 ```
 
 ### Monitor Tasks
 
 ```bash
 # Watch specific task (real-time)
-aipartnerupflow tasks watch --task-id task-123
+apflow tasks watch --task-id task-123
 
 # Watch all running tasks
-aipartnerupflow tasks watch --all
+apflow tasks watch --all
 
 # Custom update interval
-aipartnerupflow tasks watch --task-id task-123 --interval 0.5
+apflow tasks watch --task-id task-123 --interval 0.5
 ```
 
 ### Cancel Tasks
 
 ```bash
 # Cancel single task
-aipartnerupflow tasks cancel task-123
+apflow tasks cancel task-123
 
 # Cancel multiple tasks
-aipartnerupflow tasks cancel task-123 task-456 task-789
+apflow tasks cancel task-123 task-456 task-789
 
 # Force cancel (immediate stop)
-aipartnerupflow tasks cancel task-123 --force
+apflow tasks cancel task-123 --force
 ```
 
 ### Create Tasks
@@ -391,10 +391,10 @@ Create task trees from JSON file or stdin.
 
 ```bash
 # Create task tree from JSON file
-aipartnerupflow tasks create --file tasks.json
+apflow tasks create --file tasks.json
 
 # Create task tree from stdin
-echo '{"id": "task1", "name": "Task 1", ...}' | aipartnerupflow tasks create --stdin
+echo '{"id": "task1", "name": "Task 1", ...}' | apflow tasks create --stdin
 
 # File format: single task object or array of tasks
 cat > tasks.json << EOF
@@ -410,7 +410,7 @@ cat > tasks.json << EOF
   }
 ]
 EOF
-aipartnerupflow tasks create --file tasks.json
+apflow tasks create --file tasks.json
 ```
 
 ### Update Tasks
@@ -419,19 +419,19 @@ Update task fields (name, status, progress, inputs, params, etc.).
 
 ```bash
 # Update task name
-aipartnerupflow tasks update task-123 --name "New Task Name"
+apflow tasks update task-123 --name "New Task Name"
 
 # Update task status and progress
-aipartnerupflow tasks update task-123 --status completed --progress 1.0
+apflow tasks update task-123 --status completed --progress 1.0
 
 # Update task inputs (JSON string)
-aipartnerupflow tasks update task-123 --inputs '{"key": "value"}'
+apflow tasks update task-123 --inputs '{"key": "value"}'
 
 # Update task params (JSON string)
-aipartnerupflow tasks update task-123 --params '{"executor_id": "my_executor"}'
+apflow tasks update task-123 --params '{"executor_id": "my_executor"}'
 
 # Update multiple fields
-aipartnerupflow tasks update task-123 \
+apflow tasks update task-123 \
   --name "Updated Name" \
   --status in_progress \
   --progress 0.5 \
@@ -446,10 +446,10 @@ Delete tasks with validation (only pending tasks can be deleted).
 
 ```bash
 # Delete a pending task
-aipartnerupflow tasks delete task-123
+apflow tasks delete task-123
 
 # Force delete (bypasses validation)
-aipartnerupflow tasks delete task-123 --force
+apflow tasks delete task-123 --force
 ```
 
 **Deletion Rules:**
@@ -464,33 +464,33 @@ Create a copy of a task tree for re-execution. This is useful for retrying faile
 
 ```bash
 # Copy a task tree (basic usage, minimal mode)
-aipartnerupflow tasks copy task-123
+apflow tasks copy task-123
 
 # Copy and save to file
-aipartnerupflow tasks copy task-123 --output /path/to/copied_task.json
+apflow tasks copy task-123 --output /path/to/copied_task.json
 
 # Copy with children (also copy each direct child task with its dependencies)
-aipartnerupflow tasks copy task-123 --children
+apflow tasks copy task-123 --children
 
 # Copy with full mode (copies complete tree from root)
-aipartnerupflow tasks copy task-123 --copy-mode full
+apflow tasks copy task-123 --copy-mode full
 
 # Copy with custom mode (copy only specified tasks)
-aipartnerupflow tasks copy task-123 \
+apflow tasks copy task-123 \
   --copy-mode custom \
   --custom-task-ids task-123,task-child-456
 
 # Copy with custom mode and include children recursively
-aipartnerupflow tasks copy task-123 \
+apflow tasks copy task-123 \
   --copy-mode custom \
   --custom-task-ids task-123,task-child-456 \
   --custom-include-children
 
 # Preview copy without saving to database (returns task array)
-aipartnerupflow tasks copy task-123 --dry-run
+apflow tasks copy task-123 --dry-run
 
 # Copy with reset fields (reset specific fields during copy)
-aipartnerupflow tasks copy task-123 --reset-fields status,progress
+apflow tasks copy task-123 --reset-fields status,progress
 ```
 
 **Copy Modes:**
@@ -515,68 +515,68 @@ aipartnerupflow tasks copy task-123 --reset-fields status,progress
 **Use cases:**
 ```bash
 # 1. Original task failed - retry with copy
-aipartnerupflow tasks status task-123
+apflow tasks status task-123
 # Status: failed
 
 # 2. Copy the task tree
-aipartnerupflow tasks copy task-123
+apflow tasks copy task-123
 # Returns: new_task_id (e.g., task-copy-xyz-789)
 
 # 3. Execute the copied task
-aipartnerupflow run flow --tasks '[{"id": "task-copy-xyz-789", ...}]'
+apflow run flow --tasks '[{"id": "task-copy-xyz-789", ...}]'
 
 # Preview copy before saving (useful for validation)
-aipartnerupflow tasks copy task-123 --dry-run --output preview.json
+apflow tasks copy task-123 --dry-run --output preview.json
 
 # Copy specific tasks only (custom mode)
-aipartnerupflow tasks copy task-123 \
+apflow tasks copy task-123 \
   --copy-mode custom \
   --custom-task-ids task-123,task-child-456
 ```
 
 ### Examples Data Management ⚠️ DEPRECATED
 
-> **Note:** The `examples` command has been removed from aipartnerupflow core library.
+> **Note:** The `examples` command has been removed from apflow core library.
 > 
-> **Migration:** For demo task initialization, please use the **aipartnerupflow-demo** project instead.
-> The aipartnerupflow-demo project provides:
+> **Migration:** For demo task initialization, please use the **apflow-demo** project instead.
+> The apflow-demo project provides:
 > - Complete demo tasks for all executors
 > - Per-user demo task initialization
 > - Demo task validation against executor schemas
 > 
-> See [aipartnerupflow-demo](https://github.com/aipartnerup/aipartnerupflow-demo) for more information.
+> See [apflow-demo](https://github.com/aipartnerup/apflow-demo) for more information.
 
-The `aipartnerupflow examples init` command is no longer available. Demo task initialization has been moved to the separate aipartnerupflow-demo project to keep the core library focused on orchestration functionality.
+The `apflow examples init` command is no longer available. Demo task initialization has been moved to the separate apflow-demo project to keep the core library focused on orchestration functionality.
 
 ### API Server Management
 
 ```bash
 # Start API server (foreground, default: A2A protocol)
-aipartnerupflow serve start --port 8000
+apflow serve start --port 8000
 
 # Start API server with A2A protocol (explicit)
-aipartnerupflow serve start --port 8000 --protocol a2a
+apflow serve start --port 8000 --protocol a2a
 
 # Start API server with MCP protocol
-aipartnerupflow serve start --port 8000 --protocol mcp
+apflow serve start --port 8000 --protocol mcp
 
 # Start with auto-reload (development)
-aipartnerupflow serve start --port 8000 --reload
+apflow serve start --port 8000 --reload
 
 # Start daemon (background service, default: A2A protocol)
-aipartnerupflow daemon start --port 8000
+apflow daemon start --port 8000
 
 # Start daemon with MCP protocol
-aipartnerupflow daemon start --port 8000 --protocol mcp
+apflow daemon start --port 8000 --protocol mcp
 
 # Check daemon status
-aipartnerupflow daemon status
+apflow daemon status
 
 # Stop daemon
-aipartnerupflow daemon stop
+apflow daemon stop
 
 # View daemon logs
-aipartnerupflow daemon logs
+apflow daemon logs
 ```
 
 **Protocol Selection:**
@@ -594,10 +594,10 @@ CLI uses DuckDB by default - no configuration needed:
 
 ```bash
 # Just use CLI - database is created automatically
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
+apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 ```
 
-Database file location: `~/.aipartnerup/data/aipartnerupflow.duckdb` (or configured path)
+Database file location: `~/.aipartnerup/data/apflow.duckdb` (or configured path)
 
 ### Optional: PostgreSQL
 
@@ -605,10 +605,10 @@ If you want to use PostgreSQL (for production or shared access):
 
 ```bash
 # Set environment variable
-export DATABASE_URL="postgresql+asyncpg://user:password@localhost/aipartnerupflow"
+export DATABASE_URL="postgresql+asyncpg://user:password@localhost/apflow"
 
 # Use CLI as normal - it will connect to PostgreSQL
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
+apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 ```
 
 **Note**: Both CLI and API will use the same database connection string, so they share data automatically.
@@ -649,7 +649,7 @@ aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": 
 **Format**: Executor ID + Inputs
 
 ```bash
-aipartnerupflow run flow executor_id --inputs '{"key": "value"}'
+apflow run flow executor_id --inputs '{"key": "value"}'
 ```
 
 **Features**:
@@ -678,7 +678,7 @@ CLI automatically handles this by:
 
 ```bash
 # Multiple unrelated tasks (2 root tasks)
-aipartnerupflow run flow --tasks '[
+apflow run flow --tasks '[
   {"id": "task1", "name": "Get CPU Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}},
   {"id": "task2", "name": "Get Memory Info", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "memory"}}
 ]'
@@ -734,10 +734,10 @@ aipartnerupflow run flow --tasks '[
 
 ```bash
 # Check task status from database
-aipartnerupflow tasks list  # Shows tasks from database
+apflow tasks list  # Shows tasks from database
 
 # Check full status from database (includes completed/failed tasks)
-aipartnerupflow tasks status task-123  # Shows full details from DB
+apflow tasks status task-123  # Shows full details from DB
 ```
 
 ### Q: Can I cancel a task started via API using CLI?
@@ -749,7 +749,7 @@ aipartnerupflow tasks status task-123  # Shows full details from DB
 curl -X POST http://localhost:8000/api/tasks -d '...'
 
 # Cancel via CLI
-aipartnerupflow tasks cancel <task_id>
+apflow tasks cancel <task_id>
 ```
 
 ## Best Practices
@@ -758,10 +758,10 @@ aipartnerupflow tasks cancel <task_id>
 
 ```bash
 # Use CLI for quick testing
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
+apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 
 # Use API server for integration testing
-aipartnerupflow serve start --reload
+apflow serve start --reload
 # Then test API endpoints
 ```
 
@@ -773,9 +773,9 @@ aipartnerupflow serve start --reload
 
 # Option B: API server (for remote access)
 # Start with A2A protocol (default)
-aipartnerupflow daemon start --port 8000
+apflow daemon start --port 8000
 # Or start with MCP protocol
-aipartnerupflow daemon start --port 8000 --protocol mcp
+apflow daemon start --port 8000 --protocol mcp
 # Then use HTTP API, A2A protocol, or MCP protocol
 ```
 
@@ -783,26 +783,26 @@ aipartnerupflow daemon start --port 8000 --protocol mcp
 
 ```bash
 # For single task
-aipartnerupflow tasks watch --task-id task-123
+apflow tasks watch --task-id task-123
 
 # For all tasks
-aipartnerupflow tasks watch --all
+apflow tasks watch --all
 
 # For specific user
-aipartnerupflow tasks list --user-id my-user
+apflow tasks list --user-id my-user
 ```
 
 ### 4. Error Handling
 
 ```bash
 # Check task status after execution
-aipartnerupflow tasks status <task_id>
+apflow tasks status <task_id>
 
 # If failed, check error message
 # Error is stored in task.error field
 
 # Cancel stuck tasks
-aipartnerupflow tasks cancel <task_id> --force
+apflow tasks cancel <task_id> --force
 ```
 
 ## Troubleshooting
@@ -811,8 +811,8 @@ aipartnerupflow tasks cancel <task_id> --force
 
 **Solution**: Check if task ID is correct:
 ```bash
-aipartnerupflow tasks list  # See all running tasks
-aipartnerupflow tasks status <task_id>  # Check specific task
+apflow tasks list  # See all running tasks
+apflow tasks status <task_id>  # Check specific task
 ```
 
 ### Problem: "Database connection error"
@@ -828,8 +828,8 @@ echo $DATABASE_URL
 
 **Solution**: Cancel and restart:
 ```bash
-aipartnerupflow tasks cancel <task_id> --force
-aipartnerupflow run flow <batch_id> --inputs '...'
+apflow tasks cancel <task_id> --force
+apflow run flow <batch_id> --inputs '...'
 ```
 
 ### Problem: "Cannot query task status"
@@ -837,7 +837,7 @@ aipartnerupflow run flow <batch_id> --inputs '...'
 **Solution**: Ensure database is accessible:
 ```bash
 # Check if database file exists (DuckDB)
-ls ~/.aipartnerup/data/aipartnerupflow.duckdb
+ls ~/.aipartnerup/data/apflow.duckdb
 
 # Or check PostgreSQL connection
 psql $DATABASE_URL -c "SELECT COUNT(*) FROM apflow_tasks;"
@@ -860,7 +860,7 @@ The `apflow` CLI supports dynamic discovery of subcommands through Python's `ent
 ### Unified Entry Point
 
 Users always use the same consistent entry point:
-- `aipartnerupflow <your-plugin-name> <command>`
+- `apflow <your-plugin-name> <command>`
 - `apflow <your-plugin-name> <command>`
 
 ### Example: Users Extension

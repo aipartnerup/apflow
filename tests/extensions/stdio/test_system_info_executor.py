@@ -6,7 +6,7 @@ and are always available (safe predefined commands).
 """
 
 import pytest
-from aipartnerupflow.extensions.stdio import SystemInfoExecutor
+from apflow.extensions.stdio import SystemInfoExecutor
 
 
 class TestSystemInfoExecutor:

@@ -10,9 +10,9 @@ import uuid
 import tempfile
 from pathlib import Path
 from typer.testing import CliRunner
-from aipartnerupflow.cli.main import app
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow.core.config import get_task_model_class
+from apflow.cli.main import app
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.config import get_task_model_class
 
 runner = CliRunner()
 

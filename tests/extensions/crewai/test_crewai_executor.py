@@ -31,8 +31,8 @@ from unittest.mock import Mock, patch
 
 # Try to import CrewaiExecutor, skip tests if not available
 try:
-    from aipartnerupflow.extensions.crewai import CrewaiExecutor
-    from aipartnerupflow.core.tools import register_tool, resolve_tool
+    from apflow.extensions.crewai import CrewaiExecutor
+    from apflow.core.tools import register_tool, resolve_tool
     from crewai import LLM, Agent
 except ImportError:
     CrewaiExecutor = None
@@ -70,9 +70,9 @@ class TestCrewaiExecutor:
         mock_task = Mock()
         
         # Create CrewaiExecutor with all mocks in place
-        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class, \
-             patch('aipartnerupflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
-             patch('aipartnerupflow.extensions.crewai.crewai_executor.Task') as mock_task_class:
+        with patch('apflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class, \
+             patch('apflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
+             patch('apflow.extensions.crewai.crewai_executor.Task') as mock_task_class:
             mock_crew_class.return_value = mock_crew
             mock_agent_class.return_value = mock_agent
             mock_task_class.return_value = mock_task
@@ -126,9 +126,9 @@ class TestCrewaiExecutor:
         mock_task = Mock()
         
         # Create CrewaiExecutor with mock crew
-        with patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class, \
-             patch('aipartnerupflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
-             patch('aipartnerupflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class:
+        with patch('apflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class, \
+             patch('apflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
+             patch('apflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class:
             mock_crew_class.return_value = mock_crew
             mock_task_class.return_value = mock_task
             mock_agent_class.return_value = Mock()
@@ -173,7 +173,7 @@ class TestCrewaiExecutor:
         mock_llm_instance = Mock()
         mock_llm_instance.model = "gpt-4"
         
-        with patch('aipartnerupflow.extensions.crewai.crewai_executor.LLM') as mock_llm_class:
+        with patch('apflow.extensions.crewai.crewai_executor.LLM') as mock_llm_class:
             mock_llm_class.return_value = mock_llm_instance
             
             # Mock Agent, Task and CrewAI
@@ -181,9 +181,9 @@ class TestCrewaiExecutor:
             mock_task = Mock()
             mock_crew = Mock()
             
-            with patch('aipartnerupflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
-                 patch('aipartnerupflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
-                 patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class:
+            with patch('apflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
+                 patch('apflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
+                 patch('apflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class:
                 mock_agent_class.return_value = mock_agent
                 mock_task_class.return_value = mock_task
                 mock_crew_class.return_value = mock_crew
@@ -222,10 +222,10 @@ class TestCrewaiExecutor:
     @pytest.mark.skipif(CrewaiExecutor is None or LLM is None, reason="CrewaiExecutor or LLM not available")
     def test_model_from_kwargs(self):
         """Test CrewaiExecutor receives model from kwargs (from schemas)"""
-        with patch('aipartnerupflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
-             patch('aipartnerupflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
-             patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class, \
-             patch('aipartnerupflow.extensions.crewai.crewai_executor.LLM') as mock_llm_class:
+        with patch('apflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
+             patch('apflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
+             patch('apflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class, \
+             patch('apflow.extensions.crewai.crewai_executor.LLM') as mock_llm_class:
             
             mock_agent = Mock()
             mock_task = Mock()
@@ -274,7 +274,7 @@ class TestCrewaiExecutor:
         mock_tool.run = Mock(return_value="tool result")
         
         # Mock resolve_tool to return our mock tool
-        with patch('aipartnerupflow.extensions.crewai.crewai_executor.resolve_tool') as mock_resolve_tool:
+        with patch('apflow.extensions.crewai.crewai_executor.resolve_tool') as mock_resolve_tool:
             mock_resolve_tool.return_value = mock_tool
             
             # Mock Agent, Task and CrewAI
@@ -282,9 +282,9 @@ class TestCrewaiExecutor:
             mock_task = Mock()
             mock_crew = Mock()
             
-            with patch('aipartnerupflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
-                 patch('aipartnerupflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
-                 patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class:
+            with patch('apflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
+                 patch('apflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
+                 patch('apflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class:
                 mock_agent_class.return_value = mock_agent
                 mock_task_class.return_value = mock_task
                 mock_crew_class.return_value = mock_crew
@@ -336,8 +336,8 @@ class TestCrewaiExecutor:
         mock_tool = Mock()
         mock_tool.run = Mock(return_value="tool result")
         
-        with patch('aipartnerupflow.extensions.crewai.crewai_executor.LLM') as mock_llm_class, \
-             patch('aipartnerupflow.extensions.crewai.crewai_executor.resolve_tool') as mock_resolve_tool:
+        with patch('apflow.extensions.crewai.crewai_executor.LLM') as mock_llm_class, \
+             patch('apflow.extensions.crewai.crewai_executor.resolve_tool') as mock_resolve_tool:
             mock_llm_class.return_value = mock_llm_instance
             mock_resolve_tool.return_value = mock_tool
             
@@ -346,9 +346,9 @@ class TestCrewaiExecutor:
             mock_task = Mock()
             mock_crew = Mock()
             
-            with patch('aipartnerupflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
-                 patch('aipartnerupflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
-                 patch('aipartnerupflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class:
+            with patch('apflow.extensions.crewai.crewai_executor.Agent') as mock_agent_class, \
+                 patch('apflow.extensions.crewai.crewai_executor.Task') as mock_task_class, \
+                 patch('apflow.extensions.crewai.crewai_executor.CrewAI') as mock_crew_class:
                 mock_agent_class.return_value = mock_agent
                 mock_task_class.return_value = mock_task
                 mock_crew_class.return_value = mock_crew
@@ -479,7 +479,7 @@ class TestCrewaiExecutor:
         
         try:
             import crewai_tools  # noqa: F401
-            from aipartnerupflow.core.tools import resolve_tool, get_tool_registry
+            from apflow.core.tools import resolve_tool, get_tool_registry
         except ImportError:
             pytest.skip("crewai_tools or CrewAI module not available")
         
@@ -539,7 +539,7 @@ class TestCrewaiExecutor:
             pytest.skip("OPENAI_API_KEY is not set")
         
         try:
-            from aipartnerupflow.core.tools import resolve_tool, get_tool_registry, BaseTool
+            from apflow.core.tools import resolve_tool, get_tool_registry, BaseTool
             from pydantic import BaseModel, Field
             from typing import Type
             import inspect

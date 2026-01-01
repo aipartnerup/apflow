@@ -1,6 +1,6 @@
 # API Server Usage Guide
 
-This guide explains how to use the aipartnerupflow API server for remote task execution and integration.
+This guide explains how to use the apflow API server for remote task execution and integration.
 
 ## Overview
 
@@ -17,27 +17,27 @@ The API server provides:
 
 ```bash
 # Start server on default port (8000) with A2A Protocol (default)
-aipartnerupflow serve
+apflow serve
 
 # Or use the server command
-aipartnerupflow-server
+apflow-server
 
 # Or use Python module
-python -m aipartnerupflow.api.main
+python -m apflow.api.main
 ```
 
 ### Protocol Selection
 
-You can choose which protocol to use via the `AIPARTNERUPFLOW_API_PROTOCOL` environment variable:
+You can choose which protocol to use via the `APFLOW_API_PROTOCOL` environment variable:
 
 ```bash
 # A2A Protocol Server (default)
-export AIPARTNERUPFLOW_API_PROTOCOL=a2a
-python -m aipartnerupflow.api.main
+export APFLOW_API_PROTOCOL=a2a
+python -m apflow.api.main
 
 # MCP Server
-export AIPARTNERUPFLOW_API_PROTOCOL=mcp
-python -m aipartnerupflow.api.main
+export APFLOW_API_PROTOCOL=mcp
+python -m apflow.api.main
 ```
 
 **Supported Protocols:**
@@ -48,16 +48,16 @@ python -m aipartnerupflow.api.main
 
 ```bash
 # Custom host and port
-aipartnerupflow serve --host 0.0.0.0 --port 8080
+apflow serve --host 0.0.0.0 --port 8080
 
 # Enable auto-reload (development)
-aipartnerupflow serve --reload
+apflow serve --reload
 
 # Multiple workers (production)
-aipartnerupflow serve --workers 4
+apflow serve --workers 4
 
 # Custom configuration
-aipartnerupflow serve --config config.yaml
+apflow serve --config config.yaml
 ```
 
 ## API Endpoints
@@ -71,7 +71,7 @@ The API server supports multiple protocols:
 
 ### A2A Protocol Endpoints
 
-The API server implements the A2A (Agent-to-Agent) Protocol standard when `AIPARTNERUPFLOW_API_PROTOCOL=a2a` (default).
+The API server implements the A2A (Agent-to-Agent) Protocol standard when `APFLOW_API_PROTOCOL=a2a` (default).
 
 #### Get Agent Card
 
@@ -262,7 +262,7 @@ console.log(result);
 The API supports JWT authentication via headers or cookies. You can generate tokens using the `generate_token()` function:
 
 ```python
-from aipartnerupflow.api.a2a.server import generate_token
+from apflow.api.a2a.server import generate_token
 
 # Generate JWT token
 payload = {"user_id": "user123", "roles": ["admin"]}
@@ -359,13 +359,13 @@ For production multi-user scenarios, use the `llm-key-config` extension:
 
 ```bash
 # Install extension
-pip install aipartnerupflow[llm-key-config]
+pip install apflow[llm-key-config]
 ```
 
 Then configure keys programmatically:
 
 ```python
-from aipartnerupflow.extensions.llm_key_config import LLMKeyConfigManager
+from apflow.extensions.llm_key_config import LLMKeyConfigManager
 
 # Set user's LLM key
 config_manager = LLMKeyConfigManager()
@@ -394,14 +394,14 @@ export GOOGLE_API_KEY="xxx"
 
 ```bash
 # Server configuration
-export AIPARTNERUPFLOW_HOST=0.0.0.0
-export AIPARTNERUPFLOW_PORT=8000
+export APFLOW_HOST=0.0.0.0
+export APFLOW_PORT=8000
 
 # Database configuration
-export AIPARTNERUPFLOW_DATABASE_URL=postgresql://user:pass@localhost/db
+export APFLOW_DATABASE_URL=postgresql://user:pass@localhost/db
 
 # Authentication
-export AIPARTNERUPFLOW_JWT_SECRET=your-secret-key
+export APFLOW_JWT_SECRET=your-secret-key
 ```
 
 ### Configuration File
@@ -427,7 +427,7 @@ auth:
 ### Using Uvicorn Directly
 
 ```bash
-uvicorn aipartnerupflow.api.main:app \
+uvicorn apflow.api.main:app \
   --host 0.0.0.0 \
   --port 8000 \
   --workers 4
@@ -439,24 +439,24 @@ uvicorn aipartnerupflow.api.main:app \
 FROM python:3.12
 WORKDIR /app
 COPY . .
-RUN pip install aipartnerupflow[a2a]
-CMD ["aipartnerupflow-server", "--host", "0.0.0.0", "--port", "8000"]
+RUN pip install apflow[a2a]
+CMD ["apflow-server", "--host", "0.0.0.0", "--port", "8000"]
 ```
 
 ### Using Systemd
 
-Create `/etc/systemd/system/aipartnerupflow.service`:
+Create `/etc/systemd/system/apflow.service`:
 
 ```ini
 [Unit]
-Description=aipartnerupflow API Server
+Description=apflow API Server
 After=network.target
 
 [Service]
 Type=simple
 User=apflow
-WorkingDirectory=/opt/aipartnerupflow
-ExecStart=/usr/local/bin/aipartnerupflow-server --host 0.0.0.0 --port 8000
+WorkingDirectory=/opt/apflow
+ExecStart=/usr/local/bin/apflow-server --host 0.0.0.0 --port 8000
 Restart=always
 
 [Install]
@@ -499,7 +499,7 @@ curl http://localhost:8000/metrics
 
 ## MCP Server
 
-When started with `AIPARTNERUPFLOW_API_PROTOCOL=mcp`, the API server exposes task orchestration capabilities as MCP tools and resources.
+When started with `APFLOW_API_PROTOCOL=mcp`, the API server exposes task orchestration capabilities as MCP tools and resources.
 
 ### MCP Tools
 
@@ -539,7 +539,7 @@ curl -X POST http://localhost:8000/mcp \
 **stdio Mode:**
 ```bash
 # Run as standalone process
-python -m aipartnerupflow.api.mcp.server
+python -m apflow.api.mcp.server
 ```
 
 ### MCP Usage Example
@@ -579,12 +579,12 @@ python -m aipartnerupflow.api.mcp.server
 
 ## Programmatic Usage
 
-For library usage in external projects (e.g., aipartnerupflow-demo), you can import functions from the modular API components:
+For library usage in external projects (e.g., apflow-demo), you can import functions from the modular API components:
 
 ### Extension Management
 
 ```python
-from aipartnerupflow.api.extensions import initialize_extensions
+from apflow.api.extensions import initialize_extensions
 
 # Initialize extensions before creating the app
 initialize_extensions(
@@ -597,7 +597,7 @@ initialize_extensions(
 ### Protocol Management
 
 ```python
-from aipartnerupflow.api.protocols import (
+from apflow.api.protocols import (
     get_protocol_from_env,
     check_protocol_dependency,
     get_supported_protocols,
@@ -616,7 +616,7 @@ protocols = get_supported_protocols()  # ['a2a', 'mcp']
 ### Application Creation
 
 ```python
-from aipartnerupflow.api.app import (
+from apflow.api.app import (
     create_app_by_protocol,
     create_a2a_server,
     create_mcp_server,
@@ -643,7 +643,7 @@ a2a_app = create_a2a_server(
 You can extend `TaskRoutes` functionality without monkey patching:
 
 ```python
-from aipartnerupflow.api.routes.tasks import TaskRoutes
+from apflow.api.routes.tasks import TaskRoutes
 
 class MyCustomTaskRoutes(TaskRoutes):
     async def handle_task_create(self, params, request, request_id):

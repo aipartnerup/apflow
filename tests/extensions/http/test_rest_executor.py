@@ -7,7 +7,7 @@ Tests for HTTP/REST API executor functionality.
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 import httpx
-from aipartnerupflow.extensions.http.rest_executor import RestExecutor
+from apflow.extensions.http.rest_executor import RestExecutor
 
 
 class TestRestExecutor:
@@ -140,7 +140,7 @@ class TestRestExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_url(self):
         """Test error when URL is missing"""
-        from aipartnerupflow.core.execution.errors import ValidationError
+        from apflow.core.execution.errors import ValidationError
         executor = RestExecutor()
         
         with pytest.raises(ValidationError, match="url is required"):

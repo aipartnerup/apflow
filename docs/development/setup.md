@@ -1,6 +1,6 @@
-# aipartnerupflow Development Guide
+# apflow Development Guide
 
-This document is for developers working on the `aipartnerupflow` project. For user documentation, see [README.md](../../README.md).
+This document is for developers working on the `apflow` project. For user documentation, see [README.md](../../README.md).
 
 ## Project Structure
 
@@ -20,7 +20,7 @@ See [docs/architecture/DIRECTORY_STRUCTURE.md](../architecture/DIRECTORY_STRUCTU
 
 ```bash
 git clone <repository-url>
-cd aipartnerupflow
+cd apflow
 
 # Create virtual environment
 python3.12 -m venv .venv
@@ -72,7 +72,7 @@ API_HOST=0.0.0.0
 API_PORT=8000
 
 # Database Configuration (optional, if using PostgreSQL)
-# DATABASE_URL=postgresql+asyncpg://user:password@localhost/aipartnerupflow
+# DATABASE_URL=postgresql+asyncpg://user:password@localhost/apflow
 
 # DuckDB (default, no configuration needed)
 # Uses embedded database, no external setup required
@@ -86,7 +86,7 @@ LOG_LEVEL=INFO
 
 ```bash
 # Check installation
-python -c "import aipartnerupflow; print(aipartnerupflow.__version__)"
+python -c "import apflow; print(apflow.__version__)"
 
 # Run tests to verify everything works
 pytest tests/ -v
@@ -106,7 +106,7 @@ pytest tests/
 pytest tests/test_task_manager.py -v
 
 # Run with coverage
-pytest --cov=aipartnerupflow --cov-report=html tests/
+pytest --cov=apflow --cov-report=html tests/
 
 # Run only unit tests (exclude integration tests)
 pytest -m "not integration" tests/
@@ -119,32 +119,32 @@ pytest -m integration tests/
 
 ```bash
 # Method 1: Using CLI (if installed with [cli] extra)
-aipartnerupflow serve start --port 8000 --reload
+apflow serve start --port 8000 --reload
 # Or use shorthand:
 apflow serve start --port 8000 --reload
 # Note: 'serve --port 8000' (without 'start') also works
 
 # Method 2: Using Python module directly (recommended)
-python -m aipartnerupflow.api.main
+python -m apflow.api.main
 
 # Method 3: Using entry point (if installed with [a2a] extra)
-aipartnerupflow-server
+apflow-server
 
 # Method 4: Direct execution of serve command (for development)
-python src/aipartnerupflow/cli/commands/serve.py start --port 8000 --reload
+python src/apflow/cli/commands/serve.py start --port 8000 --reload
 ```
 
 #### Run CLI Commands
 
 ```bash
 # Run a flow (standard mode with tasks array)
-aipartnerupflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
+apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 
 # Or legacy mode (executor ID + inputs)
-aipartnerupflow run flow system_info_executor --inputs '{"resource": "cpu"}'
+apflow run flow system_info_executor --inputs '{"resource": "cpu"}'
 
 # Start daemon mode
-aipartnerupflow daemon start
+apflow daemon start
 ```
 
 ### Code Quality
@@ -187,10 +187,10 @@ ruff check --fix src/ tests/
 
 ```bash
 # Run type checker
-mypy src/aipartnerupflow/
+mypy src/apflow/
 
 # Check specific module
-mypy src/aipartnerupflow/core/interfaces/ src/aipartnerupflow/core/execution/ src/aipartnerupflow/core/storage/
+mypy src/apflow/core/interfaces/ src/apflow/core/execution/ src/apflow/core/storage/
 ### Continuous Integration
 
 The project uses GitHub Actions for CI. The workflow is defined in `.github/workflows/ci.yml`.
@@ -218,7 +218,7 @@ If you want to test with PostgreSQL:
 pip install -e ".[postgres]"
 
 # Set environment variable
-export DATABASE_URL="postgresql+asyncpg://user:password@localhost/aipartnerupflow"
+export DATABASE_URL="postgresql+asyncpg://user:password@localhost/apflow"
 
 # Run database migrations (if using Alembic)
 alembic upgrade head
@@ -243,30 +243,30 @@ alembic downgrade -1
 
 ```bash
 # Development mode (auto-reload)
-aipartnerupflow serve --port 8000 --reload
+apflow serve --port 8000 --reload
 
 # Production mode
-aipartnerupflow serve --port 8000 --workers 4
+apflow serve --port 8000 --workers 4
 ```
 
 #### Daemon Mode
 
 ```bash
 # Start daemon
-aipartnerupflow daemon start
+apflow daemon start
 
 # Stop daemon
-aipartnerupflow daemon stop
+apflow daemon stop
 
 # Check daemon status
-aipartnerupflow daemon status
+apflow daemon status
 ```
 
 ## Dependency Management
 
 ### Core Dependencies
 
-Installed with `pip install aipartnerupflow` (pure orchestration framework):
+Installed with `pip install apflow` (pure orchestration framework):
 
 - `pydantic` - Data validation
 - `sqlalchemy` - ORM
@@ -396,7 +396,7 @@ async def test_api_integration(api_keys_available):
 
 ```bash
 # Generate coverage report
-pytest --cov=aipartnerupflow --cov-report=html tests/
+pytest --cov=apflow --cov-report=html tests/
 
 # View HTML report
 open htmlcov/index.html  # macOS
@@ -408,7 +408,7 @@ xdg-open htmlcov/index.html  # Linux
 
 ### Module Structure
 
-**Core Modules** (always included with `pip install aipartnerupflow`):
+**Core Modules** (always included with `pip install apflow`):
 - **`execution/`**: Task orchestration specifications (TaskManager, StreamingCallbacks)
 - **`interfaces/`**: Core interfaces (ExecutableTask, BaseTask, TaskStorage)
 - **`storage/`**: Storage abstractions and implementations (DuckDB default, PostgreSQL optional)
@@ -455,7 +455,7 @@ xdg-open htmlcov/index.html  # Linux
 
 ```python
 import logging
-from aipartnerupflow.utils.logger import get_logger
+from apflow.utils.logger import get_logger
 
 logger = get_logger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -506,7 +506,7 @@ python -m build --wheel
 
 ```bash
 # Install from local build
-pip install dist/aipartnerupflow-0.2.0-py3-none-any.whl
+pip install dist/apflow-0.2.0-py3-none-any.whl
 ```
 
 ## Contributing
@@ -526,7 +526,7 @@ pip install dist/aipartnerupflow-0.2.0-py3-none-any.whl
    ```bash
    black src/ tests/
    ruff check --fix src/ tests/
-   mypy src/aipartnerupflow/
+   mypy src/apflow/
    pytest tests/
    ```
 5. **Commit changes**
@@ -556,7 +556,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 - [ ] Tests pass (`pytest tests/`)
 - [ ] Code is formatted (`black src/ tests/`)
 - [ ] No linting errors (`ruff check src/ tests/`)
-- [ ] Type checking passes (`mypy src/aipartnerupflow/`)
+- [ ] Type checking passes (`mypy src/apflow/`)
 - [ ] Documentation updated (if needed)
 - [ ] CHANGELOG.md updated (if needed)
 
@@ -565,7 +565,7 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 - **User Documentation**: [README.md](../../README.md)
 - **Changelog**: [CHANGELOG.md](../../CHANGELOG.md)
 - **Website**: [aipartnerup.com](https://aipartnerup.com)
-- **Issue Tracker**: [GitHub Issues](https://github.com/aipartnerup/aipartnerupflow/issues)
+- **Issue Tracker**: [GitHub Issues](https://github.com/aipartnerup/apflow/issues)
 
 ## Getting Help
 

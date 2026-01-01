@@ -4,9 +4,9 @@ Test TaskCreator functionality
 import pytest
 from typing import List, Dict, Any, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from aipartnerupflow.core.execution.task_creator import TaskCreator
-from aipartnerupflow.core.types import TaskTreeNode
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.execution.task_creator import TaskCreator
+from apflow.core.types import TaskTreeNode
+from apflow.core.storage.sqlalchemy.models import TaskModel
 
 
 class TestTaskCreator:
@@ -244,8 +244,8 @@ class TestTaskCreator:
         creator = TaskCreator(sync_db_session)
         
         # First, create a task with a specific ID
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from aipartnerupflow.core.config import get_task_model_class
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.config import get_task_model_class
         repo = TaskRepository(sync_db_session, task_model_class=get_task_model_class())
         existing_task = await repo.create_task(
             name="Existing Task",
@@ -1019,7 +1019,7 @@ class TestTaskCreatorCopy:
     @pytest.mark.asyncio
     async def test_create_task_copy_basic(self, sync_db_session):
         """Test basic task copy without dependencies"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1079,7 +1079,7 @@ class TestTaskCreatorCopy:
     @pytest.mark.asyncio
     async def test_create_task_copy_with_direct_dependency(self, sync_db_session):
         """Test task copy with direct dependency"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1126,7 +1126,7 @@ class TestTaskCreatorCopy:
     @pytest.mark.asyncio
     async def test_create_task_copy_with_transitive_dependency(self, sync_db_session):
         """Test task copy with transitive dependency (A -> B -> C)"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1170,7 +1170,7 @@ class TestTaskCreatorCopy:
     @pytest.mark.asyncio
     async def test_create_task_copy_with_subtree_dependencies(self, sync_db_session):
         """Test task copy when original_task has children with dependencies"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1213,7 +1213,7 @@ class TestTaskCreatorCopy:
     @pytest.mark.asyncio
     async def test_create_task_copy_preserves_structure(self, sync_db_session):
         """Test that copied tree preserves original structure"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1266,7 +1266,7 @@ class TestTaskCreatorCopy:
     @pytest.mark.asyncio
     async def test_create_task_copy_marks_has_copy_flag(self, sync_db_session):
         """Test that has_copy flag is set on all original tasks"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1310,7 +1310,7 @@ class TestTaskCreatorCopy:
     @pytest.mark.asyncio
     async def test_create_task_copy_resets_execution_fields(self, sync_db_session):
         """Test that execution-specific fields are reset in copy"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1345,7 +1345,7 @@ class TestTaskCreatorCopy:
         This test verifies that when there are no dependent tasks,
         only the original_task and its children are copied, not the entire root tree.
         """
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1420,7 +1420,7 @@ class TestTaskCreatorCopy:
         we copy original_task subtree + all dependent tasks (including transitive dependencies),
         but NOT the entire root task tree (excluding unrelated tasks).
         """
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1504,7 +1504,7 @@ class TestTaskCreatorCopy:
     @pytest.mark.asyncio
     async def test_create_task_copy_minimal_subtree(self, sync_db_session):
         """Test that minimal subtree is built correctly"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1705,7 +1705,7 @@ class TestTaskCreatorCopy:
     @pytest.mark.asyncio
     async def test_create_task_copy_with_children(self, sync_db_session):
         """Test create_task_copy with children=True parameter"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1774,7 +1774,7 @@ class TestTaskCreatorCopy:
     @pytest.mark.asyncio
     async def test_create_task_copy_children_deduplication(self, sync_db_session):
         """Test that tasks depending on multiple copied children are only copied once"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1887,7 +1887,7 @@ class TestTaskCreatorCopyWithSave:
     @pytest.mark.asyncio
     async def test_create_task_copy_save_false_returns_array(self, sync_db_session):
         """Test that save=False returns task array instead of saving to database"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1925,7 +1925,7 @@ class TestTaskCreatorCopyWithSave:
     @pytest.mark.asyncio
     async def test_create_task_copy_save_true_saves_to_database(self, sync_db_session):
         """Test that save=True saves tasks to database and returns TaskTreeNode"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -1966,8 +1966,8 @@ class TestTaskCreatorCopyWithSave:
     @pytest.mark.asyncio
     async def test_tree_to_task_array_format(self, sync_db_session):
         """Test that _tree_to_task_array returns correct format compatible with tasks.create"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from aipartnerupflow.core.config import get_task_model_class
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.config import get_task_model_class
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -2033,7 +2033,7 @@ class TestTaskCreatorCopyWithSave:
     @pytest.mark.asyncio
     async def test_tree_to_task_array_name_uniqueness(self, sync_db_session):
         """Test that _tree_to_task_array ensures name uniqueness"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -2071,7 +2071,7 @@ class TestTaskCreatorCopyWithSave:
     @pytest.mark.asyncio
     async def test_tree_to_task_array_parent_id_references(self, sync_db_session):
         """Test that parent_id uses name references instead of ID"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -2118,7 +2118,7 @@ class TestTaskCreatorCopyWithSave:
     @pytest.mark.asyncio
     async def test_tree_to_task_array_dependencies_references(self, sync_db_session):
         """Test that dependencies use name references instead of ID"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -2163,7 +2163,7 @@ class TestTaskCreatorCopyWithSave:
     @pytest.mark.asyncio
     async def test_task_array_compatible_with_tasks_create(self, sync_db_session):
         """Test that returned task array can be used with tasks.create"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -2213,7 +2213,7 @@ class TestTaskCreatorCopyWithSave:
     @pytest.mark.asyncio
     async def test_create_task_copy_custom_mode_save_false(self, sync_db_session):
         """Test custom copy mode with save=False"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -2262,7 +2262,7 @@ class TestTaskCreatorCopyWithSave:
     @pytest.mark.asyncio
     async def test_create_task_copy_full_mode_save_false(self, sync_db_session):
         """Test full copy mode with save=False"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -2302,7 +2302,7 @@ class TestTaskCreatorCopyWithSave:
     @pytest.mark.asyncio
     async def test_create_task_copy_reset_fields(self, sync_db_session):
         """Test reset_fields parameter functionality"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -2341,7 +2341,7 @@ class TestTaskCreatorCopyWithSave:
     @pytest.mark.asyncio
     async def test_create_task_copy_reset_fields_all(self, sync_db_session):
         """Test reset_fields=None resets all execution fields"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -2372,7 +2372,7 @@ class TestTaskCreatorCopyWithSave:
     @pytest.mark.asyncio
     async def test_create_task_copy_custom_include_children(self, sync_db_session):
         """Test custom copy mode with include_children parameter"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -2424,8 +2424,8 @@ class TestTaskCreatorCopyWithSave:
     @pytest.mark.asyncio
     async def test_tree_to_task_array_uses_task_model_fields(self, sync_db_session):
         """Test that _tree_to_task_array only uses TaskModel's actual fields"""
-        from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from aipartnerupflow.core.config import get_task_model_class
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.config import get_task_model_class
         
         task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)

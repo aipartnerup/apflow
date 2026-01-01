@@ -63,7 +63,7 @@
 
 #### 1. Create AggregateResultsExecutor
 
-Location: `src/aipartnerupflow/extensions/core/aggregate_results_executor.py`
+Location: `src/apflow/extensions/core/aggregate_results_executor.py`
 
 - Implements `BaseTask` interface
 - Uses `@executor_register()` for automatic registration

@@ -14,7 +14,7 @@ from unittest.mock import patch, MagicMock
 # Import functions - these are private but we need to test them
 # Use importlib to ensure we get the module, not a function
 import importlib
-api_main_module = importlib.import_module("aipartnerupflow.api.main")
+api_main_module = importlib.import_module("apflow.api.main")
 
 # Access private functions for testing
 _load_env_file = api_main_module._load_env_file
@@ -146,9 +146,9 @@ class TestSetupDevelopmentEnvironment:
     def test_setup_dev_env_skips_when_installed_as_package(self, monkeypatch):
         """Test that _setup_development_environment() skips when installed as package"""
         # Mock library root to be in site-packages
-        with patch("aipartnerupflow.api.main.Path") as mock_path:
+        with patch("apflow.api.main.Path") as mock_path:
             mock_file = MagicMock()
-            mock_file.parent.parent.parent.parent = Path("/usr/lib/python3.11/site-packages/aipartnerupflow")
+            mock_file.parent.parent.parent.parent = Path("/usr/lib/python3.11/site-packages/apflow")
             mock_path.return_value = mock_file
             
             # Mock sys.path operations
@@ -163,9 +163,9 @@ class TestSetupDevelopmentEnvironment:
     def test_setup_dev_env_runs_in_development_mode(self, monkeypatch):
         """Test that _setup_development_environment() runs in development mode"""
         # Mock library root to be in development directory (not site-packages)
-        with patch("aipartnerupflow.api.main.Path") as mock_path:
+        with patch("apflow.api.main.Path") as mock_path:
             mock_file = MagicMock()
-            dev_root = Path("/Users/dev/aipartnerupflow")
+            dev_root = Path("/Users/dev/apflow")
             mock_file.parent.parent.parent.parent = dev_root
             mock_path.return_value = mock_file
             
@@ -184,7 +184,7 @@ class TestSetupDevelopmentEnvironment:
     def test_setup_dev_env_handles_errors_gracefully(self):
         """Test that _setup_development_environment() handles errors gracefully"""
         # Mock Path to raise exception
-        with patch("aipartnerupflow.api.main.Path", side_effect=Exception("Error")):
+        with patch("apflow.api.main.Path", side_effect=Exception("Error")):
             # Should not raise exception
             _setup_development_environment()
             
@@ -206,14 +206,14 @@ class TestCreateRunnableApp:
         monkeypatch.delenv("TEST_VAR", raising=False)
         
         # Mock create_app_by_protocol to avoid full initialization
-        with patch("aipartnerupflow.api.main.create_app_by_protocol") as mock_create:
+        with patch("apflow.api.main.create_app_by_protocol") as mock_create:
             mock_app = MagicMock()
             mock_create.return_value = mock_app
             
             # Mock other initialization functions
-            with patch("aipartnerupflow.api.main.initialize_extensions"):
-                with patch("aipartnerupflow.api.main._load_custom_task_model"):
-                    with patch("aipartnerupflow.api.main._setup_development_environment"):
+            with patch("apflow.api.main.initialize_extensions"):
+                with patch("apflow.api.main._load_custom_task_model"):
+                    with patch("apflow.api.main._setup_development_environment"):
                         app = create_runnable_app(protocol="a2a")
                         
                         # .env should be loaded
@@ -223,14 +223,14 @@ class TestCreateRunnableApp:
     @pytest.mark.asyncio
     async def test_create_runnable_app_calls_setup_dev_env(self, monkeypatch):
         """Test that create_runnable_app() calls _setup_development_environment()"""
-        with patch("aipartnerupflow.api.main.create_app_by_protocol") as mock_create:
+        with patch("apflow.api.main.create_app_by_protocol") as mock_create:
             mock_app = MagicMock()
             mock_create.return_value = mock_app
             
-            with patch("aipartnerupflow.api.main.initialize_extensions"):
-                with patch("aipartnerupflow.api.main._load_custom_task_model"):
-                    with patch("aipartnerupflow.api.main._load_env_file"):
-                        with patch("aipartnerupflow.api.main._setup_development_environment") as mock_setup:
+            with patch("apflow.api.main.initialize_extensions"):
+                with patch("apflow.api.main._load_custom_task_model"):
+                    with patch("apflow.api.main._load_env_file"):
+                        with patch("apflow.api.main._setup_development_environment") as mock_setup:
                             app = create_runnable_app(protocol="a2a")
                             
                             # Should call _setup_development_environment
@@ -240,14 +240,14 @@ class TestCreateRunnableApp:
     @pytest.mark.asyncio
     async def test_create_runnable_app_initializes_extensions(self, monkeypatch):
         """Test that create_runnable_app() initializes extensions by default"""
-        with patch("aipartnerupflow.api.main.create_app_by_protocol") as mock_create:
+        with patch("apflow.api.main.create_app_by_protocol") as mock_create:
             mock_app = MagicMock()
             mock_create.return_value = mock_app
             
-            with patch("aipartnerupflow.api.main.initialize_extensions") as mock_init:
-                with patch("aipartnerupflow.api.main._load_custom_task_model"):
-                    with patch("aipartnerupflow.api.main._load_env_file"):
-                        with patch("aipartnerupflow.api.main._setup_development_environment"):
+            with patch("apflow.api.main.initialize_extensions") as mock_init:
+                with patch("apflow.api.main._load_custom_task_model"):
+                    with patch("apflow.api.main._load_env_file"):
+                        with patch("apflow.api.main._setup_development_environment"):
                             app = create_runnable_app(protocol="a2a")
                             
                             # Should initialize extensions by default
@@ -257,14 +257,14 @@ class TestCreateRunnableApp:
     @pytest.mark.asyncio
     async def test_create_runnable_app_skips_extension_init_when_disabled(self, monkeypatch):
         """Test that create_runnable_app() can skip extension initialization"""
-        with patch("aipartnerupflow.api.main.create_app_by_protocol") as mock_create:
+        with patch("apflow.api.main.create_app_by_protocol") as mock_create:
             mock_app = MagicMock()
             mock_create.return_value = mock_app
             
-            with patch("aipartnerupflow.api.main.initialize_extensions") as mock_init:
-                with patch("aipartnerupflow.api.main._load_custom_task_model"):
-                    with patch("aipartnerupflow.api.main._load_env_file"):
-                        with patch("aipartnerupflow.api.main._setup_development_environment"):
+            with patch("apflow.api.main.initialize_extensions") as mock_init:
+                with patch("apflow.api.main._load_custom_task_model"):
+                    with patch("apflow.api.main._load_env_file"):
+                        with patch("apflow.api.main._setup_development_environment"):
                             app = create_runnable_app(
                                 protocol="a2a",
                                 auto_initialize_extensions=False
@@ -277,14 +277,14 @@ class TestCreateRunnableApp:
     @pytest.mark.asyncio
     async def test_create_runnable_app_passes_kwargs_to_create_app(self, monkeypatch):
         """Test that create_runnable_app() passes kwargs to create_app_by_protocol"""
-        with patch("aipartnerupflow.api.main.create_app_by_protocol") as mock_create:
+        with patch("apflow.api.main.create_app_by_protocol") as mock_create:
             mock_app = MagicMock()
             mock_create.return_value = mock_app
             
-            with patch("aipartnerupflow.api.main.initialize_extensions"):
-                with patch("aipartnerupflow.api.main._load_custom_task_model"):
-                    with patch("aipartnerupflow.api.main._load_env_file"):
-                        with patch("aipartnerupflow.api.main._setup_development_environment"):
+            with patch("apflow.api.main.initialize_extensions"):
+                with patch("apflow.api.main._load_custom_task_model"):
+                    with patch("apflow.api.main._load_env_file"):
+                        with patch("apflow.api.main._setup_development_environment"):
                             # Pass custom kwargs
                             custom_routes = [MagicMock()]
                             custom_middleware = [MagicMock()]

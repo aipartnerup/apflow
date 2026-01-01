@@ -6,7 +6,7 @@ Tests for gRPC service execution functionality.
 
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from aipartnerupflow.extensions.grpc.grpc_executor import GrpcExecutor, GRPC_AVAILABLE
+from apflow.extensions.grpc.grpc_executor import GrpcExecutor, GRPC_AVAILABLE
 
 
 class TestGrpcExecutor:
@@ -41,7 +41,7 @@ class TestGrpcExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_server(self):
         """Test error when server is missing"""
-        from aipartnerupflow.core.execution.errors import ValidationError
+        from apflow.core.execution.errors import ValidationError
         executor = GrpcExecutor()
         
         with pytest.raises(ValidationError, match="server is required"):
@@ -55,7 +55,7 @@ class TestGrpcExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_service(self):
         """Test error when service is missing"""
-        from aipartnerupflow.core.execution.errors import ValidationError
+        from apflow.core.execution.errors import ValidationError
         executor = GrpcExecutor()
         
         with pytest.raises(ValidationError, match="service is required"):
@@ -69,7 +69,7 @@ class TestGrpcExecutor:
     @pytest.mark.asyncio
     async def test_execute_missing_method(self):
         """Test error when method is missing"""
-        from aipartnerupflow.core.execution.errors import ValidationError
+        from apflow.core.execution.errors import ValidationError
         executor = GrpcExecutor()
         
         with pytest.raises(ValidationError, match="method is required"):
@@ -82,8 +82,8 @@ class TestGrpcExecutor:
     @pytest.mark.asyncio
     async def test_execute_grpc_not_available(self):
         """Test behavior when grpcio is not installed"""
-        from aipartnerupflow.core.execution.errors import ConfigurationError
-        with patch("aipartnerupflow.extensions.grpc.grpc_executor.GRPC_AVAILABLE", False):
+        from apflow.core.execution.errors import ConfigurationError
+        with patch("apflow.extensions.grpc.grpc_executor.GRPC_AVAILABLE", False):
             executor = GrpcExecutor()
             with pytest.raises(ConfigurationError, match="grpcio is not installed"):
                 await executor.execute({

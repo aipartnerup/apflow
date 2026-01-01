@@ -10,9 +10,9 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch, AsyncMock, Mock
 from typer.testing import CliRunner
-from aipartnerupflow.cli.main import app
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow import clear_config
+from apflow.cli.main import app
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow import clear_config
 
 runner = CliRunner()
 
@@ -76,7 +76,7 @@ class TestGenerateCommand:
         
         # Also mock the specific module's getenv and os.environ.get to be sure
         # because the module might have already loaded them or use a cached version
-        with patch('aipartnerupflow.cli.commands.generate.os.getenv', return_value=None):
+        with patch('apflow.cli.commands.generate.os.getenv', return_value=None):
             with patch('os.environ.get', return_value=None):
                 result = runner.invoke(app, [
                     "generate", "task-tree",
@@ -92,8 +92,8 @@ class TestGenerateCommand:
     @pytest.mark.asyncio
     async def test_generate_basic(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):
         """Test basic task tree generation"""
-        with patch('aipartnerupflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
-            with patch('aipartnerupflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
+        with patch('apflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
+            with patch('apflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
                 mock_task_executor = Mock()
                 mock_task_executor.execute_task_tree = AsyncMock()
                 mock_task_executor_class.return_value = mock_task_executor
@@ -110,7 +110,7 @@ class TestGenerateCommand:
                 mock_result_task.error = None
                 mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
                 
-                with patch('aipartnerupflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+                with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
                     result = runner.invoke(app, [
                         "generate", "task-tree",
                         "Fetch data from API and process it"
@@ -124,8 +124,8 @@ class TestGenerateCommand:
     @pytest.mark.asyncio
     async def test_generate_with_temperature(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):
         """Test generate command with --temperature parameter"""
-        with patch('aipartnerupflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
-            with patch('aipartnerupflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
+        with patch('apflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
+            with patch('apflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
                 mock_task_executor = Mock()
                 mock_task_executor.execute_task_tree = AsyncMock()
                 mock_task_executor_class.return_value = mock_task_executor
@@ -151,7 +151,7 @@ class TestGenerateCommand:
                 mock_result_task.error = None
                 mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
                 
-                with patch('aipartnerupflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+                with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
                     result = runner.invoke(app, [
                         "generate", "task-tree",
                         "Test requirement",
@@ -165,8 +165,8 @@ class TestGenerateCommand:
     @pytest.mark.asyncio
     async def test_generate_with_max_tokens(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):
         """Test generate command with --max-tokens parameter"""
-        with patch('aipartnerupflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
-            with patch('aipartnerupflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
+        with patch('apflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
+            with patch('apflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
                 mock_task_executor = Mock()
                 mock_task_executor.execute_task_tree = AsyncMock()
                 mock_task_executor_class.return_value = mock_task_executor
@@ -192,7 +192,7 @@ class TestGenerateCommand:
                 mock_result_task.error = None
                 mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
                 
-                with patch('aipartnerupflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+                with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
                     result = runner.invoke(app, [
                         "generate", "task-tree",
                         "Test requirement",
@@ -206,8 +206,8 @@ class TestGenerateCommand:
     @pytest.mark.asyncio
     async def test_generate_with_all_parameters(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):
         """Test generate command with all LLM parameters"""
-        with patch('aipartnerupflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
-            with patch('aipartnerupflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
+        with patch('apflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
+            with patch('apflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
                 mock_task_executor = Mock()
                 mock_task_executor.execute_task_tree = AsyncMock()
                 mock_task_executor_class.return_value = mock_task_executor
@@ -233,7 +233,7 @@ class TestGenerateCommand:
                 mock_result_task.error = None
                 mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
                 
-                with patch('aipartnerupflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+                with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
                     result = runner.invoke(app, [
                         "generate", "task-tree",
                         "Test requirement",
@@ -256,8 +256,8 @@ class TestGenerateCommand:
     @pytest.mark.asyncio
     async def test_generate_with_output_file(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):
         """Test generate command with --output parameter"""
-        with patch('aipartnerupflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
-            with patch('aipartnerupflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
+        with patch('apflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
+            with patch('apflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
                 mock_task_executor = Mock()
                 mock_task_executor.execute_task_tree = AsyncMock()
                 mock_task_executor_class.return_value = mock_task_executor
@@ -274,7 +274,7 @@ class TestGenerateCommand:
                 mock_result_task.error = None
                 mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
                 
-                with patch('aipartnerupflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+                with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
                     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as tmp_file:
                             tmp_path = tmp_file.name
                     
@@ -301,8 +301,8 @@ class TestGenerateCommand:
     @pytest.mark.asyncio
     async def test_generate_with_save(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):
         """Test generate command with --save parameter"""
-        with patch('aipartnerupflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
-            with patch('aipartnerupflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
+        with patch('apflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
+            with patch('apflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
                 mock_task_executor = Mock()
                 mock_task_executor.execute_task_tree = AsyncMock()
                 mock_task_executor_class.return_value = mock_task_executor
@@ -320,8 +320,8 @@ class TestGenerateCommand:
                 mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
                 
                 # Mock TaskCreator (it's imported inside the function, so we patch the import path)
-                with patch('aipartnerupflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
-                    with patch('aipartnerupflow.core.execution.task_creator.TaskCreator') as mock_task_creator_class:
+                with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+                    with patch('apflow.core.execution.task_creator.TaskCreator') as mock_task_creator_class:
                         mock_task_creator = Mock()
                         mock_task_tree = Mock()
                         mock_task_tree.task = Mock()

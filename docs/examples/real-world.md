@@ -4,7 +4,7 @@
 > - [Basic Task Examples](basic_task.md) for simple, copy-paste patterns
 > - [Task Tree Examples](task-tree.md) for dependency and execution order patterns
 
-Complete, runnable examples for common real-world use cases. These examples demonstrate how to use aipartnerupflow in production scenarios.
+Complete, runnable examples for common real-world use cases. These examples demonstrate how to use apflow in production scenarios.
 
 ## Table of Contents
 
@@ -24,7 +24,7 @@ Process data from multiple sources, transform it, and save results.
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -112,7 +112,7 @@ Call multiple APIs, aggregate results, and send notifications.
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -213,7 +213,7 @@ Process a batch of items where each item depends on the previous one.
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -276,7 +276,7 @@ Handle failures gracefully with fallback tasks.
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()
@@ -358,7 +358,7 @@ Complex workflow with multiple stages and parallel processing.
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()

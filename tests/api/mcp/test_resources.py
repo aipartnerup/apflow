@@ -6,8 +6,8 @@ Tests for MCP resources registry and resource reading.
 
 import pytest
 from unittest.mock import AsyncMock, patch
-from aipartnerupflow.api.mcp.resources import McpResourcesRegistry
-from aipartnerupflow.api.mcp.adapter import TaskRoutesAdapter
+from apflow.api.mcp.resources import McpResourcesRegistry
+from apflow.api.mcp.adapter import TaskRoutesAdapter
 
 
 class TestMcpResourcesRegistry:

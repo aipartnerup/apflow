@@ -1,12 +1,12 @@
-# Extending aipartnerupflow
+# Extending apflow
 
 > **For end users:** See the [Custom Tasks Guide](../guides/custom-tasks.md) for a step-by-step tutorial on creating your own executors. This document is focused on contributors and advanced extension patterns.
 
-This guide explains how to extend aipartnerupflow by creating custom executors, extensions, tools, and hooks.
+This guide explains how to extend apflow by creating custom executors, extensions, tools, and hooks.
 
 ## Overview
 
-aipartnerupflow is designed to be extensible. You can create:
+apflow is designed to be extensible. You can create:
 
 1. **Custom Executors**: Task execution implementations
 2. **Custom Extensions**: Storage, hooks, and other extension types
@@ -21,7 +21,7 @@ aipartnerupflow is designed to be extensible. You can create:
 For maximum flexibility:
 
 ```python
-from aipartnerupflow import ExecutableTask
+from apflow import ExecutableTask
 from typing import Dict, Any
 
 class MyCustomExecutor(ExecutableTask):
@@ -66,7 +66,7 @@ class MyCustomExecutor(ExecutableTask):
 For common functionality:
 
 ```python
-from aipartnerupflow import BaseTask
+from apflow import BaseTask
 from typing import Dict, Any
 from pydantic import BaseModel
 
@@ -111,7 +111,7 @@ class MyCustomExecutor(BaseTask):
 ### Registering Your Executor
 
 ```python
-from aipartnerupflow import executor_register
+from apflow import executor_register
 
 # Register the executor
 executor_register(MyCustomExecutor())
@@ -134,9 +134,9 @@ Extensions are categorized by `ExtensionCategory`:
 ### Example: Custom Storage Extension
 
 ```python
-from aipartnerupflow.core.extensions.base import Extension
-from aipartnerupflow.core.extensions.types import ExtensionCategory
-from aipartnerupflow.core.extensions.storage import StorageExtension
+from apflow.core.extensions.base import Extension
+from apflow.core.extensions.types import ExtensionCategory
+from apflow.core.extensions.storage import StorageExtension
 
 class MyCustomStorage(StorageExtension):
     """Custom storage implementation"""
@@ -159,7 +159,7 @@ class MyCustomStorage(StorageExtension):
 ### Registering Extensions
 
 ```python
-from aipartnerupflow import storage_register
+from apflow import storage_register
 
 storage_register(MyCustomStorage())
 ```
@@ -169,7 +169,7 @@ storage_register(MyCustomStorage())
 Tools are reusable utilities that can be used by executors:
 
 ```python
-from aipartnerupflow.core.tools.base import Tool
+from apflow.core.tools.base import Tool
 from typing import Dict, Any
 
 class MyCustomTool(Tool):
@@ -195,7 +195,7 @@ class MyCustomTool(Tool):
 
 **Registering:**
 ```python
-from aipartnerupflow import tool_register
+from apflow import tool_register
 
 tool_register(MyCustomTool())
 ```
@@ -209,7 +209,7 @@ Hooks allow you to modify task behavior before and after execution.
 Modify task inputs before execution:
 
 ```python
-from aipartnerupflow import register_pre_hook
+from apflow import register_pre_hook
 
 @register_pre_hook
 async def validate_and_transform(task):
@@ -231,7 +231,7 @@ async def validate_and_transform(task):
 Process results after execution:
 
 ```python
-from aipartnerupflow import register_post_hook
+from apflow import register_post_hook
 
 @register_post_hook
 async def log_and_notify(task, inputs, result):
@@ -250,7 +250,7 @@ async def log_and_notify(task, inputs, result):
 Hooks can access the database using the same session as TaskManager:
 
 ```python
-from aipartnerupflow import register_pre_hook, get_hook_repository
+from apflow import register_pre_hook, get_hook_repository
 
 @register_pre_hook
 async def modify_task_fields(task):
@@ -307,9 +307,9 @@ For detailed lifecycle information, see [Task Tree Execution Lifecycle](../archi
 Extend TaskModel to add custom fields:
 
 ```python
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.storage.sqlalchemy.models import TaskModel
 from sqlalchemy import Column, String, Integer
-from aipartnerupflow import set_task_model_class
+from apflow import set_task_model_class
 
 class ProjectTaskModel(TaskModel):
     """Custom TaskModel with project and department fields"""
@@ -384,14 +384,14 @@ CLI extensions allow you to register new subcommand groups to the `apflow` CLI. 
 The `@cli_register()` decorator provides a clean, declarative way to register CLI extensions:
 
 ```python
-from aipartnerupflow.cli import CLIExtension, cli_register
+from apflow.cli import CLIExtension, cli_register
 
 @cli_register(name="users", help="Manage and analyze users")
 class UsersCommand(CLIExtension):
     pass
 
 # Add commands to the registered extension
-from aipartnerupflow.cli import get_cli_registry
+from apflow.cli import get_cli_registry
 
 users_app = get_cli_registry()["users"]
 
@@ -441,12 +441,12 @@ class EnhancedUsersCommand(CLIExtension):
 
 ### Method 2: Using Entry Points (External Packages)
 
-For external packages, register your command group under the `aipartnerupflow.cli_plugins` group in your project's `pyproject.toml`.
+For external packages, register your command group under the `apflow.cli_plugins` group in your project's `pyproject.toml`.
 
 #### 1. Create your Command Group
 
 ```python
-from aipartnerupflow.cli import CLIExtension
+from apflow.cli import CLIExtension
 
 # Create the command group
 users_app = CLIExtension(help="Manage and analyze users")
@@ -465,7 +465,7 @@ def list():
 #### 2. Register in `pyproject.toml`
 
 ```toml
-[project.entry-points."aipartnerupflow.cli_plugins"]
+[project.entry-points."apflow.cli_plugins"]
 users = "your_package.cli:users_app"
 ```
 
@@ -490,7 +490,7 @@ Both registration methods support two types of plugin objects:
 ### CLI Extension API Reference
 
 ```python
-from aipartnerupflow.cli import (
+from apflow.cli import (
     CLIExtension,      # Base class for CLI extensions (inherits from typer.Typer)
     cli_register,      # Decorator for registering CLI extensions
     get_cli_registry,  # Get all registered CLI extensions
@@ -623,7 +623,7 @@ async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
 
 ```python
 import pytest
-from aipartnerupflow import executor_register, TaskManager, create_session
+from apflow import executor_register, TaskManager, create_session
 
 @pytest.fixture
 def executor():
@@ -644,7 +644,7 @@ async def test_executor_execution(executor, task_manager):
         inputs={"data": "test"}
     )
     
-    from aipartnerupflow.core.types import TaskTreeNode
+    from apflow.core.types import TaskTreeNode
     task_tree = TaskTreeNode(task)
     result = await task_manager.distribute_task_tree(task_tree)
     

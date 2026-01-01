@@ -1,6 +1,6 @@
 # Tutorial 3: Working with Dependencies
 
-Master dependencies - the mechanism that controls when tasks execute. This is one of the most important concepts in aipartnerupflow!
+Master dependencies - the mechanism that controls when tasks execute. This is one of the most important concepts in apflow!
 
 ## What You'll Learn
 
@@ -48,7 +48,7 @@ Create two tasks where the second depends on the first:
 
 ```python
 import asyncio
-from aipartnerupflow import TaskManager, TaskTreeNode, create_session
+from apflow import TaskManager, TaskTreeNode, create_session
 
 async def main():
     db = create_session()

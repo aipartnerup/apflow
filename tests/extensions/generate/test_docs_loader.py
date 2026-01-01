@@ -2,7 +2,7 @@
 Test docs_loader module
 """
 
-from aipartnerupflow.extensions.generate.docs_loader import (
+from apflow.extensions.generate.docs_loader import (
     load_task_orchestration_docs,
     load_task_examples,
     load_executor_docs,

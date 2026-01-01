@@ -4,7 +4,7 @@ Test crew_tool decorator functionality
 import pytest
 
 try:
-    from aipartnerupflow.core.tools import tool_register, get_tool_registry, register_tool, BaseTool
+    from apflow.core.tools import tool_register, get_tool_registry, register_tool, BaseTool
     # Backward compatibility aliases
     tool = tool_register
     crew_tool = tool_register

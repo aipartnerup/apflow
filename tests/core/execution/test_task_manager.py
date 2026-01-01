@@ -4,9 +4,9 @@ Test TaskManager functionality
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from aipartnerupflow.core.execution.task_manager import TaskManager
-from aipartnerupflow.core.types import TaskTreeNode
-from aipartnerupflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.execution.task_manager import TaskManager
+from apflow.core.types import TaskTreeNode
+from apflow.core.storage.sqlalchemy.models import TaskModel
 
 
 class TestTaskManager:

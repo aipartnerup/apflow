@@ -9,11 +9,11 @@ import pytest_asyncio
 import json
 import uuid
 from typer.testing import CliRunner
-from aipartnerupflow.cli.main import app
-from aipartnerupflow.core.execution.task_executor import TaskExecutor
-from aipartnerupflow.core.storage import set_default_session, reset_default_session
-from aipartnerupflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from aipartnerupflow.core.config import get_task_model_class
+from apflow.cli.main import app
+from apflow.core.execution.task_executor import TaskExecutor
+from apflow.core.storage import set_default_session, reset_default_session
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.config import get_task_model_class
 
 runner = CliRunner()
 
@@ -1980,14 +1980,14 @@ class TestTasksWatchCommand:
         # Mock the Live display to avoid interactive blocking
         from unittest.mock import patch, MagicMock
         
-        with patch('aipartnerupflow.cli.commands.tasks.Live') as mock_live:
+        with patch('apflow.cli.commands.tasks.Live') as mock_live:
             # Mock Live context manager
             mock_live_instance = MagicMock()
             mock_live.return_value.__enter__ = MagicMock(return_value=mock_live_instance)
             mock_live.return_value.__exit__ = MagicMock(return_value=None)
             
             # Mock time.sleep to avoid actual waiting
-            with patch('aipartnerupflow.cli.commands.tasks.time.sleep') as mock_sleep:
+            with patch('apflow.cli.commands.tasks.time.sleep') as mock_sleep:
                 # Make the loop exit after first iteration by raising KeyboardInterrupt
                 mock_sleep.side_effect = KeyboardInterrupt()
                 
