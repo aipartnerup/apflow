@@ -15,7 +15,12 @@ docs/
 ├── guides/                      # User guides (merged usage + user-guide)
 │   ├── task-orchestration.md   # Task orchestration guide
 │   ├── custom-tasks.md         # Custom tasks creation guide
-│   ├── cli.md                  # CLI usage documentation
+│   ├── cli/                     # CLI usage documentation
+│   │   ├── index.md            # CLI overview and quick start
+│   │   ├── configuration.md    # CLI configuration management
+│   │   ├── commands.md         # CLI command reference
+│   │   ├── api-gateway.md      # API gateway integration
+│   │   └── examples.md         # CLI usage examples
 │   └── api-server.md           # API server setup and usage guide
 ├── api/                         # API reference documentation
 │   ├── python.md               # Python library API reference

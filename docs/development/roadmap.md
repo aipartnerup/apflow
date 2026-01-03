@@ -42,7 +42,73 @@ result = await (
 
 ---
 
-### Priority 2: Protocol Adapter Abstraction Layer ⭐⭐⭐
+### Priority 2: CLI → API Gateway Architecture ⭐⭐⭐
+
+**Goal:** Enable CLI commands to access API-managed data, ensuring data consistency and supporting concurrent access patterns.
+
+**Problem Statement:**
+- CLI currently queries database directly, causing data inconsistency when API is running
+- DuckDB doesn't support concurrent writes, creating conflicts between CLI and API
+- No support for remote API servers or multi-instance deployments
+
+**Implementation:**
+```python
+# New module: src/apflow/cli/api_client.py
+# HTTP client for CLI to communicate with API
+class APIClient:
+    def __init__(self, server_url: str, auth_token: Optional[str] = None):
+        self.server_url = server_url
+        self.auth_token = auth_token
+    
+    async def execute_task(self, task_id: str) -> dict: ...
+    async def get_task_status(self, task_id: str) -> dict: ...
+    async def list_tasks(self, **filters) -> list: ...
+    async def cancel_task(self, task_id: str) -> dict: ...
+
+# ConfigManager extended with:
+# - api_server_url (address, port)
+# - api_auth_token (optional, for auth with running API)
+# - use_local_db (bool, bypass API for direct local queries if needed)
+# - api_timeout (seconds)
+# - api_retry_policy (exponential backoff)
+```
+
+**CLI Integration:**
+```bash
+# Configure API server
+apflow config set api_server_url http://localhost:8000
+apflow config set api_auth_token <token>
+
+# CLI commands automatically use API when configured
+apflow tasks list  # Routes to API instead of local DB
+apflow tasks execute task-123
+apflow tasks cancel task-456
+
+# Fallback behavior: if API unreachable, use local DB (configurable)
+apflow tasks list --local-only  # Force local database access
+```
+
+**Deliverables:**
+- HTTP client layer (`src/apflow/cli/api_client.py`) with request/response handling
+- ConfigManager extension for API configuration (URL, auth, timeouts, retry policy)
+- CLI command layer refactored to use APIClient by default when configured
+- Graceful fallback to local DB if API unavailable (with warning)
+- Request middleware for auth token injection
+- Error handling for network timeouts and API errors
+- Documentation on API + CLI co-deployment patterns
+- Integration tests for CLI → API workflows
+
+**Why:**
+- Solves data consistency problem between API and CLI (single source of truth)
+- Unblocks DuckDB concurrent write limitations (all writes go through API)
+- Foundation for all future protocol adapters (CLI, GraphQL, MQTT, WebSocket all use same HTTP layer)
+- Enterprise requirement (API gateway pattern for multi-instance deployments)
+- Prerequisite for distributed deployments and remote API servers
+- Enables CLI to work with centralized API without direct database access
+
+---
+
+### Priority 3: Protocol Adapter Abstraction Layer ⭐⭐⭐
 
 **Goal:** Unified protocol interface, framework-agnostic
 
@@ -68,7 +134,7 @@ class ProtocolAdapter(Protocol):
 
 ---
 
-### Priority 3: GraphQL Protocol Adapter ⭐⭐⭐
+### Priority 4: GraphQL Protocol Adapter ⭐⭐⭐
 
 **Goal:** GraphQL query interface for complex task trees
 
@@ -100,7 +166,7 @@ graphql = ["strawberry-graphql>=0.219.0"]
 
 ---
 
-### Priority 4: MQTT Protocol Adapter ⭐⭐
+### Priority 5: MQTT Protocol Adapter ⭐⭐
 
 **Goal:** IoT/Edge AI agent communication
 
@@ -131,7 +197,7 @@ mqtt = ["paho-mqtt>=1.6.1"]
 
 ---
 
-### Priority 5: Observability Hook System ⭐⭐
+### Priority 6: Observability Hook System ⭐⭐
 
 **Goal:** Pluggable metrics collection, user-chosen backends
 
@@ -160,7 +226,7 @@ tracer.register_collector(PrometheusCollector())  # User provides
 
 ---
 
-### Priority 6: Workflow Patterns Library ⭐⭐
+### Priority 7: Workflow Patterns Library ⭐⭐
 
 **Goal:** Common orchestration patterns as reusable functions
 
@@ -189,7 +255,7 @@ result = await map_reduce(
 
 ---
 
-### Priority 7: VS Code Extension ⭐
+### Priority 8: VS Code Extension ⭐
 
 **Goal:** Task tree visualization in editor
 
@@ -207,7 +273,7 @@ result = await map_reduce(
 
 ---
 
-### Priority 8: Testing Utilities ⭐
+### Priority 9: Testing Utilities ⭐
 
 **Goal:** Make workflow testing easy
 
@@ -233,7 +299,7 @@ result = await simulate_workflow(task_tree, speed_factor=10.0)
 
 ---
 
-### Priority 9: Hot Reload Development Mode ⭐
+### Priority 10: Hot Reload Development Mode ⭐
 
 **Goal:** Auto-reload on code changes
 
@@ -258,7 +324,7 @@ apflow dev --watch src/tasks/
 
 ---
 
-### Priority 10: Bidirectional WebSocket Server ⭐
+### Priority 11: Bidirectional WebSocket Server ⭐
 
 **Goal:** Real-time agent-to-agent collaboration
 

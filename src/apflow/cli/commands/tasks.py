@@ -10,6 +10,12 @@ from typing import Optional, List, Coroutine, Any
 from apflow.core.execution.task_executor import TaskExecutor
 from apflow.core.utils.logger import get_logger
 from apflow.core.utils.helpers import tree_node_to_dict
+from apflow.cli.api_gateway_helper import (
+    should_use_api,
+    run_async_safe,
+    get_api_client_if_configured,
+    log_api_usage,
+)
 from rich.console import Console
 from rich.table import Table
 from rich.live import Live
@@ -18,33 +24,6 @@ logger = get_logger(__name__)
 
 app = typer.Typer(name="tasks", help="Manage and query tasks")
 console = Console()
-
-
-def run_async_safe(coro: Coroutine[Any, Any, Any]) -> Any:
-    """
-    Safely run async coroutine in CLI context.
-    
-    Handles the case where asyncpg connections need to be created and destroyed
-    within the same event loop. This ensures database connections don't get
-    bound to closed event loops.
-    
-    Args:
-        coro: Coroutine to run
-        
-    Returns:
-        Result of the coroutine
-    """
-    try:
-        # Check if event loop is already running
-        loop = asyncio.get_running_loop()
-        # Event loop is running (e.g., in test environment), use nest_asyncio
-        import nest_asyncio
-        nest_asyncio.apply()
-        return loop.run_until_complete(coro)
-    except RuntimeError:
-        # No event loop running, safe to use asyncio.run()
-        # This creates and closes an event loop for the entire coroutine operation
-        return asyncio.run(coro)
 
 
 
@@ -61,87 +40,121 @@ def status(
         task_ids: List of task IDs to check
     """
     try:
-        task_executor = TaskExecutor()
+        using_api = should_use_api()
+        log_api_usage("status", using_api)
         
-        # Get task details from database
-        from apflow.core.storage import get_default_session
-        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from apflow.core.config import get_task_model_class
-        
-        db_session = get_default_session()
-        task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
-        
-        statuses = []
-        
-        # Helper function to get task (handles both sync and async)
-        async def get_task_safe(task_id: str):
-            try:
-                return await task_repository.get_task_by_id(task_id)
-            except Exception as e:
-                logger.warning(f"Failed to get task {task_id}: {str(e)}")
-                return None
-        
-        for task_id in task_ids:
-            is_running = task_executor.is_task_running(task_id)
+        async def get_statuses():
+            statuses = []
             
-            try:
-                task = run_async_safe(get_task_safe(task_id))
-                
-                if task:
-                    # Match API format: (task_id, context_id, status, progress, error, is_running, started_at, updated_at)
-                    # Keep name field for CLI display convenience
-                    statuses.append({
-                        "task_id": task.id,
-                        "context_id": task.id,  # For API compatibility
-                        "name": task.name,  # Keep for CLI display
-                        "status": task.status,
-                        "progress": float(task.progress) if task.progress else 0.0,
-                        "is_running": is_running,
-                        "error": task.error,
-                        "started_at": task.started_at.isoformat() if task.started_at else None,
-                        "updated_at": task.updated_at.isoformat() if task.updated_at else None,
-                    })
-                else:
-                    # Task not found in database, but check if it's running in memory
-                    if is_running:
+            async with get_api_client_if_configured() as client:
+                for task_id in task_ids:
+                    try:
+                        if client:
+                            # Use API
+                            status_data = await client.get_task_status(task_id)
+                            statuses.append(status_data)
+                        else:
+                            # Use local database
+                            task_executor = TaskExecutor()
+                            is_running = task_executor.is_task_running(task_id)
+                            
+                            from apflow.core.storage import get_default_session
+                            from apflow.core.storage.sqlalchemy.task_repository import (
+                                TaskRepository,
+                            )
+                            from apflow.core.config import get_task_model_class
+                            
+                            db_session = get_default_session()
+                            task_repository = TaskRepository(
+                                db_session,
+                                task_model_class=get_task_model_class(),
+                            )
+                            
+                            try:
+                                task = (
+                                    await task_repository.get_task_by_id(task_id)
+                                )
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to get task {task_id}: "
+                                    f"{str(e)}"
+                                )
+                                task = None
+                            
+                            if task:
+                                statuses.append({
+                                    "task_id": task.id,
+                                    "context_id": task.id,
+                                    "name": task.name,
+                                    "status": task.status,
+                                    "progress": (
+                                        float(task.progress)
+                                        if task.progress
+                                        else 0.0
+                                    ),
+                                    "is_running": is_running,
+                                    "error": task.error,
+                                    "started_at": (
+                                        task.started_at.isoformat()
+                                        if task.started_at
+                                        else None
+                                    ),
+                                    "updated_at": (
+                                        task.updated_at.isoformat()
+                                        if task.updated_at
+                                        else None
+                                    ),
+                                })
+                            elif is_running:
+                                statuses.append({
+                                    "task_id": task_id,
+                                    "context_id": task_id,
+                                    "name": "Unknown",
+                                    "status": "in_progress",
+                                    "progress": 0.0,
+                                    "is_running": True,
+                                    "error": None,
+                                    "started_at": None,
+                                    "updated_at": None,
+                                })
+                            else:
+                                statuses.append({
+                                    "task_id": task_id,
+                                    "context_id": task_id,
+                                    "name": "Unknown",
+                                    "status": "not_found",
+                                    "progress": 0.0,
+                                    "is_running": False,
+                                    "error": None,
+                                    "started_at": None,
+                                    "updated_at": None,
+                                })
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to get task {task_id}: {str(e)}"
+                        )
+                        task_executor = TaskExecutor()
+                        is_running = task_executor.is_task_running(task_id)
                         statuses.append({
                             "task_id": task_id,
-                            "context_id": task_id,  # For API compatibility
+                            "context_id": task_id,
                             "name": "Unknown",
-                            "status": "in_progress",
+                            "status": "error",
                             "progress": 0.0,
-                            "is_running": True,
-                            "error": None,
+                            "is_running": is_running,
+                            "error": str(e),
                             "started_at": None,
                             "updated_at": None,
                         })
-                    else:
-                        statuses.append({
-                            "task_id": task_id,
-                            "context_id": task_id,  # For API compatibility
-                            "name": "Unknown",
-                            "status": "not_found",
-                            "progress": 0.0,
-                            "is_running": False,
-                            "error": None,
-                            "started_at": None,
-                            "updated_at": None,
-                        })
-            except Exception as e:
-                logger.warning(f"Failed to get task {task_id}: {str(e)}")
-                statuses.append({
-                    "task_id": task_id,
-                    "context_id": task_id,  # For API compatibility
-                    "name": "Unknown",
-                    "status": "error",
-                    "progress": 0.0,
-                    "is_running": is_running,
-                    "error": str(e),
-                    "started_at": None,
-                    "updated_at": None,
-                })
+            
+            return statuses
         
+        statuses = run_async_safe(get_statuses())
         typer.echo(json.dumps(statuses, indent=2))
+        
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        raise typer.Exit(1)
         
     except Exception as e:
         typer.echo(f"Error: {str(e)}", err=True)
@@ -267,7 +280,10 @@ def _print_count_table(counts: dict):
 @app.command()
 def cancel(
     task_ids: List[str] = typer.Argument(..., help="Task IDs to cancel"),
-    force: bool = typer.Option(False, "--force", "-f", help="Force cancellation (immediate stop)"),
+    force: bool = typer.Option(
+        False, "--force", "-f",
+        help="Force cancellation (immediate stop)",
+    ),
 ):
     """
     Cancel one or more running tasks
@@ -281,43 +297,62 @@ def cancel(
         force: If True, force immediate cancellation (may lose data)
     """
     try:
-        task_executor = TaskExecutor()
+        using_api = should_use_api()
+        log_api_usage("cancel", using_api)
         
+        async def cancel_tasks():
+            results = []
+            
+            async with get_api_client_if_configured() as client:
+                for task_id in task_ids:
+                    try:
+                        error_message = (
+                            "Cancelled by user"
+                            if not force
+                            else "Force cancelled by user"
+                        )
+                        
+                        if client:
+                            # Use API
+                            cancel_result = (
+                                await client.cancel_task(task_id)
+                            )
+                        else:
+                            # Use local database
+                            task_executor = TaskExecutor()
+                            cancel_result = (
+                                await task_executor.cancel_task(
+                                    task_id, error_message
+                                )
+                            )
+                        
+                        cancel_result["task_id"] = task_id
+                        cancel_result["force"] = force
+                        results.append(cancel_result)
+                    except Exception as e:
+                        logger.error(
+                            f"Error cancelling task {task_id}: "
+                            f"{str(e)}",
+                            exc_info=True,
+                        )
+                        results.append({
+                            "task_id": task_id,
+                            "status": "error",
+                            "error": str(e),
+                        })
+            
+            return results
         
-        results = []
-        for task_id in task_ids:
-            try:
-                # Prepare error message
-                error_message = "Cancelled by user" if not force else "Force cancelled by user"
-                
-                # Call TaskExecutor.cancel_task() which handles:
-                # 1. Calling executor.cancel() if executor supports cancellation
-                # 2. Updating database with cancelled status and token_usage
-                cancel_result = run_async_safe(task_executor.cancel_task(task_id, error_message))
-                
-                # Add task_id to result
-                cancel_result["task_id"] = task_id
-                cancel_result["force"] = force
-                
-                results.append(cancel_result)
-                    
-            except Exception as e:
-                logger.error(f"Error cancelling task {task_id}: {str(e)}", exc_info=True)
-                results.append({
-                    "task_id": task_id,
-                    "status": "error",
-                    "error": str(e)
-                })
-        
-        # Output results
+        results = run_async_safe(cancel_tasks())
         typer.echo(json.dumps(results, indent=2))
         
         # Check if any cancellation failed
-        # Note: "failed" status for already completed/cancelled tasks is acceptable (not an error)
-        # Only treat actual errors as failures
         failed = any(
-            r.get("status") == "error" or 
-            (r.get("status") == "failed" and "not found" in r.get("message", "").lower())
+            r.get("status") == "error"
+            or (
+                r.get("status") == "failed"
+                and "not found" in r.get("message", "").lower()
+            )
             for r in results
         )
         if failed:
@@ -467,18 +502,33 @@ def get(
         task_id: Task ID to retrieve
     """
     try:
-        from apflow.core.storage import get_default_session
-        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from apflow.core.config import get_task_model_class
-        
-        db_session = get_default_session()
-        task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+        using_api = should_use_api()
+        log_api_usage("get", using_api)
         
         async def get_task():
-            task = await task_repository.get_task_by_id(task_id)
-            if not task:
-                raise ValueError(f"Task {task_id} not found")
-            return task.to_dict()
+            async with get_api_client_if_configured() as client:
+                if client:
+                    # Use API
+                    task_dict = await client.get_task(task_id)
+                    return task_dict
+                else:
+                    # Use local database
+                    from apflow.core.storage import get_default_session
+                    from apflow.core.storage.sqlalchemy.task_repository import (
+                        TaskRepository,
+                    )
+                    from apflow.core.config import get_task_model_class
+                    
+                    db_session = get_default_session()
+                    task_repository = TaskRepository(
+                        db_session,
+                        task_model_class=get_task_model_class(),
+                    )
+                    
+                    task = await task_repository.get_task_by_id(task_id)
+                    if not task:
+                        raise ValueError(f"Task {task_id} not found")
+                    return task.to_dict()
         
         task_dict = run_async_safe(get_task())
         typer.echo(json.dumps(task_dict, indent=2))
@@ -843,14 +893,26 @@ def children(
 
 @app.command("list")
 def list_tasks(
-    user_id: Optional[str] = typer.Option(None, "--user-id", "-u", help="Filter by user ID"),
-    status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status"),
-    root_only: bool = typer.Option(True, "--root-only/--all-tasks", help="Only show root tasks (default: True)"),
-    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of tasks to return"),
-    offset: int = typer.Option(0, "--offset", "-o", help="Pagination offset"),
+    user_id: Optional[str] = typer.Option(
+        None, "--user-id", "-u", help="Filter by user ID",
+    ),
+    status: Optional[str] = typer.Option(
+        None, "--status", "-s", help="Filter by status",
+    ),
+    root_only: bool = typer.Option(
+        True, "--root-only/--all-tasks",
+        help="Only show root tasks (default: True)",
+    ),
+    limit: int = typer.Option(
+        100, "--limit", "-l",
+        help="Maximum number of tasks to return",
+    ),
+    offset: int = typer.Option(
+        0, "--offset", "-o", help="Pagination offset",
+    ),
 ):
     """
-    List tasks from database
+    List tasks from database or API
     
     Args:
         user_id: Filter by user ID
@@ -860,49 +922,72 @@ def list_tasks(
         offset: Pagination offset
     """
     try:
-        from apflow.core.storage import get_default_session
-        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from apflow.core.config import get_task_model_class
+        using_api = should_use_api()
+        log_api_usage("list", using_api)
         
         async def get_all_tasks():
-            # Create database session inside async context to ensure proper event loop binding
-            db_session = get_default_session()
-            task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
-            
-            try:
-                # Query tasks with filters
-                parent_id_filter = "" if root_only else None
-                tasks = await task_repository.query_tasks(
-                    user_id=user_id,
-                    status=status,
-                    parent_id=parent_id_filter,
-                    limit=limit,
-                    offset=offset,
-                    order_by="created_at",
-                    order_desc=True
-                )
-                
-                # Convert to dictionaries and check if tasks have children
-                task_dicts = []
-                for task in tasks:
-                    task_dict = task.to_dict()
-                    
-                    # Check if task has children (if has_children field is not set or False, check database)
-                    if not task_dict.get("has_children"):
-                        children = await task_repository.get_child_tasks_by_parent_id(task.id)
-                        task_dict["has_children"] = len(children) > 0
-                    
-                    task_dicts.append(task_dict)
-                
-                return task_dicts
-            finally:
-                # Ensure session is properly closed
-                # Ensure session is properly closed
-                from sqlalchemy.ext.asyncio import AsyncSession
-                if isinstance(db_session, AsyncSession):
-                    await db_session.close()
+            async with get_api_client_if_configured() as client:
+                if client:
+                    # Use API
+                    tasks = await client.list_tasks(
+                        user_id=user_id,
+                        status=status,
+                        limit=limit,
+                        offset=offset,
+                    )
+                    return tasks
                 else:
-                    db_session.close()
+                    # Use local database
+                    from apflow.core.storage import get_default_session
+                    from apflow.core.storage.sqlalchemy.task_repository import (
+                        TaskRepository,
+                    )
+                    from apflow.core.config import get_task_model_class
+                    
+                    db_session = get_default_session()
+                    task_repository = TaskRepository(
+                        db_session,
+                        task_model_class=get_task_model_class(),
+                    )
+                    
+                    try:
+                        parent_id_filter = "" if root_only else None
+                        tasks = await task_repository.query_tasks(
+                            user_id=user_id,
+                            status=status,
+                            parent_id=parent_id_filter,
+                            limit=limit,
+                            offset=offset,
+                            order_by="created_at",
+                            order_desc=True,
+                        )
+                        
+                        # Convert to dictionaries
+                        task_dicts = []
+                        for task in tasks:
+                            task_dict = task.to_dict()
+                            
+                            # Check if task has children
+                            if not task_dict.get("has_children"):
+                                children = (
+                                    await task_repository
+                                    .get_child_tasks_by_parent_id(
+                                        task.id
+                                    )
+                                )
+                                task_dict["has_children"] = (
+                                    len(children) > 0
+                                )
+                            
+                            task_dicts.append(task_dict)
+                        
+                        return task_dicts
+                    finally:
+                        from sqlalchemy.ext.asyncio import AsyncSession
+                        if isinstance(db_session, AsyncSession):
+                            await db_session.close()
+                        else:
+                            db_session.close()
         
         tasks = run_async_safe(get_all_tasks())
         typer.echo(json.dumps(tasks, indent=2))

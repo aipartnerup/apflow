@@ -730,8 +730,23 @@ def api_keys_available():
         pytest.skip("OPENAI_API_KEY is not set - skipping integration test")
     
     return {
-        "openai_api_key": openai_key
+        "openai_api_key": openai_api_key
     }
+
+
+@pytest.fixture
+def disable_api_for_tests(monkeypatch):
+    """
+    Fixture to disable API usage during CLI tests.
+    
+    This ensures CLI tests use the local database instead of trying to connect
+    to an API server that may not be running.
+    """
+    # Patch should_use_api to always return False for tests
+    monkeypatch.setattr(
+        "apflow.cli.api_gateway_helper.should_use_api",
+        lambda: False
+    )
 
 
 def requires_api_keys(func):
@@ -742,4 +757,79 @@ def requires_api_keys(func):
 def integration_test(func):
     """Decorator to mark integration tests that require external services"""
     return pytest.mark.integration(pytest.mark.requires_api_keys(pytest.mark.asyncio(func)))
+
+
+
+@pytest.fixture(scope="function")
+def disable_api_for_tests():
+    """
+    Fixture to disable API usage and fix event loop issues in CLI tests.
+    
+    This fixture ensures that CLI commands use the local database instead of trying
+    to connect to an API server during tests. It also patches run_async_safe to
+    prevent event loop conflicts when tests are marked with @pytest.mark.asyncio.
+    
+    Usage:
+        @pytest.mark.asyncio
+        async def test_cli_command(self, use_test_db_session, disable_api_for_tests):
+            # CLI will use local database, and run_async_safe won't conflict
+            # with pytest-asyncio's event loop
+    """
+    from unittest.mock import patch
+    import asyncio
+    
+    def patched_run_async_safe(coro):
+        """
+        Patched version of run_async_safe that works correctly in pytest-asyncio tests.
+        
+        Runs the coroutine in a separate thread to avoid event loop conflicts.
+        """
+        import concurrent.futures
+        
+        def run_in_thread():
+            # Create a fresh event loop in this thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                return loop.run_until_complete(coro)
+            finally:
+                loop.close()
+        
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future = executor.submit(run_in_thread)
+            return future.result()
+    
+    # Mock both should_use_api and run_async_safe
+    with patch('apflow.cli.api_gateway_helper.should_use_api', return_value=False), \
+         patch('apflow.cli.api_gateway_helper.run_async_safe', side_effect=patched_run_async_safe), \
+         patch('apflow.cli.commands.tasks.run_async_safe', side_effect=patched_run_async_safe):
+        yield
+
+
+@pytest.fixture(scope="function")
+def run_async():
+    """
+    Helper fixture to run async code from synchronous tests.
+    
+    This is useful for CLI tests that need to set up async database operations
+    without being marked as async tests themselves.
+    
+    Usage:
+        def test_cli_command(self, use_test_db_session, run_async):
+            task_id = run_async(task_repository.create_task(...))
+            # Continue with sync code like runner.invoke()
+    """
+    import asyncio
+    
+    def _run_async(coro):
+        """Run async code and return the result"""
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
+    
+    return _run_async
+
 

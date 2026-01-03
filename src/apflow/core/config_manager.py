@@ -11,6 +11,11 @@ from apflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Default API configuration values
+DEFAULT_API_TIMEOUT = 30.0
+DEFAULT_API_RETRY_ATTEMPTS = 3
+DEFAULT_API_RETRY_BACKOFF = 1.0  # seconds
+
 
 @dataclass
 class ConfigManager:
@@ -19,6 +24,14 @@ class ConfigManager:
 
     Provides a single entrypoint for loading environment variables, managing
     hooks, and controlling execution flags (demo scaling, task creator policy).
+
+    API Configuration:
+    - api_server_url: URL of the API server (e.g., http://localhost:8000)
+    - api_auth_token: Optional auth token for API requests
+    - use_local_db: Fallback to local DB if API unreachable (default: True)
+    - api_timeout: Request timeout in seconds (default: 30.0)
+    - api_retry_attempts: Number of retry attempts (default: 3)
+    - api_retry_backoff: Initial backoff for exponential retry (default: 1.0)
 
     Usage examples
     --------------
@@ -36,9 +49,22 @@ class ConfigManager:
         cm.register_pre_hook(lambda task: task.inputs.update({"ctx": "dynamic"}))
         cm.set_demo_sleep_scale(0.5)
         cm.load_env_files([Path.cwd()/".env"], override=False)
+
+    Configure API gateway:
+        cm = get_config_manager()
+        cm.set_api_server_url("http://localhost:8000")
+        cm.set_api_auth_token("token-xyz")
+        cm.set_api_timeout(60.0)
     """
 
     _registry: ConfigRegistry = field(default_factory=get_config)
+    # API Gateway configuration
+    _api_server_url: Optional[str] = field(default=None)
+    _api_auth_token: Optional[str] = field(default=None)
+    _use_local_db: bool = field(default=True)
+    _api_timeout: float = field(default=DEFAULT_API_TIMEOUT)
+    _api_retry_attempts: int = field(default=DEFAULT_API_RETRY_ATTEMPTS)
+    _api_retry_backoff: float = field(default=DEFAULT_API_RETRY_BACKOFF)
 
     def load_env_files(self, paths: Iterable[Path], override: bool = False) -> None:
         """Load the first existing .env file from the provided paths."""
@@ -57,6 +83,61 @@ class ConfigManager:
             except Exception as exc:  # pragma: no cover - defensive
                 logger.debug("Failed to load .env from %s: %s", env_path, exc)
                 continue
+
+    def load_cli_config(self) -> None:
+        """
+        Load API configuration from CLI config files.
+
+        Loads both non-sensitive (config.json) and sensitive (secrets.json)
+        configuration from priority-based locations:
+        1. Project-local: <project>/.data/
+        2. User-global: ~/.aipartnerup/apflow/
+
+        This is called automatically by the CLI to load persisted configuration.
+        Useful for remembering API server URL and auth token between sessions.
+        """
+        try:
+            from apflow.cli.cli_config import (
+                load_cli_config as load_config,
+                load_secrets_config,
+            )
+
+            config = load_config()
+            secrets = load_secrets_config()
+
+            # Load non-sensitive API configuration from config.json
+            if "api_server_url" in config:
+                self.set_api_server_url(config["api_server_url"])
+
+            if "api_timeout" in config:
+                try:
+                    self.set_api_timeout(float(config["api_timeout"]))
+                except ValueError:
+                    logger.warning("Invalid api_timeout in config file")
+
+            # Load sensitive API configuration from secrets.json
+            if "api_auth_token" in secrets:
+                self.set_api_auth_token(secrets["api_auth_token"])
+            
+            if "api_retry_attempts" in config:
+                try:
+                    self.set_api_retry_attempts(int(config["api_retry_attempts"]))
+                except ValueError:
+                    logger.warning("Invalid api_retry_attempts in config file")
+            
+            if "use_local_db" in config:
+                value = config["use_local_db"]
+                if isinstance(value, bool):
+                    self.set_use_local_db(value)
+                elif isinstance(value, str):
+                    self.set_use_local_db(value.lower() == "true")
+            
+            logger.debug("Loaded API config from CLI config file")
+        except ImportError:
+            # cli_config module not available (shouldn't happen in CLI context)
+            pass
+        except Exception as e:
+            logger.warning(f"Failed to load CLI config: {e}")
 
     def set_task_model_class(self, task_model_class: Optional[Type[TaskModel]]) -> None:
         self._registry.set_task_model_class(task_model_class)
@@ -100,8 +181,107 @@ class ConfigManager:
     def get_demo_sleep_scale(self) -> float:
         return self._registry.get_demo_sleep_scale()
 
+    # API Gateway configuration methods
+    def set_api_server_url(self, url: Optional[str]) -> None:
+        """Set API server URL (e.g., http://localhost:8000)."""
+        self._api_server_url = url
+        if url:
+            logger.debug(f"API server configured: {url}")
+
+    def get_api_server_url(self) -> Optional[str]:
+        """Get configured API server URL."""
+        return self._api_server_url
+
+    def set_api_auth_token(self, token: Optional[str]) -> None:
+        """Set auth token for API requests."""
+        self._api_auth_token = token
+        if token:
+            logger.debug("API auth token configured")
+
+    def get_api_auth_token(self) -> Optional[str]:
+        """Get auth token for API requests."""
+        return self._api_auth_token
+
+    def set_use_local_db(self, enabled: bool) -> None:
+        """Set whether to fallback to local DB if API unreachable."""
+        self._use_local_db = enabled
+        logger.debug(f"Local DB fallback: {enabled}")
+
+    def get_use_local_db(self) -> bool:
+        """Get whether to fallback to local DB if API unreachable."""
+        return self._use_local_db
+
+    def set_api_timeout(self, timeout: float) -> None:
+        """Set API request timeout in seconds."""
+        self._api_timeout = timeout
+        logger.debug(f"API timeout: {timeout}s")
+
+    def get_api_timeout(self) -> float:
+        """Get API request timeout in seconds."""
+        return self._api_timeout
+
+    def set_api_retry_attempts(self, attempts: int) -> None:
+        """Set number of API retry attempts."""
+        self._api_retry_attempts = attempts
+        logger.debug(f"API retry attempts: {attempts}")
+
+    def get_api_retry_attempts(self) -> int:
+        """Get number of API retry attempts."""
+        return self._api_retry_attempts
+
+    def set_api_retry_backoff(self, backoff: float) -> None:
+        """Set initial backoff for exponential retry (seconds)."""
+        self._api_retry_backoff = backoff
+        logger.debug(f"API retry backoff: {backoff}s")
+
+    def get_api_retry_backoff(self) -> float:
+        """Get initial backoff for exponential retry."""
+        return self._api_retry_backoff
+
+    def is_api_configured(self) -> bool:
+        """Check if API server is configured."""
+        return self._api_server_url is not None
+
+    # Property accessors for convenience (in addition to getter methods)
+    @property
+    def api_server_url(self) -> Optional[str]:
+        """Get configured API server URL."""
+        return self._api_server_url
+
+    @property
+    def api_auth_token(self) -> Optional[str]:
+        """Get auth token for API requests."""
+        return self._api_auth_token
+
+    @property
+    def use_local_db(self) -> bool:
+        """Get whether to fallback to local DB if API unreachable."""
+        return self._use_local_db
+
+    @property
+    def api_timeout(self) -> float:
+        """Get API request timeout in seconds."""
+        return self._api_timeout
+
+    @property
+    def api_retry_attempts(self) -> int:
+        """Get number of API retry attempts."""
+        return self._api_retry_attempts
+
+    @property
+    def api_retry_backoff(self) -> float:
+        """Get initial backoff for exponential retry."""
+        return self._api_retry_backoff
+
     def clear(self) -> None:
         self._registry.clear()
+        # Reset API configuration
+        self._api_server_url = None
+        self._api_auth_token = None
+        self._use_local_db = True
+        self._api_timeout = DEFAULT_API_TIMEOUT
+        self._api_retry_attempts = DEFAULT_API_RETRY_ATTEMPTS
+        self._api_retry_backoff = DEFAULT_API_RETRY_BACKOFF
 
 
 _config_manager = ConfigManager()

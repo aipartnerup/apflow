@@ -1,0 +1,155 @@
+"""
+CLI helper utilities for API Gateway integration.
+
+This module provides helper functions and context managers to transparently
+use API when configured, with graceful fallback to local database.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from contextlib import asynccontextmanager
+from typing import Any, Coroutine, Optional
+from apflow.cli.api_client import APIClient, APIClientError
+from apflow.core.config_manager import get_config_manager
+from apflow.core.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+def should_use_api() -> bool:
+    """
+    Check if CLI should use API gateway based on configuration.
+    
+    Loads configuration from CLI config file if not already loaded.
+    
+    Returns:
+        True if api_server_url is configured, False otherwise
+    """
+    cm = get_config_manager()
+    
+    # Try to load from CLI config file if not already loaded
+    if not cm.is_api_configured():
+        try:
+            cm.load_cli_config()
+        except Exception:
+            # If loading fails, just continue without API
+            pass
+    
+    return cm.is_api_configured()
+
+
+@asynccontextmanager
+async def get_api_client_if_configured() -> Optional[APIClient]:
+    """
+    Context manager that yields APIClient if configured, None otherwise.
+    
+    Usage:
+        async with get_api_client_if_configured() as client:
+            if client:
+                # Use API
+                result = await client.list_tasks()
+            else:
+                # Use local database
+                result = query_local_db()
+    
+    Yields:
+        APIClient instance if configured, None otherwise
+    """
+    if not should_use_api():
+        yield None
+        return
+    
+    cm = get_config_manager()
+    server_url = cm.api_server_url
+    auth_token = cm.api_auth_token
+    timeout = cm.api_timeout
+    retry_attempts = cm.api_retry_attempts
+    retry_backoff = cm.api_retry_backoff
+    
+    client = APIClient(
+        server_url=server_url,
+        auth_token=auth_token,
+        timeout=timeout,
+        retry_attempts=retry_attempts,
+        retry_backoff=retry_backoff,
+    )
+    
+    async with client:
+        yield client
+
+
+def run_async_safe(coro: Coroutine[Any, Any, Any]) -> Any:
+    """
+    Safely run async coroutine in CLI context.
+    
+    Handles the case where asyncpg connections need to be created and destroyed
+    within the same event loop. This ensures database connections don't get
+    bound to closed event loops.
+    
+    Args:
+        coro: Coroutine to run
+        
+    Returns:
+        Result of the coroutine
+    """
+    try:
+        # Check if event loop is already running
+        loop = asyncio.get_running_loop()
+        # Event loop is running (e.g., in test environment), use nest_asyncio
+        import nest_asyncio
+        nest_asyncio.apply()
+        return loop.run_until_complete(coro)
+    except RuntimeError:
+        # No event loop running, safe to use asyncio.run()
+        # This creates and closes an event loop for the entire coroutine operation
+        return asyncio.run(coro)
+
+
+async def api_with_fallback_decorator(
+    api_func: Coroutine[Any, Any, Any],
+    fallback_func: Coroutine[Any, Any, Any],
+) -> Any:
+    """
+    Try API first, fall back to local database if API unavailable.
+    
+    Args:
+        api_func: Async function to execute via API
+        fallback_func: Async function to execute if API unavailable
+        
+    Returns:
+        Result from either API or fallback function
+    """
+    if not should_use_api():
+        return await fallback_func
+    
+    try:
+        return await api_func
+    except APIClientError as e:
+        cm = get_config_manager()
+        if cm.use_local_db:
+            logger.warning(
+                f"API call failed, falling back to local DB: {e}"
+            )
+            return await fallback_func
+        else:
+            logger.error(f"API call failed and no fallback configured: {e}")
+            raise
+
+
+def log_api_usage(command_name: str, using_api: bool) -> None:
+    """
+    Log whether a command is using API or local database.
+    
+    Args:
+        command_name: Name of the CLI command
+        using_api: True if using API, False if using local DB
+    """
+    if using_api:
+        cm = get_config_manager()
+        logger.debug(
+            f"Command '{command_name}' using API gateway: "
+            f"{cm.api_server_url}"
+        )
+    else:
+        logger.debug(f"Command '{command_name}' using local database")

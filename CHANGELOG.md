@@ -13,11 +13,63 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added tests for TaskBuilder handling multiple dependencies and multi-level dependency chains to prevent regressions when wiring dependent tasks.
 - **ConfigManager integration validation**
   - New integration test verifies `.env` loading and dynamic hook registration work end-to-end via `distribute_task_tree`.
+- **CLI → API Gateway Architecture (Priority 2)**
+  - New `APIClient` class (`src/apflow/cli/api_client.py`) for CLI to communicate with API server via HTTP
+  - ConfigManager extended with API configuration: `api_server_url`, `api_auth_token`, `use_local_db`, `api_timeout`, `api_retry_attempts`, `api_retry_backoff`
+  - APIClient supports exponential backoff retry (configurable attempts and initial backoff)
+  - APIClient supports auth token injection via Bearer header
+  - Comprehensive error handling for connection failures, timeouts, and API errors with custom exception types
+  - Added `httpx>=0.27.0` to CLI optional dependencies for HTTP communication
+  - Integration tests for APIClient initialization, context manager, and ConfigManager API methods (8 tests)
+  - Enables single source of truth (API) for task data when both CLI and API are running
+  - Solves DuckDB concurrent write limitation (all writes go through API)
+  - Foundation for future protocol adapters (GraphQL, MQTT, WebSocket)
+- **CLI Command Layer Refactoring for API Gateway Integration**
+  - Created `api_gateway_helper.py` with helper functions for transparent API usage and fallback to local database
+  - `should_use_api()`: Check if API is configured
+  - `get_api_client_if_configured()`: Async context manager yielding APIClient when configured, None otherwise
+  - `api_with_fallback_decorator()`: Try API first, fall back to local database if unavailable
+  - `log_api_usage()`: Log whether command is using API or local database
+  - Refactored CLI task commands to use API gateway when configured:
+    - `tasks list`: Supports API via `client.list_tasks()` with status and user filters
+    - `tasks get`: Supports API via `client.get_task()`
+    - `tasks status`: Supports API via `client.get_task_status()`
+    - `tasks cancel`: Supports API via `client.cancel_task()`
+  - All commands automatically fall back to local database if API is not configured
+  - Graceful error handling with warning logs when API unavailable but fallback enabled
+  - Added property accessors to ConfigManager for convenience: `api_server_url`, `api_auth_token`, `use_local_db`, `api_timeout`, `api_retry_attempts`, `api_retry_backoff`
+  - Integration tests for CLI API gateway with fallback scenarios (13 tests)
+  - All existing CLI tests pass without modification (59 tests, backward compatible)
+- **CLI Configuration Management System with Multi-Location & Separated Secrets**
+  - New `apflow config` command with 13 subcommands for comprehensive configuration management
+  - **Basic Config**: `set`, `get`, `unset`, `list`, `reset` - Full CRUD operations with alias support
+  - **Token Management**: `gen-token`, `verify-token` - Generate and verify JWT tokens with role-based claims
+  - **Quick Setup**: `init`, `init-server` - Interactive wizard and one-command server setup
+  - **Utilities**: `path`, `show-path`, `edit`, `validate` - Config file management and validation
+  - **Multi-location configuration support**:
+    - Priority 1 (highest): `APFLOW_CONFIG_DIR` environment variable
+    - Priority 2: Project-local `.data/` directory (if in project with pyproject.toml/.git)
+    - Priority 3: User-global `~/.aipartnerup/apflow/` (default fallback)
+  - **Separated secrets architecture**:
+    - `config.json` (644 permissions) - Non-sensitive config (api_server_url, timeouts, etc.)
+    - `secrets.json` (600 permissions) - Sensitive credentials (api_auth_token, jwt_secret)
+  - Both files support multi-location priority system (shared locations for project and user-global)
+  - API server can also read from same multi-location config structure
+  - `gen-token --save` parameter (simpler than `--save-as`) to save tokens to secrets.json
+  - Token security: Automatic masking in all outputs, expiry validation, signature verification
+  - Alias support for convenience: `api-server`/`api-url` → `api_server_url`, `api-token`/`token` → `api_auth_token`
+  - `apflow config validate` checks JSON syntax, API server connectivity, and token validity
+  - `apflow config verify-token` displays token details (subject, issuer, expiry, role) with status indicators
+  - `apflow config init` provides interactive wizard for first-time setup
+  - Added `PyJWT>=2.8.0` to CLI dependencies for JWT token support
+  - 19 new tests for config persistence and CLI commands (all passing)
 
 ### Changed
 - **Docs: centralized config and builder examples**
   - Documented ConfigManager usage for env loading, hook registration, and demo sleep scaling across quick-reference and CLI guides.
   - Added TaskBuilder example with ConfigManager to the basic task docs.
+- **ConfigManager API methods**: Moved `run_async_safe()` from tasks.py to `api_gateway_helper.py` for reusability across CLI commands
+
 
 ## [0.10.0] 2026-01-01
 
@@ -36,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - stdio
     - websocket
   - Adjusted integration tests to align with the new import paths.
+
 
 ## [0.9.0] 2025-12-28
 
@@ -82,7 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - `ExecutorError` for executor runtime failures
     - `StorageError` for database/storage failures
   - Created `core/execution/errors.py` with comprehensive exception documentation
-  - Created `docs/development/exception-handling-standards.md` with implementation guidelines
+  - Created `docs/development/exception.md` with implementation guidelines
 
 ### Changed
 - **Executor Error Handling Refactoring**

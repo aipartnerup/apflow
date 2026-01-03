@@ -154,7 +154,7 @@ Comprehensive guides for developers:
 - **[Custom Tasks](guides/custom-tasks.md)** - Creating custom executors
 - **[Best Practices](guides/best-practices.md)** - Design patterns and optimization
 - **[FAQ](guides/faq.md)** - Common questions and troubleshooting
-- **[CLI](guides/cli.md)** - Command-line interface
+- **[CLI](guides/cli/index.md)** - Command-line interface guide
 - **[API Server](guides/api-server.md)** - API server setup
 
 ### Examples

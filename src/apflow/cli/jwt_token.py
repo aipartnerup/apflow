@@ -1,0 +1,223 @@
+"""
+JWT token generator for CLI authentication.
+
+Provides secure token generation with JWT algorithm support.
+Supports multiple config locations with priority:
+1. APFLOW_CONFIG_DIR environment variable (highest priority)
+2. Project-local: .data/secrets.json (if in project)
+3. User-global: ~/.aipartnerup/apflow/secrets.json (fallback)
+"""
+
+from __future__ import annotations
+
+import json
+import jwt
+import uuid
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+from pathlib import Path
+
+from apflow.core.utils.logger import get_logger
+
+logger = get_logger(__name__)
+
+# Default JWT configuration
+DEFAULT_JWT_ALGO = "HS256"
+DEFAULT_JWT_EXPIRY_DAYS = 365
+DEFAULT_JWT_ISSUER = "apflow-cli"
+JWT_SECRET_KEY = "jwt_secret"
+
+
+def get_jwt_secret_path() -> Path:
+    """
+    Get JWT secret file path (secrets.json).
+
+    Uses config directory priority:
+    1. Project-local: .data/secrets.json
+    2. User-global: ~/.aipartnerup/apflow/secrets.json
+
+    Returns:
+        Path to secrets.json (project-local or user-global)
+    """
+    from apflow.cli.cli_config import (
+        get_config_file_path,
+        SECRETS_FILE,
+    )
+
+    return get_config_file_path(SECRETS_FILE)
+
+
+def ensure_local_jwt_secret() -> str:
+    """
+    Get or create local JWT secret.
+
+    Stores secret in appropriate location:
+    - Project-local: .data/secrets.json (if in project)
+    - User-global: ~/.aipartnerup/apflow/secrets.json (fallback)
+
+    Returns:
+        JWT secret string
+    """
+    from apflow.cli.cli_config import (
+        ensure_config_dir,
+        load_secrets_config,
+        save_secrets_config,
+    )
+
+    ensure_config_dir()
+    secret_file = get_jwt_secret_path()
+
+    # Load existing secret if file exists
+    if secret_file.exists():
+        try:
+            secrets = load_secrets_config()
+            if JWT_SECRET_KEY in secrets:
+                return secrets[JWT_SECRET_KEY]
+        except Exception as e:
+            logger.warning(
+                f"Failed to load JWT secret from {secret_file}: {e}"
+            )
+
+    # Generate new secret
+    secret = _generate_jwt_secret()
+
+    # Save for future use
+    try:
+        secrets = load_secrets_config()
+        secrets[JWT_SECRET_KEY] = secret
+        save_secrets_config(secrets)
+        logger.debug(f"Saved JWT secret to {secret_file}")
+    except Exception as e:
+        logger.warning(f"Failed to save JWT secret to {secret_file}: {e}")
+
+    return secret
+
+
+def _generate_jwt_secret() -> str:
+    """
+    Generate a random JWT secret.
+    
+    Returns:
+        Random secret string (32 bytes, hex encoded)
+    """
+    return uuid.uuid4().hex
+
+
+def generate_token(
+    subject: str = "apflow-user",
+    secret: Optional[str] = None,
+    algo: str = DEFAULT_JWT_ALGO,
+    expiry_days: int = DEFAULT_JWT_EXPIRY_DAYS,
+    extra_claims: Optional[dict] = None,
+) -> str:
+    """
+    Generate a JWT token.
+    
+    Args:
+        subject: Token subject (typically username or app name)
+        secret: JWT secret key. If None, uses local default
+        algo: JWT algorithm (HS256, HS512, etc.)
+        expiry_days: Token expiration in days
+        extra_claims: Additional JWT claims
+        
+    Returns:
+        JWT token string
+    """
+    if secret is None:
+        secret = ensure_local_jwt_secret()
+    
+    now = datetime.now(timezone.utc)
+    expiry = now + timedelta(days=expiry_days)
+    
+    payload = {
+        "sub": subject,
+        "iss": DEFAULT_JWT_ISSUER,
+        "iat": now,
+        "exp": expiry,
+        "jti": uuid.uuid4().hex,
+    }
+    
+    if extra_claims:
+        payload.update(extra_claims)
+    
+    token = jwt.encode(payload, secret, algorithm=algo)
+    
+    logger.debug(f"Generated JWT token with algo={algo}, expiry={expiry_days} days")
+    
+    return token
+
+
+def verify_token(
+    token: str,
+    secret: Optional[str] = None,
+    algo: str = DEFAULT_JWT_ALGO,
+) -> dict:
+    """
+    Verify and decode a JWT token.
+    
+    Args:
+        token: JWT token string
+        secret: JWT secret key. If None, uses local default
+        algo: JWT algorithm
+        
+    Returns:
+        Decoded token payload
+        
+    Raises:
+        jwt.InvalidTokenError: If token is invalid or expired
+    """
+    if secret is None:
+        secret = ensure_local_jwt_secret()
+    
+    try:
+        payload = jwt.decode(token, secret, algorithms=[algo])
+        logger.debug("Successfully verified JWT token")
+        return payload
+    except jwt.ExpiredSignatureError:
+        logger.error("JWT token has expired")
+        raise
+    except jwt.InvalidTokenError as e:
+        logger.error(f"Invalid JWT token: {e}")
+        raise
+
+
+def get_token_info(token: str) -> dict:
+    """
+    Get information about a token without verifying signature.
+    
+    Useful for displaying token details.
+    
+    Args:
+        token: JWT token string
+        
+    Returns:
+        Dictionary with token info (subject, issuer, expiry, etc.)
+    """
+    try:
+        payload = jwt.decode(token, options={"verify_signature": False})
+        
+        info = {
+            "subject": payload.get("sub"),
+            "issuer": payload.get("iss"),
+            "issued_at": payload.get("iat"),
+            "expires_at": payload.get("exp"),
+            "token_id": payload.get("jti"),
+        }
+        
+        # Format timestamps
+        if info["issued_at"]:
+            info["issued_at"] = datetime.fromtimestamp(
+                info["issued_at"], tz=timezone.utc
+            ).isoformat()
+        
+        if info["expires_at"]:
+            expires = datetime.fromtimestamp(
+                info["expires_at"], tz=timezone.utc
+            )
+            info["expires_at"] = expires.isoformat()
+            info["expires_in_days"] = (expires - datetime.now(timezone.utc)).days
+        
+        return info
+    except Exception as e:
+        logger.error(f"Failed to decode token: {e}")
+        return {}

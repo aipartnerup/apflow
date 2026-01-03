@@ -5,7 +5,7 @@ CLI main entry point for apflow
 import sys
 import typer
 from pathlib import Path
-from apflow.cli.commands import run, serve, daemon, tasks, generate
+from apflow.cli.commands import run, serve, daemon, tasks, generate, config
 from apflow.core.config_manager import get_config_manager
 from apflow.core.utils.logger import get_logger
 
@@ -78,6 +78,7 @@ app = typer.Typer(
 def cli_callback(ctx: typer.Context):
     # Ensure env + hook registry are initialized before any subcommand runs
     _load_env_file()
+    
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
 
@@ -86,6 +87,7 @@ app.add_typer(serve.app, name="serve", help="Start API server")
 app.add_typer(daemon.app, name="daemon", help="Manage daemon")
 app.add_typer(tasks.app, name="tasks", help="Manage and query tasks")
 app.add_typer(generate.app, name="generate", help="Generate task trees from natural language")
+app.add_typer(config.app, name="config", help="Manage CLI configuration")
 
 _load_cli_plugins(app)
 

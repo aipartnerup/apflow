@@ -80,7 +80,34 @@ API_PORT=8000
 # Development
 DEBUG=True
 LOG_LEVEL=INFO
+
+# CLI Configuration (optional, stored in .data/ or ~/.aipartnerup/apflow/)
+# APFLOW_CONFIG_DIR=/custom/config/path  # Override config directory location
 ```
+
+#### CLI Configuration
+
+Configuration is managed through the `apflow config` command and stored securely:
+
+```bash
+# Setup API server configuration
+apflow config init-server --url http://localhost:8000 --role admin
+
+# Or manually configure
+apflow config set api-server http://localhost:8000
+apflow config gen-token --role admin --save api_auth_token
+
+# View configuration (tokens masked)
+apflow config list
+apflow config path  # Show file locations and priorities
+```
+
+**Configuration Storage**:
+- **Project-local** (highest priority): `.data/` directory
+- **User-global** (fallback): `~/.aipartnerup/apflow/` directory
+- **Files**:
+  - `config.json` (644) - Non-sensitive settings
+  - `secrets.json` (600) - Sensitive credentials and tokens
 
 ### 4. Verify Installation
 
