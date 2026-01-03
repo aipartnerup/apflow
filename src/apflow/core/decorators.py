@@ -3,7 +3,9 @@ Unified decorators for apflow
 
 This module provides a single entry point for all decorators used in apflow.
 Similar to Flask's app decorators (@app.before_request, @app.route, etc.), this module
-provides a clean, unified API for registering hooks and extensions.
+provides a clean, unified API for registering hooks and extensions. Decorators are the
+recommended way to register hooks; ConfigManager is only an optional imperative path for
+dynamic or test-time registration.
 
 All decorators are part of the core framework and can be imported from:
     from apflow import register_pre_hook, register_post_hook, executor_register

@@ -29,6 +29,32 @@ The CLI is **completely independent** from the API server. You can use CLI comma
 
 ## Quick Start
 
+### Hook Setup: Decorators vs ConfigManager
+
+- Prefer decorators for static hooks packaged with your code:
+
+```python
+from apflow import register_pre_hook
+
+@register_pre_hook
+async def inject_env(task):
+  task.inputs["env"] = "static"
+```
+
+- Use ConfigManager when wiring hooks or loading .env files dynamically (tests, plugins):
+
+```python
+from pathlib import Path
+from apflow.core.config_manager import get_config_manager
+
+config = get_config_manager()
+config.register_pre_hook(lambda task: task.inputs.update({"source": "runtime"}))
+config.load_env_files([Path(".env"), Path(".env.local")], override=False)
+```
+
+Both patterns are honored by CLI and API entrypoints; they load env variables via ConfigManager
+before running commands or starting servers.
+
 ### 1. Installation
 
 ```bash

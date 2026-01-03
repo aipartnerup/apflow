@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [Unreleased] 
+
+### Added
+- **TaskBuilder dependency coverage**
+  - Added tests for TaskBuilder handling multiple dependencies and multi-level dependency chains to prevent regressions when wiring dependent tasks.
+- **ConfigManager integration validation**
+  - New integration test verifies `.env` loading and dynamic hook registration work end-to-end via `distribute_task_tree`.
+
+### Changed
+- **Docs: centralized config and builder examples**
+  - Documented ConfigManager usage for env loading, hook registration, and demo sleep scaling across quick-reference and CLI guides.
+  - Added TaskBuilder example with ConfigManager to the basic task docs.
+
 ## [0.10.0] 2026-01-01
 
 ### Changed

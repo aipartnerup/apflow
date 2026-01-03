@@ -320,6 +320,28 @@ async def modify_task_with_db(task):
 - Changes are visible across all hooks in the execution
 - Thread-safe context isolation
 
+### Dynamic Hooks and Env Loading (ConfigManager)
+
+Prefer decorators for static hooks. Use `ConfigManager` when you need to wire hooks at runtime
+or in tests and to load env files in one place:
+
+```python
+from pathlib import Path
+
+from apflow.core.config_manager import get_config_manager
+
+config = get_config_manager()
+
+# Register a hook dynamically (e.g., from config or tests)
+config.register_pre_hook(lambda task: task.inputs.update({"source": "runtime"}))
+
+# Tweak demo timings globally
+config.set_demo_sleep_scale(0.5)
+
+# Load .env files once, then start CLI/API
+config.load_env_files([Path(".env"), Path(".env.local")], override=False)
+```
+
 ### Use Hooks with TaskManager
 
 ```python

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 from typing import Optional
+from apflow.core.config_manager import get_config_manager
 from apflow.core.execution.task_executor import TaskExecutor
 from apflow.core.storage import get_default_session
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
@@ -17,17 +18,10 @@ logger = get_logger(__name__)
 
 app = typer.Typer(name="generate", help="Generate task trees from natural language requirements")
 
-# Try to load .env file if python-dotenv is available
-try:
-    from dotenv import load_dotenv
-    # Load .env file from project root
-    env_path = Path(__file__).parent.parent.parent.parent.parent / ".env"
-    if env_path.exists():
-        load_dotenv(env_path)
-        logger.debug(f"Loaded .env file from {env_path}")
-except ImportError:
-    # python-dotenv not installed, skip .env loading
-    pass
+# Load .env file from project root using ConfigManager (if python-dotenv is installed)
+config_manager = get_config_manager()
+project_env_path = Path(__file__).parent.parent.parent.parent.parent / ".env"
+config_manager.load_env_files([project_env_path], override=False)
 
 
 def run_async_safe(coro):

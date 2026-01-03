@@ -24,6 +24,7 @@ from typing import Optional
 from apflow.api.app import create_app_by_protocol
 from apflow.api.extensions import initialize_extensions, _load_custom_task_model
 from apflow.api.protocols import get_protocol_from_env
+from apflow.core.config_manager import get_config_manager
 from apflow.core.storage.factory import get_default_session
 from apflow.core.utils.logger import get_logger
 
@@ -36,7 +37,7 @@ _start_time: Optional[float] = None
 
 def _load_env_file():
     """
-    Load .env file from appropriate location
+    Load .env file from appropriate location via ConfigManager to keep env/hook wiring centralized
     
     Priority order:
     1. Current working directory (where script is run from)
@@ -46,12 +47,6 @@ def _load_env_file():
     This ensures that when used as a library, it loads .env from the calling project,
     not from the library's installation directory.
     """
-    try:
-        from dotenv import load_dotenv
-    except ImportError:
-        # python-dotenv not installed, skip .env loading
-        return
-    
     possible_paths = []
     
     # 1. Current working directory (where the script is run from)
@@ -84,15 +79,8 @@ def _load_env_file():
         pass  # Ignore errors
     
     # Try each path and load the first one that exists
-    for env_path in possible_paths:
-        if env_path.exists():
-            try:
-                load_dotenv(env_path, override=False)  # override=False to respect existing env vars
-                logger.debug(f"Loaded .env file from {env_path}")
-                return
-            except Exception as e:
-                logger.debug(f"Failed to load .env from {env_path}: {e}")
-                continue
+    config_manager = get_config_manager()
+    config_manager.load_env_files(possible_paths, override=False)
 
 
 def _setup_development_environment():
@@ -184,6 +172,7 @@ def create_runnable_app(**kwargs):
         _start_time = time.time()
     
     # Load .env file (from calling project's directory when used as library)
+    # ConfigManager is the single entrypoint for env + hook registration across CLI/API
     _load_env_file()
     
     # Setup development environment (only when running library's own main.py directly)

@@ -25,6 +25,7 @@ from apflow.core.execution import (
     TaskCreator,
     StreamingCallbacks,
 )
+from apflow.core.builders import TaskBuilder
 from apflow.core.extensions import (
     Extension,
     ExtensionCategory,
@@ -81,6 +82,7 @@ __all__ = [
     "TaskManager",
     "TaskCreator",
     "StreamingCallbacks",
+    "TaskBuilder",
     # Extensions
     "Extension",
     "ExtensionCategory",

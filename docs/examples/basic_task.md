@@ -20,6 +20,45 @@ This document provides practical, copy-paste ready examples for common use cases
 - How to handle errors
 - Common patterns and best practices
 
+## Quick: TaskBuilder (Fluent) + ConfigManager
+
+```python
+import asyncio
+from pathlib import Path
+
+from apflow import TaskManager, create_session
+from apflow.core.builders import TaskBuilder
+from apflow.core.config_manager import get_config_manager
+
+
+async def main():
+    db = create_session()
+    task_manager = TaskManager(db)
+
+    config = get_config_manager()
+    config.register_pre_hook(lambda task: task.inputs.update({"source": "config_manager"}))
+    config.load_env_files([Path(".env")], override=False)
+
+    builder = TaskBuilder(task_manager, "system_info_executor")
+    result = await (
+        builder.with_name("System Info")
+        .with_inputs({"resource": "cpu"})
+        .enable_demo_mode(sleep_scale=0.5)
+        .execute()
+    )
+    print(result["result"])
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+- Builder handles task creation + execution fluently (name, inputs, demo mode).
+- ConfigManager keeps env loading and dynamic hooks in one place for CLI/API.
+- See [docs/api/quick-reference.md](
+    docs/api/quick-reference.md#dynamic-hooks-and-env-loading-configmanager)
+    for the decorator vs ConfigManager hook pattern.
+
 ## Example 1: Using Built-in Executor (Simplest)
 
 **What it does:** Gets system CPU information using the built-in `system_info_executor`.

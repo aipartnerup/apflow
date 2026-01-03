@@ -6,6 +6,7 @@ import sys
 import typer
 from pathlib import Path
 from apflow.cli.commands import run, serve, daemon, tasks, generate
+from apflow.core.config_manager import get_config_manager
 from apflow.core.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -13,13 +14,8 @@ logger = get_logger(__name__)
 
 def _load_env_file():
     """
-    Load .env file from appropriate location
+    Load .env file from appropriate location using ConfigManager so hooks/env stay centralized
     """
-    try:
-        from dotenv import load_dotenv
-    except ImportError:
-        return
-    
     possible_paths = [Path.cwd() / ".env"]
     if sys.argv and len(sys.argv) > 0:
         try:
@@ -28,14 +24,9 @@ def _load_env_file():
                 possible_paths.append(main_script.parent / ".env")
         except Exception:
             pass
-    
-    for env_path in possible_paths:
-        if env_path.exists():
-            try:
-                load_dotenv(env_path, override=False)
-                return
-            except Exception:
-                continue
+
+    config_manager = get_config_manager()
+    config_manager.load_env_files(possible_paths, override=False)
 
 
 def _load_cli_plugins(app: typer.Typer):
@@ -85,6 +76,7 @@ app = typer.Typer(
 
 @app.callback(invoke_without_command=True)
 def cli_callback(ctx: typer.Context):
+    # Ensure env + hook registry are initialized before any subcommand runs
     _load_env_file()
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
