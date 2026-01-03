@@ -80,6 +80,11 @@ pip install apflow
 ### With Optional Features
 
 ```bash
+# Standard installation (recommended for most use cases)
+# Includes A2A server, CLI tools, CrewAI, and LLM support
+pip install apflow[standard]
+
+# Individual features:
 # CrewAI LLM task support (includes batch)
 pip install apflow[crewai]
 # Includes: CrewaiExecutor for LLM-based agent crews
@@ -313,6 +318,7 @@ See [docs/architecture/DIRECTORY_STRUCTURE.md](docs/architecture/DIRECTORY_STRUC
 
 **Installation Strategy**:
 - `pip install apflow`: Core library only (execution, base, storage, utils) - **NO CrewAI**
+- `pip install apflow[standard]`: Core + A2A server + CLI tools + CrewAI + LLM support (recommended)
 - `pip install apflow[crewai]`: Core + CrewAI support (includes BatchCrewaiExecutor)
 - `pip install apflow[a2a]`: Core + A2A Protocol Server
 - `pip install apflow[cli]`: Core + CLI tools

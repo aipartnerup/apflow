@@ -35,21 +35,27 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 # Install uv if you haven't already
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install project in development mode with all extras
+# Install standard development environment (recommended)
+uv pip install -e ".[standard,dev]"
+
+# OR install with all features
 uv pip install -e ".[all,dev]"
 
 # OR install with specific extras
-uv pip install -e ".[api,cli,dev]"  # API + CLI + dev tools
+uv pip install -e ".[crewai,cli,dev]"  # CrewAI + CLI + dev tools
 ```
 
 #### Option B: Using pip (Traditional)
 
 ```bash
-# Install project in development mode with all features
+# Install standard development environment (recommended)
+pip install -e ".[standard,dev]"
+
+# OR install with all features
 pip install -e ".[all,dev]"
 
 # OR install with specific extras
-pip install -e ".[api,cli,dev]"  # API + CLI + dev tools
+pip install -e ".[crewai,cli,dev]"  # CrewAI + CLI + dev tools
 ```
 
 #### Option C: Using Poetry (If configured)
@@ -126,8 +132,8 @@ pytest tests/ -v
 #### Run Tests
 
 ```bash
-# Run all tests
-pytest tests/
+# Run all tests (recommended)
+pytest tests/ -v
 
 # Run specific test file
 pytest tests/test_task_manager.py -v
@@ -140,6 +146,15 @@ pytest -m "not integration" tests/
 
 # Run only integration tests
 pytest -m integration tests/
+
+# Run CLI tests specifically
+pytest tests/cli/ -v
+```
+
+**Note**: A2A tests are excluded by default (optional a2a dependency). To run them:
+```bash
+pip install -e ".[a2a]"
+pytest tests/api/a2a/ -v
 ```
 
 #### Run API Server (Development)
@@ -352,6 +367,36 @@ Includes:
 
 **Note**: For examples and learning templates, see the test cases in `tests/integration/` and `tests/extensions/`. Test cases serve as comprehensive examples demonstrating real-world usage patterns.
 
+#### LLM Support (`[llm]`)
+
+```bash
+pip install -e ".[llm]"
+```
+
+Includes:
+- `litellm` - Unified LLM interface supporting 100+ providers
+
+#### Standard (`[standard]`)
+
+```bash
+# Recommended for most developers
+pip install -e ".[standard,dev]"
+```
+
+Includes:
+- **A2A Protocol Server** - Agent-to-Agent communication protocol
+- **CLI Tools** - Command-line interface
+- **CrewAI Support** - LLM-based agent crew orchestration
+- **LLM Support** - Direct LLM interaction via LiteLLM
+- **Development Tools** - When combined with [dev]
+
+**This is the recommended installation profile** for most use cases as it provides:
+- API server capability (A2A Protocol)
+- CLI tools for task management and execution
+- LLM support for AI-powered tasks
+- Batch execution via CrewAI
+- Full development environment when combined with [dev]
+
 #### Development (`[dev]`)
 
 ```bash
@@ -364,10 +409,23 @@ Includes:
 - `ruff` - Linting
 - `mypy` - Type checking
 
+### Standard Installation (Recommended)
+
+```bash
+# Install standard features + development tools (recommended)
+pip install -e ".[standard,dev]"
+
+# This installs:
+# - A2A Protocol Server
+# - CLI tools
+# - CrewAI and LLM support
+# - Development tools (pytest, ruff, mypy, etc.)
+```
+
 ### Full Installation
 
 ```bash
-# Install everything
+# Install everything (all extras + dev tools)
 pip install -e ".[all,dev]"
 ```
 

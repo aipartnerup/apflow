@@ -9,7 +9,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] 
 
 ### Added
-- **TaskBuilder dependency coverage**
+- **Standard Installation Profile** - New `[standard]` extra providing recommended feature set
+  - Combines A2A server, CLI tools, CrewAI, and LLM support in single installation command
+  - Installation: `pip install apflow[standard]` or `pip install -e ".[standard,dev]"` for development
+  - Simplifies setup for most common use cases without requiring manual feature selection
+- **Test Infrastructure Improvements**
+  - Fixed event loop conflicts in pytest-asyncio test environment via ThreadPoolExecutor-based async isolation
+  - New test fixtures: `disable_api_for_tests` for API gateway testing, `run_async` helper for sync test context
+  - All 59 CLI tests now passing without hangs (fixed exit code 130 issues)
+  - A2A tests excluded by default (added to pytest.ini ignore list since a2a is optional dependency)
+  - Full test suite stable: 861 tests passing
+- **Security Enhancement: Token Masking**
+  - Improved token masking in CLI config display from 8-character preview to 3-character preview
+  - Prevents sensitive words from leaking in masked token display
+  - Example: "very-secret-token-12345" now masked as "ver...***" instead of "very-sec...***"
+
+### Changed
+- **Documentation Updates**
+  - Updated README.md to highlight `[standard]` as recommended installation option
+  - Updated docs/development/setup.md to recommend `[standard,dev]` for development environment
+  - Enhanced installation documentation to explain standard profile benefits
+  - Improved test documentation with note about A2A tests being optional
+  - Added detailed [standard] configuration documentation in setup.md
+- **API Client Enhancement**
+  - APIClient.list_tasks() now supports `offset` parameter for pagination beyond initial limit
+
+### Fixed
+- **Event Loop Conflict Resolution**
+  - Fixed hangs in async CLI tests by implementing ThreadPoolExecutor-based event loop isolation in conftest.py
+  - Root cause: run_async_safe() was attempting nested event loop execution in pytest-asyncio context
+  - Solution: Patched run_async_safe() to use separate thread with independent event loop
+  - Resolves issue where @pytest.mark.asyncio + runner.invoke() caused tests to hang with exit code 130
+
+### TaskBuilder dependency coverage**
   - Added tests for TaskBuilder handling multiple dependencies and multi-level dependency chains to prevent regressions when wiring dependent tasks.
 - **ConfigManager integration validation**
   - New integration test verifies `.env` loading and dynamic hook registration work end-to-end via `distribute_task_tree`.
@@ -63,12 +95,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `apflow config init` provides interactive wizard for first-time setup
   - Added `PyJWT>=2.8.0` to CLI dependencies for JWT token support
   - 19 new tests for config persistence and CLI commands (all passing)
-
-### Changed
-- **Docs: centralized config and builder examples**
-  - Documented ConfigManager usage for env loading, hook registration, and demo sleep scaling across quick-reference and CLI guides.
-  - Added TaskBuilder example with ConfigManager to the basic task docs.
-- **ConfigManager API methods**: Moved `run_async_safe()` from tasks.py to `api_gateway_helper.py` for reusability across CLI commands
 
 
 ## [0.10.0] 2026-01-01

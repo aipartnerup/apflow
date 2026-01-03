@@ -113,6 +113,12 @@ llm = [
     "litellm>=1.0.0",
 ]
 
+# Standard installation (recommended for most use cases)
+# Includes A2A server, CLI tools, CrewAI, and LLM support
+standard = [
+    "apflow[a2a,cli,crewai,llm]",
+]
+
 # Development dependencies
 dev = [
     "pytest>=7.0.0",
