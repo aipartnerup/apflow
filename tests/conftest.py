@@ -730,23 +730,8 @@ def api_keys_available():
         pytest.skip("OPENAI_API_KEY is not set - skipping integration test")
     
     return {
-        "openai_api_key": openai_api_key
+        "openai_api_key": openai_key
     }
-
-
-@pytest.fixture
-def disable_api_for_tests(monkeypatch):
-    """
-    Fixture to disable API usage during CLI tests.
-    
-    This ensures CLI tests use the local database instead of trying to connect
-    to an API server that may not be running.
-    """
-    # Patch should_use_api to always return False for tests
-    monkeypatch.setattr(
-        "apflow.cli.api_gateway_helper.should_use_api",
-        lambda: False
-    )
 
 
 def requires_api_keys(func):

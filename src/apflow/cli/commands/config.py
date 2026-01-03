@@ -11,7 +11,6 @@ Provides commands to manage CLI configuration including:
 import typer
 import json
 import subprocess
-from pathlib import Path
 from typing import Optional
 
 from apflow.cli.cli_config import (
@@ -19,10 +18,7 @@ from apflow.cli.cli_config import (
     set_config_value,
     list_config_values,
     get_config_file_path,
-    save_cli_config,
     load_cli_config,
-    load_secrets_config,
-    save_secrets_config,
 )
 from apflow.cli.jwt_token import generate_token, get_token_info, verify_token
 from apflow.core.utils.logger import get_logger
@@ -396,7 +392,7 @@ def init_server(
             SECRETS_FILE,
         )
 
-        typer.echo(f"\nSaved to:")
+        typer.echo("\nSaved to:")
         typer.echo(
             f"   config.json  (non-sensitive): "
             f"{get_config_file_path(CONFIG_FILE)}"
@@ -444,13 +440,13 @@ def show_path():
         active = "🔵 ACTIVE" if location == active_config else ""
         typer.echo(f"  {i}. {exists} {location} {active}")
 
-    typer.echo(f"\nSensitive config (secrets.json):")
+    typer.echo("\nSensitive config (secrets.json):")
     for i, location in enumerate(get_all_secrets_locations(), 1):
         exists = "✅" if location.exists() else "⚪"
         active = "🔵 ACTIVE" if location == active_secrets_dir / "secrets.json" else ""
         typer.echo(f"  {i}. {exists} {location} {active}")
 
-    typer.echo(f"\nActive config directory:")
+    typer.echo("\nActive config directory:")
     typer.echo(f"  {active_secrets_dir}")
 
     if active_config.exists():
@@ -459,20 +455,20 @@ def show_path():
         mtime = datetime.datetime.fromtimestamp(
             active_config.stat().st_mtime
         )
-        typer.echo(f"\nActive config details:")
+        typer.echo("\nActive config details:")
         typer.echo(f"  Size: {active_config.stat().st_size} bytes")
         typer.echo(f"  Modified: {mtime.strftime('%Y-%m-%d %H:%M:%S')}")
     else:
-        typer.echo(f"\n⚠️  No config file exists yet (will be created on first set)")
+        typer.echo("\n⚠️  No config file exists yet (will be created on first set)")
 
-    typer.echo(f"\n💡 Priority (highest to lowest):")
-    typer.echo(f"  1. APFLOW_CONFIG_DIR environment variable")
-    typer.echo(f"  2. Project-local: <project>/.data/")
-    typer.echo(f"  3. User-global: ~/.aipartnerup/apflow/ (default)")
+    typer.echo("\n💡 Priority (highest to lowest):")
+    typer.echo("  1. APFLOW_CONFIG_DIR environment variable")
+    typer.echo("  2. Project-local: <project>/.data/")
+    typer.echo("  3. User-global: ~/.aipartnerup/apflow/ (default)")
 
-    typer.echo(f"\n🔒 File Permissions:")
-    typer.echo(f"  config.json:  644 (readable by all)")
-    typer.echo(f"  secrets.json: 600 (owner-only access)")
+    typer.echo("\n🔒 File Permissions:")
+    typer.echo("  config.json:  644 (readable by all)")
+    typer.echo("  secrets.json: 600 (owner-only access)")
 
 
 @app.command("path")
@@ -569,7 +565,7 @@ def verify_token_cmd(
         
         # Try to verify with local secret (if available)
         try:
-            payload = verify_token(token)
+            verify_token(token)
             typer.echo("\n✅ Token signature verified with local secret")
         except Exception as verify_error:
             typer.echo(f"\n⚠️  Could not verify signature: {str(verify_error)}")

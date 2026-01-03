@@ -3,7 +3,6 @@ Tests for CLI configuration management.
 """
 
 import json
-import pytest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -49,21 +48,6 @@ class TestCLIConfigPersistence:
             with patch("apflow.cli.cli_config.CONFIG_FILE", config_file):
                 loaded = load_cli_config()
                 assert loaded == {}
-    
-    def test_generate_admin_token(self):
-        """Test admin token generation."""
-        token1 = generate_admin_token()
-        token2 = generate_admin_token()
-        
-        # Should start with admin-
-        assert token1.startswith("admin-")
-        assert token2.startswith("admin-")
-        
-        # Should be different
-        assert token1 != token2
-        
-        # Should be reasonable length
-        assert len(token1) > 10
     
     def test_generate_admin_token(self):
         """Test admin token generation."""

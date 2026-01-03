@@ -6,9 +6,8 @@ including API usage detection and local database fallback.
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 from apflow.cli.api_gateway_helper import (
     should_use_api,

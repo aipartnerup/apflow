@@ -121,7 +121,6 @@ async def test_api_client_url_construction():
 
     # Test URL paths for different methods
     # (We won't actually call them, just verify the paths would be correct)
-    task_id = "test-task-123"
 
     # These would be called with correct URLs:
     # POST /tasks/{task_id}/execute

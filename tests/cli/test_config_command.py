@@ -2,7 +2,6 @@
 Tests for CLI config command.
 """
 
-import pytest
 from typer.testing import CliRunner
 from apflow.cli.main import app
 

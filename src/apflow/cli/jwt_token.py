@@ -10,7 +10,6 @@ Supports multiple config locations with priority:
 
 from __future__ import annotations
 
-import json
 import jwt
 import uuid
 from datetime import datetime, timedelta, timezone
