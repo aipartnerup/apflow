@@ -13,7 +13,7 @@ Supports:
 
 from typing import Dict, Type, Optional, Callable, Any
 from apflow.core.interfaces.executable_task import ExecutableTask
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

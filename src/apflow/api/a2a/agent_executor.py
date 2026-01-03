@@ -22,7 +22,7 @@ from apflow.core.config import get_task_model_class
 from apflow.api.a2a.event_queue_bridge import EventQueueBridge
 from apflow.api.a2a.task_routes_adapter import TaskRoutesAdapter
 from apflow.api.routes.tasks import TaskRoutes
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

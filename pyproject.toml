@@ -139,7 +139,7 @@ all = [
 
 [project.scripts]
 # CLI tools (requires [cli] extra)
-apflow = "apflow.cli.main:app"
+apflow = "apflow.cli.main:main"
 
 # A2A Protocol Server entry point (requires [a2a] extra)
 # Usage: python -m apflow.api.main

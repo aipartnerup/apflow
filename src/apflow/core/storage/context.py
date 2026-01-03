@@ -18,7 +18,7 @@ from apflow.core.storage.factory import (
     get_default_session,
     create_pooled_session,
 )
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 if TYPE_CHECKING:
     from apflow.core.storage.sqlalchemy.task_repository import TaskRepository

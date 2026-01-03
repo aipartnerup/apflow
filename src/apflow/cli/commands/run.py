@@ -8,7 +8,7 @@ import uuid
 import asyncio
 from typing import Optional, List, Dict, Any, Coroutine
 from pathlib import Path
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 from apflow.core.execution.task_executor import TaskExecutor
 
 logger = get_logger(__name__)

@@ -66,7 +66,7 @@ from apflow.core.storage.factory import (  # noqa: E402
     is_postgresql_url,
     normalize_postgresql_url,
 )
-from apflow.core.utils.logger import get_logger  # noqa: E402
+from apflow.logger import get_logger  # noqa: E402
 
 logger = get_logger(__name__)
 
@@ -711,7 +711,7 @@ def fresh_db_session(temp_db_path):
 @pytest.fixture(autouse=True)
 def mock_logger():
     """Mock logger for testing"""
-    with patch('apflow.core.utils.logger.get_logger') as mock_logger:
+    with patch('apflow.logger.get_logger') as mock_logger:
         logger = Mock()
         logger.info = Mock()
         logger.debug = Mock()

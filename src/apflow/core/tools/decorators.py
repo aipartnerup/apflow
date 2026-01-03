@@ -6,7 +6,7 @@ Provides @tool_register() decorator for automatic tool registration.
 
 from typing import Any, Optional
 from apflow.core.tools.registry import register_tool
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

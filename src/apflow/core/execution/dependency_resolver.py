@@ -9,7 +9,7 @@ These functions can be used by TaskManager and other orchestration components.
 from typing import Dict, Any
 from apflow.core.storage.sqlalchemy.models import TaskModel
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

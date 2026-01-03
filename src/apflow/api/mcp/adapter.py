@@ -7,7 +7,7 @@ This adapter bridges TaskRoutes (protocol-agnostic task handlers) with MCP proto
 from typing import Dict, Any, Optional, Type
 from starlette.requests import Request
 from apflow.api.routes.tasks import TaskRoutes
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -8,7 +8,7 @@ from a2a.server.events import EventQueue
 from a2a.types import TaskStatusUpdateEvent, TaskStatus, TaskState
 from a2a.utils import new_agent_parts_message, new_agent_text_message
 from a2a.types import DataPart
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

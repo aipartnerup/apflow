@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable, List, Optional, Type
+from typing import TYPE_CHECKING, Callable, Iterable, List, Optional, Type
 
 from apflow.core.config.registry import ConfigRegistry, get_config
-from apflow.core.storage.sqlalchemy.models import TaskModel
 from apflow.core.types import TaskPostHook, TaskPreHook
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
+
+if TYPE_CHECKING:
+    from apflow.core.storage.sqlalchemy.models import TaskModel
 
 logger = get_logger(__name__)
 
@@ -139,10 +141,10 @@ class ConfigManager:
         except Exception as e:
             logger.warning(f"Failed to load CLI config: {e}")
 
-    def set_task_model_class(self, task_model_class: Optional[Type[TaskModel]]) -> None:
+    def set_task_model_class(self, task_model_class: Optional['TaskModel']) -> None:
         self._registry.set_task_model_class(task_model_class)
 
-    def get_task_model_class(self) -> Type[TaskModel]:
+    def get_task_model_class(self) -> 'TaskModel':
         return self._registry.get_task_model_class()
 
     def register_pre_hook(self, hook: TaskPreHook) -> None:

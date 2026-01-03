@@ -16,7 +16,7 @@ from a2a.utils.constants import (
 )
 
 from apflow.core.storage.sqlalchemy.models import TaskModel
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 from apflow.api.routes import TaskRoutes, SystemRoutes, DocsRoutes
 
 logger = get_logger(__name__)

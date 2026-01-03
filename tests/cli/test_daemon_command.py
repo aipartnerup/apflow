@@ -8,8 +8,8 @@ Tests the daemon command as documented in README.md
 
 import pytest
 from unittest.mock import patch, MagicMock
-from typer.testing import CliRunner
-from apflow.cli.main import app
+from click.testing import CliRunner
+from apflow.cli.main import cli
 from apflow.cli.commands.daemon import (
     get_pid_file,
     get_log_file,
@@ -46,31 +46,31 @@ class TestDaemonCommand:
     
     def test_daemon_help(self):
         """Test daemon command help output"""
-        result = runner.invoke(app, ["daemon", "--help"])
+        result = runner.invoke(cli, ["daemon", "--help"])
         assert result.exit_code == 0
         assert "Manage daemon" in result.stdout
     
     def test_daemon_subcommands_help(self):
         """Test daemon subcommand help (start, stop)"""
         # Start help
-        result = runner.invoke(app, ["daemon", "start", "--help"])
+        result = runner.invoke(cli, ["daemon", "start", "--help"])
         assert result.exit_code == 0
         assert "Start daemon service" in result.stdout
         
         # Stop help
-        result = runner.invoke(app, ["daemon", "stop", "--help"])
+        result = runner.invoke(cli, ["daemon", "stop", "--help"])
         assert result.exit_code == 0
         assert "Stop daemon service" in result.stdout
     
     def test_daemon_status_when_not_running(self, cleanup_daemon_files):
         """Test daemon status when no daemon is running"""
-        result = runner.invoke(app, ["daemon", "status"])
+        result = runner.invoke(cli, ["daemon", "status"])
         assert result.exit_code == 0
         assert "not running" in result.stdout.lower() or "no pid" in result.stdout.lower()
     
     def test_daemon_stop_when_not_running(self, cleanup_daemon_files):
         """Test daemon stop when no daemon is running"""
-        result = runner.invoke(app, ["daemon", "stop"])
+        result = runner.invoke(cli, ["daemon", "stop"])
         assert result.exit_code == 0
         assert "not running" in result.stdout.lower() or "no pid" in result.stdout.lower()
     
@@ -82,7 +82,7 @@ class TestDaemonCommand:
         mock_process.poll.return_value = None  # Process still running
         mock_popen.return_value = mock_process
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "daemon", "start",
             "--port", "9001",
             "--protocol", "mcp",
@@ -102,7 +102,7 @@ class TestDaemonCommand:
         write_pid(99999)
         mock_is_running.side_effect = [True] + [False] * 10
         
-        result = runner.invoke(app, ["daemon", "stop"])
+        result = runner.invoke(cli, ["daemon", "stop"])
         
         assert result.exit_code == 0
         assert "stopped successfully" in result.stdout.lower()
@@ -117,7 +117,7 @@ class TestDaemonCommand:
         # Process takes multiple checks to die
         mock_is_running.side_effect = [True] * 51 + [False]
         
-        result = runner.invoke(app, ["daemon", "stop"])
+        result = runner.invoke(cli, ["daemon", "stop"])
         
         assert result.exit_code == 0
         assert "stopped successfully" in result.stdout.lower()
@@ -129,7 +129,7 @@ class TestDaemonCommand:
         write_pid(55555)
         mock_is_running.return_value = True
         
-        result = runner.invoke(app, ["daemon", "status"])
+        result = runner.invoke(cli, ["daemon", "status"])
         
         assert result.exit_code == 0
         assert "running" in result.stdout.lower()

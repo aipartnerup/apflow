@@ -471,7 +471,7 @@ class TestCustomTaskModelWithAgentExecutor:
             # or by checking what post-hook received
             
             import json
-            from apflow.core.utils.logger import get_logger
+            from apflow.logger import get_logger
             logger = get_logger(__name__)
             
             logger.info("==Custom TaskModel Test Results==")

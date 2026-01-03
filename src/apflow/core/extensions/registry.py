@@ -11,7 +11,7 @@ from typing import Dict, List, Optional, Type, Callable, Any
 from apflow.core.extensions.base import Extension
 from apflow.core.extensions.types import ExtensionCategory
 from apflow.core.extensions.protocol import ExecutorFactory
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -540,15 +540,36 @@ class ExtensionRegistry:
 
 # Global registry instance
 _registry = ExtensionRegistry()
+_extensions_loaded = False  # Track if extensions have been auto-loaded
 
 
 def get_registry() -> ExtensionRegistry:
     """
     Get the global extension registry instance
     
+    Auto-loads extensions on first access to ensure all extensions are registered.
+    This lazy loading approach improves CLI startup performance while ensuring
+    extensions are available when needed.
+    
     Returns:
         ExtensionRegistry singleton instance
     """
+    global _extensions_loaded
+    
+    # Auto-load extensions on first registry access
+    if not _extensions_loaded:
+        _extensions_loaded = True
+        try:
+            # Import extensions module which auto-registers all extensions
+            import apflow.extensions  # noqa: F401
+            logger.debug("Auto-loaded extensions on first registry access")
+        except ImportError:
+            # Extensions may not be installed
+            logger.debug("Extensions not available (ImportError)")
+        except Exception as e:
+            # Log but don't fail if extensions have errors
+            logger.warning(f"Failed to auto-load extensions: {e}")
+    
     return _registry
 
 

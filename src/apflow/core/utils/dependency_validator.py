@@ -8,7 +8,7 @@ including circular dependency detection and dependency reference validation.
 from typing import Dict, Any, List, Set, Optional
 from apflow.core.storage.sqlalchemy.models import TaskModel
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

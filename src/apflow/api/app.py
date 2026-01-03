@@ -15,7 +15,7 @@ from apflow.api.protocols import (
     get_protocol_from_env,
 )
 from apflow.core.utils.helpers import get_url_with_host_and_port
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 if TYPE_CHECKING:
     from apflow.api.routes.tasks import TaskRoutes

@@ -216,6 +216,57 @@ When writing tests that use the extension registry or other global state:
 - Focus on critical paths and edge cases
 - Test both success and failure scenarios
 
+## Import Performance Checks
+
+apflow includes automated tools to prevent slow imports and circular dependencies. These checks run automatically in CI/CD and as pre-commit hooks.
+
+### Available Checks
+
+```bash
+# Check all import issues
+make check-imports
+
+# Individual checks
+make check-circular      # Detect circular imports
+make check-performance   # Check import time
+make check-heavy        # Detect heavy module-level imports
+```
+
+### Pre-commit Hooks
+
+Install pre-commit hooks to automatically check on every commit:
+
+```bash
+pip install pre-commit
+pre-commit install
+```
+
+This will automatically run:
+- ✓ Circular import detection
+- ✓ Heavy dependency detection (litellm, crewai, etc.)
+- ✓ Code formatting (ruff)
+
+### Best Practices
+
+**❌ Avoid:**
+```python
+# Module-level heavy imports
+import litellm  # Slows down CLI startup!
+
+def simple_function():
+    ...  # Doesn't even use litellm
+```
+
+**✅ Prefer:**
+```python
+# Lazy import when needed
+def llm_function():
+    import litellm  # Import only when called
+    ...
+```
+
+See [Import Performance Guide](import-tools-guide.md) for detailed guidelines.
+
 ## Commit Messages
 
 Follow [Conventional Commits](https://www.conventionalcommits.org/) format:

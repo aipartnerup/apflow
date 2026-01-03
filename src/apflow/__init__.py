@@ -20,46 +20,10 @@ Protocol Standard: A2A (Agent-to-Agent) Protocol
 
 __version__ = "0.10.0"
 
-# Core framework - re-export from core module for convenience
-from apflow.core import (
-    ExecutableTask,
-    BaseTask,
-    TaskManager,
-    StreamingCallbacks,
-    create_session,
-    get_default_session,
-    get_hook_session,
-    get_hook_repository,
-    # Backward compatibility (deprecated)
-    create_storage,
-    get_default_storage,
-)
-
-# Unified decorators (Flask-style API) - single entry point for all decorators
-from apflow.core.decorators import (
-    register_pre_hook,
-    register_post_hook,
-    register_task_tree_hook,
-    get_task_tree_hooks,
-    set_task_model_class,
-    get_task_model_class,
-    task_model_register,
-    clear_config,
-    set_use_task_creator,
-    get_use_task_creator,
-    set_require_existing_tasks,
-    get_require_existing_tasks,
-    executor_register,
-    storage_register,
-    hook_register,
-    tool_register,
-)
-
-# Extension registry utilities
-from apflow.core.extensions import add_executor_hook
-
+# Lazy imports to keep package import fast and avoid circular dependencies
+# Core framework exports are loaded on first access via __getattr__
 __all__ = [
-    # Core framework (from core module)
+    # Core framework
     "ExecutableTask",
     "BaseTask",
     "TaskManager",
@@ -71,7 +35,7 @@ __all__ = [
     # Backward compatibility (deprecated)
     "create_storage",
     "get_default_storage",
-    # Unified decorators (Flask-style API)
+    # Unified decorators
     "register_pre_hook",
     "register_post_hook",
     "register_task_tree_hook",
@@ -88,12 +52,46 @@ __all__ = [
     "storage_register",
     "hook_register",
     "tool_register",
-    # Extension registry utilities
+    # Extension utilities
     "add_executor_hook",
     # Version
     "__version__",
 ]
 
-# Optional features (require extras):
-# from apflow.extensions.crewai import CrewaiExecutor, BatchCrewaiExecutor
-# Requires: pip install apflow[crewai]
+
+def __getattr__(name):
+    """Lazy import to avoid loading heavy apflow.core at package import time"""
+    
+    # Core interfaces
+    if name in ("ExecutableTask", "BaseTask", "TaskManager", "StreamingCallbacks",
+                "create_session", "get_default_session", "get_hook_session", 
+                "get_hook_repository", "create_storage", "get_default_storage"):
+        from apflow.core import (
+            ExecutableTask, BaseTask, TaskManager, StreamingCallbacks,
+            create_session, get_default_session, get_hook_session,
+            get_hook_repository, create_storage, get_default_storage
+        )
+        return locals()[name]
+    
+    # Decorators
+    if name in ("register_pre_hook", "register_post_hook", "register_task_tree_hook",
+                "get_task_tree_hooks", "set_task_model_class", "get_task_model_class",
+                "task_model_register", "clear_config", "set_use_task_creator",
+                "get_use_task_creator", "set_require_existing_tasks", "get_require_existing_tasks",
+                "executor_register", "storage_register", "hook_register", "tool_register"):
+        from apflow.core.decorators import (
+            register_pre_hook, register_post_hook, register_task_tree_hook,
+            get_task_tree_hooks, set_task_model_class, get_task_model_class,
+            task_model_register, clear_config, set_use_task_creator,
+            get_use_task_creator, set_require_existing_tasks, get_require_existing_tasks,
+            executor_register, storage_register, hook_register, tool_register
+        )
+        return locals()[name]
+    
+    # Extension utilities
+    if name == "add_executor_hook":
+        from apflow.core.extensions import add_executor_hook
+        return add_executor_hook
+    
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+

@@ -21,7 +21,7 @@ from apflow.cli.cli_config import (
     load_cli_config,
 )
 from apflow.cli.jwt_token import generate_token, get_token_info, verify_token
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

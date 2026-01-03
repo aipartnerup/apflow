@@ -40,7 +40,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apflow.core.execution.task_manager import TaskManager
 from apflow.core.types import TaskTreeNode
 from apflow.core.storage.sqlalchemy.models import TaskModel
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 from apflow.core.config import get_task_model_class
 
 logger = get_logger(__name__)

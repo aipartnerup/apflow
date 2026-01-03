@@ -8,8 +8,8 @@ import pytest
 import pytest_asyncio
 import json
 import uuid
-from typer.testing import CliRunner
-from apflow.cli.main import app
+from click.testing import CliRunner
+from apflow.cli.main import cli
 from apflow.core.execution.task_executor import TaskExecutor
 from apflow.core.storage import set_default_session, reset_default_session
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
@@ -50,7 +50,7 @@ class TestTasksListCommand:
     
     def test_tasks_list_empty_db(self, use_test_db_session, disable_api_for_tests):
         """Test listing tasks when database is empty"""
-        result = runner.invoke(app, ["tasks", "list"])
+        result = runner.invoke(cli, ["tasks", "list"])
         
         assert result.exit_code == 0
         output = result.stdout
@@ -85,8 +85,8 @@ class TestTasksStatusCommand:
     
     def test_tasks_status_not_found(self, use_test_db_session, disable_api_for_tests):
         """Test checking status of non-existent task"""
-        result = runner.invoke(app, [
-            "tasks", "status", "non-existent-task-id"
+        result = runner.invoke(cli, [
+              "tasks", "status", "not-found-id"
         ])
         
         assert result.exit_code == 0
@@ -97,8 +97,8 @@ class TestTasksStatusCommand:
         assert len(statuses) > 0
         status = statuses[0]
         assert status["status"] == "not_found"
-        assert status["task_id"] == "non-existent-task-id"
-        assert status["context_id"] == "non-existent-task-id"
+        assert status["task_id"] == "not-found-id"
+        assert status["context_id"] == "not-found-id"
 
 
 class TestTasksCountCommand:
@@ -109,7 +109,7 @@ class TestTasksCountCommand:
     @pytest.mark.asyncio
     async def test_tasks_count_empty_db(self, use_test_db_session, disable_api_for_tests):
         """Test counting tasks when database is empty"""
-        result = runner.invoke(app, ["tasks", "count", "--format", "json"])
+        result = runner.invoke(cli, ["tasks", "count", "--format", "json"])
         
         assert result.exit_code == 0
         output = result.stdout
@@ -146,7 +146,7 @@ class TestTasksCountCommand:
             if status != "pending":
                 await task_repository.update_task_status(task_id, status)
         
-        result = runner.invoke(app, ["tasks", "count", "--format", "json"])
+        result = runner.invoke(cli, ["tasks", "count", "--format", "json"])
         
         assert result.exit_code == 0
         output = result.stdout
@@ -183,7 +183,7 @@ class TestTasksCountCommand:
             has_children=False,
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "count",
             "--user-id", "user_1",
             "--format", "json"
@@ -201,7 +201,7 @@ class TestTasksCountCommand:
     @pytest.mark.asyncio
     async def test_tasks_count_table_format(self, use_test_db_session, disable_api_for_tests):
         """Test count with table output format"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "count",
             "--format", "table"
         ])
@@ -244,12 +244,12 @@ class TestTasksCountCommand:
             )
         
         # Count all tasks (should include children)
-        result_all = runner.invoke(app, ["tasks", "count", "--format", "json"])
+        result_all = runner.invoke(cli, ["tasks", "count", "--format", "json"])
         assert result_all.exit_code == 0
         count_all = json.loads(result_all.stdout)
         
         # Count root only (should exclude children)
-        result_root = runner.invoke(app, ["tasks", "count", "--root-only", "--format", "json"])
+        result_root = runner.invoke(cli, ["tasks", "count", "--root-only", "--format", "json"])
         assert result_root.exit_code == 0
         count_root = json.loads(result_root.stdout)
         
@@ -286,7 +286,7 @@ class TestTasksCancelCommand:
         await task_executor.start_task_tracking(task_id)
         
         try:
-            result = runner.invoke(app, [
+            result = runner.invoke(cli, [
                 "tasks", "cancel", task_id
             ])
             
@@ -326,7 +326,7 @@ class TestTasksCancelCommand:
             task_ids.append(task_id)
         
         try:
-            result = runner.invoke(app, [
+            result = runner.invoke(cli, [
                 "tasks", "cancel", *task_ids
             ])
             
@@ -364,7 +364,7 @@ class TestTasksCancelCommand:
         await task_executor.start_task_tracking(task_id)
         
         try:
-            result = runner.invoke(app, [
+            result = runner.invoke(cli, [
                 "tasks", "cancel", task_id,
                 "--force"
             ])
@@ -397,7 +397,7 @@ class TestTasksCancelCommand:
             progress=1.0
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "cancel", task_id
         ])
         
@@ -411,7 +411,7 @@ class TestTasksCancelCommand:
     @pytest.mark.asyncio
     async def test_tasks_cancel_not_found(self, use_test_db_session, disable_api_for_tests):
         """Test cancelling a non-existent task"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "cancel", "non-existent-task-id"
         ])
         
@@ -457,7 +457,7 @@ class TestTasksCopyCommand:
         )
         
         # Copy task
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "copy", root_task_id
         ])
         
@@ -505,7 +505,7 @@ class TestTasksCopyCommand:
         
         # Copy task with output file
         output_file = tmp_path / "copied_task.json"
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "copy", task_id,
             "--output", str(output_file)
         ])
@@ -526,7 +526,7 @@ class TestTasksCopyCommand:
     @pytest.mark.asyncio
     async def test_tasks_copy_not_found(self, use_test_db_session, disable_api_for_tests):
         """Test copying a non-existent task"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "copy", "non-existent-task-id"
         ])
         
@@ -579,7 +579,7 @@ class TestTasksCopyCommand:
         )
         
         # Copy task with --children flag
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "copy", root_task_id,
             "--children"
         ])
@@ -640,7 +640,7 @@ class TestTasksCopyCommand:
         )
         
         # Copy task with --dry-run flag
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "copy", root_task_id,
             "--dry-run"
         ])
@@ -710,7 +710,7 @@ class TestTasksCopyCommand:
         )
         
         # Copy with custom mode
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "copy", child1_id,
             "--copy-mode", "custom",
             "--custom-task-ids", child1_id
@@ -769,7 +769,7 @@ class TestTasksCopyCommand:
         )
         
         # Copy with full mode
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "copy", root_task_id,
             "--copy-mode", "full"
         ])
@@ -811,7 +811,7 @@ class TestTasksCopyCommand:
         )
         
         # Copy with reset_fields
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "copy", task_id,
             "--reset-fields", "status,progress"
         ])
@@ -866,7 +866,7 @@ class TestTasksGetCommand:
             progress=1.0
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "get", task_id
         ])
         
@@ -883,7 +883,7 @@ class TestTasksGetCommand:
     @pytest.mark.asyncio
     async def test_tasks_get_not_found(self, use_test_db_session, disable_api_for_tests):
         """Test getting a non-existent task"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "get", "non-existent-task-id"
         ])
         
@@ -939,7 +939,7 @@ class TestTasksCopyCommandAdvanced:
         set_default_session(use_test_db_session)
         try:
             root = task_tree_for_copy["root"]
-            result = runner.invoke(app, [
+            result = runner.invoke(cli, [
                 "tasks", "copy",
                 root.id,
                 "--copy-mode", "minimal"
@@ -978,7 +978,7 @@ class TestTasksCopyCommandAdvanced:
         set_default_session(use_test_db_session)
         try:
             root = task_tree_for_copy["root"]
-            result = runner.invoke(app, [
+            result = runner.invoke(cli, [
                 "tasks", "copy",
                 root.id,
                 "--copy-mode", "minimal",
@@ -1011,7 +1011,7 @@ class TestTasksCopyCommandAdvanced:
         set_default_session(use_test_db_session)
         try:
             root = task_tree_for_copy["root"]
-            result = runner.invoke(app, [
+            result = runner.invoke(cli, [
                 "tasks", "copy",
                 root.id,
                 "--copy-mode", "minimal",
@@ -1042,7 +1042,7 @@ class TestTasksCopyCommandAdvanced:
         set_default_session(use_test_db_session)
         try:
             child1 = task_tree_for_copy["child1"]
-            result = runner.invoke(app, [
+            result = runner.invoke(cli, [
                 "tasks", "copy",
                 child1.id,
                 "--copy-mode", "custom",
@@ -1073,7 +1073,7 @@ class TestTasksCopyCommandAdvanced:
         set_default_session(use_test_db_session)
         try:
             root = task_tree_for_copy["root"]
-            result = runner.invoke(app, [
+            result = runner.invoke(cli, [
                 "tasks", "copy",
                 root.id,
                 "--copy-mode", "full"
@@ -1103,7 +1103,7 @@ class TestTasksCopyCommandAdvanced:
         set_default_session(use_test_db_session)
         try:
             root = task_tree_for_copy["root"]
-            result = runner.invoke(app, [
+            result = runner.invoke(cli, [
                 "tasks", "copy",
                 root.id,
                 "--copy-mode", "minimal",
@@ -1140,7 +1140,7 @@ class TestTasksCopyCommandAdvanced:
         """Test error handling when task is not found"""
         set_default_session(use_test_db_session)
         try:
-            result = runner.invoke(app, [
+            result = runner.invoke(cli, [
                 "tasks", "copy",
                 "non-existent-task",
                 "--copy-mode", "minimal"
@@ -1174,7 +1174,7 @@ class TestTasksCreateCommand:
         with open(task_file, 'w') as f:
             json.dump(task_data, f)
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "create",
             "--file", str(task_file)
         ])
@@ -1223,7 +1223,7 @@ class TestTasksCreateCommand:
         
         # Test that the create command accepts --stdin flag (even if we can't easily test stdin input)
         # We verify the command structure by checking help or using file as alternative
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "create",
             "--file", str(task_file)
         ])
@@ -1250,7 +1250,7 @@ class TestTasksCreateCommand:
     @pytest.mark.asyncio
     async def test_tasks_create_missing_file_or_stdin(self, use_test_db_session, disable_api_for_tests):
         """Test creating tasks without file or stdin"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "create"
         ])
         
@@ -1280,7 +1280,7 @@ class TestTasksUpdateCommand:
             progress=0.0
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "update", task_id,
             "--name", "Updated Name"
         ])
@@ -1318,7 +1318,7 @@ class TestTasksUpdateCommand:
             progress=0.0
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "update", task_id,
             "--status", "completed",
             "--progress", "1.0"
@@ -1354,7 +1354,7 @@ class TestTasksUpdateCommand:
             progress=0.0
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "update", task_id
         ])
         
@@ -1367,7 +1367,7 @@ class TestTasksUpdateCommand:
     @pytest.mark.asyncio
     async def test_tasks_update_not_found(self, use_test_db_session, disable_api_for_tests):
         """Test updating a non-existent task"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "update", "non-existent-task-id",
             "--name", "New Name"
         ])
@@ -1398,7 +1398,7 @@ class TestTasksDeleteCommand:
             progress=0.0
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "delete", task_id
         ])
         
@@ -1449,7 +1449,7 @@ class TestTasksDeleteCommand:
             progress=0.0
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "delete", root_id
         ])
         
@@ -1493,7 +1493,7 @@ class TestTasksDeleteCommand:
         task_before = await task_repository.get_task_by_id(task_id)
         assert task_before.status == "completed"
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "delete", task_id
         ])
         
@@ -1512,7 +1512,7 @@ class TestTasksDeleteCommand:
     @pytest.mark.asyncio
     async def test_tasks_delete_not_found(self, use_test_db_session, disable_api_for_tests):
         """Test deleting a non-existent task"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "delete", "non-existent-task-id"
         ])
         
@@ -1554,7 +1554,7 @@ class TestTasksTreeCommand:
             progress=1.0
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "tree", root_id
         ])
         
@@ -1598,7 +1598,7 @@ class TestTasksTreeCommand:
         )
         
         # Get tree starting from child - should return root tree
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "tree", child_id
         ])
         
@@ -1613,7 +1613,7 @@ class TestTasksTreeCommand:
     @pytest.mark.asyncio
     async def test_tasks_tree_not_found(self, use_test_db_session, disable_api_for_tests):
         """Test getting tree for non-existent task"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "tree", "non-existent-task-id"
         ])
         
@@ -1667,7 +1667,7 @@ class TestTasksChildrenCommand:
             progress=1.0
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "children",
             "--parent-id", parent_id
         ])
@@ -1711,7 +1711,7 @@ class TestTasksChildrenCommand:
             progress=1.0
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "children",
             "--task-id", parent_id
         ])
@@ -1727,7 +1727,7 @@ class TestTasksChildrenCommand:
     @pytest.mark.asyncio
     async def test_tasks_children_no_parent_or_task_id(self, use_test_db_session, disable_api_for_tests):
         """Test getting children without specifying parent-id or task-id"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "children"
         ])
         
@@ -1740,7 +1740,7 @@ class TestTasksChildrenCommand:
     @pytest.mark.asyncio
     async def test_tasks_children_not_found(self, use_test_db_session, disable_api_for_tests):
         """Test getting children for non-existent parent"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "children",
             "--parent-id", "non-existent-parent-id"
         ])
@@ -1775,7 +1775,7 @@ class TestTasksAllCommand:
             )
             task_ids.append(task_id)
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "list"
         ])
         
@@ -1825,7 +1825,7 @@ class TestTasksAllCommand:
             progress=1.0
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "list",
             "--status", "completed",
             "--root-only"  # Explicitly set root_only to True (default)
@@ -1871,7 +1871,7 @@ class TestTasksAllCommand:
             progress=0.0
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "list",
             "--user-id", "user1"
         ])
@@ -1907,7 +1907,7 @@ class TestTasksAllCommand:
                 progress=0.0
             )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "list",
             "--limit", "2"
         ])
@@ -1948,7 +1948,7 @@ class TestTasksAllCommand:
             progress=0.0
         )
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "list",
             "--root-only"
         ])
@@ -1974,7 +1974,7 @@ class TestTasksWatchCommand:
     @pytest.mark.asyncio
     async def test_tasks_watch_requires_task_id_or_all(self, use_test_db_session, disable_api_for_tests):
         """Test that tasks watch requires either --task-id or --all"""
-        result = runner.invoke(app, ["tasks", "watch"])
+        result = runner.invoke(cli, ["tasks", "watch"])
         
         # Command should fail with exit code 1
         assert result.exit_code == 1
@@ -1999,7 +1999,7 @@ class TestTasksWatchCommand:
                 # Make the loop exit after first iteration by raising KeyboardInterrupt
                 mock_sleep.side_effect = KeyboardInterrupt()
                 
-                result = runner.invoke(app, [
+                result = runner.invoke(cli, [
                     "tasks", "watch",
                     "--task-id", "non-existent-task-id",
                     "--interval", "0.1"
@@ -2017,7 +2017,7 @@ class TestTasksWatchCommand:
     async def test_tasks_watch_with_all_no_tasks(self, use_test_db_session, disable_api_for_tests):
         """Test watching all running tasks when none are running"""
         # When no tasks are running, command should handle gracefully
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "tasks", "watch",
             "--all",
             "--interval", "0.1"

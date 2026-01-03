@@ -19,7 +19,7 @@ from apflow.api.routes.base import BaseRouteHandler
 from apflow.core.storage import create_pooled_session
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from apflow.core.execution.task_creator import TaskCreator
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 from apflow.core.utils.helpers import tree_node_to_dict
 
 logger = get_logger(__name__)

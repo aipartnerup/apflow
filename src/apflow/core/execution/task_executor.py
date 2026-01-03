@@ -19,19 +19,11 @@ from apflow.core.config import (
     get_use_task_creator,
     get_require_existing_tasks,
 )
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
-# Auto-import extensions to register extensions and tools when TaskExecutor is imported
-# This ensures extensions and tools are available when TaskExecutor is used
-# (extensions/__init__.py auto-imports tools, so tools will be registered automatically)
-try:
-    import apflow.extensions  # noqa: F401
-except ImportError:
-    # Extensions may not be installed, that's okay
-    pass
-except Exception:
-    # Other errors (syntax errors, etc.) should not break import
-    pass
+# Note: Extensions are now loaded on-demand when TaskExecutor is instantiated,
+# not at module import time. This dramatically improves CLI startup performance.
+# Extensions will be automatically registered when get_registry().get_executor() is called.
 
 logger = get_logger(__name__)
 

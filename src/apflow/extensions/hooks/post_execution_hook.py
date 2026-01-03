@@ -9,7 +9,7 @@ from apflow.core.extensions.hook import HookExtension
 from apflow.core.extensions.decorators import hook_register
 from apflow.core.storage.sqlalchemy.models import TaskModel
 from apflow.core.config.registry import get_post_hooks
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

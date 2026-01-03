@@ -7,7 +7,7 @@ import json
 from typing import Dict, Any, Optional, Type
 from apflow.core.tools import BaseTool, tool_register
 from pydantic import BaseModel, Field
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

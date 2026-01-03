@@ -7,7 +7,7 @@ Supports multiple providers - users can have different keys for different LLM pr
 """
 
 from typing import Optional, Dict
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

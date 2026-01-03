@@ -6,7 +6,7 @@ Defines MCP tools that expose apflow task orchestration capabilities.
 
 from typing import Dict, Any, List, Optional
 from apflow.api.mcp.adapter import TaskRoutesAdapter
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

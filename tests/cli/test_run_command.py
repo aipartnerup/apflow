@@ -9,8 +9,8 @@ import json
 import uuid
 import tempfile
 from pathlib import Path
-from typer.testing import CliRunner
-from apflow.cli.main import app
+from click.testing import CliRunner
+from apflow.cli.main import cli
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from apflow.core.config import get_task_model_class
 
@@ -73,7 +73,7 @@ class TestRunCommand:
             }
         ])
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "run", "flow",
             "--tasks", tasks_json
         ])
@@ -91,7 +91,7 @@ class TestRunCommand:
     async def test_run_flow_with_tasks_file(self, use_test_db_session, temp_tasks_file):
         """Test executing tasks using --tasks-file option"""
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "run", "flow",
             "--tasks-file", str(temp_tasks_file)
         ])
@@ -107,11 +107,9 @@ class TestRunCommand:
     async def test_run_flow_legacy_mode(self, use_test_db_session):
         """Test executing task using legacy mode (executor_id + inputs)"""
         
-        result = runner.invoke(app, [
-            "run", "flow", "system_info_executor",
-            "--inputs", '{"resource": "cpu"}'
+        result = runner.invoke(cli, [
+            "run", "flow", "system_info_executor", "--inputs", '{"resource": "cpu"}'
         ])
-        
         assert result.exit_code == 0
         assert "status" in result.stdout or "root_task_id" in result.stdout
     
@@ -137,7 +135,7 @@ class TestRunCommand:
             }
         ])
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "run", "flow",
             "--tasks", tasks_json,
             "--background"
@@ -183,7 +181,7 @@ class TestRunCommand:
             }
         ])
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "run", "flow",
             "--tasks", tasks_json
         ])
@@ -236,7 +234,7 @@ class TestRunCommand:
             }
         ])
         
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "run", "flow",
             "--tasks", tasks_json
         ])
@@ -253,24 +251,20 @@ class TestRunCommand:
     
     def test_run_flow_missing_tasks_error(self):
         """Test error when no tasks provided"""
-        result = runner.invoke(app, [
-            "run", "flow"
+        result = runner.invoke(cli, [
+            "run", "flow", "system_info_executor"
         ])
-        
         assert result.exit_code == 1
-        # Error message may be in stdout or stderr
         output = result.output
-        assert "Error" in output or "must be provided" in output or result.exception is not None
-    
+        assert "No tasks provided" in output or "Error" in output
+
     def test_run_flow_invalid_tasks_json(self):
         """Test error with invalid JSON"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "run", "flow",
             "--tasks", "invalid json"
         ])
-        
         assert result.exit_code == 1
-        # Should have error about invalid JSON
         output = result.output
-        assert "Error" in output or "JSON" in output or result.exception is not None
+        assert "Error" in output or "JSON" in output
 

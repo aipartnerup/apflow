@@ -15,59 +15,9 @@ No optional dependencies required.
 Note: TaskCreator (core) creates tasks from tasks array.
 Note: Protocol specifications are handled by A2A Protocol (Agent-to-Agent Protocol),
 which is the standard protocol for agent communication. See api/ module for A2A implementation.
-"""
 
-# Re-export from core modules for convenience
-from apflow.core.interfaces import ExecutableTask
-from apflow.core.base import BaseTask
-from apflow.core.execution import (
-    TaskManager,
-    TaskCreator,
-    StreamingCallbacks,
-)
-from apflow.core.builders import TaskBuilder
-from apflow.core.extensions import (
-    Extension,
-    ExtensionCategory,
-    ExtensionRegistry,
-    get_registry,
-    register_extension,
-    executor_register,
-    storage_register,
-    hook_register,
-)
-from apflow.core.types import (
-    TaskTreeNode,
-    TaskPreHook,
-    TaskPostHook,
-    TaskStatus,
-)
-    # Unified decorators (convenience re-export from decorators module)
-from apflow.core.decorators import (
-    register_pre_hook,
-    register_post_hook,
-    set_task_model_class,
-    get_task_model_class,
-    clear_config,
-    set_use_task_creator,
-    get_use_task_creator,
-    set_require_existing_tasks,
-    get_require_existing_tasks,
-    # executor_register, storage_register, hook_register already imported from extensions
-)
-from apflow.core.config import (
-    get_pre_hooks,
-    get_post_hooks,
-)
-from apflow.core.storage import (
-    create_session,
-    get_default_session,
-    get_hook_session,
-    get_hook_repository,
-    # Backward compatibility (deprecated)
-    create_storage,
-    get_default_storage,
-)
+Performance: Uses lazy imports to avoid loading heavy modules at package import time.
+"""
 
 __all__ = [
     # Base interfaces
@@ -114,4 +64,61 @@ __all__ = [
     "create_storage",
     "get_default_storage",
 ]
+
+
+def __getattr__(name):
+    """Lazy import to avoid loading heavy modules at package import time"""
+    # Base interfaces
+    if name == "ExecutableTask":
+        from apflow.core.interfaces import ExecutableTask
+        return ExecutableTask
+    elif name == "BaseTask":
+        from apflow.core.base import BaseTask
+        return BaseTask
+    
+    # Core types
+    elif name in ("TaskTreeNode", "TaskPreHook", "TaskPostHook", "TaskStatus"):
+        from apflow.core.types import TaskTreeNode, TaskPreHook, TaskPostHook, TaskStatus
+        return locals()[name]
+    
+    # Execution
+    elif name in ("TaskManager", "TaskCreator", "StreamingCallbacks"):
+        from apflow.core.execution import TaskManager, TaskCreator, StreamingCallbacks
+        return locals()[name]
+    elif name == "TaskBuilder":
+        from apflow.core.builders import TaskBuilder
+        return TaskBuilder
+    
+    # Extensions
+    elif name in ("Extension", "ExtensionCategory", "ExtensionRegistry", "get_registry", "register_extension", "executor_register", "storage_register", "hook_register"):
+        from apflow.core.extensions import (
+            Extension, ExtensionCategory, ExtensionRegistry,
+            get_registry, register_extension, executor_register,
+            storage_register, hook_register
+        )
+        return locals()[name]
+    
+    # Decorators
+    elif name in ("register_pre_hook", "register_post_hook", "set_task_model_class", "get_task_model_class", "clear_config", "set_use_task_creator", "get_use_task_creator", "set_require_existing_tasks", "get_require_existing_tasks"):
+        from apflow.core.decorators import (
+            register_pre_hook, register_post_hook, set_task_model_class,
+            get_task_model_class, clear_config, set_use_task_creator,
+            get_use_task_creator, set_require_existing_tasks, get_require_existing_tasks
+        )
+        return locals()[name]
+    
+    # Configuration
+    elif name in ("get_pre_hooks", "get_post_hooks"):
+        from apflow.core.config import get_pre_hooks, get_post_hooks
+        return locals()[name]
+    
+    # Storage
+    elif name in ("create_session", "get_default_session", "get_hook_session", "get_hook_repository", "create_storage", "get_default_storage"):
+        from apflow.core.storage import (
+            create_session, get_default_session, get_hook_session,
+            get_hook_repository, create_storage, get_default_storage
+        )
+        return locals()[name]
+    
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

@@ -8,15 +8,17 @@ These types represent the domain model of task orchestration and are not
 tied to any specific implementation layer.
 """
 
-from typing import List, Dict, Any, Union, Callable, Awaitable
-from apflow.core.storage.sqlalchemy.models import TaskModel
+from typing import TYPE_CHECKING, List, Dict, Any, Union, Callable, Awaitable
+
+if TYPE_CHECKING:
+    from apflow.core.storage.sqlalchemy.models import TaskModel
 
 
 # ============================================================================
 # Type Aliases
 # ============================================================================
 
-TaskPreHook = Callable[[TaskModel], Union[None, Awaitable[None]]]
+TaskPreHook = Callable[["TaskModel"], Union[None, Awaitable[None]]]
 """
 Type alias for pre-execution hook functions.
 
@@ -30,7 +32,7 @@ Example:
         task.inputs["timestamp"] = datetime.now().isoformat()
 """
 
-TaskPostHook = Callable[[TaskModel, Dict[str, Any], Any], Union[None, Awaitable[None]]]
+TaskPostHook = Callable[["TaskModel", Dict[str, Any], Any], Union[None, Awaitable[None]]]
 """
 Type alias for post-execution hook functions.
 
@@ -127,7 +129,7 @@ class TaskTreeNode:
         calculate_status: Calculate the overall status of the task tree
     """
     
-    def __init__(self, task: TaskModel):
+    def __init__(self, task: "TaskModel"):
         """
         Initialize a task tree node
         

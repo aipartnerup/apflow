@@ -18,7 +18,7 @@ from apflow.core.storage.context import (
 from apflow.core.storage.factory import (
     create_session,
 )
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

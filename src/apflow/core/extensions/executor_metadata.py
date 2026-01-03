@@ -9,7 +9,7 @@ like apflow-demo to generate accurate demo tasks.
 from typing import Dict, Any, Optional
 from apflow.core.extensions.registry import get_registry
 from apflow.core.extensions.types import ExtensionCategory
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 from apflow.core.utils.helpers import validate_input_schema as _validate_input_schema
 
 logger = get_logger(__name__)

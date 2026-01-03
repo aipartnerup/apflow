@@ -6,7 +6,7 @@ when generating task trees.
 """
 
 from pathlib import Path
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

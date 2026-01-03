@@ -15,7 +15,7 @@ from starlette.responses import JSONResponse
 
 from apflow.api.routes.base import BaseRouteHandler
 from apflow.__init__ import __version__
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

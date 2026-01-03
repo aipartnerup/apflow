@@ -12,7 +12,7 @@ from apflow.api.mcp.tools import McpToolsRegistry
 from apflow.api.mcp.resources import McpResourcesRegistry
 from apflow.api.mcp.transport_stdio import StdioTransport
 from apflow.api.mcp.transport_http import HttpTransport
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 if TYPE_CHECKING:
     from apflow.api.routes.tasks import TaskRoutes

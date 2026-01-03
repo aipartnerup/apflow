@@ -10,7 +10,7 @@ import json
 from typing import Dict, Any, Optional
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

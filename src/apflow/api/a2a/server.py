@@ -21,7 +21,7 @@ from apflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
 from apflow.api.a2a.custom_starlette_app import CustomA2AStarletteApplication
 from apflow.api.routes.tasks import TaskRoutes
 from apflow.core.config import get_task_model_class
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

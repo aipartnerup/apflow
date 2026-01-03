@@ -3,7 +3,7 @@ Lightweight task tracker for in-memory task tracking
 Separated from TaskExecutor to avoid blocking issues and improve performance
 """
 from typing import Set, List, Dict, Any
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

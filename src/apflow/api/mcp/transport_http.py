@@ -17,7 +17,7 @@ except ImportError:
     JSONResponse = None
     StreamingResponse = None
     Route = None
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

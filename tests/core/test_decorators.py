@@ -18,7 +18,7 @@ from apflow import (
 )
 from apflow.core.storage.sqlalchemy.models import TaskModel
 from apflow.core.extensions.types import ExtensionCategory
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

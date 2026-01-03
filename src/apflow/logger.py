@@ -1,0 +1,55 @@
+"""
+Logging configuration for apflow
+
+This module provides a simple wrapper around Python's standard logging,
+without importing any apflow.core modules to keep imports fast.
+
+Usage:
+    from apflow.logger import get_logger
+    logger = get_logger(__name__)
+
+Or directly use standard library (recommended for maximum performance):
+    import logging
+    logger = logging.getLogger(__name__)
+"""
+
+import logging
+import sys
+import os
+
+
+# Configure root logger for apflow namespace
+def setup_logging(level: str = None) -> None:
+    """
+    Configure logging for apflow namespace
+    
+    Args:
+        level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+               If None, uses environment variables LOG_LEVEL or DEBUG
+    """
+    if level is None:
+        level = os.getenv("LOG_LEVEL", "").upper()
+        if not level:
+            level = "DEBUG" if os.getenv("DEBUG", "").lower() in ("true", "1", "yes") else "ERROR"
+    
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        stream=sys.stdout
+    )
+
+
+def get_logger(name: str = None) -> logging.Logger:
+    """
+    Get a logger instance
+    
+    Simple wrapper around logging.getLogger() for convenience.
+    No custom configuration - uses standard Python logging.
+    
+    Args:
+        name: Logger name (typically __name__)
+    
+    Returns:
+        Standard library logging.Logger instance
+    """
+    return logging.getLogger(name or "apflow")

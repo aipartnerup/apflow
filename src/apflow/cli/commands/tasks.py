@@ -6,8 +6,8 @@ import json
 import time
 from pathlib import Path
 from typing import Optional, List
-from apflow.core.execution.task_executor import TaskExecutor
-from apflow.core.utils.logger import get_logger
+# TaskExecutor imported on-demand to avoid loading extensions at CLI startup
+from apflow.logger import get_logger
 from apflow.core.utils.helpers import tree_node_to_dict
 from apflow.cli.api_gateway_helper import (
     should_use_api,
@@ -54,6 +54,7 @@ def status(
                             statuses.append(status_data)
                         else:
                             # Use local database
+                            from apflow.core.execution.task_executor import TaskExecutor
                             task_executor = TaskExecutor()
                             is_running = task_executor.is_task_running(task_id)
                             
@@ -132,6 +133,7 @@ def status(
                         logger.warning(
                             f"Failed to get task {task_id}: {str(e)}"
                         )
+                        from apflow.core.execution.task_executor import TaskExecutor
                         task_executor = TaskExecutor()
                         is_running = task_executor.is_task_running(task_id)
                         statuses.append({
@@ -318,6 +320,7 @@ def cancel(
                             )
                         else:
                             # Use local database
+                            from apflow.core.execution.task_executor import TaskExecutor
                             task_executor = TaskExecutor()
                             cancel_result = (
                                 await task_executor.cancel_task(
@@ -1015,6 +1018,7 @@ def watch(
         all_tasks: Watch all running tasks instead of specific task
     """
     try:
+        from apflow.core.execution.task_executor import TaskExecutor
         task_executor = TaskExecutor()
         
         # Get database session

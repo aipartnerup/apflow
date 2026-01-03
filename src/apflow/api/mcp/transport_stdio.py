@@ -10,7 +10,7 @@ import sys
 from typing import Any, Callable, Dict, Optional, Union
 
 from apflow import __version__
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -1,17 +1,8 @@
 """
 Execution module for task management and distribution
-"""
 
-from apflow.core.execution.task_manager import TaskManager
-from apflow.core.execution.task_creator import TaskCreator
-from apflow.core.execution.streaming_callbacks import StreamingCallbacks
-from apflow.core.execution.task_tracker import TaskTracker
-from apflow.core.execution.task_executor import TaskExecutor
-from apflow.core.execution.executor_registry import (
-    ExecutorRegistry,
-    get_registry,
-    register_executor,
-)
+Uses lazy imports to avoid loading heavy TaskExecutor at package import time.
+"""
 
 __all__ = [
     "TaskManager",
@@ -23,4 +14,33 @@ __all__ = [
     "get_registry",
     "register_executor",
 ]
+
+
+def __getattr__(name):
+    """Lazy import to avoid loading TaskExecutor (which triggers extensions) at package import"""
+    if name == "TaskManager":
+        from apflow.core.execution.task_manager import TaskManager
+        return TaskManager
+    elif name == "TaskCreator":
+        from apflow.core.execution.task_creator import TaskCreator
+        return TaskCreator
+    elif name == "StreamingCallbacks":
+        from apflow.core.execution.streaming_callbacks import StreamingCallbacks
+        return StreamingCallbacks
+    elif name == "TaskTracker":
+        from apflow.core.execution.task_tracker import TaskTracker
+        return TaskTracker
+    elif name == "TaskExecutor":
+        from apflow.core.execution.task_executor import TaskExecutor
+        return TaskExecutor
+    elif name == "ExecutorRegistry":
+        from apflow.core.execution.executor_registry import ExecutorRegistry
+        return ExecutorRegistry
+    elif name == "get_registry":
+        from apflow.core.execution.executor_registry import get_registry
+        return get_registry
+    elif name == "register_executor":
+        from apflow.core.execution.executor_registry import register_executor
+        return register_executor
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

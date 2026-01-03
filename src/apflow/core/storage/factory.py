@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import create_engine, Engine
 from apflow.core.storage.sqlalchemy.models import Base
 from apflow.core.storage.dialects.registry import get_dialect_config
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

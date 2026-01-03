@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Coroutine, Optional
 from apflow.cli.api_client import APIClient, APIClientError
 from apflow.core.config_manager import get_config_manager
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

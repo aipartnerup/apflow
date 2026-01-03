@@ -26,7 +26,7 @@ from apflow.core.execution.dependency_resolver import (
     get_completed_tasks_by_id,
 )
 from apflow.core.execution.errors import BusinessError
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

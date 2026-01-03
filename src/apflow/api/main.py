@@ -26,7 +26,7 @@ from apflow.api.extensions import initialize_extensions, _load_custom_task_model
 from apflow.api.protocols import get_protocol_from_env
 from apflow.core.config_manager import get_config_manager
 from apflow.core.storage.factory import get_default_session
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 # Initialize logger early
 logger = get_logger(__name__)

@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

@@ -17,7 +17,7 @@ from a2a.utils import new_agent_text_message
 
 from apflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 # Import executors to trigger @executor_register decorator
 # This ensures the executors are registered before tests run

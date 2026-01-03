@@ -5,12 +5,11 @@ Tests the generate task-tree command, including the new temperature and max_toke
 """
 
 import pytest
-import json
 import tempfile
 from pathlib import Path
 from unittest.mock import patch, AsyncMock, Mock
-from typer.testing import CliRunner
-from apflow.cli.main import app
+from click.testing import CliRunner
+from apflow.cli.main import cli
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from apflow import clear_config
 
@@ -52,13 +51,13 @@ class TestGenerateCommand:
     
     def test_generate_command_help(self):
         """Test generate command help"""
-        result = runner.invoke(app, ["generate", "--help"])
+        result = runner.invoke(cli, ["generate", "--help"])
         assert result.exit_code == 0
-        assert "Generate task trees" in result.stdout
+        assert "Generate a task tree JSON array from natural language requirement" in result.stdout
     
     def test_generate_task_tree_help(self):
         """Test generate task-tree command help"""
-        result = runner.invoke(app, ["generate", "task-tree", "--help"])
+        result = runner.invoke(cli, ["generate", "task-tree", "--help"])
         assert result.exit_code == 0
         assert "requirement" in result.stdout
         # Check for either max-tokens or temperature (LLM parameter options may vary in help format)
@@ -78,13 +77,13 @@ class TestGenerateCommand:
         # because the module might have already loaded them or use a cached version
         with patch('apflow.cli.commands.generate.os.getenv', return_value=None):
             with patch('os.environ.get', return_value=None):
-                result = runner.invoke(app, [
+                result = runner.invoke(cli, [
                     "generate", "task-tree",
                     "Test requirement"
                 ])
                 assert result.exit_code == 1
                 output = result.output
-                assert "No LLM API key found" in output or "Warning" in output or "LLM API key" in output
+                assert "No LLM API key found" in output or "Warning" in output
         
         # Clear config again to ensure clean state
         clear_config()
@@ -111,11 +110,9 @@ class TestGenerateCommand:
                 mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
                 
                 with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
-                    result = runner.invoke(app, [
-                        "generate", "task-tree",
-                        "Fetch data from API and process it"
+                    result = runner.invoke(cli, [
+                        "generate", "task-tree", "Fetch data from API and process it"
                     ])
-                    
                     assert result.exit_code == 0
                     output = result.stdout
                     # Should contain generated tasks JSON
@@ -152,7 +149,7 @@ class TestGenerateCommand:
                 mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
                 
                 with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
-                    result = runner.invoke(app, [
+                    result = runner.invoke(cli, [
                         "generate", "task-tree",
                         "Test requirement",
                         "--temperature", "0.9"
@@ -193,7 +190,7 @@ class TestGenerateCommand:
                 mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
                 
                 with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
-                    result = runner.invoke(app, [
+                    result = runner.invoke(cli, [
                         "generate", "task-tree",
                         "Test requirement",
                         "--max-tokens", "6000"
@@ -234,7 +231,7 @@ class TestGenerateCommand:
                 mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
                 
                 with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
-                    result = runner.invoke(app, [
+                    result = runner.invoke(cli, [
                         "generate", "task-tree",
                         "Test requirement",
                         "--user-id", "test_user",
@@ -279,7 +276,7 @@ class TestGenerateCommand:
                             tmp_path = tmp_file.name
                     
                     try:
-                        result = runner.invoke(app, [
+                        result = runner.invoke(cli, [
                             "generate", "task-tree",
                             "Test requirement",
                             "--output", tmp_path
@@ -329,7 +326,7 @@ class TestGenerateCommand:
                         mock_task_creator.create_task_tree_from_array = AsyncMock(return_value=mock_task_tree)
                         mock_task_creator_class.return_value = mock_task_creator
                         
-                        result = runner.invoke(app, [
+                        result = runner.invoke(cli, [
                             "generate", "task-tree",
                             "Test requirement",
                             "--save"
@@ -343,7 +340,7 @@ class TestGenerateCommand:
     
     def test_generate_temperature_short_flag(self):
         """Test that --temperature can be used with short flag -t"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "generate", "task-tree",
             "Test requirement",
             "-t", "0.8",
@@ -355,7 +352,7 @@ class TestGenerateCommand:
     def test_generate_parameter_validation(self):
         """Test parameter validation for temperature and max_tokens"""
         # Test invalid temperature (should be float)
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "generate", "task-tree",
             "Test requirement",
             "--temperature", "invalid"
@@ -364,7 +361,7 @@ class TestGenerateCommand:
         assert result.exit_code != 0
         
         # Test invalid max_tokens (should be int)
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "generate", "task-tree",
             "Test requirement",
             "--max-tokens", "invalid"

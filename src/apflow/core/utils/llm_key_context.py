@@ -13,7 +13,7 @@ but we also support them here for executors that need explicit key passing.
 import os
 import threading
 from typing import Optional, Literal, Callable
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

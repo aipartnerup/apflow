@@ -12,7 +12,7 @@ import uuid
 from typing import Dict, Any, List, Optional, Set
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 from apflow.extensions.generate.executor_info import format_executors_for_llm
 from apflow.extensions.generate.docs_loader import load_relevant_docs_for_requirement
 from apflow.extensions.generate.llm_client import create_llm_client

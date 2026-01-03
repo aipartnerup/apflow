@@ -12,7 +12,7 @@ from a2a.server.agent_execution import RequestContext
 from a2a.types import Task, TaskStatus, TaskState, DataPart, Artifact, Part
 from a2a.utils import new_agent_text_message
 from apflow.api.routes.tasks import TaskRoutes
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 if TYPE_CHECKING:
     from typing import Callable

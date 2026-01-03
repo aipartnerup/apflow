@@ -10,9 +10,8 @@ import os
 from threading import local
 from typing import Callable, Dict, List, Optional, Type
 
-from apflow.core.storage.sqlalchemy.models import TaskModel
 from apflow.core.types import TaskPreHook, TaskPostHook
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -34,7 +33,7 @@ class ConfigRegistry:
 
     def __init__(self):
         """Initialize empty registry"""
-        self._task_model_class: Optional[Type[TaskModel]] = None
+        self._task_model_class: Optional['TaskModel'] = None
         self._pre_hooks: List[TaskPreHook] = []
         self._post_hooks: List[TaskPostHook] = []
         self._use_task_creator: bool = True  # Default to True for rigorous task creation
@@ -51,7 +50,7 @@ class ConfigRegistry:
         # Example: executor returns _demo_sleep=2.0, global scale=0.5 → actual sleep=1.0s
         self._demo_sleep_scale: float = float(os.getenv("APFLOW_DEMO_SLEEP_SCALE", "1.0"))
 
-    def set_task_model_class(self, task_model_class: Optional[Type[TaskModel]]) -> None:
+    def set_task_model_class(self, task_model_class: Optional['TaskModel']) -> None:
         """
         Set the global task model class
 
@@ -62,11 +61,16 @@ class ConfigRegistry:
             TypeError: If task_model_class is not a subclass of TaskModel
         """
         if task_model_class:
+            # Import TaskModel dynamically for comparison
+            from apflow.core.storage.sqlalchemy.models import (
+                TaskModel as ImportedTaskModel,
+            )
+
             # Check if task_model_class is a subclass of TaskModel
             # Use MRO (Method Resolution Order) to handle cases where TaskModel might have been reloaded
             is_subclass = False
             try:
-                is_subclass = issubclass(task_model_class, TaskModel)
+                is_subclass = issubclass(task_model_class, ImportedTaskModel)
             except TypeError:
                 # If issubclass fails (e.g., due to module reload), check MRO
                 is_subclass = False
@@ -98,14 +102,19 @@ class ConfigRegistry:
             f"{task_model_class.__name__ if task_model_class else 'TaskModel'}"
         )
 
-    def get_task_model_class(self) -> Type[TaskModel]:
+    def get_task_model_class(self) -> 'TaskModel':
         """
         Get the global task model class
 
         Returns:
             TaskModel class (default or custom)
         """
-        return self._task_model_class or TaskModel
+        if self._task_model_class:
+            return self._task_model_class
+        
+        # Lazy import TaskModel on first access
+        from apflow.core.storage.sqlalchemy.models import TaskModel
+        return TaskModel
 
     def register_pre_hook(self, hook: TaskPreHook) -> None:
         """
@@ -297,7 +306,7 @@ def get_config() -> ConfigRegistry:
     return _get_registry()
 
 
-def set_task_model_class(task_model_class: Optional[Type[TaskModel]]) -> None:
+def set_task_model_class(task_model_class: Optional['TaskModel']) -> None:
     """
     Set the global task model class
 
@@ -307,7 +316,7 @@ def set_task_model_class(task_model_class: Optional[Type[TaskModel]]) -> None:
     _get_registry().set_task_model_class(task_model_class)
 
 
-def get_task_model_class() -> Type[TaskModel]:
+def get_task_model_class() -> 'TaskModel':
     """
     Get the global task model class
 
@@ -554,7 +563,7 @@ def task_model_register():
         Decorator function
     """
 
-    def decorator(cls: Type[TaskModel]) -> Type[TaskModel]:
+    def decorator(cls: 'TaskModel') -> 'TaskModel':
         if not issubclass(cls, TaskModel):
             raise TypeError(
                 f"Class {cls.__name__} must be a subclass of TaskModel. "

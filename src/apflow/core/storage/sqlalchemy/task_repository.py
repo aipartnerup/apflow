@@ -12,7 +12,7 @@ from sqlalchemy import select, delete
 from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING, Type, TypeVar
 from datetime import datetime
 from apflow.core.storage.sqlalchemy.models import TaskModel
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 if TYPE_CHECKING:
     from apflow.core.types import TaskTreeNode

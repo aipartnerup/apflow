@@ -7,7 +7,7 @@ Defines MCP resources that expose apflow task data.
 from typing import Dict, Any, List, Optional
 from urllib.parse import urlparse, parse_qs
 from apflow.api.mcp.adapter import TaskRoutesAdapter
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 

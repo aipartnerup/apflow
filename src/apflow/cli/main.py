@@ -3,18 +3,20 @@ CLI main entry point for apflow
 """
 
 import sys
-import typer
 from pathlib import Path
-from apflow.cli.commands import run, serve, daemon, tasks, generate, config
+
+import click
+import typer
+
 from apflow.core.config_manager import get_config_manager
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 
 
-def _load_env_file():
+def _load_env_file() -> None:
     """
-    Load .env file from appropriate location using ConfigManager so hooks/env stay centralized
+    Load .env file from appropriate location using ConfigManager.
     """
     possible_paths = [Path.cwd() / ".env"]
     if sys.argv and len(sys.argv) > 0:
@@ -29,73 +31,112 @@ def _load_env_file():
     config_manager.load_env_files(possible_paths, override=False)
 
 
-def _load_cli_plugins(app: typer.Typer):
-    """
-    Robustly load CLI extensions from entry points and registry.
-    """
-    from importlib.metadata import distributions
-    from apflow.cli.decorators import get_cli_registry
+# Create main CLI app - using Click's LazyGroup for lazy command loading
+import click
 
-    seen_plugins = set()
 
-    # First, load from decorator registry
-    for name, plugin_app in get_cli_registry().items():
-        if name not in seen_plugins:
-            app.add_typer(plugin_app, name=name)
-            seen_plugins.add(name)
-            logger.debug(f"Loaded CLI extension from registry: {name}")
+class LazyGroup(click.Group):
+    """A Click Group that lazy-loads command modules."""
 
-    # Then, load from entry points
-    for dist in distributions():
+    def __init__(
+        self,
+        name: str | None = None,
+        commands: dict[str, click.Command] | None = None,
+        **kwargs: any,
+    ) -> None:
+        super().__init__(name=name, commands=commands or {}, **kwargs)
+        self._lazy_commands = {
+            "run": ("apflow.cli.commands.run", "app", "Execute tasks through TaskExecutor"),
+            "serve": ("apflow.cli.commands.serve", "app", "Start API server"),
+            "daemon": ("apflow.cli.commands.daemon", "app", "Manage daemon service"),
+            "tasks": ("apflow.cli.commands.tasks", "app", "Manage and query tasks"),
+            "generate": ("apflow.cli.commands.generate", "app", "Generate a task tree from natural language"),
+            "config": ("apflow.cli.commands.config", "app", "Manage CLI configuration"),
+        }
+
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        """Return list of all commands (lazy + regular)."""
+        return sorted(set(list(self.commands) + list(self._lazy_commands)))
+
+    def format_commands(
+        self, ctx: click.Context, formatter: click.HelpFormatter
+    ) -> None:
+        """Format commands for help without loading them."""
+        commands = []
+        for cmd_name in self.list_commands(ctx):
+            # Use pre-defined help for lazy commands (don't load them)
+            if cmd_name in self._lazy_commands:
+                _, _, help_text = self._lazy_commands[cmd_name]
+                commands.append((cmd_name, help_text))
+            elif cmd_name in self.commands:
+                # For already-loaded commands, get actual help
+                cmd = self.commands[cmd_name]
+                help_text = cmd.get_short_help_str(formatter.width) if hasattr(cmd, "get_short_help_str") else ""
+                commands.append((cmd_name, help_text))
+        
+        if commands:
+            with formatter.section("Commands"):
+                formatter.write_dl(commands)
+
+    def get_command(self, ctx: click.Context, name: str) -> click.Command | None:
+        """Get command, lazily loading if needed."""
+        # Check already-loaded commands
+        if name in self.commands:
+            return self.commands[name]
+
+        # Check lazy commands
+        if name not in self._lazy_commands:
+            return None
+
+        # Load the command module
+        module_path, attr_name, _ = self._lazy_commands[name]
         try:
-            for ep in dist.entry_points:
-                if ep.group == 'apflow.cli_plugins' and ep.name not in seen_plugins:
-                    try:
-                        plugin = ep.load()
-                        if hasattr(plugin, 'app') and isinstance(plugin.app, typer.Typer):
-                            app.add_typer(plugin.app, name=ep.name)
-                        elif isinstance(plugin, typer.Typer):
-                            app.add_typer(plugin, name=ep.name)
-                        elif callable(plugin):
-                            app.command(name=ep.name)(plugin)
-                        
-                        seen_plugins.add(ep.name)
-                        logger.debug(f"Loaded CLI extension: {ep.name}")
-                    except Exception as e:
-                        logger.warning(f"Failed to load CLI extension {ep.name}: {e}")
-        except Exception:
-            continue
+            import importlib
+
+            import typer.main
+
+            module = importlib.import_module(module_path)
+            typer_app = getattr(module, attr_name)
+            
+            # Convert Typer app to Click command
+            click_cmd = typer.main.get_command(typer_app)
+            
+            # Cache the loaded command
+            self.commands[name] = click_cmd
+            return click_cmd
+        except (ImportError, AttributeError) as e:
+            logger.error(f"Failed to load command {name}: {e}")
+            return None
 
 
-# Create Typer app
-app = typer.Typer(
+@click.group(
+    cls=LazyGroup,
     name="apflow",
     help="Agent workflow orchestration and execution platform CLI",
-    add_completion=False,
+    context_settings={"help_option_names": ["--help", "-h"]},
 )
-
-@app.callback(invoke_without_command=True)
-def cli_callback(ctx: typer.Context):
-    # Ensure env + hook registry are initialized before any subcommand runs
+@click.pass_context
+def cli(ctx: click.Context) -> None:
+    """Main CLI entry point."""
     _load_env_file()
-    
-    if ctx.invoked_subcommand is None:
-        typer.echo(ctx.get_help())
 
-app.add_typer(run.app, name="run", help="Run a flow")
-app.add_typer(serve.app, name="serve", help="Start API server")
-app.add_typer(daemon.app, name="daemon", help="Manage daemon")
-app.add_typer(tasks.app, name="tasks", help="Manage and query tasks")
-app.add_typer(generate.app, name="generate", help="Generate task trees from natural language")
-app.add_typer(config.app, name="config", help="Manage CLI configuration")
 
-_load_cli_plugins(app)
-
-@app.command()
-def version():
+@cli.command()
+def version() -> None:
     """Show version information."""
     from apflow import __version__
-    typer.echo(f"apflow version {__version__}")
+
+    click.echo(f"apflow version {__version__}")
+
+
+# Entry point for console script
+def main() -> None:
+    """Entry point for console script."""
+    cli()
+
+
+# Backward compatibility: alias for imports
+app = cli
 
 if __name__ == "__main__":
     app()

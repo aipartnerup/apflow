@@ -27,7 +27,6 @@ from apflow.core.config.registry import (
     set_demo_sleep_scale,
     get_demo_sleep_scale,
 )
-from apflow.core.config_manager import get_config_manager
 
 __all__ = [
     "get_config",
@@ -47,6 +46,5 @@ __all__ = [
     "task_model_register",
     "set_demo_sleep_scale",
     "get_demo_sleep_scale",
-    "get_config_manager",
 ]
 

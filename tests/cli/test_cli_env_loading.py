@@ -4,8 +4,8 @@ Test CLI .env file loading functionality
 Tests that CLI commands load .env file from appropriate location when executed.
 """
 import os
-from typer.testing import CliRunner
-from apflow.cli.main import app, _load_env_file
+from click.testing import CliRunner
+from apflow.cli.main import cli, _load_env_file
 
 runner = CliRunner()
 
@@ -26,7 +26,7 @@ class TestCliEnvLoading:
         monkeypatch.delenv("TEST_VAR", raising=False)
         
         # Invoke any CLI command (version is simple and doesn't require setup)
-        result = runner.invoke(app, ["version"])
+        result = runner.invoke(cli, ["version"])
         
         # .env should be loaded (TEST_VAR should be set)
         # Note: The env var might not persist after command execution,
@@ -58,7 +58,7 @@ class TestCliEnvLoading:
         monkeypatch.delenv("APFLOW_API_PROTOCOL", raising=False)
         
         # Invoke a command that might use env vars
-        result = runner.invoke(app, ["version"])
+        result = runner.invoke(cli, ["version"])
         
         # Command should succeed (env loading shouldn't break it)
         assert result.exit_code == 0
@@ -76,7 +76,7 @@ class TestCliEnvLoading:
         monkeypatch.chdir(tmp_path)
         
         # Invoke help
-        result = runner.invoke(app, ["--help"])
+        result = runner.invoke(cli, ["--help"])
         
         # Help should work
         assert result.exit_code == 0

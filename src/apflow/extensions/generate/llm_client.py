@@ -8,7 +8,7 @@ to support multiple LLM providers.
 import os
 from abc import ABC, abstractmethod
 from typing import Optional
-from apflow.core.utils.logger import get_logger
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 
