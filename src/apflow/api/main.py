@@ -48,6 +48,8 @@ def _load_env_file():
     This ensures that when used as a library, it loads .env from the calling project,
     not from the library's installation directory.
     """
+    import os
+    
     possible_paths = []
     
     # 1. Current working directory (where the script is run from)
@@ -92,7 +94,30 @@ def _load_env_file():
     
     # Try each path and load the first one that exists
     config_manager = get_config_manager()
-    config_manager.load_env_files(possible_paths, override=False)
+    config_manager.load_env_files(possible_paths, override=True)
+    
+    # If APFLOW_JWT_SECRET_KEY is not in any .env file, ensure it's not set in environment
+    # This handles the case where the env var was previously set but is now commented out
+    env_file_has_jwt_secret = False
+    for env_path in possible_paths:
+        if env_path.exists():
+            try:
+                env_content = env_path.read_text()
+                for line in env_content.splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#"):
+                        if line.startswith("APFLOW_JWT_SECRET_KEY="):
+                            env_file_has_jwt_secret = True
+                            break
+            except Exception:
+                pass
+        if env_file_has_jwt_secret:
+            break
+    
+    # If .env files don't have APFLOW_JWT_SECRET_KEY, remove it from environment
+    if not env_file_has_jwt_secret and "APFLOW_JWT_SECRET_KEY" in os.environ:
+        del os.environ["APFLOW_JWT_SECRET_KEY"]
+        logger.debug("Removed APFLOW_JWT_SECRET_KEY from environment (not found in .env files)")
 
 
 def _setup_development_environment():

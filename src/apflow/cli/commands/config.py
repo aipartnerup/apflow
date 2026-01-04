@@ -384,90 +384,89 @@ def init_server(
         # Set server URL
         config["api_server_url"] = url
 
-        # Load .env file to check for APFLOW_JWT_SECRET_KEY
-        config_manager = get_config_manager()
+        # Check for APFLOW_JWT_SECRET_KEY directly from .env file
+        # Don't use os.getenv() as it may have cached values from previous runs
         env_path = Path.cwd() / ".env"
-        config_manager.load_env_files([env_path], override=False)
+        env_jwt_secret = None
+        
+        if env_path.exists():
+            try:
+                env_content = env_path.read_text()
+                for line in env_content.splitlines():
+                    line = line.strip()
+                    # Skip comments and empty lines
+                    if line and not line.startswith("#"):
+                        if line.startswith("APFLOW_JWT_SECRET_KEY="):
+                            env_jwt_secret = line.split("=", 1)[1].strip()
+                            break
+            except Exception as e:
+                typer.echo(f"⚠️  Warning: Could not read .env file: {e}", err=True)
 
-        # Check for APFLOW_JWT_SECRET_KEY in environment
-        env_jwt_secret = os.getenv("APFLOW_JWT_SECRET_KEY")
-
-        # Use env value if present, otherwise use existing logic
+        # Use env value if present, otherwise clear auth-related config
         if env_jwt_secret:
             config["jwt_secret"] = env_jwt_secret
-            typer.echo("✅ Using JWT secret from .env file (APFLOW_JWT_SECRET_KEY)")
-        elif "jwt_secret" not in config:
-            # Only generate if not in config and not in .env
-            # Check if jwt_secret is required for non-localhost URLs
-            if not is_localhost_url(url):
-                typer.echo(
-                    f"⚠️  Warning: jwt_secret is required for non-localhost URLs.\n"
-                    f"   Generating jwt_secret automatically..."
-                )
-            from apflow.cli.jwt_token import ensure_local_jwt_secret
-
-            config["jwt_secret"] = ensure_local_jwt_secret()
-            typer.echo("ℹ️  Generated new JWT secret (not found in .env)")
-
-        # Set jwt_algorithm if not set
-        if "jwt_algorithm" not in config:
             config["jwt_algorithm"] = "HS256"
+            typer.echo("✅ Using JWT secret from .env file (APFLOW_JWT_SECRET_KEY)")
+        else:
+            # .env doesn't have APFLOW_JWT_SECRET_KEY, clear auth config
+            # This means API server has authentication disabled
+            config.pop("jwt_secret", None)
+            config.pop("admin_auth_token", None)
+            # Keep jwt_algorithm as it's a harmless default setting
+            config["jwt_algorithm"] = "HS256"
+            typer.echo("ℹ️  No APFLOW_JWT_SECRET_KEY in .env - cleared auth config")
+            typer.echo("   API server authentication is disabled")
 
-        # Save config first to ensure jwt_secret is persisted before generating token
-        # This ensures generate_token() will use the correct secret
+        # Save config
         save_cli_config_yaml(config)
 
-        # Generate and save token using the current jwt_secret from config
-        from apflow.cli.jwt_token import generate_token
+        # Generate token only if we have jwt_secret
+        if env_jwt_secret:
+            from apflow.cli.jwt_token import generate_token
 
-        token = generate_token(
-            subject="apflow-cli",
-            secret=config.get("jwt_secret"),  # Explicitly pass secret to ensure consistency
-            algo=config.get("jwt_algorithm", "HS256"),
-            extra_claims={"role": role},
-            expiry_days=365,
-        )
-        config["admin_auth_token"] = token
+            token = generate_token(
+                subject="apflow-cli",
+                secret=config.get("jwt_secret"),
+                algo=config.get("jwt_algorithm", "HS256"),
+                extra_claims={"role": role},
+                expiry_days=365,
+            )
+            config["admin_auth_token"] = token
 
-        # Save unified config again with the new token
-        save_cli_config_yaml(config)
+            # Save unified config again with the new token
+            save_cli_config_yaml(config)
 
         typer.echo("✅ API server configuration initialized!")
         typer.echo(f"   Server: {url}")
-        typer.echo(f"   Token: {token[:20]}...***")
-        typer.echo(f"   Role: {role}")
+        if env_jwt_secret:
+            typer.echo(f"   Token: {config['admin_auth_token'][:20]}...***")
+            typer.echo(f"   Role: {role}")
         typer.echo(f"\n📁 Saved to: {get_cli_config_file_path()}")
         typer.echo()
-        typer.echo("💡 Note: This token is generated using CLI's local jwt_secret.")
         if env_jwt_secret:
+            typer.echo("💡 Note: This token is generated using CLI's local jwt_secret.")
             typer.echo(
                 "   JWT secret synced from .env file (APFLOW_JWT_SECRET_KEY)."
             )
             typer.echo(
                 "   API server will use the same secret from .env for authentication."
             )
-        elif is_localhost_url(url):
-            typer.echo(
-                "   For localhost, the token will work if the API server uses the same jwt_secret."
-            )
-            typer.echo(
-                "   Tip: Set APFLOW_JWT_SECRET_KEY in .env to sync with API server."
-            )
+            typer.echo()
+            typer.echo("You can now run:")
+            typer.echo("   apflow tasks list     # Use CLI with API")
         else:
+            typer.echo("💡 Note: API server authentication is disabled.")
             typer.echo(
-                "   For remote servers, configure the server's APFLOW_JWT_SECRET_KEY "
-                "environment variable to match CLI's jwt_secret."
+                "   To enable authentication, set APFLOW_JWT_SECRET_KEY in .env file."
             )
-            typer.echo(
-                "   Tip: Set APFLOW_JWT_SECRET_KEY in .env to sync with API server."
-            )
+            typer.echo()
+            typer.echo("You can now run:")
+            typer.echo("   apflow tasks list     # Use CLI with API (no auth required)")
         typer.echo()
-        typer.echo("You can now run:")
-        typer.echo("   apflow tasks list     # Use CLI with API")
-        typer.echo()
-        typer.echo("Or manually configure using:")
-        typer.echo(f"   apflow config set api-server {url}")
-        typer.echo("   apflow config gen-token --role admin --save admin_auth_token")
+        if env_jwt_secret:
+            typer.echo("Or manually configure using:")
+            typer.echo(f"   apflow config set api-server {url}")
+            typer.echo("   apflow config gen-token --role admin --save admin_auth_token")
 
     except Exception as e:
         typer.echo(f"❌ Error initializing server: {str(e)}", err=True)

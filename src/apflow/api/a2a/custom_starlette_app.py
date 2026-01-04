@@ -86,6 +86,13 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         """
         super().__init__(app)
         self.verify_token_func = verify_token_func
+        # Log JWT auth status
+        from apflow.logger import get_logger
+        logger = get_logger(__name__)
+        if verify_token_func:
+            logger.info("JWT Authentication enabled in middleware")
+        else:
+            logger.info("JWT Authentication disabled in middleware")
     
     async def dispatch(self, request: Request, call_next):
         """Verify JWT token from Authorization header or cookie"""

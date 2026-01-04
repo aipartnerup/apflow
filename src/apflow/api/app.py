@@ -212,6 +212,29 @@ def create_app_by_protocol(
     # Get protocol dependency info for logging
     _, _, description = get_protocol_dependency_info(protocol)
     logger.info(f"Creating {description} application")
+    
+    # Check if APFLOW_JWT_SECRET_KEY is actually in .env file
+    # This handles the case where env var was previously set but is now commented out
+    env_file_has_jwt_secret = False
+    try:
+        from pathlib import Path
+        env_path = Path.cwd() / ".env"
+        if env_path.exists():
+            env_content = env_path.read_text()
+            for line in env_content.splitlines():
+                line = line.strip()
+                if line and not line.startswith("#"):
+                    if line.startswith("APFLOW_JWT_SECRET_KEY="):
+                        env_file_has_jwt_secret = True
+                        break
+    except Exception:
+        pass
+    
+    # If .env doesn't have APFLOW_JWT_SECRET_KEY, remove it from environment
+    if not env_file_has_jwt_secret and "APFLOW_JWT_SECRET_KEY" in os.environ:
+        del os.environ["APFLOW_JWT_SECRET_KEY"]
+        logger.info("Cleared APFLOW_JWT_SECRET_KEY from environment (not found in .env file)")
+    
     # Common configuration
     jwt_secret_key = os.getenv("APFLOW_JWT_SECRET_KEY")
     jwt_algorithm = os.getenv("APFLOW_JWT_ALGORITHM", "HS256")
