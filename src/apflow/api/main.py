@@ -41,8 +41,9 @@ def _load_env_file():
     
     Priority order:
     1. Current working directory (where script is run from)
-    2. Directory of the main script (if running as a script)
-    3. Library's own directory (only when running library's own main.py directly)
+    2. Project root directory (if in a project, found by pyproject.toml or .git)
+    3. Directory of the main script (if running as a script)
+    4. Library's own directory (only when running library's own main.py directly)
     
     This ensures that when used as a library, it loads .env from the calling project,
     not from the library's installation directory.
@@ -56,7 +57,18 @@ def _load_env_file():
     except Exception:
         pass  # Ignore errors in getting current working directory
     
-    # 2. Directory of the main script (if running as a script)
+    # 2. Project root directory (if in a project)
+    # This helps when API server is started from a subdirectory
+    try:
+        from apflow.cli.cli_config import get_project_root
+        
+        project_root = get_project_root()
+        if project_root:
+            possible_paths.append(project_root / ".env")
+    except Exception:
+        pass  # Ignore errors
+    
+    # 3. Directory of the main script (if running as a script)
     # This finds .env in the same directory as the script that calls main()
     if sys.argv and len(sys.argv) > 0:
         try:
@@ -66,7 +78,7 @@ def _load_env_file():
         except Exception:
             pass  # Ignore errors in resolving script path
     
-    # 3. Library's own directory (only for library development)
+    # 4. Library's own directory (only for library development)
     # Check if we're running apflow's own main.py directly
     # This helps when developing the library itself
     try:

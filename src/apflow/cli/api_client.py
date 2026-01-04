@@ -193,6 +193,8 @@ class APIClient:
         offset: int = 0,
     ) -> List[Dict[str, Any]]:
         """List tasks with optional filtering and pagination."""
+        import uuid
+        
         params = {}
         if status:
             params["status"] = status
@@ -201,9 +203,31 @@ class APIClient:
         params["limit"] = limit
         params["offset"] = offset
 
-        response = await self._request("GET", "/tasks", params=params)
+        # Use JSON-RPC format for /tasks endpoint
+        jsonrpc_request = {
+            "jsonrpc": "2.0",
+            "method": "tasks.list",
+            "params": params,
+            "id": str(uuid.uuid4()),
+        }
 
-        # Handle both array and paginated responses
+        response = await self._request("POST", "/tasks", json=jsonrpc_request)
+
+        # Handle JSON-RPC response format
+        if isinstance(response, dict):
+            if "result" in response:
+                result = response["result"]
+                if isinstance(result, list):
+                    return result
+                if isinstance(result, dict) and "tasks" in result:
+                    return result["tasks"]
+            elif "error" in response:
+                error = response["error"]
+                raise APIResponseError(
+                    f"API error {error.get('code', 'unknown')}: {error.get('message', 'Unknown error')}"
+                )
+
+        # Fallback: handle direct array response (backward compatibility)
         if isinstance(response, list):
             return response
         if isinstance(response, dict) and "tasks" in response:

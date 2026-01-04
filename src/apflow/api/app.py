@@ -215,6 +215,12 @@ def create_app_by_protocol(
     # Common configuration
     jwt_secret_key = os.getenv("APFLOW_JWT_SECRET_KEY")
     jwt_algorithm = os.getenv("APFLOW_JWT_ALGORITHM", "HS256")
+    
+    # Log JWT configuration status for debugging
+    if jwt_secret_key:
+        logger.info(f"JWT secret key found: {'*' * min(len(jwt_secret_key), 8)}... (length: {len(jwt_secret_key)})")
+    else:
+        logger.info("JWT secret key not found (APFLOW_JWT_SECRET_KEY not set) - authentication will be disabled")
     enable_system_routes = (
         os.getenv("APFLOW_ENABLE_SYSTEM_ROUTES", "true").lower()
         in ("true", "1", "yes")

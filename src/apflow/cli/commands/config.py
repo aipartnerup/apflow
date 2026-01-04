@@ -413,17 +413,23 @@ def init_server(
         if "jwt_algorithm" not in config:
             config["jwt_algorithm"] = "HS256"
 
-        # Generate and save token
+        # Save config first to ensure jwt_secret is persisted before generating token
+        # This ensures generate_token() will use the correct secret
+        save_cli_config_yaml(config)
+
+        # Generate and save token using the current jwt_secret from config
         from apflow.cli.jwt_token import generate_token
 
         token = generate_token(
             subject="apflow-cli",
+            secret=config.get("jwt_secret"),  # Explicitly pass secret to ensure consistency
+            algo=config.get("jwt_algorithm", "HS256"),
             extra_claims={"role": role},
             expiry_days=365,
         )
         config["admin_auth_token"] = token
 
-        # Save unified config
+        # Save unified config again with the new token
         save_cli_config_yaml(config)
 
         typer.echo("✅ API server configuration initialized!")
@@ -744,11 +750,47 @@ def validate_config():
         jwt_secret = config.get("jwt_secret")
         if jwt_secret:
             typer.echo("✅ jwt_secret configured")
+            
+            # Check if .env file has APFLOW_JWT_SECRET_KEY and if it matches
+            import os
+            from pathlib import Path
+            from apflow.core.config_manager import get_config_manager
+            
+            env_path = Path.cwd() / ".env"
+            config_manager = get_config_manager()
+            config_manager.load_env_files([env_path], override=False)
+            
+            env_jwt_secret = os.getenv("APFLOW_JWT_SECRET_KEY")
+            if env_jwt_secret:
+                if env_jwt_secret == jwt_secret:
+                    typer.echo("   ✅ JWT secret matches .env file (APFLOW_JWT_SECRET_KEY)")
+                else:
+                    typer.echo("   ⚠️  JWT secret does NOT match .env file!")
+                    typer.echo("   💡 CLI and API server may use different secrets")
+                    typer.echo("   💡 Run: apflow config init-server to sync")
+            else:
+                typer.echo("   ℹ️  APFLOW_JWT_SECRET_KEY not found in .env file")
+                typer.echo("   💡 API server will not require authentication")
+                typer.echo("   💡 Set APFLOW_JWT_SECRET_KEY in .env to enable authentication")
         else:
             if api_url and not is_localhost_url(api_url):
                 typer.echo("❌ jwt_secret is REQUIRED for non-localhost URLs")
             else:
                 typer.echo("ℹ️  jwt_secret not configured (optional for localhost)")
+                
+                # Check if .env has APFLOW_JWT_SECRET_KEY
+                import os
+                from pathlib import Path
+                from apflow.core.config_manager import get_config_manager
+                
+                env_path = Path.cwd() / ".env"
+                config_manager = get_config_manager()
+                config_manager.load_env_files([env_path], override=False)
+                
+                env_jwt_secret = os.getenv("APFLOW_JWT_SECRET_KEY")
+                if env_jwt_secret:
+                    typer.echo("   ⚠️  Found APFLOW_JWT_SECRET_KEY in .env but not in CLI config")
+                    typer.echo("   💡 Run: apflow config init-server to sync")
 
         # Check jwt_algorithm
         jwt_algorithm = config.get("jwt_algorithm", "HS256")
@@ -770,6 +812,16 @@ def validate_config():
                         typer.echo(f"   ⚠️  Token expiring soon ({days} days)")
                     else:
                         typer.echo(f"   ✅ Token valid ({days} days remaining)")
+                
+                # Try to verify token with current jwt_secret
+                if jwt_secret:
+                    try:
+                        verify_token(token, secret=jwt_secret, algo=jwt_algorithm)
+                        typer.echo("   ✅ Token can be verified with current jwt_secret")
+                    except Exception as e:
+                        typer.echo(f"   ❌ Token verification FAILED with current jwt_secret: {str(e)}")
+                        typer.echo("   💡 This means API server may be using a different secret")
+                        typer.echo("   💡 Solution: Restart API server or check .env file")
             except Exception as e:
                 typer.echo(f"   ⚠️  Could not parse token: {str(e)}")
         else:
