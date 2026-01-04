@@ -342,6 +342,12 @@ def init_server(
     This command generates a local admin_auth_token using CLI's own jwt_secret.
     The token is signed with CLI's jwt_algorithm (default: HS256).
 
+    JWT Secret Synchronization:
+    - If .env file contains APFLOW_JWT_SECRET_KEY, it will be used for jwt_secret
+    - This ensures CLI and API server use the same secret for authentication
+    - If .env doesn't have APFLOW_JWT_SECRET_KEY, a new secret will be generated
+    - When APFLOW_JWT_SECRET_KEY is not set, the API server disables authentication
+
     For the token to work with an API server, that server's APFLOW_JWT_SECRET_KEY
     must match CLI's jwt_secret. For localhost, this usually works automatically.
 
@@ -358,12 +364,16 @@ def init_server(
         apflow config init-server --url http://localhost:8000 --role user
     """
     try:
+        import os
+        from pathlib import Path
+
         from apflow.cli.cli_config import (
             get_cli_config_file_path,
             is_localhost_url,
             load_cli_config,
             save_cli_config_yaml,
         )
+        from apflow.core.config_manager import get_config_manager
 
         # Normalize URL (remove trailing slash)
         url = url.rstrip("/")
@@ -374,22 +384,30 @@ def init_server(
         # Set server URL
         config["api_server_url"] = url
 
-        # Check if jwt_secret is required
-        if not is_localhost_url(url):
-            if "jwt_secret" not in config:
+        # Load .env file to check for APFLOW_JWT_SECRET_KEY
+        config_manager = get_config_manager()
+        env_path = Path.cwd() / ".env"
+        config_manager.load_env_files([env_path], override=False)
+
+        # Check for APFLOW_JWT_SECRET_KEY in environment
+        env_jwt_secret = os.getenv("APFLOW_JWT_SECRET_KEY")
+
+        # Use env value if present, otherwise use existing logic
+        if env_jwt_secret:
+            config["jwt_secret"] = env_jwt_secret
+            typer.echo("✅ Using JWT secret from .env file (APFLOW_JWT_SECRET_KEY)")
+        elif "jwt_secret" not in config:
+            # Only generate if not in config and not in .env
+            # Check if jwt_secret is required for non-localhost URLs
+            if not is_localhost_url(url):
                 typer.echo(
                     f"⚠️  Warning: jwt_secret is required for non-localhost URLs.\n"
                     f"   Generating jwt_secret automatically..."
                 )
-                from apflow.cli.jwt_token import ensure_local_jwt_secret
-
-                config["jwt_secret"] = ensure_local_jwt_secret()
-
-        # Ensure jwt_secret exists (for token generation)
-        if "jwt_secret" not in config:
             from apflow.cli.jwt_token import ensure_local_jwt_secret
 
             config["jwt_secret"] = ensure_local_jwt_secret()
+            typer.echo("ℹ️  Generated new JWT secret (not found in .env)")
 
         # Set jwt_algorithm if not set
         if "jwt_algorithm" not in config:
@@ -415,14 +433,27 @@ def init_server(
         typer.echo(f"\n📁 Saved to: {get_cli_config_file_path()}")
         typer.echo()
         typer.echo("💡 Note: This token is generated using CLI's local jwt_secret.")
-        if is_localhost_url(url):
+        if env_jwt_secret:
+            typer.echo(
+                "   JWT secret synced from .env file (APFLOW_JWT_SECRET_KEY)."
+            )
+            typer.echo(
+                "   API server will use the same secret from .env for authentication."
+            )
+        elif is_localhost_url(url):
             typer.echo(
                 "   For localhost, the token will work if the API server uses the same jwt_secret."
+            )
+            typer.echo(
+                "   Tip: Set APFLOW_JWT_SECRET_KEY in .env to sync with API server."
             )
         else:
             typer.echo(
                 "   For remote servers, configure the server's APFLOW_JWT_SECRET_KEY "
                 "environment variable to match CLI's jwt_secret."
+            )
+            typer.echo(
+                "   Tip: Set APFLOW_JWT_SECRET_KEY in .env to sync with API server."
             )
         typer.echo()
         typer.echo("You can now run:")

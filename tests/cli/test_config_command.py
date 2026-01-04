@@ -2,8 +2,11 @@
 Tests for CLI config command.
 """
 
+import os
+from pathlib import Path
 from click.testing import CliRunner
 from apflow.cli.main import cli
+from apflow.cli.cli_config import load_cli_config
 
 runner = CliRunner()
 
@@ -133,3 +136,120 @@ class TestConfigCommand:
         result = runner.invoke(cli, ["config", "get", "admin_auth_token"])
         assert result.exit_code == 0
         assert "***" in result.stdout  # Masked
+
+
+class TestInitServerEnvSync:
+    """Test init-server command with .env file synchronization."""
+
+    def test_init_server_uses_env_jwt_secret(self, tmp_path, monkeypatch):
+        """Test that init-server uses APFLOW_JWT_SECRET_KEY from .env file."""
+        # Create .env file with APFLOW_JWT_SECRET_KEY
+        env_file = tmp_path / ".env"
+        test_secret = "test-jwt-secret-from-env-12345"
+        env_file.write_text(f"APFLOW_JWT_SECRET_KEY={test_secret}\n")
+
+        # Change to tmp_path directory
+        monkeypatch.chdir(tmp_path)
+        # Clear any existing env var
+        monkeypatch.delenv("APFLOW_JWT_SECRET_KEY", raising=False)
+
+        # Run init-server command
+        result = runner.invoke(cli, ["config", "init-server"])
+
+        # Should succeed
+        assert result.exit_code == 0
+        assert "✅" in result.stdout
+        assert "Using JWT secret from .env file" in result.stdout
+
+        # Verify jwt_secret was saved to config
+        config = load_cli_config()
+        assert config.get("jwt_secret") == test_secret
+        assert config.get("api_server_url") == "http://localhost:8000"
+        assert "admin_auth_token" in config
+
+    def test_init_server_generates_secret_when_env_not_set(self, tmp_path, monkeypatch):
+        """Test that init-server generates new secret when .env doesn't have APFLOW_JWT_SECRET_KEY."""
+        # Create .env file without APFLOW_JWT_SECRET_KEY
+        env_file = tmp_path / ".env"
+        env_file.write_text("OTHER_VAR=some_value\n")
+
+        # Change to tmp_path directory
+        monkeypatch.chdir(tmp_path)
+        # Clear any existing env var
+        monkeypatch.delenv("APFLOW_JWT_SECRET_KEY", raising=False)
+
+        # Clear any existing jwt_secret from config to ensure fresh test
+        config = load_cli_config()
+        if "jwt_secret" in config:
+            runner.invoke(cli, ["config", "unset", "jwt_secret", "--yes"])
+
+        # Run init-server command
+        result = runner.invoke(cli, ["config", "init-server"])
+
+        # Should succeed
+        assert result.exit_code == 0
+        assert "✅" in result.stdout
+        assert "Generated new JWT secret" in result.stdout
+
+        # Verify jwt_secret was generated and saved
+        config = load_cli_config()
+        assert "jwt_secret" in config
+        assert config["jwt_secret"]  # Should not be empty
+        assert config.get("api_server_url") == "http://localhost:8000"
+        assert "admin_auth_token" in config
+
+    def test_init_server_generates_secret_when_no_env_file(self, tmp_path, monkeypatch):
+        """Test that init-server generates new secret when .env file doesn't exist."""
+        # Don't create .env file
+
+        # Change to tmp_path directory
+        monkeypatch.chdir(tmp_path)
+        # Clear any existing env var
+        monkeypatch.delenv("APFLOW_JWT_SECRET_KEY", raising=False)
+
+        # Clear any existing jwt_secret from config to ensure fresh test
+        config = load_cli_config()
+        if "jwt_secret" in config:
+            runner.invoke(cli, ["config", "unset", "jwt_secret", "--yes"])
+
+        # Run init-server command
+        result = runner.invoke(cli, ["config", "init-server"])
+
+        # Should succeed
+        assert result.exit_code == 0
+        assert "✅" in result.stdout
+        assert "Generated new JWT secret" in result.stdout
+
+        # Verify jwt_secret was generated and saved
+        config = load_cli_config()
+        assert "jwt_secret" in config
+        assert config["jwt_secret"]  # Should not be empty
+        assert config.get("api_server_url") == "http://localhost:8000"
+        assert "admin_auth_token" in config
+
+    def test_init_server_env_secret_syncs_with_existing_config(self, tmp_path, monkeypatch):
+        """Test that env secret overrides existing jwt_secret in config."""
+        # Create .env file with APFLOW_JWT_SECRET_KEY
+        env_file = tmp_path / ".env"
+        test_secret = "env-secret-override-67890"
+        env_file.write_text(f"APFLOW_JWT_SECRET_KEY={test_secret}\n")
+
+        # Change to tmp_path directory
+        monkeypatch.chdir(tmp_path)
+        # Clear any existing env var
+        monkeypatch.delenv("APFLOW_JWT_SECRET_KEY", raising=False)
+
+        # First, set an existing jwt_secret
+        runner.invoke(cli, ["config", "set", "jwt_secret", "old-secret-123"])
+
+        # Run init-server command
+        result = runner.invoke(cli, ["config", "init-server"])
+
+        # Should succeed and use env secret
+        assert result.exit_code == 0
+        assert "Using JWT secret from .env file" in result.stdout
+
+        # Verify jwt_secret was overridden with env value
+        config = load_cli_config()
+        assert config.get("jwt_secret") == test_secret
+        assert config.get("jwt_secret") != "old-secret-123"
