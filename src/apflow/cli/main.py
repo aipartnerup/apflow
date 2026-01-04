@@ -53,20 +53,93 @@ class LazyGroup(click.Group):
             "generate": ("apflow.cli.commands.generate", "app", "Generate a task tree from natural language"),
             "config": ("apflow.cli.commands.config", "app", "Manage CLI configuration"),
         }
+        # Ensure CLI extensions are loaded (lazy import to avoid circular dependencies)
+        self._ensure_extensions_loaded()
+
+    def _ensure_extensions_loaded(self) -> None:
+        """Ensure CLI extensions are loaded by importing the registry and entry points."""
+        try:
+            # Import registry to trigger any module-level registration
+            from apflow.cli.decorators import get_cli_registry
+            # Just accessing the registry will trigger any imports that register extensions
+            get_cli_registry()
+            
+            # Load CLI extensions from entry points
+            self._load_entry_point_plugins()
+        except Exception:
+            # If extensions fail to load, continue without them
+            pass
+
+    def _load_entry_point_plugins(self) -> None:
+        """Load CLI plugins from entry points (apflow.cli_plugins)."""
+        try:
+            import importlib.metadata
+            from apflow.cli.decorators import get_cli_registry
+            
+            registry = get_cli_registry()
+            
+            # Load plugins from entry points
+            try:
+                entry_points = importlib.metadata.entry_points(group="apflow.cli_plugins")
+            except Exception:
+                # Python < 3.10 compatibility
+                try:
+                    import pkg_resources
+                    entry_points = pkg_resources.iter_entry_points("apflow.cli_plugins")
+                except Exception:
+                    entry_points = []
+            
+            for entry_point in entry_points:
+                try:
+                    plugin_name = entry_point.name
+                    # Skip if already registered (via decorator or previous entry point)
+                    if plugin_name in registry:
+                        logger.debug(f"CLI plugin '{plugin_name}' already registered, skipping entry point")
+                        continue
+                    
+                    # Load the plugin
+                    typer_app = entry_point.load()
+                    
+                    # Register the plugin
+                    registry[plugin_name] = typer_app
+                    logger.debug(f"Loaded CLI plugin '{plugin_name}' from entry point")
+                except Exception as e:
+                    logger.warning(f"Failed to load CLI plugin from entry point '{entry_point.name}': {e}")
+        except Exception as e:
+            logger.debug(f"Failed to load CLI entry point plugins: {e}")
+
+    def _get_registered_commands(self) -> dict[str, str]:
+        """Get commands from cli_register registry with their help text."""
+        try:
+            from apflow.cli.decorators import get_cli_registry
+            registry = get_cli_registry()
+            result = {}
+            for cmd_name, typer_app in registry.items():
+                help_text = getattr(typer_app.info, "help", None) or f"CLI extension: {cmd_name}"
+                result[cmd_name] = help_text
+            return result
+        except Exception:
+            return {}
 
     def list_commands(self, ctx: click.Context) -> list[str]:
-        """Return list of all commands (lazy + regular)."""
-        return sorted(set(list(self.commands) + list(self._lazy_commands)))
+        """Return list of all commands (lazy + regular + registered extensions)."""
+        registered = set(self._get_registered_commands().keys())
+        return sorted(set(list(self.commands) + list(self._lazy_commands) + list(registered)))
 
     def format_commands(
         self, ctx: click.Context, formatter: click.HelpFormatter
     ) -> None:
         """Format commands for help without loading them."""
+        registered_commands = self._get_registered_commands()
         commands = []
         for cmd_name in self.list_commands(ctx):
             # Use pre-defined help for lazy commands (don't load them)
             if cmd_name in self._lazy_commands:
                 _, _, help_text = self._lazy_commands[cmd_name]
+                commands.append((cmd_name, help_text))
+            elif cmd_name in registered_commands:
+                # Use help from registered extension
+                help_text = registered_commands[cmd_name]
                 commands.append((cmd_name, help_text))
             elif cmd_name in self.commands:
                 # For already-loaded commands, get actual help
@@ -83,6 +156,30 @@ class LazyGroup(click.Group):
         # Check already-loaded commands
         if name in self.commands:
             return self.commands[name]
+
+        # Check registered CLI extensions first
+        try:
+            from apflow.cli.decorators import get_cli_registry
+            registry = get_cli_registry()
+            if name in registry:
+                typer_app = registry[name]
+                import typer.main
+                
+                # Check if Typer app has subcommands (registered_commands)
+                # If it has subcommands, use get_group() to return a Click Group
+                # Otherwise, use get_command() to return a single Click command
+                if hasattr(typer_app, 'registered_commands') and len(typer_app.registered_commands) > 0:
+                    # Has subcommands - return as a group
+                    click_cmd = typer.main.get_group(typer_app)
+                else:
+                    # No subcommands - return as a single command
+                    click_cmd = typer.main.get_command(typer_app)
+                
+                # Cache the loaded command
+                self.commands[name] = click_cmd
+                return click_cmd
+        except Exception as e:
+            logger.debug(f"Failed to load registered extension {name}: {e}")
 
         # Check lazy commands
         if name not in self._lazy_commands:
