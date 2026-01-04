@@ -5,6 +5,7 @@ Provides a unified interface for CLI commands to access API-managed data,
 ensuring data consistency between CLI and API when both are running.
 """
 
+import uuid
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -89,6 +90,28 @@ class APIClient:
         """Context manager exit."""
         if self._client:
             await self._client.aclose()
+
+    async def _tasks_rpc(self, method: str, params: Any) -> Any:
+        """Call the /tasks JSON-RPC endpoint."""
+        jsonrpc_request = {
+            "jsonrpc": "2.0",
+            "method": method,
+            "params": params,
+            "id": str(uuid.uuid4()),
+        }
+
+        response = await self._request("POST", "/tasks", json=jsonrpc_request)
+
+        if isinstance(response, dict):
+            if "result" in response:
+                return response["result"]
+            if "error" in response:
+                error = response["error"]
+                raise APIResponseError(
+                    f"API error {error.get('code', 'unknown')}: {error.get('message', 'Unknown error')}"
+                )
+
+        return response
 
     async def _request(
         self, method: str, path: str, **kwargs: Any
@@ -179,11 +202,20 @@ class APIClient:
 
     async def get_task_status(self, task_id: str) -> Dict[str, Any]:
         """Get task status by ID."""
-        return await self._request("GET", f"/tasks/{task_id}")
+        statuses = await self.get_tasks_status([task_id])
+        if statuses:
+            return statuses[0]
+        return {"task_id": task_id, "status": "not_found"}
+
+    async def get_tasks_status(self, task_ids: List[str]) -> List[Dict[str, Any]]:
+        """Get status for multiple tasks."""
+        if not task_ids:
+            return []
+        return await self._tasks_rpc("tasks.running.status", {"task_ids": task_ids})
 
     async def get_task(self, task_id: str) -> Dict[str, Any]:
         """Get full task details by ID."""
-        return await self._request("GET", f"/tasks/{task_id}")
+        return await self._tasks_rpc("tasks.get", {"task_id": task_id})
 
     async def list_tasks(
         self,
@@ -191,43 +223,21 @@ class APIClient:
         user_id: Optional[str] = None,
         limit: int = 100,
         offset: int = 0,
+        root_only: bool = True,
     ) -> List[Dict[str, Any]]:
         """List tasks with optional filtering and pagination."""
-        import uuid
-        
-        params = {}
+        params: Dict[str, Any] = {
+            "limit": limit,
+            "offset": offset,
+            "root_only": root_only,
+        }
         if status:
             params["status"] = status
         if user_id:
             params["user_id"] = user_id
-        params["limit"] = limit
-        params["offset"] = offset
 
-        # Use JSON-RPC format for /tasks endpoint
-        jsonrpc_request = {
-            "jsonrpc": "2.0",
-            "method": "tasks.list",
-            "params": params,
-            "id": str(uuid.uuid4()),
-        }
+        response = await self._tasks_rpc("tasks.list", params)
 
-        response = await self._request("POST", "/tasks", json=jsonrpc_request)
-
-        # Handle JSON-RPC response format
-        if isinstance(response, dict):
-            if "result" in response:
-                result = response["result"]
-                if isinstance(result, list):
-                    return result
-                if isinstance(result, dict) and "tasks" in result:
-                    return result["tasks"]
-            elif "error" in response:
-                error = response["error"]
-                raise APIResponseError(
-                    f"API error {error.get('code', 'unknown')}: {error.get('message', 'Unknown error')}"
-                )
-
-        # Fallback: handle direct array response (backward compatibility)
         if isinstance(response, list):
             return response
         if isinstance(response, dict) and "tasks" in response:
@@ -238,30 +248,75 @@ class APIClient:
 
     async def cancel_task(self, task_id: str) -> Dict[str, Any]:
         """Cancel a running task."""
-        return await self._request("POST", f"/tasks/{task_id}/cancel")
+        results = await self.cancel_tasks([task_id])
+        return results[0] if results else {"task_id": task_id, "status": "not_found"}
+
+    async def cancel_tasks(
+        self,
+        task_ids: List[str],
+        force: bool = False,
+        error_message: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Cancel multiple tasks."""
+        params: Dict[str, Any] = {"task_ids": task_ids, "force": force}
+        if error_message:
+            params["error_message"] = error_message
+        return await self._tasks_rpc("tasks.cancel", params)
 
     async def delete_task(self, task_id: str) -> Dict[str, Any]:
         """Delete a task."""
-        return await self._request("DELETE", f"/tasks/{task_id}")
+        return await self._tasks_rpc("tasks.delete", {"task_id": task_id})
 
     async def create_task(
         self, name: str, executor_id: str, inputs: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         """Create a new task."""
-        payload = {
+        payload: Dict[str, Any] = {
             "name": name,
             "schemas": {"method": executor_id},
         }
         if inputs:
             payload["inputs"] = inputs
 
-        return await self._request("POST", "/tasks", json=payload)
+        return await self._tasks_rpc("tasks.create", payload)
+
+    async def create_tasks(self, tasks: List[Dict[str, Any]] | Dict[str, Any]) -> Dict[str, Any]:
+        """Create tasks from a task array or single task dict."""
+        return await self._tasks_rpc("tasks.create", tasks)
 
     async def update_task(
         self, task_id: str, **updates: Any
     ) -> Dict[str, Any]:
         """Update task fields."""
-        return await self._request("PATCH", f"/tasks/{task_id}", json=updates)
+        return await self._tasks_rpc("tasks.update", {"task_id": task_id, **updates})
+
+    async def copy_task(self, **params: Any) -> Dict[str, Any]:
+        """Copy a task tree."""
+        return await self._tasks_rpc("tasks.copy", params)
+
+    async def get_task_tree(self, task_id: str) -> Dict[str, Any]:
+        """Get task tree structure."""
+        return await self._tasks_rpc("tasks.tree", {"task_id": task_id})
+
+    async def get_task_children(self, parent_id: str) -> List[Dict[str, Any]]:
+        """Get child tasks for a parent."""
+        response = await self._tasks_rpc("tasks.children", {"parent_id": parent_id})
+        return response if isinstance(response, list) else []
+
+    async def count_tasks(
+        self,
+        user_id: Optional[str] = None,
+        root_only: bool = False,
+        statuses: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        """Count tasks grouped by status."""
+        params: Dict[str, Any] = {"root_only": root_only}
+        if user_id:
+            params["user_id"] = user_id
+        if statuses:
+            params["statuses"] = statuses
+
+        return await self._tasks_rpc("tasks.count", params)
 
 
 __all__ = [

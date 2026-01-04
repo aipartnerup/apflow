@@ -12,15 +12,17 @@ import uuid
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import httpx
+from sqlalchemy import func, select
 from starlette.requests import Request
 from starlette.responses import JSONResponse, StreamingResponse
 
 from apflow.api.routes.base import BaseRouteHandler
+from apflow.core.execution.task_creator import TaskCreator
 from apflow.core.storage import create_pooled_session
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from apflow.core.execution.task_creator import TaskCreator
-from apflow.logger import get_logger
+from apflow.core.types import TaskStatus
 from apflow.core.utils.helpers import tree_node_to_dict
+from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -386,6 +388,8 @@ class TaskRoutes(BaseRouteHandler):
                     result = await self.handle_task_tree(params, request, request_id)
                 elif method == "tasks.list":
                     result = await self.handle_tasks_list(params, request, request_id)
+                elif method == "tasks.count":
+                    result = await self.handle_tasks_count(params, request, request_id)
                 elif method == "tasks.children":
                     result = await self.handle_task_children(params, request, request_id)
                 # Running task monitoring
@@ -683,6 +687,84 @@ class TaskRoutes(BaseRouteHandler):
 
         except Exception as e:
             logger.error(f"Error getting tasks list: {str(e)}", exc_info=True)
+            raise
+
+    async def handle_tasks_count(self, params: dict, request: Request, request_id: str) -> dict:
+        """
+        Count tasks in the database grouped by status.
+
+        Params:
+            user_id: Optional user ID filter (permission-checked)
+            root_only: If True, only count root tasks (parent_id is None)
+            statuses: Optional list of statuses to count (defaults to all statuses)
+
+        Returns:
+            Dict with counts per status and total.
+        """
+        try:
+            user_id = params.get("user_id")
+            root_only = params.get("root_only", False)
+            statuses_param = params.get("statuses")
+
+            statuses = (
+                [s for s in statuses_param if s]
+                if isinstance(statuses_param, list)
+                else [
+                    TaskStatus.PENDING,
+                    TaskStatus.IN_PROGRESS,
+                    TaskStatus.COMPLETED,
+                    TaskStatus.FAILED,
+                    TaskStatus.CANCELLED,
+                ]
+            )
+
+            if user_id:
+                self._check_permission(request, user_id, "count tasks for")
+            else:
+                authenticated_user_id, _ = self._get_user_info(request)
+                if authenticated_user_id and not self._is_admin(request):
+                    user_id = authenticated_user_id
+
+            async with create_pooled_session() as db_session:
+                task_repository = self._get_task_repository(db_session)
+                task_model = task_repository.task_model_class
+
+                base_filters = []
+                if user_id is not None:
+                    base_filters.append(task_model.user_id == user_id)
+                if root_only:
+                    base_filters.append(task_model.parent_id.is_(None))
+
+                counts: dict[str, int] = {}
+                total = 0
+
+                from sqlalchemy.ext.asyncio import AsyncSession
+
+                for status in statuses:
+                    stmt = select(func.count()).select_from(task_model)
+                    for filter_clause in base_filters:
+                        stmt = stmt.where(filter_clause)
+                    stmt = stmt.where(task_model.status == status)
+
+                    if isinstance(db_session, AsyncSession):
+                        result = await db_session.execute(stmt)
+                    else:
+                        result = db_session.execute(stmt)
+
+                    count = result.scalar_one()
+                    counts[status] = int(count or 0)
+                    total += count or 0
+
+                counts["total"] = int(total)
+                if user_id is not None:
+                    counts["user_id"] = user_id
+                if root_only:
+                    counts["root_only"] = True
+
+                return counts
+
+        except Exception as e:
+            logger.error(f"Error counting tasks: {str(e)}", exc_info=True)
             raise
 
     async def handle_task_children(self, params: dict, request: Request, request_id: str) -> list:

@@ -43,98 +43,91 @@ def status(
         log_api_usage("status", using_api)
         
         async def get_statuses():
-            statuses = []
-            
             async with get_api_client_if_configured() as client:
+                if client:
+                    return await client.get_tasks_status(task_ids)
+
+                statuses = []
+                from apflow.core.execution.task_executor import TaskExecutor
+
+                task_executor = TaskExecutor()
+
+                from apflow.core.storage import get_default_session
+                from apflow.core.storage.sqlalchemy.task_repository import (
+                    TaskRepository,
+                )
+                from apflow.core.config import get_task_model_class
+
+                db_session = get_default_session()
+                task_repository = TaskRepository(
+                    db_session,
+                    task_model_class=get_task_model_class(),
+                )
+
                 for task_id in task_ids:
                     try:
-                        if client:
-                            # Use API
-                            status_data = await client.get_task_status(task_id)
-                            statuses.append(status_data)
+                        try:
+                            task = await task_repository.get_task_by_id(task_id)
+                        except Exception as inner_error:
+                            logger.warning(
+                                f"Failed to get task {task_id}: {str(inner_error)}"
+                            )
+                            task = None
+
+                        is_running = task_executor.is_task_running(task_id)
+
+                        if task:
+                            statuses.append({
+                                "task_id": task.id,
+                                "context_id": task.id,
+                                "name": task.name,
+                                "status": task.status,
+                                "progress": (
+                                    float(task.progress)
+                                    if task.progress
+                                    else 0.0
+                                ),
+                                "is_running": is_running,
+                                "error": task.error,
+                                "started_at": (
+                                    task.started_at.isoformat()
+                                    if task.started_at
+                                    else None
+                                ),
+                                "updated_at": (
+                                    task.updated_at.isoformat()
+                                    if task.updated_at
+                                    else None
+                                ),
+                            })
+                        elif is_running:
+                            statuses.append({
+                                "task_id": task_id,
+                                "context_id": task_id,
+                                "name": "Unknown",
+                                "status": "in_progress",
+                                "progress": 0.0,
+                                "is_running": True,
+                                "error": None,
+                                "started_at": None,
+                                "updated_at": None,
+                            })
                         else:
-                            # Use local database
-                            from apflow.core.execution.task_executor import TaskExecutor
-                            task_executor = TaskExecutor()
-                            is_running = task_executor.is_task_running(task_id)
-                            
-                            from apflow.core.storage import get_default_session
-                            from apflow.core.storage.sqlalchemy.task_repository import (
-                                TaskRepository,
-                            )
-                            from apflow.core.config import get_task_model_class
-                            
-                            db_session = get_default_session()
-                            task_repository = TaskRepository(
-                                db_session,
-                                task_model_class=get_task_model_class(),
-                            )
-                            
-                            try:
-                                task = (
-                                    await task_repository.get_task_by_id(task_id)
-                                )
-                            except Exception as e:
-                                logger.warning(
-                                    f"Failed to get task {task_id}: "
-                                    f"{str(e)}"
-                                )
-                                task = None
-                            
-                            if task:
-                                statuses.append({
-                                    "task_id": task.id,
-                                    "context_id": task.id,
-                                    "name": task.name,
-                                    "status": task.status,
-                                    "progress": (
-                                        float(task.progress)
-                                        if task.progress
-                                        else 0.0
-                                    ),
-                                    "is_running": is_running,
-                                    "error": task.error,
-                                    "started_at": (
-                                        task.started_at.isoformat()
-                                        if task.started_at
-                                        else None
-                                    ),
-                                    "updated_at": (
-                                        task.updated_at.isoformat()
-                                        if task.updated_at
-                                        else None
-                                    ),
-                                })
-                            elif is_running:
-                                statuses.append({
-                                    "task_id": task_id,
-                                    "context_id": task_id,
-                                    "name": "Unknown",
-                                    "status": "in_progress",
-                                    "progress": 0.0,
-                                    "is_running": True,
-                                    "error": None,
-                                    "started_at": None,
-                                    "updated_at": None,
-                                })
-                            else:
-                                statuses.append({
-                                    "task_id": task_id,
-                                    "context_id": task_id,
-                                    "name": "Unknown",
-                                    "status": "not_found",
-                                    "progress": 0.0,
-                                    "is_running": False,
-                                    "error": None,
-                                    "started_at": None,
-                                    "updated_at": None,
-                                })
+                            statuses.append({
+                                "task_id": task_id,
+                                "context_id": task_id,
+                                "name": "Unknown",
+                                "status": "not_found",
+                                "progress": 0.0,
+                                "is_running": False,
+                                "error": None,
+                                "started_at": None,
+                                "updated_at": None,
+                            })
                     except Exception as e:
                         logger.warning(
                             f"Failed to get task {task_id}: {str(e)}"
                         )
-                        from apflow.core.execution.task_executor import TaskExecutor
-                        task_executor = TaskExecutor()
                         is_running = task_executor.is_task_running(task_id)
                         statuses.append({
                             "task_id": task_id,
@@ -147,8 +140,8 @@ def status(
                             "started_at": None,
                             "updated_at": None,
                         })
-            
-            return statuses
+
+                return statuses
         
         statuses = run_async_safe(get_statuses())
         typer.echo(json.dumps(statuses, indent=2))
@@ -182,6 +175,9 @@ def count(
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         from apflow.core.config import get_task_model_class
         from apflow.core.types import TaskStatus
+
+        using_api = should_use_api()
+        log_api_usage("count", using_api)
         
         # All possible statuses
         all_statuses = [
@@ -196,33 +192,41 @@ def count(
         parent_id_filter = "" if root_only else None
         
         async def get_counts():
-            # Create database session inside async context
-            db_session = get_default_session()
-            task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
-            
-            try:
-                counts = {}
-                total = 0
-                
-                # Count all statuses
-                for status in all_statuses:
-                    tasks = await task_repository.query_tasks(
+            async with get_api_client_if_configured() as client:
+                if client:
+                    return await client.count_tasks(
                         user_id=user_id,
-                        status=status,
-                        parent_id=parent_id_filter,
-                        limit=10000  # High limit for counting
+                        root_only=root_only,
+                        statuses=all_statuses,
                     )
-                    counts[status] = len(tasks)
-                    total += len(tasks)
+
+                db_session = get_default_session()
+                task_repository = TaskRepository(
+                    db_session,
+                    task_model_class=get_task_model_class(),
+                )
                 
-                return {"total": total, **counts}
-            finally:
-                # Ensure session is properly closed
-                from sqlalchemy.ext.asyncio import AsyncSession
-                if isinstance(db_session, AsyncSession):
-                    await db_session.close()
-                else:
-                    db_session.close()
+                try:
+                    counts = {}
+                    total = 0
+                    
+                    for status in all_statuses:
+                        tasks = await task_repository.query_tasks(
+                            user_id=user_id,
+                            status=status,
+                            parent_id=parent_id_filter,
+                            limit=10000,
+                        )
+                        counts[status] = len(tasks)
+                        total += len(tasks)
+                    
+                    return {"total": total, **counts}
+                finally:
+                    from sqlalchemy.ext.asyncio import AsyncSession
+                    if isinstance(db_session, AsyncSession):
+                        await db_session.close()
+                    else:
+                        db_session.close()
         
         result = run_async_safe(get_counts())
         
@@ -305,43 +309,44 @@ def cancel(
             results = []
             
             async with get_api_client_if_configured() as client:
-                for task_id in task_ids:
-                    try:
-                        error_message = (
-                            "Cancelled by user"
-                            if not force
-                            else "Force cancelled by user"
-                        )
-                        
-                        if client:
-                            # Use API
-                            cancel_result = (
-                                await client.cancel_task(task_id)
-                            )
-                        else:
-                            # Use local database
-                            from apflow.core.execution.task_executor import TaskExecutor
-                            task_executor = TaskExecutor()
+                if client:
+                    api_results = await client.cancel_tasks(
+                        task_ids, force=force
+                    )
+                    results.extend(api_results)
+                else:
+                    error_message = (
+                        "Cancelled by user"
+                        if not force
+                        else "Force cancelled by user"
+                    )
+
+                    from apflow.core.execution.task_executor import TaskExecutor
+
+                    task_executor = TaskExecutor()
+
+                    for task_id in task_ids:
+                        try:
                             cancel_result = (
                                 await task_executor.cancel_task(
                                     task_id, error_message
                                 )
                             )
-                        
-                        cancel_result["task_id"] = task_id
-                        cancel_result["force"] = force
-                        results.append(cancel_result)
-                    except Exception as e:
-                        logger.error(
-                            f"Error cancelling task {task_id}: "
-                            f"{str(e)}",
-                            exc_info=True,
-                        )
-                        results.append({
-                            "task_id": task_id,
-                            "status": "error",
-                            "error": str(e),
-                        })
+
+                            cancel_result["task_id"] = task_id
+                            cancel_result["force"] = force
+                            results.append(cancel_result)
+                        except Exception as e:
+                            logger.error(
+                                f"Error cancelling task {task_id}: "
+                                f"{str(e)}",
+                                exc_info=True,
+                            )
+                            results.append({
+                                "task_id": task_id,
+                                "status": "error",
+                                "error": str(e),
+                            })
             
             return results
         
@@ -426,6 +431,58 @@ def copy(
         
         # Convert dry_run to save parameter
         save = not dry_run
+        using_api = should_use_api()
+        log_api_usage("copy", using_api)
+
+        async def try_api_copy():
+            async with get_api_client_if_configured() as client:
+                if not client:
+                    return None
+
+                return await client.copy_task(
+                    task_id=task_id,
+                    children=children,
+                    copy_mode=copy_mode,
+                    custom_task_ids=parsed_custom_task_ids,
+                    custom_include_children=custom_include_children,
+                    reset_fields=parsed_reset_fields,
+                    save=save,
+                )
+
+        api_response = run_async_safe(try_api_copy())
+
+        if api_response is not None:
+            def _count_dict_tasks(node: dict) -> int:
+                child_nodes = node.get("children") or []
+                return 1 + sum(_count_dict_tasks(child) for child in child_nodes)
+
+            if save:
+                result_dict = api_response
+                task_count = _count_dict_tasks(api_response)
+                root_task_id = api_response.get("task", {}).get("id")
+            else:
+                tasks_array = api_response.get("tasks", []) if isinstance(api_response, dict) else []
+                result_dict = {"tasks": tasks_array, "saved": False}
+                task_count = len(tasks_array)
+                root_task_id = None
+
+            if output:
+                with open(output, 'w') as f:
+                    json.dump(result_dict, f, indent=2)
+                typer.echo(f"Task copy {'preview' if dry_run else 'result'} saved to {output}")
+            else:
+                typer.echo(json.dumps(result_dict, indent=2))
+
+            if save:
+                typer.echo(
+                    f"\n✅ Successfully copied task {task_id} to new task {root_task_id} "
+                    f"(mode: {copy_mode})"
+                )
+            else:
+                typer.echo(
+                    f"\n✅ Preview generated: {task_count} tasks (mode: {copy_mode}, not saved)"
+                )
+            return
         
         from apflow.core.storage import get_default_session
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
@@ -573,6 +630,23 @@ def create(
             tasks_array = task_data
         else:
             raise ValueError("Task data must be a dict (single task) or list (tasks array)")
+
+        using_api = should_use_api()
+        log_api_usage("create", using_api)
+
+        async def try_api_create():
+            async with get_api_client_if_configured() as client:
+                if not client:
+                    return None
+                return await client.create_tasks(tasks_array)
+
+        api_result = run_async_safe(try_api_create())
+        if api_result is not None:
+            typer.echo(json.dumps(api_result, indent=2))
+            root_task_id = api_result.get("task", {}).get("id")
+            if root_task_id:
+                typer.echo(f"\n✅ Successfully created task tree: root task {root_task_id}")
+            return
         
         from apflow.core.storage import get_default_session
         from apflow.core.execution.task_creator import TaskCreator
@@ -628,6 +702,9 @@ def update(
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         from apflow.core.config import get_task_model_class
         
+        using_api = should_use_api()
+        log_api_usage("update", using_api)
+        
         db_session = get_default_session()
         task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
         
@@ -657,6 +734,10 @@ def update(
             raise typer.Exit(1)
         
         async def update_task():
+            async with get_api_client_if_configured() as client:
+                if client:
+                    return await client.update_task(task_id, **update_params)
+
             # Get task first
             task = await task_repository.get_task_by_id(task_id)
             if not task:
@@ -738,10 +819,17 @@ def delete(
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         from apflow.core.config import get_task_model_class
         
+        using_api = should_use_api()
+        log_api_usage("delete", using_api)
+        
         db_session = get_default_session()
         task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
         
         async def delete_task():
+            async with get_api_client_if_configured() as client:
+                if client:
+                    return await client.delete_task(task_id)
+
             # Get task first to check if exists
             task = await task_repository.get_task_by_id(task_id)
             if not task:
@@ -797,7 +885,10 @@ def delete(
         
         result = run_async_safe(delete_task())
         typer.echo(json.dumps(result, indent=2))
-        typer.echo(f"\n✅ Successfully deleted task {task_id} and {result['children_deleted']} children")
+        children_deleted = result.get("children_deleted", 0)
+        typer.echo(
+            f"\n✅ Successfully deleted task {task_id} and {children_deleted} children"
+        )
         
     except Exception as e:
         typer.echo(f"Error: {str(e)}", err=True)
@@ -820,10 +911,17 @@ def tree(
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         from apflow.core.config import get_task_model_class
         
+        using_api = should_use_api()
+        log_api_usage("tree", using_api)
+        
         db_session = get_default_session()
         task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
         
         async def get_tree():
+            async with get_api_client_if_configured() as client:
+                if client:
+                    return await client.get_task_tree(task_id)
+
             # Get task
             task = await task_repository.get_task_by_id(task_id)
             if not task:
@@ -869,10 +967,17 @@ def children(
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         from apflow.core.config import get_task_model_class
         
+        using_api = should_use_api()
+        log_api_usage("children", using_api)
+        
         db_session = get_default_session()
         task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
         
         async def get_children():
+            async with get_api_client_if_configured() as client:
+                if client:
+                    return await client.get_task_children(parent_task_id)
+
             # Get parent task to verify it exists
             parent_task = await task_repository.get_task_by_id(parent_task_id)
             if not parent_task:
@@ -934,6 +1039,7 @@ def list_tasks(
                     tasks = await client.list_tasks(
                         user_id=user_id,
                         status=status,
+                        root_only=root_only,
                         limit=limit,
                         offset=offset,
                     )
