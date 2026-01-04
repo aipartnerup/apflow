@@ -160,7 +160,19 @@ class CrewaiExecutor(BaseTask):
             if "tools" in processed_config:
                 tools = processed_config.get("tools", [])
                 if tools:
-                    processed_config["tools"] = [resolve_tool(tool) for tool in tools]
+                    resolved_tools = []
+                    for tool in tools:
+                        resolved = resolve_tool(tool)
+                        # Check if tool is CrewAI compatible
+                        from apflow.core.tools import BaseTool as ApflowBaseTool
+                        if isinstance(resolved, ApflowBaseTool):
+                            if not resolved.is_crewai_compatible():
+                                logger.warning(
+                                    f"Tool {type(resolved).__name__} may not be compatible with CrewAI. "
+                                    f"CrewAI is not installed or tool compatibility check failed."
+                                )
+                        resolved_tools.append(resolved)
+                    processed_config["tools"] = resolved_tools
 
             agent = Agent(**processed_config)
             self.agents[agent_name] = agent

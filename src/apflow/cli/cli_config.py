@@ -366,12 +366,22 @@ def list_config_values() -> dict:
     config = load_cli_config()
     secrets = load_secrets_config()
 
+    # Sensitive keys that should be masked
+    sensitive_keys = {"api_auth_token", "token", "api_key", "secret"}
+
     # Combine and mask
     display_config = {}
 
-    # Add non-sensitive config
+    # Add config values, masking sensitive keys
     for key, value in config.items():
-        display_config[key] = value
+        # Check if key contains sensitive keywords
+        if any(sensitive in key.lower() for sensitive in sensitive_keys):
+            if isinstance(value, str) and len(value) > 3:
+                display_config[key] = f"{value[:3]}...***"
+            else:
+                display_config[key] = "***"
+        else:
+            display_config[key] = value
 
     # Add sensitive values from secrets (masked)
     for key, value in secrets.items():

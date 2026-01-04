@@ -4,6 +4,7 @@ Test CLI generate command functionality
 Tests the generate task-tree command, including the new temperature and max_tokens parameters.
 """
 
+import json
 import pytest
 import tempfile
 from pathlib import Path
@@ -53,7 +54,8 @@ class TestGenerateCommand:
         """Test generate command help"""
         result = runner.invoke(cli, ["generate", "--help"])
         assert result.exit_code == 0
-        assert "Generate a task tree JSON array from natural language requirement" in result.stdout
+        # Now generate is a group with subcommands, so help text is different
+        assert "Generate task trees from natural language requirements" in result.stdout or "task-tree" in result.stdout
     
     def test_generate_task_tree_help(self):
         """Test generate task-tree command help"""

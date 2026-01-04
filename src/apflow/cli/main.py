@@ -94,12 +94,20 @@ class LazyGroup(click.Group):
             import importlib
 
             import typer.main
+            import click
 
             module = importlib.import_module(module_path)
             typer_app = getattr(module, attr_name)
             
-            # Convert Typer app to Click command
-            click_cmd = typer.main.get_command(typer_app)
+            # Check if Typer app has subcommands (registered_commands)
+            # If it has subcommands, use get_group() to return a Click Group
+            # Otherwise, use get_command() to return a single Click command
+            if hasattr(typer_app, 'registered_commands') and len(typer_app.registered_commands) > 0:
+                # Has subcommands - return as a group
+                click_cmd = typer.main.get_group(typer_app)
+            else:
+                # No subcommands - return as a single command
+                click_cmd = typer.main.get_command(typer_app)
             
             # Cache the loaded command
             self.commands[name] = click_cmd

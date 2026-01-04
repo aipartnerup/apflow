@@ -9,39 +9,28 @@ Performance Note: CrewAI import is deferred to keep startup time fast.
 
 from typing import Type, Optional, Any
 from abc import ABC
-from pydantic import BaseModel, Field
 
-
-class BaseTool(BaseModel, ABC):
-    """
-    Base class for all tools
+# Try to use CrewAI's BaseTool if available, otherwise use our own implementation
+# This ensures tools are actual CrewAI BaseTool instances when CrewAI is available,
+# which is required for CrewAI Agent validation.
+try:
+    from crewai.tools.base_tool import BaseTool as CrewAIBaseTool
     
-    Compatible with CrewAI's BaseTool interface.
-    If CrewAI is installed, this tool can be used with CrewAI agents.
-    If CrewAI is not installed, tool works standalone.
-    
-    Subclasses should implement _run() method for synchronous execution
-    and optionally _arun() for asynchronous execution.
-    
-    Performance: CrewAI compatibility is checked at runtime, not import time,
-    to keep CLI startup fast (avoids 5.4s CrewAI import).
-    """
-    
-    name: str = Field(..., description="Tool name")
-    description: str = Field(..., description="Tool description")
-    
-    def _run(self, *args: Any, **kwargs: Any) -> Any:
+    class BaseTool(CrewAIBaseTool, ABC):
         """
-        Synchronous execution - must be implemented by subclass
+        Base class for all tools
+        
+        Compatible with CrewAI's BaseTool interface.
+        If CrewAI is installed, inherits from CrewAI's BaseTool for full compatibility.
+        This ensures tools are actual CrewAI BaseTool instances, which is required
+        for CrewAI Agent validation.
+        
+        Subclasses should implement _run() method for synchronous execution
+        and optionally _arun() for asynchronous execution.
         """
-        raise NotImplementedError("Subclass must implement _run()")
+        pass
     
-    async def _arun(self, *args: Any, **kwargs: Any) -> Any:
-        """
-        Asynchronous execution - optional, defaults to calling _run()
-        """
-        return self._run(*args, **kwargs)
-    
+    # Add is_crewai_compatible method
     @classmethod
     def is_crewai_compatible(cls) -> bool:
         """
@@ -50,13 +39,15 @@ class BaseTool(BaseModel, ABC):
         Returns:
             True if crewai is installed and this tool can use CrewAI features
         """
-        try:
-            import crewai
-            return True
-        except ImportError:
-            return False
+        return True
     
-    class BaseTool(ABC):
+    BaseTool.is_crewai_compatible = is_crewai_compatible
+    
+except ImportError:
+    # CrewAI not available, use standalone implementation
+    from pydantic import BaseModel, Field
+    
+    class BaseTool(BaseModel, ABC):
         """
         Base class for all tools (standalone implementation)
         
@@ -66,69 +57,30 @@ class BaseTool(BaseModel, ABC):
         Subclasses should implement _run() method for synchronous execution
         and optionally _arun() for asynchronous execution.
         """
-        name: str = ""
-        description: str = ""
-        args_schema: Optional[Type[BaseModel]] = None
+        name: str = Field(..., description="Tool name")
+        description: str = Field(..., description="Tool description")
         
-        def _run(self, *args, **kwargs) -> Any:
+        def _run(self, *args: Any, **kwargs: Any) -> Any:
             """
-            Execute the tool (synchronous)
-            
-            Subclasses must implement this method.
-            
-            Args:
-                *args: Positional arguments
-                **kwargs: Keyword arguments
-                
-            Returns:
-                Tool execution result
+            Synchronous execution - must be implemented by subclass
             """
-            raise NotImplementedError("Subclasses must implement _run method")
+            raise NotImplementedError("Subclass must implement _run()")
         
-        def run(self, *args, **kwargs) -> Any:
+        async def _arun(self, *args: Any, **kwargs: Any) -> Any:
             """
-            Public interface for running the tool
-            Delegates to _run() for compatibility with CrewAI
-            
-            Args:
-                *args: Positional arguments
-                **kwargs: Keyword arguments
-                
-            Returns:
-                Tool execution result
+            Asynchronous execution - optional, defaults to calling _run()
             """
             return self._run(*args, **kwargs)
         
-        async def _arun(self, *args, **kwargs) -> Any:
+        @classmethod
+        def is_crewai_compatible(cls) -> bool:
             """
-            Execute the tool (asynchronous) - optional
+            Check if CrewAI is available for enhanced features
             
-            Subclasses can implement this method for async execution.
-            If not implemented, _run() will be used.
-            
-            Args:
-                *args: Positional arguments
-                **kwargs: Keyword arguments
-                
             Returns:
-                Tool execution result
+                True if crewai is installed and this tool can use CrewAI features
             """
-            raise NotImplementedError("Async execution not implemented. Use _run() instead.")
-        
-        async def arun(self, *args, **kwargs) -> Any:
-            """
-            Public interface for async tool execution
-            Delegates to _arun() for compatibility with CrewAI
-            
-            Args:
-                *args: Positional arguments
-                **kwargs: Keyword arguments
-                
-            Returns:
-                Tool execution result
-            """
-            return await self._arun(*args, **kwargs)
+            return False
 
 
 __all__ = ["BaseTool"]
-

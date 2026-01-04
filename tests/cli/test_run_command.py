@@ -251,12 +251,13 @@ class TestRunCommand:
     
     def test_run_flow_missing_tasks_error(self):
         """Test error when no tasks provided"""
+        # Test with no executor_id and no --tasks
         result = runner.invoke(cli, [
-            "run", "flow", "system_info_executor"
+            "run", "flow"
         ])
         assert result.exit_code == 1
         output = result.output
-        assert "No tasks provided" in output or "Error" in output
+        assert "Either --tasks/--tasks-file or executor_id must be provided" in output or "Error" in output
 
     def test_run_flow_invalid_tasks_json(self):
         """Test error with invalid JSON"""
