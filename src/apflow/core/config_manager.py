@@ -29,7 +29,7 @@ class ConfigManager:
 
     API Configuration:
     - api_server_url: URL of the API server (e.g., http://localhost:8000)
-    - api_auth_token: Optional auth token for API requests
+    - admin_auth_token: Optional admin auth token for CLI API requests
     - use_local_db: Fallback to local DB if API unreachable (default: True)
     - api_timeout: Request timeout in seconds (default: 30.0)
     - api_retry_attempts: Number of retry attempts (default: 3)
@@ -55,14 +55,14 @@ class ConfigManager:
     Configure API gateway:
         cm = get_config_manager()
         cm.set_api_server_url("http://localhost:8000")
-        cm.set_api_auth_token("token-xyz")
+        cm.set_admin_auth_token("token-xyz")
         cm.set_api_timeout(60.0)
     """
 
     _registry: ConfigRegistry = field(default_factory=get_config)
     # API Gateway configuration
     _api_server_url: Optional[str] = field(default=None)
-    _api_auth_token: Optional[str] = field(default=None)
+    _admin_auth_token: Optional[str] = field(default=None)
     _use_local_db: bool = field(default=True)
     _api_timeout: float = field(default=DEFAULT_API_TIMEOUT)
     _api_retry_attempts: int = field(default=DEFAULT_API_RETRY_ATTEMPTS)
@@ -88,52 +88,32 @@ class ConfigManager:
 
     def load_cli_config(self) -> None:
         """
-        Load API configuration from CLI config files.
+        Load API configuration from CLI config file.
 
-        Loads both non-sensitive (config.json) and sensitive (secrets.json)
-        configuration from priority-based locations:
-        1. Project-local: <project>/.data/
-        2. User-global: ~/.aipartnerup/apflow/
+        Loads unified configuration from config.cli.yaml:
+        1. Project-local: <project>/.data/config.cli.yaml
+        2. User-global: ~/.aipartnerup/apflow/config.cli.yaml
 
         This is called automatically by the CLI to load persisted configuration.
         Useful for remembering API server URL and auth token between sessions.
         """
         try:
-            from apflow.cli.cli_config import (
-                load_cli_config as load_config,
-                load_secrets_config,
-            )
+            from apflow.cli.cli_config import load_cli_config as load_config
 
             config = load_config()
-            secrets = load_secrets_config()
 
-            # Load non-sensitive API configuration from config.json
+            # Load API configuration from unified config
             if "api_server_url" in config:
                 self.set_api_server_url(config["api_server_url"])
 
-            if "api_timeout" in config:
-                try:
-                    self.set_api_timeout(float(config["api_timeout"]))
-                except ValueError:
-                    logger.warning("Invalid api_timeout in config file")
+            # Load admin_auth_token (migrated from api_auth_token)
+            if "admin_auth_token" in config:
+                self.set_admin_auth_token(config["admin_auth_token"])
+            elif "api_auth_token" in config:
+                # Backward compatibility: migrate api_auth_token -> admin_auth_token
+                self.set_admin_auth_token(config["api_auth_token"])
+                logger.debug("Migrated api_auth_token -> admin_auth_token")
 
-            # Load sensitive API configuration from secrets.json
-            if "api_auth_token" in secrets:
-                self.set_api_auth_token(secrets["api_auth_token"])
-            
-            if "api_retry_attempts" in config:
-                try:
-                    self.set_api_retry_attempts(int(config["api_retry_attempts"]))
-                except ValueError:
-                    logger.warning("Invalid api_retry_attempts in config file")
-            
-            if "use_local_db" in config:
-                value = config["use_local_db"]
-                if isinstance(value, bool):
-                    self.set_use_local_db(value)
-                elif isinstance(value, str):
-                    self.set_use_local_db(value.lower() == "true")
-            
             logger.debug("Loaded API config from CLI config file")
         except ImportError:
             # cli_config module not available (shouldn't happen in CLI context)
@@ -194,15 +174,27 @@ class ConfigManager:
         """Get configured API server URL."""
         return self._api_server_url
 
-    def set_api_auth_token(self, token: Optional[str]) -> None:
-        """Set auth token for API requests."""
-        self._api_auth_token = token
+    def set_admin_auth_token(self, token: Optional[str]) -> None:
+        """Set admin auth token for CLI API requests."""
+        self._admin_auth_token = token
         if token:
-            logger.debug("API auth token configured")
+            logger.debug("Admin auth token configured")
+
+    def get_admin_auth_token(self) -> Optional[str]:
+        """Get admin auth token for CLI API requests."""
+        return self._admin_auth_token
+
+    # Backward compatibility aliases
+    def set_api_auth_token(self, token: Optional[str]) -> None:
+        """Set admin auth token (backward compatibility alias)."""
+        logger.warning(
+            "set_api_auth_token() is deprecated, use set_admin_auth_token() instead"
+        )
+        self.set_admin_auth_token(token)
 
     def get_api_auth_token(self) -> Optional[str]:
-        """Get auth token for API requests."""
-        return self._api_auth_token
+        """Get admin auth token (backward compatibility alias)."""
+        return self.get_admin_auth_token()
 
     def set_use_local_db(self, enabled: bool) -> None:
         """Set whether to fallback to local DB if API unreachable."""
@@ -251,9 +243,14 @@ class ConfigManager:
         return self._api_server_url
 
     @property
+    def admin_auth_token(self) -> Optional[str]:
+        """Get admin auth token for CLI API requests."""
+        return self._admin_auth_token
+
+    @property
     def api_auth_token(self) -> Optional[str]:
-        """Get auth token for API requests."""
-        return self._api_auth_token
+        """Get admin auth token (backward compatibility alias)."""
+        return self._admin_auth_token
 
     @property
     def use_local_db(self) -> bool:
@@ -279,7 +276,7 @@ class ConfigManager:
         self._registry.clear()
         # Reset API configuration
         self._api_server_url = None
-        self._api_auth_token = None
+        self._admin_auth_token = None
         self._use_local_db = True
         self._api_timeout = DEFAULT_API_TIMEOUT
         self._api_retry_attempts = DEFAULT_API_RETRY_ATTEMPTS

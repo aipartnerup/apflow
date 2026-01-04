@@ -1,11 +1,10 @@
 """
-Configuration persistence module for APFlow CLI and API.
+Configuration persistence module for APFlow CLI.
 
-Handles saving/loading configuration with multi-location and multi-file support:
+Handles saving/loading configuration with single unified YAML file support:
 
 File Structure:
-  config.json   - Non-sensitive configuration (shared between CLI & API)
-  secrets.json  - Sensitive configuration (API auth tokens, JWT secrets)
+  config.cli.yaml  - Unified CLI configuration (all settings in one file)
 
 Location Priority:
   1. APFLOW_CONFIG_DIR environment variable (highest priority)
@@ -13,30 +12,46 @@ Location Priority:
   3. User-global: ~/.aipartnerup/apflow/ (default fallback)
 
 Permissions:
-  config.json  - 644 (readable by all, writable by owner)
-  secrets.json - 600 (readable/writable by owner only)
+  config.cli.yaml  - 600 (owner-only access, more secure)
 
 Environment Variables:
   APFLOW_CONFIG_DIR: Override config directory location (highest priority)
+
+Migration:
+  Automatically migrates from config.json + secrets.json to config.cli.yaml
+  on first access. Old files are backed up as .json.bak.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 
+# Try to import yaml, fallback to None if not available
+try:
+    import yaml
+
+    YAML_AVAILABLE = True
+except ImportError:
+    YAML_AVAILABLE = False
+    yaml = None  # type: ignore
+
 # User-global configuration (default)
 USER_CONFIG_DIR = Path.home() / ".aipartnerup" / "apflow"
 
 # Configuration file names
-CONFIG_FILE = "config.json"      # Non-sensitive configuration
-SECRETS_FILE = "secrets.json"    # Sensitive configuration (API tokens, JWT)
+CLI_CONFIG_FILE = "config.cli.yaml"  # Unified CLI configuration
+# Legacy file names (for migration)
+LEGACY_CONFIG_FILE = "config.json"  # Legacy non-sensitive configuration
+LEGACY_SECRETS_FILE = "secrets.json"  # Legacy sensitive configuration
 
 
 def get_project_root() -> Optional[Path]:
@@ -54,9 +69,7 @@ def get_project_root() -> Optional[Path]:
     # Walk up the directory tree
     for parent in [current] + list(current.parents):
         # Check for project markers
-        if (parent / "pyproject.toml").exists() or (
-            parent / ".git"
-        ).exists():
+        if (parent / "pyproject.toml").exists() or (parent / ".git").exists():
             logger.debug(f"Found project root: {parent}")
             return parent
 
@@ -102,71 +115,232 @@ def get_config_dir() -> Path:
     return USER_CONFIG_DIR
 
 
-def get_all_config_locations() -> list[Path]:
+def get_cli_config_file_path() -> Path:
     """
-    Get all possible config file locations in priority order.
-
-    Returns:
-        List of config.json paths in priority order
-    """
-    project_config_dir = get_project_config_dir()
-    locations = []
-
-    # Add project-local if applicable
-    if project_config_dir:
-        locations.append(project_config_dir / CONFIG_FILE)
-
-    # Add user-global
-    locations.append(USER_CONFIG_DIR / CONFIG_FILE)
-
-    return locations
-
-
-def get_all_secrets_locations() -> list[Path]:
-    """
-    Get all possible secrets file locations in priority order.
-
-    Returns:
-        List of secrets.json paths in priority order
-    """
-    project_config_dir = get_project_config_dir()
-    locations = []
-
-    # Add project-local if applicable
-    if project_config_dir:
-        locations.append(project_config_dir / SECRETS_FILE)
-
-    # Add user-global
-    locations.append(USER_CONFIG_DIR / SECRETS_FILE)
-
-    return locations
-
-
-def get_config_file_path(filename: str = CONFIG_FILE) -> Path:
-    """
-    Get the path to a config file for reading/writing.
+    Get the path to the unified CLI config file (config.cli.yaml).
 
     For reading: Returns path to first existing file in priority order
     For writing: Returns path where config should be saved (respects priority)
 
-    Args:
-        filename: "config.json" or "secrets.json"
+    Returns:
+        Path to config.cli.yaml file
+    """
+    config_dir = get_config_dir()
+    return config_dir / CLI_CONFIG_FILE
+
+
+def get_all_cli_config_locations() -> list[Path]:
+    """
+    Get all possible CLI config file locations in priority order.
 
     Returns:
-        Path to config file
+        List of config.cli.yaml paths in priority order
     """
-    # Check environment variable override
-    env_config_dir = os.getenv("APFLOW_CONFIG_DIR")
-    if env_config_dir:
-        return Path(env_config_dir) / filename
-
-    # Check if we're in a project and use project-local config
     project_config_dir = get_project_config_dir()
-    if project_config_dir:
-        return project_config_dir / filename
+    locations = []
 
-    # Default to user-global config
-    return USER_CONFIG_DIR / filename
+    # Add project-local if applicable
+    if project_config_dir:
+        locations.append(project_config_dir / CLI_CONFIG_FILE)
+
+    # Add user-global
+    locations.append(USER_CONFIG_DIR / CLI_CONFIG_FILE)
+
+    return locations
+
+
+def is_localhost_url(url: str) -> bool:
+    """
+    Check if a URL is localhost.
+
+    Args:
+        url: URL string to check
+
+    Returns:
+        True if URL is localhost, False otherwise
+    """
+    try:
+        parsed = urlparse(url)
+        hostname = parsed.hostname or ""
+        return hostname in ("localhost", "127.0.0.1") or "localhost" in hostname
+    except Exception:
+        return False
+
+
+def validate_cli_config(config: dict) -> None:
+    """
+    Validate CLI configuration.
+
+    Rules:
+    - If api_server_url is not localhost, jwt_secret is REQUIRED
+    - jwt_algorithm defaults to HS256 if not specified
+
+    Args:
+        config: Configuration dictionary to validate
+
+    Raises:
+        ValueError: If validation fails
+    """
+    api_server_url = config.get("api_server_url")
+    if api_server_url:
+        if not is_localhost_url(api_server_url):
+            jwt_secret = config.get("jwt_secret")
+            if not jwt_secret:
+                raise ValueError(
+                    f"jwt_secret is REQUIRED when api_server_url is not localhost. "
+                    f"Current api_server_url: {api_server_url}"
+                )
+
+    # Set default jwt_algorithm if not specified
+    if "jwt_algorithm" not in config:
+        config["jwt_algorithm"] = "HS256"
+
+
+def migrate_json_to_yaml() -> Optional[dict]:
+    """
+    Migrate legacy JSON files (config.json + secrets.json) to unified YAML format.
+
+    Merges config.json and secrets.json into a single config.cli.yaml file.
+    Renames api_auth_token to admin_auth_token during migration.
+
+    Returns:
+        Merged configuration dictionary if migration occurred, None otherwise
+    """
+    config_dir = get_config_dir()
+    legacy_config_path = config_dir / LEGACY_CONFIG_FILE
+    legacy_secrets_path = config_dir / LEGACY_SECRETS_FILE
+    yaml_config_path = config_dir / CLI_CONFIG_FILE
+
+    # Check if YAML file already exists
+    if yaml_config_path.exists():
+        return None
+
+    # Check if legacy files exist
+    has_config = legacy_config_path.exists()
+    has_secrets = legacy_secrets_path.exists()
+
+    if not (has_config or has_secrets):
+        return None
+
+    logger.info("Migrating legacy JSON config files to YAML format...")
+
+    # Load legacy files
+    config = {}
+    secrets = {}
+
+    if has_config:
+        try:
+            with open(legacy_config_path, "r") as f:
+                config = json.load(f)
+            logger.debug(f"Loaded legacy config from {legacy_config_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load legacy config: {e}")
+
+    if has_secrets:
+        try:
+            with open(legacy_secrets_path, "r") as f:
+                secrets = json.load(f)
+            logger.debug(f"Loaded legacy secrets from {legacy_secrets_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load legacy secrets: {e}")
+
+    # Merge configs
+    merged = config.copy()
+
+    # Migrate api_auth_token -> admin_auth_token
+    if "api_auth_token" in secrets:
+        merged["admin_auth_token"] = secrets.pop("api_auth_token")
+        logger.debug("Migrated api_auth_token -> admin_auth_token")
+
+    # Add other secrets
+    for key, value in secrets.items():
+        if key not in merged:
+            merged[key] = value
+
+    # Remove deprecated fields
+    deprecated_fields = [
+        "api_timeout",
+        "api_retry_attempts",
+        "auto_use_api_if_configured",
+        "use_local_db",
+    ]
+    for field in deprecated_fields:
+        merged.pop(field, None)
+
+    # Validate merged config
+    try:
+        validate_cli_config(merged)
+    except ValueError as e:
+        logger.warning(f"Config validation warning after migration: {e}")
+
+    # Save as YAML
+    ensure_config_dir()
+    try:
+        save_cli_config_yaml(merged)
+        logger.info(f"Successfully migrated to {yaml_config_path}")
+
+        # Backup legacy files
+        if has_config:
+            backup_path = legacy_config_path.with_suffix(".json.bak")
+            shutil.copy2(legacy_config_path, backup_path)
+            logger.debug(f"Backed up {legacy_config_path} to {backup_path}")
+
+        if has_secrets:
+            backup_path = legacy_secrets_path.with_suffix(".json.bak")
+            shutil.copy2(legacy_secrets_path, backup_path)
+            logger.debug(f"Backed up {legacy_secrets_path} to {backup_path}")
+
+        return merged
+    except Exception as e:
+        logger.error(f"Failed to save migrated config: {e}")
+        raise
+
+
+def load_yaml_file(file_path: Path) -> dict:
+    """
+    Load YAML file.
+
+    Args:
+        file_path: Path to YAML file
+
+    Returns:
+        Dictionary with config, empty dict if file doesn't exist or error
+    """
+    if not YAML_AVAILABLE:
+        logger.warning("PyYAML not installed, cannot load YAML config")
+        return {}
+
+    if not file_path.exists():
+        return {}
+
+    try:
+        with open(file_path, "r") as f:
+            config = yaml.safe_load(f) or {}
+            logger.debug(f"Loaded YAML config from {file_path}")
+            return config
+    except Exception as e:
+        logger.warning(f"Failed to load YAML config from {file_path}: {e}")
+        return {}
+
+
+def save_yaml_file(file_path: Path, config: dict) -> None:
+    """
+    Save configuration to YAML file.
+
+    Args:
+        file_path: Path to YAML file
+        config: Configuration dictionary to save
+    """
+    if not YAML_AVAILABLE:
+        raise RuntimeError("PyYAML not installed, cannot save YAML config")
+
+    try:
+        with open(file_path, "w") as f:
+            yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
+        logger.debug(f"Saved YAML config to {file_path}")
+    except Exception as e:
+        logger.error(f"Failed to save YAML config to {file_path}: {e}")
+        raise
 
 
 def ensure_config_dir() -> None:
@@ -177,91 +351,41 @@ def ensure_config_dir() -> None:
 
 def load_cli_config() -> dict:
     """
-    Load CLI configuration from config.json.
+    Load CLI configuration from config.cli.yaml.
 
     Checks multiple locations in priority order:
-    1. Project-local: .data/config.json
-    2. User-global: ~/.aipartnerup/apflow/config.json
+    1. Project-local: .data/config.cli.yaml
+    2. User-global: ~/.aipartnerup/apflow/config.cli.yaml
+
+    Also attempts to migrate from legacy JSON files if YAML doesn't exist.
 
     Returns:
         Dictionary with config, empty dict if no config found
     """
-    for config_path in get_all_config_locations():
+    # Try to migrate from legacy JSON files first
+    migrated_config = migrate_json_to_yaml()
+    if migrated_config is not None:
+        return migrated_config
+
+    # Load YAML config
+    for config_path in get_all_cli_config_locations():
         if config_path.exists():
-            try:
-                with open(config_path, "r") as f:
-                    config = json.load(f)
-                    logger.debug(f"Loaded config from {config_path}")
-                    return config
-            except Exception as e:
-                logger.warning(
-                    f"Failed to load config from {config_path}: {e}"
-                )
-                continue
+            config = load_yaml_file(config_path)
+            if config:
+                # Validate config
+                try:
+                    validate_cli_config(config)
+                except ValueError as e:
+                    logger.warning(f"Config validation warning: {e}")
+                return config
 
     logger.debug("No config found, using empty config")
     return {}
 
 
-def save_cli_config(config: dict) -> None:
+def save_cli_config_yaml(config: dict) -> None:
     """
-    Save CLI configuration to config.json.
-
-    Saves to appropriate location based on context:
-    - Project-local if in project context
-    - User-global otherwise
-
-    Sets file permissions to 644 (readable by all).
-
-    Args:
-        config: Configuration dictionary to save
-    """
-    ensure_config_dir()
-    config_file = get_config_file_path(CONFIG_FILE)
-
-    try:
-        with open(config_file, "w") as f:
-            json.dump(config, f, indent=2)
-
-        # Set readable permissions (644)
-        config_file.chmod(0o644)
-        logger.debug(f"Saved config to {config_file}")
-    except Exception as e:
-        logger.error(f"Failed to save config to {config_file}: {e}")
-        raise
-
-
-def load_secrets_config() -> dict:
-    """
-    Load sensitive configuration from secrets.json.
-
-    Checks multiple locations in priority order:
-    1. Project-local: .data/secrets.json
-    2. User-global: ~/.aipartnerup/apflow/secrets.json
-
-    Returns:
-        Dictionary with secrets, empty dict if no file found
-    """
-    for secrets_path in get_all_secrets_locations():
-        if secrets_path.exists():
-            try:
-                with open(secrets_path, "r") as f:
-                    secrets = json.load(f)
-                    logger.debug(f"Loaded secrets from {secrets_path}")
-                    return secrets
-            except Exception as e:
-                logger.warning(
-                    f"Failed to load secrets from {secrets_path}: {e}"
-                )
-                continue
-
-    logger.debug("No secrets file found, using empty secrets")
-    return {}
-
-
-def save_secrets_config(secrets: dict) -> None:
-    """
-    Save sensitive configuration to secrets.json.
+    Save CLI configuration to config.cli.yaml.
 
     Saves to appropriate location based on context:
     - Project-local if in project context
@@ -270,48 +394,31 @@ def save_secrets_config(secrets: dict) -> None:
     Sets file permissions to 600 (owner-only access).
 
     Args:
-        secrets: Secrets dictionary to save
+        config: Configuration dictionary to save
     """
+    if not YAML_AVAILABLE:
+        raise RuntimeError("PyYAML not installed, cannot save YAML config")
+
+    # Validate before saving
+    validate_cli_config(config)
+
     ensure_config_dir()
-    secrets_file = get_config_file_path(SECRETS_FILE)
+    config_file = get_cli_config_file_path()
 
     try:
-        with open(secrets_file, "w") as f:
-            json.dump(secrets, f, indent=2)
+        save_yaml_file(config_file, config)
 
         # Set restricted permissions (600 - owner only)
-        secrets_file.chmod(0o600)
-        logger.debug(f"Saved secrets to {secrets_file}")
+        config_file.chmod(0o600)
+        logger.debug(f"Saved config to {config_file}")
     except Exception as e:
-        logger.error(f"Failed to save secrets to {secrets_file}: {e}")
+        logger.error(f"Failed to save config to {config_file}: {e}")
         raise
-
-
-def generate_admin_token() -> str:
-    """
-    Generate a JWT admin token for localhost.
-    
-    Uses local JWT secret for consistency.
-    Sets admin role in token claims.
-    
-    Returns:
-        JWT admin token string
-    """
-    from apflow.cli.jwt_token import generate_token
-    
-    token = generate_token(
-        subject="admin",
-        extra_claims={"role": "admin"},
-        expiry_days=365,
-    )
-    return token
 
 
 def get_config_value(key: str) -> Optional[str]:
     """
-    Get a configuration value from config.json or secrets.json.
-
-    Checks both non-sensitive and sensitive config.
+    Get a configuration value from config.cli.yaml.
 
     Args:
         key: Configuration key
@@ -319,60 +426,58 @@ def get_config_value(key: str) -> Optional[str]:
     Returns:
         Configuration value or None if not found
     """
-    # Try config.json first
     config = load_cli_config()
-    if key in config:
-        return config.get(key)
-
-    # Then try secrets.json
-    secrets = load_secrets_config()
-    return secrets.get(key)
+    value = config.get(key)
+    if value is not None:
+        return str(value) if not isinstance(value, str) else value
+    return None
 
 
 def set_config_value(key: str, value: Optional[str], is_sensitive: bool = False) -> None:
     """
-    Set a configuration value in the appropriate config file.
+    Set a configuration value in config.cli.yaml.
+
+    Note: is_sensitive parameter is kept for backward compatibility but
+    all values are now stored in the same file with 600 permissions.
 
     Args:
         key: Configuration key
         value: Configuration value (None to delete)
-        is_sensitive: If True, saves to secrets.json; otherwise config.json
+        is_sensitive: Ignored (kept for backward compatibility)
     """
-    if is_sensitive:
-        secrets = load_secrets_config()
-        if value is None:
-            secrets.pop(key, None)
-        else:
-            secrets[key] = value
-        save_secrets_config(secrets)
+    config = load_cli_config()
+    if value is None:
+        config.pop(key, None)
     else:
-        config = load_cli_config()
-        if value is None:
-            config.pop(key, None)
-        else:
-            config[key] = value
-        save_cli_config(config)
+        config[key] = value
+
+    save_cli_config_yaml(config)
 
 
 def list_config_values() -> dict:
     """
     List all configuration values.
 
-    Sensitive values (tokens) are masked.
+    Sensitive values (tokens, secrets) are masked.
 
     Returns:
         Dictionary of configuration values with tokens masked
     """
     config = load_cli_config()
-    secrets = load_secrets_config()
 
     # Sensitive keys that should be masked
-    sensitive_keys = {"api_auth_token", "token", "api_key", "secret"}
+    sensitive_keys = {
+        "admin_auth_token",
+        "api_auth_token",  # Legacy key
+        "token",
+        "api_key",
+        "secret",
+        "jwt_secret",
+    }
 
     # Combine and mask
     display_config = {}
 
-    # Add config values, masking sensitive keys
     for key, value in config.items():
         # Check if key contains sensitive keywords
         if any(sensitive in key.lower() for sensitive in sensitive_keys):
@@ -383,11 +488,86 @@ def list_config_values() -> dict:
         else:
             display_config[key] = value
 
-    # Add sensitive values from secrets (masked)
-    for key, value in secrets.items():
-        if isinstance(value, str) and len(value) > 3:
-            display_config[key] = f"{value[:3]}...***"
-        else:
-            display_config[key] = "***"
-
     return display_config
+
+
+# Legacy functions for backward compatibility
+def load_secrets_config() -> dict:
+    """
+    Legacy function: Load secrets from unified config.
+
+    Returns empty dict. Use load_cli_config() instead.
+    """
+    logger.warning(
+        "load_secrets_config() is deprecated, use load_cli_config() instead"
+    )
+    return {}
+
+
+def save_secrets_config(secrets: dict) -> None:
+    """
+    Legacy function: Save secrets to unified config.
+
+    Use save_cli_config_yaml() instead.
+    """
+    logger.warning(
+        "save_secrets_config() is deprecated, use save_cli_config_yaml() instead"
+    )
+    config = load_cli_config()
+    config.update(secrets)
+    save_cli_config_yaml(config)
+
+
+# Legacy constants for backward compatibility
+CONFIG_FILE = LEGACY_CONFIG_FILE
+SECRETS_FILE = LEGACY_SECRETS_FILE
+
+
+def get_config_file_path(filename: str = CLI_CONFIG_FILE) -> Path:
+    """
+    Get the path to a config file.
+
+    For backward compatibility, supports both legacy filenames and new CLI config file.
+
+    Args:
+        filename: Config file name
+
+    Returns:
+        Path to config file
+    """
+    if filename == CLI_CONFIG_FILE:
+        return get_cli_config_file_path()
+    elif filename in (LEGACY_CONFIG_FILE, LEGACY_SECRETS_FILE):
+        # Legacy support
+        config_dir = get_config_dir()
+        return config_dir / filename
+    else:
+        # Default to CLI config file
+        return get_cli_config_file_path()
+
+
+def get_all_config_locations() -> list[Path]:
+    """
+    Legacy function: Get all possible config file locations.
+
+    Returns CLI config locations for backward compatibility.
+    """
+    return get_all_cli_config_locations()
+
+
+def get_all_secrets_locations() -> list[Path]:
+    """
+    Legacy function: Get all possible secrets file locations.
+
+    Returns CLI config locations for backward compatibility.
+    """
+    return get_all_cli_config_locations()
+
+
+def save_cli_config(config: dict) -> None:
+    """
+    Legacy function: Save CLI configuration.
+
+    Use save_cli_config_yaml() instead.
+    """
+    save_cli_config_yaml(config)

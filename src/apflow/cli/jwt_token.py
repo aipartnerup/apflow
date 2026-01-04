@@ -4,8 +4,8 @@ JWT token generator for CLI authentication.
 Provides secure token generation with JWT algorithm support.
 Supports multiple config locations with priority:
 1. APFLOW_CONFIG_DIR environment variable (highest priority)
-2. Project-local: .data/secrets.json (if in project)
-3. User-global: ~/.aipartnerup/apflow/secrets.json (fallback)
+2. Project-local: .data/config.cli.yaml (if in project)
+3. User-global: ~/.aipartnerup/apflow/config.cli.yaml (fallback)
 """
 
 from __future__ import annotations
@@ -29,21 +29,18 @@ JWT_SECRET_KEY = "jwt_secret"
 
 def get_jwt_secret_path() -> Path:
     """
-    Get JWT secret file path (secrets.json).
+    Get JWT secret file path (config.cli.yaml).
 
     Uses config directory priority:
-    1. Project-local: .data/secrets.json
-    2. User-global: ~/.aipartnerup/apflow/secrets.json
+    1. Project-local: .data/config.cli.yaml
+    2. User-global: ~/.aipartnerup/apflow/config.cli.yaml
 
     Returns:
-        Path to secrets.json (project-local or user-global)
+        Path to config.cli.yaml (project-local or user-global)
     """
-    from apflow.cli.cli_config import (
-        get_config_file_path,
-        SECRETS_FILE,
-    )
+    from apflow.cli.cli_config import get_cli_config_file_path
 
-    return get_config_file_path(SECRETS_FILE)
+    return get_cli_config_file_path()
 
 
 def ensure_local_jwt_secret() -> str:
@@ -51,16 +48,16 @@ def ensure_local_jwt_secret() -> str:
     Get or create local JWT secret.
 
     Stores secret in appropriate location:
-    - Project-local: .data/secrets.json (if in project)
-    - User-global: ~/.aipartnerup/apflow/secrets.json (fallback)
+    - Project-local: .data/config.cli.yaml (if in project)
+    - User-global: ~/.aipartnerup/apflow/config.cli.yaml (fallback)
 
     Returns:
         JWT secret string
     """
     from apflow.cli.cli_config import (
         ensure_config_dir,
-        load_secrets_config,
-        save_secrets_config,
+        load_cli_config,
+        save_cli_config_yaml,
     )
 
     ensure_config_dir()
@@ -69,9 +66,9 @@ def ensure_local_jwt_secret() -> str:
     # Load existing secret if file exists
     if secret_file.exists():
         try:
-            secrets = load_secrets_config()
-            if JWT_SECRET_KEY in secrets:
-                return secrets[JWT_SECRET_KEY]
+            config = load_cli_config()
+            if JWT_SECRET_KEY in config:
+                return config[JWT_SECRET_KEY]
         except Exception as e:
             logger.warning(
                 f"Failed to load JWT secret from {secret_file}: {e}"
@@ -82,9 +79,9 @@ def ensure_local_jwt_secret() -> str:
 
     # Save for future use
     try:
-        secrets = load_secrets_config()
-        secrets[JWT_SECRET_KEY] = secret
-        save_secrets_config(secrets)
+        config = load_cli_config()
+        config[JWT_SECRET_KEY] = secret
+        save_cli_config_yaml(config)
         logger.debug(f"Saved JWT secret to {secret_file}")
     except Exception as e:
         logger.warning(f"Failed to save JWT secret to {secret_file}: {e}")
@@ -105,7 +102,7 @@ def _generate_jwt_secret() -> str:
 def generate_token(
     subject: str = "apflow-user",
     secret: Optional[str] = None,
-    algo: str = DEFAULT_JWT_ALGO,
+    algo: Optional[str] = None,
     expiry_days: int = DEFAULT_JWT_EXPIRY_DAYS,
     extra_claims: Optional[dict] = None,
 ) -> str:
@@ -115,7 +112,7 @@ def generate_token(
     Args:
         subject: Token subject (typically username or app name)
         secret: JWT secret key. If None, uses local default
-        algo: JWT algorithm (HS256, HS512, etc.)
+        algo: JWT algorithm (HS256, HS512, etc.). If None, reads from config or uses default
         expiry_days: Token expiration in days
         extra_claims: Additional JWT claims
         
@@ -124,6 +121,16 @@ def generate_token(
     """
     if secret is None:
         secret = ensure_local_jwt_secret()
+    
+    # Get algorithm from config if not provided
+    if algo is None:
+        try:
+            from apflow.cli.cli_config import load_cli_config
+
+            config = load_cli_config()
+            algo = config.get("jwt_algorithm", DEFAULT_JWT_ALGO)
+        except Exception:
+            algo = DEFAULT_JWT_ALGO
     
     now = datetime.now(timezone.utc)
     expiry = now + timedelta(days=expiry_days)
@@ -149,7 +156,7 @@ def generate_token(
 def verify_token(
     token: str,
     secret: Optional[str] = None,
-    algo: str = DEFAULT_JWT_ALGO,
+    algo: Optional[str] = None,
 ) -> dict:
     """
     Verify and decode a JWT token.
@@ -157,7 +164,7 @@ def verify_token(
     Args:
         token: JWT token string
         secret: JWT secret key. If None, uses local default
-        algo: JWT algorithm
+        algo: JWT algorithm. If None, reads from config or uses default
         
     Returns:
         Decoded token payload
@@ -167,6 +174,16 @@ def verify_token(
     """
     if secret is None:
         secret = ensure_local_jwt_secret()
+    
+    # Get algorithm from config if not provided
+    if algo is None:
+        try:
+            from apflow.cli.cli_config import load_cli_config
+
+            config = load_cli_config()
+            algo = config.get("jwt_algorithm", DEFAULT_JWT_ALGO)
+        except Exception:
+            algo = DEFAULT_JWT_ALGO
     
     try:
         payload = jwt.decode(token, secret, algorithms=[algo])

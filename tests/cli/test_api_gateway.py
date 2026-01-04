@@ -57,8 +57,10 @@ async def test_config_manager_api_configuration():
     assert cm.is_api_configured()
     assert cm.get_api_server_url() == "http://localhost:8000"
 
-    # Configure auth token
-    cm.set_api_auth_token("test-token")
+    # Configure auth token (using admin_auth_token)
+    cm.set_admin_auth_token("test-token")
+    assert cm.get_admin_auth_token() == "test-token"
+    # Backward compatibility
     assert cm.get_api_auth_token() == "test-token"
 
     # Configure timeouts and retry
@@ -144,7 +146,7 @@ async def test_config_manager_multiple_configurations():
 
     # Set multiple configurations
     cm.set_api_server_url("http://api.example.com:9000")
-    cm.set_api_auth_token("bearer-token-xyz")
+    cm.set_admin_auth_token("bearer-token-xyz")
     cm.set_api_timeout(120.0)
     cm.set_api_retry_attempts(10)
     cm.set_api_retry_backoff(0.5)
@@ -152,6 +154,8 @@ async def test_config_manager_multiple_configurations():
 
     # Verify all are set correctly
     assert cm.get_api_server_url() == "http://api.example.com:9000"
+    assert cm.get_admin_auth_token() == "bearer-token-xyz"
+    # Backward compatibility
     assert cm.get_api_auth_token() == "bearer-token-xyz"
     assert cm.get_api_timeout() == 120.0
     assert cm.get_api_retry_attempts() == 10
@@ -162,6 +166,8 @@ async def test_config_manager_multiple_configurations():
     # Clear and verify reset to defaults
     cm.clear()
     assert cm.get_api_server_url() is None
+    assert cm.get_admin_auth_token() is None
+    # Backward compatibility
     assert cm.get_api_auth_token() is None
     assert cm.get_api_timeout() == 30.0
     assert cm.get_api_retry_attempts() == 3

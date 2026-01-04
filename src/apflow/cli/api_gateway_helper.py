@@ -62,7 +62,7 @@ async def get_api_client_if_configured() -> Optional[APIClient]:
     
     cm = get_config_manager()
     server_url = cm.api_server_url
-    auth_token = cm.api_auth_token
+    auth_token = cm.admin_auth_token
     timeout = cm.api_timeout
     retry_attempts = cm.api_retry_attempts
     retry_backoff = cm.api_retry_backoff

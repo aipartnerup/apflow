@@ -57,6 +57,7 @@ cli = [
     "nest_asyncio>=1.5.0",  # For handling nested event loops in async CLI commands
     "httpx>=0.27.0",  # For CLI → API gateway communication
     "PyJWT>=2.8.0",  # For JWT token generation and verification
+    "pyyaml>=6.0.0",  # For YAML configuration file support
 ]
 
 # PostgreSQL storage (enterprise/distributed scenarios)

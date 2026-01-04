@@ -42,12 +42,12 @@ def set_config(
 
     Supports common aliases for convenience:
         api-server, api-url -> api_server_url
-        api-token, token -> api_auth_token
+        api-token, token -> admin_auth_token
 
     Examples:
         apflow config set api_server_url http://localhost:8000
         apflow config set api-server http://localhost:8000
-        apflow config set api_auth_token my-token-xyz
+        apflow config set admin_auth_token my-token-xyz
         apflow config set api-token my-token-xyz
     """
     try:
@@ -55,8 +55,8 @@ def set_config(
         alias_map = {
             "api-server": "api_server_url",
             "api-url": "api_server_url",
-            "api-token": "api_auth_token",
-            "token": "api_auth_token",
+            "api-token": "admin_auth_token",
+            "token": "admin_auth_token",
         }
         actual_key = alias_map.get(key, key)
 
@@ -73,16 +73,9 @@ def set_config(
             typer.echo(f"   Value: {value}")
 
         # Show path
-        from apflow.cli.cli_config import (
-            get_all_config_locations,
-            get_all_secrets_locations,
-        )
+        from apflow.cli.cli_config import get_cli_config_file_path
 
-        if is_sensitive:
-            typer.echo(f"   Location: {get_all_secrets_locations()[0]}")
-        else:
-            typer.echo(f"   Location: {get_all_config_locations()[0]}")
-        typer.echo(f"   Location: {get_config_file_path()}")
+        typer.echo(f"   Location: {get_cli_config_file_path()}")
         
 
     except Exception as e:
@@ -99,12 +92,12 @@ def get_config(
     
     Supports common aliases for convenience:
         api-server, api-url -> api_server_url
-        api-token, token -> api_auth_token
+        api-token, token -> admin_auth_token
     
     Examples:
         apflow config get api_server_url
         apflow config get api-server
-        apflow config get api_auth_token
+        apflow config get admin_auth_token
         apflow config get api-token
     """
     try:
@@ -112,8 +105,8 @@ def get_config(
         alias_map = {
             "api-server": "api_server_url",
             "api-url": "api_server_url",
-            "api-token": "api_auth_token",
-            "token": "api_auth_token",
+            "api-token": "admin_auth_token",
+            "token": "admin_auth_token",
         }
         actual_key = alias_map.get(key, key)
         
@@ -198,12 +191,12 @@ def unset_config(
     
     Supports common aliases for convenience:
         api-server, api-url -> api_server_url
-        api-token, token -> api_auth_token
+        api-token, token -> admin_auth_token
     
     Examples:
         apflow config unset api_server_url
         apflow config unset api-server
-        apflow config unset api_auth_token --yes
+        apflow config unset admin_auth_token --yes
         apflow config unset api-token --yes
     """
     try:
@@ -211,8 +204,8 @@ def unset_config(
         alias_map = {
             "api-server": "api_server_url",
             "api-url": "api_server_url",
-            "api-token": "api_auth_token",
-            "token": "api_auth_token",
+            "api-token": "admin_auth_token",
+            "token": "admin_auth_token",
         }
         actual_key = alias_map.get(key, key)
         
@@ -261,7 +254,7 @@ def gen_token(
     save: Optional[str] = typer.Option(
         None,
         "--save",
-        help="Save token to config key (e.g., api_auth_token)",
+        help="Save token to config key (e.g., admin_auth_token)",
     ),
 ):
     """
@@ -274,7 +267,7 @@ def gen_token(
         apflow config gen-token
         apflow config gen-token --role admin
         apflow config gen-token --subject my-app --expiry 30
-        apflow config gen-token --role admin --save api_auth_token
+        apflow config gen-token --role admin --save admin_auth_token
     """
     try:
         # Build extra claims
@@ -312,8 +305,8 @@ def gen_token(
             alias_map = {
                 "api-server": "api_server_url",
                 "api-url": "api_server_url",
-                "api-token": "api_auth_token",
-                "token": "api_auth_token",
+                "api-token": "admin_auth_token",
+                "token": "admin_auth_token",
             }
             actual_key = alias_map.get(save, save)
 
@@ -321,16 +314,9 @@ def gen_token(
             is_sensitive = "token" in actual_key.lower() or "secret" in actual_key.lower()
             set_config_value(actual_key, token, is_sensitive=is_sensitive)
             typer.echo(f"\n✅ Token saved to config key: {actual_key}")
-            from apflow.cli.cli_config import (
-                get_config_file_path,
-                CONFIG_FILE,
-                SECRETS_FILE,
-            )
+            from apflow.cli.cli_config import get_cli_config_file_path
 
-            if is_sensitive:
-                typer.echo(f"   Location: {get_config_file_path(SECRETS_FILE)}")
-            else:
-                typer.echo(f"   Location: {get_config_file_path(CONFIG_FILE)}")
+            typer.echo(f"   Location: {get_cli_config_file_path()}")
 
     except Exception as e:
         typer.echo(f"❌ Error generating token: {str(e)}", err=True)
@@ -353,14 +339,18 @@ def init_server(
     """
     Initialize API server configuration with auto-generated JWT token.
 
-    Convenience command that configures API server and generates token.
+    This command generates a local admin_auth_token using CLI's own jwt_secret.
+    The token is signed with CLI's jwt_algorithm (default: HS256).
+
+    For the token to work with an API server, that server's APFLOW_JWT_SECRET_KEY
+    must match CLI's jwt_secret. For localhost, this usually works automatically.
+
     Equivalent to running:
         apflow config set api-server <url>
-        apflow config gen-token --role <role> --save api-token
+        apflow config gen-token --role <role> --save admin_auth_token
 
     Config saved to:
-        config.json (api_server_url)
-        secrets.json (api_auth_token)
+        config.cli.yaml (unified CLI configuration)
 
     Examples:
         apflow config init-server
@@ -368,46 +358,79 @@ def init_server(
         apflow config init-server --url http://localhost:8000 --role user
     """
     try:
+        from apflow.cli.cli_config import (
+            get_cli_config_file_path,
+            is_localhost_url,
+            load_cli_config,
+            save_cli_config_yaml,
+        )
+
         # Normalize URL (remove trailing slash)
         url = url.rstrip("/")
 
-        # Set server URL (non-sensitive, config.json)
-        set_config_value("api_server_url", url, is_sensitive=False)
+        # Load existing config
+        config = load_cli_config()
 
-        # Generate and save token (sensitive, secrets.json)
+        # Set server URL
+        config["api_server_url"] = url
+
+        # Check if jwt_secret is required
+        if not is_localhost_url(url):
+            if "jwt_secret" not in config:
+                typer.echo(
+                    f"⚠️  Warning: jwt_secret is required for non-localhost URLs.\n"
+                    f"   Generating jwt_secret automatically..."
+                )
+                from apflow.cli.jwt_token import ensure_local_jwt_secret
+
+                config["jwt_secret"] = ensure_local_jwt_secret()
+
+        # Ensure jwt_secret exists (for token generation)
+        if "jwt_secret" not in config:
+            from apflow.cli.jwt_token import ensure_local_jwt_secret
+
+            config["jwt_secret"] = ensure_local_jwt_secret()
+
+        # Set jwt_algorithm if not set
+        if "jwt_algorithm" not in config:
+            config["jwt_algorithm"] = "HS256"
+
+        # Generate and save token
+        from apflow.cli.jwt_token import generate_token
+
         token = generate_token(
             subject="apflow-cli",
             extra_claims={"role": role},
             expiry_days=365,
         )
-        set_config_value("api_auth_token", token, is_sensitive=True)
+        config["admin_auth_token"] = token
+
+        # Save unified config
+        save_cli_config_yaml(config)
 
         typer.echo("✅ API server configuration initialized!")
         typer.echo(f"   Server: {url}")
         typer.echo(f"   Token: {token[:20]}...***")
         typer.echo(f"   Role: {role}")
-        from apflow.cli.cli_config import (
-            get_config_file_path,
-            CONFIG_FILE,
-            SECRETS_FILE,
-        )
-
-        typer.echo("\nSaved to:")
-        typer.echo(
-            f"   config.json  (non-sensitive): "
-            f"{get_config_file_path(CONFIG_FILE)}"
-        )
-        typer.echo(
-            f"   secrets.json (sensitive):     "
-            f"{get_config_file_path(SECRETS_FILE)}"
-        )
+        typer.echo(f"\n📁 Saved to: {get_cli_config_file_path()}")
+        typer.echo()
+        typer.echo("💡 Note: This token is generated using CLI's local jwt_secret.")
+        if is_localhost_url(url):
+            typer.echo(
+                "   For localhost, the token will work if the API server uses the same jwt_secret."
+            )
+        else:
+            typer.echo(
+                "   For remote servers, configure the server's APFLOW_JWT_SECRET_KEY "
+                "environment variable to match CLI's jwt_secret."
+            )
         typer.echo()
         typer.echo("You can now run:")
         typer.echo("   apflow tasks list     # Use CLI with API")
         typer.echo()
         typer.echo("Or manually configure using:")
         typer.echo(f"   apflow config set api-server {url}")
-        typer.echo("   apflow config gen-token --role admin --save api-token")
+        typer.echo("   apflow config gen-token --role admin --save admin_auth_token")
 
     except Exception as e:
         typer.echo(f"❌ Error initializing server: {str(e)}", err=True)
@@ -424,37 +447,29 @@ def show_path():
     [Alias: path]
     """
     from apflow.cli.cli_config import (
-        get_all_config_locations,
-        get_all_secrets_locations,
+        get_all_cli_config_locations,
         get_config_dir,
+        get_cli_config_file_path,
     )
 
-    active_config = get_config_file_path()
-    active_secrets_dir = get_config_dir()
+    active_config = get_cli_config_file_path()
+    active_config_dir = get_config_dir()
 
     typer.echo("📁 Configuration Structure\n")
 
-    typer.echo("Non-sensitive config (config.json):")
-    for i, location in enumerate(get_all_config_locations(), 1):
+    typer.echo("CLI config (config.cli.yaml):")
+    for i, location in enumerate(get_all_cli_config_locations(), 1):
         exists = "✅" if location.exists() else "⚪"
         active = "🔵 ACTIVE" if location == active_config else ""
         typer.echo(f"  {i}. {exists} {location} {active}")
 
-    typer.echo("\nSensitive config (secrets.json):")
-    for i, location in enumerate(get_all_secrets_locations(), 1):
-        exists = "✅" if location.exists() else "⚪"
-        active = "🔵 ACTIVE" if location == active_secrets_dir / "secrets.json" else ""
-        typer.echo(f"  {i}. {exists} {location} {active}")
-
     typer.echo("\nActive config directory:")
-    typer.echo(f"  {active_secrets_dir}")
+    typer.echo(f"  {active_config_dir}")
 
     if active_config.exists():
         import datetime
 
-        mtime = datetime.datetime.fromtimestamp(
-            active_config.stat().st_mtime
-        )
+        mtime = datetime.datetime.fromtimestamp(active_config.stat().st_mtime)
         typer.echo("\nActive config details:")
         typer.echo(f"  Size: {active_config.stat().st_size} bytes")
         typer.echo(f"  Modified: {mtime.strftime('%Y-%m-%d %H:%M:%S')}")
@@ -467,8 +482,7 @@ def show_path():
     typer.echo("  3. User-global: ~/.aipartnerup/apflow/ (default)")
 
     typer.echo("\n🔒 File Permissions:")
-    typer.echo("  config.json:  644 (readable by all)")
-    typer.echo("  secrets.json: 600 (owner-only access)")
+    typer.echo("  config.cli.yaml: 600 (owner-only access)")
 
 
 @app.command("path")
@@ -493,18 +507,20 @@ def reset_config(
         apflow config reset --yes
     """
     try:
-        path = get_config_file_path()
-        
+        from apflow.cli.cli_config import get_cli_config_file_path
+
+        path = get_cli_config_file_path()
+
         if not path.exists():
             typer.echo("⚠️  No configuration file found")
             return
-        
+
         if not confirm:
             typer.echo(f"This will delete: {path}")
             if not typer.confirm("Are you sure you want to reset all configuration?"):
                 typer.echo("Cancelled")
                 raise typer.Exit(0)
-        
+
         path.unlink()
         typer.echo("✅ Configuration reset successfully")
         typer.echo(f"   Deleted: {path}")
@@ -519,27 +535,29 @@ def reset_config(
 def verify_token_cmd(
     token: Optional[str] = typer.Argument(
         None,
-        help="Token to verify (if not provided, uses api_auth_token from config)"
+        help="Token to verify (if not provided, uses admin_auth_token from config)"
     ),
 ):
     """
     Verify and display JWT token information.
     
-    Can verify a specific token or the configured api_auth_token.
+    Can verify a specific token or the configured admin_auth_token.
     
     Examples:
         apflow config verify-token                    # Verify configured token
         apflow config verify-token eyJhbGci...       # Verify specific token
     """
     try:
-        # If no token provided, get from config
+        # If no token provided, get from config (try admin_auth_token first, then legacy api_auth_token)
         if not token:
-            token = get_config_value("api_auth_token")
+            token = get_config_value("admin_auth_token")
             if not token:
-                typer.echo("❌ No token provided and no api_auth_token in config")
+                token = get_config_value("api_auth_token")  # Backward compatibility
+            if not token:
+                typer.echo("❌ No token provided and no admin_auth_token in config")
                 typer.echo("   Use: apflow config verify-token <token>")
                 raise typer.Exit(1)
-            typer.echo("Verifying configured api_auth_token...\n")
+            typer.echo("Verifying configured admin_auth_token...\n")
         
         # Get token info (without verification)
         info = get_token_info(token)
@@ -588,12 +606,15 @@ def edit_config():
     import os
     
     try:
-        path = get_config_file_path()
-        
+        from apflow.cli.cli_config import get_cli_config_file_path, ensure_config_dir
+
+        path = get_cli_config_file_path()
+
         # Create file if it doesn't exist
         if not path.exists():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text("{}")
+            ensure_config_dir()
+            # Create empty YAML file
+            path.write_text("# CLI Configuration\n# See docs for configuration options\n")
             typer.echo(f"Created empty config file: {path}")
         
         # Get editor from environment or use defaults
@@ -636,22 +657,28 @@ def validate_config():
         apflow config validate
     """
     try:
-        path = get_config_file_path()
-        
+        from apflow.cli.cli_config import (
+            get_cli_config_file_path,
+            is_localhost_url,
+            validate_cli_config,
+        )
+
+        path = get_cli_config_file_path()
+
         if not path.exists():
             typer.echo("⚠️  No configuration file found")
             typer.echo(f"   Expected: {path}")
             typer.echo("\n💡 Run: apflow config init-server")
             return
-        
+
         typer.echo("🔍 Validating configuration...\n")
-        
-        # Check JSON syntax
+
+        # Check YAML syntax
         try:
             config = load_cli_config()
-            typer.echo("✅ JSON syntax valid")
-        except json.JSONDecodeError as e:
-            typer.echo(f"❌ JSON syntax error: {str(e)}")
+            typer.echo("✅ YAML syntax valid")
+        except Exception as e:
+            typer.echo(f"❌ YAML syntax error: {str(e)}")
             raise typer.Exit(1)
         
         # Check if config is empty
@@ -662,22 +689,49 @@ def validate_config():
         
         typer.echo(f"✅ Found {len(config)} configuration key(s)")
         
+        # Validate configuration rules
+        try:
+            validate_cli_config(config)
+            typer.echo("✅ Configuration validation passed")
+        except ValueError as e:
+            typer.echo(f"❌ Configuration validation failed: {str(e)}")
+            raise typer.Exit(1)
+
         # Check API server URL
         api_url = config.get("api_server_url")
         if api_url:
             typer.echo(f"✅ API server configured: {api_url}")
+            is_localhost = is_localhost_url(api_url)
+            if is_localhost:
+                typer.echo("   ℹ️  Localhost detected - jwt_secret is optional")
+            else:
+                typer.echo("   ℹ️  Remote server - jwt_secret is required")
         else:
             typer.echo("⚠️  No API server URL configured")
-        
+
+        # Check jwt_secret
+        jwt_secret = config.get("jwt_secret")
+        if jwt_secret:
+            typer.echo("✅ jwt_secret configured")
+        else:
+            if api_url and not is_localhost_url(api_url):
+                typer.echo("❌ jwt_secret is REQUIRED for non-localhost URLs")
+            else:
+                typer.echo("ℹ️  jwt_secret not configured (optional for localhost)")
+
+        # Check jwt_algorithm
+        jwt_algorithm = config.get("jwt_algorithm", "HS256")
+        typer.echo(f"✅ jwt_algorithm: {jwt_algorithm}")
+
         # Check and validate token
-        token = config.get("api_auth_token")
+        token = config.get("admin_auth_token") or config.get("api_auth_token")
         if token:
-            typer.echo("✅ API auth token configured")
-            
+            typer.echo("✅ Admin auth token configured")
+
             # Check token expiry
             try:
                 info = get_token_info(token)
-                days = info.get('expires_in_days')
+                days = info.get("expires_in_days")
                 if days is not None:
                     if days < 0:
                         typer.echo(f"   ⚠️  Token EXPIRED ({abs(days)} days ago)")
@@ -688,12 +742,15 @@ def validate_config():
             except Exception as e:
                 typer.echo(f"   ⚠️  Could not parse token: {str(e)}")
         else:
-            typer.echo("⚠️  No API auth token configured")
-        
+            typer.echo("ℹ️  No admin auth token configured (optional)")
+
         # Summary
-        typer.echo("\n" + "="*50)
-        if api_url and token:
-            typer.echo("✅ Configuration looks good!")
+        typer.echo("\n" + "=" * 50)
+        if api_url:
+            if not is_localhost_url(api_url) and not jwt_secret:
+                typer.echo("❌ Configuration incomplete (jwt_secret required)")
+            else:
+                typer.echo("✅ Configuration looks good!")
         else:
             typer.echo("⚠️  Configuration incomplete")
             typer.echo("\n💡 Run: apflow config init-server")
@@ -759,21 +816,30 @@ def init_interactive():
         # Generate configuration
         typer.echo("\n🔧 Generating configuration...")
         
-        set_config_value("api_server_url", api_url)
-        
+        from apflow.cli.cli_config import (
+            get_cli_config_file_path,
+            load_cli_config,
+            save_cli_config_yaml,
+        )
+
+        config = load_cli_config()
+        config["api_server_url"] = api_url
+
         token = generate_token(
             subject="apflow-cli",
             extra_claims={"role": role},
             expiry_days=expiry,
         )
-        set_config_value("api_auth_token", token)
-        
+        config["admin_auth_token"] = token
+
+        save_cli_config_yaml(config)
+
         typer.echo("\n✅ Configuration saved successfully!")
         typer.echo(f"   Server: {api_url}")
         typer.echo(f"   Token: {token[:20]}...***")
         typer.echo(f"   Role: {role}")
         typer.echo(f"   Expiry: {expiry} days")
-        typer.echo(f"   Location: {get_config_file_path()}")
+        typer.echo(f"   Location: {get_cli_config_file_path()}")
         
         typer.echo("\n💡 Next steps:")
         typer.echo("   apflow config validate    # Validate configuration")
