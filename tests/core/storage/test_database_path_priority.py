@@ -5,12 +5,30 @@ Note: DATABASE_URL and APFLOW_DATABASE_URL take precedence over file paths.
 These tests focus on the file path resolution when connection strings are not set.
 """
 
+import logging
 import os
 from unittest.mock import patch
 
 import pytest
 
 from apflow.core.storage.factory import _get_default_db_path
+
+
+@pytest.fixture
+def reset_logging():
+    """Reset logging configuration to ensure clean state for tests."""
+    # Get the factory logger and ensure DEBUG level is not permanently set
+    factory_logger = logging.getLogger("apflow.core.storage.factory")
+    original_level = factory_logger.level
+    original_handlers = factory_logger.handlers.copy()
+    
+    yield
+    
+    # Restore original logging state
+    factory_logger.setLevel(original_level)
+    for handler in factory_logger.handlers[:]:
+        if handler not in original_handlers:
+            factory_logger.removeHandler(handler)
 
 
 @pytest.fixture
@@ -186,13 +204,39 @@ class TestDatabaseUrlEnvironmentVariables:
 class TestDatabasePathLogging:
     """Tests for database path logging behavior."""
 
+    def test_logging_isolation_even_after_pollution(
+        self, temp_project_with_pyproject, mock_home_dir, caplog, reset_logging
+    ):
+        """Test that logging isolation works even after other tests pollute logger state.
+        
+        This test simulates environment pollution by a previous test that may have
+        modified the logger state, and verifies that our logging capture still works.
+        """
+        import logging
+        
+        # Simulate environment pollution from previous test
+        factory_logger = logging.getLogger("apflow.core.storage.factory")
+        # Set to WARNING level to simulate pollution
+        factory_logger.setLevel(logging.WARNING)
+        
+        # Now verify that caplog.at_level() properly overrides this
+        with caplog.at_level(logging.DEBUG, logger="apflow.core.storage.factory"):
+            with patch("pathlib.Path.cwd", return_value=temp_project_with_pyproject):
+                with patch("pathlib.Path.home", return_value=mock_home_dir):
+                    with patch.dict(os.environ, {}, clear=True):
+                        _get_default_db_path()
+                        
+                        # Even with polluted logger state, caplog.at_level should capture it
+                        assert any("Database path:" in record.message for record in caplog.records), \
+                            f"Expected log message not found. Captured records: {[r.message for r in caplog.records]}"
+
     def test_debug_log_for_project_local_path(
-        self, temp_project_with_pyproject, mock_home_dir, caplog
+        self, temp_project_with_pyproject, mock_home_dir, caplog, reset_logging
     ):
         """Test that debug log is emitted when using project-local path."""
         import logging
         
-        with caplog.at_level(logging.DEBUG):
+        with caplog.at_level(logging.DEBUG, logger="apflow.core.storage.factory"):
             with patch("pathlib.Path.cwd", return_value=temp_project_with_pyproject):
                 with patch("pathlib.Path.home", return_value=mock_home_dir):
                     with patch.dict(os.environ, {}, clear=True):
@@ -203,7 +247,7 @@ class TestDatabasePathLogging:
                         assert any("project-local" in record.message.lower() for record in caplog.records)
 
     def test_debug_log_for_legacy_path(
-        self, temp_project_with_pyproject, mock_home_dir, caplog
+        self, temp_project_with_pyproject, mock_home_dir, caplog, reset_logging
     ):
         """Test that debug log with tip is emitted when using legacy path."""
         import logging
@@ -214,7 +258,7 @@ class TestDatabasePathLogging:
         legacy_db = legacy_dir / "apflow.duckdb"
         legacy_db.touch()
 
-        with caplog.at_level(logging.DEBUG):
+        with caplog.at_level(logging.DEBUG, logger="apflow.core.storage.factory"):
             with patch("pathlib.Path.cwd", return_value=temp_project_with_pyproject):
                 with patch("pathlib.Path.home", return_value=mock_home_dir):
                     with patch.dict(os.environ, {}, clear=True):
