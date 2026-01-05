@@ -7,7 +7,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
-import pytest
 
 from apflow.cli.cli_config import (
     load_cli_config,

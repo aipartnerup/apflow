@@ -112,13 +112,11 @@ class ConfigManager:
         This enables users to connect without initializing config.cli.yaml.
         """
         config = {}
-        config_loaded_from_file = False
         
         try:
             from apflow.cli.cli_config import load_cli_config as load_config
 
             config = load_config()
-            config_loaded_from_file = True
             logger.debug("Loaded API config from CLI config file")
         except ImportError:
             # cli_config module not available (shouldn't happen in CLI context)
