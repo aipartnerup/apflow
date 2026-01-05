@@ -153,7 +153,10 @@ class APIClient:
         headers = kwargs.pop("headers", {})
 
         if self.auth_token:
+            logger.debug("Using auth token for API request")
             headers["Authorization"] = f"Bearer {self.auth_token}"
+        else:
+            logger.debug("No auth token provided for API request")
 
         if not self._client:
             # Use same proxy configuration logic as __aenter__

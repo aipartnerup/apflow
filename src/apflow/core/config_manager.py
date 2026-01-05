@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Iterable, List, Optional, Type
@@ -97,38 +98,64 @@ class ConfigManager:
 
     def load_cli_config(self) -> None:
         """
-        Load API configuration from CLI config file.
+        Load API configuration from CLI config file or environment variables.
 
-        Loads unified configuration from config.cli.yaml:
+        Loads unified configuration from config.cli.yaml (if exists):
         1. Project-local: <project>/.data/config.cli.yaml
         2. User-global: ~/.aipartnerup/apflow/config.cli.yaml
 
-        This is called automatically by the CLI to load persisted configuration.
-        Useful for remembering API server URL and auth token between sessions.
+        Falls back to environment variables (.env) if config file doesn't exist:
+        - APFLOW_BASE_URL: Full API server URL (e.g., http://localhost:8000)
+        - APFLOW_API_HOST and APFLOW_API_PORT: Construct URL from host:port
+        - APFLOW_ADMIN_AUTH_TOKEN: Admin auth token
+
+        This enables users to connect without initializing config.cli.yaml.
         """
+        config = {}
+        config_loaded_from_file = False
+        
         try:
             from apflow.cli.cli_config import load_cli_config as load_config
 
             config = load_config()
-
-            # Load API configuration from unified config
-            if "api_server_url" in config:
-                self.set_api_server_url(config["api_server_url"])
-
-            # Load admin_auth_token (migrated from api_auth_token)
-            if "admin_auth_token" in config:
-                self.set_admin_auth_token(config["admin_auth_token"])
-            elif "api_auth_token" in config:
-                # Backward compatibility: migrate api_auth_token -> admin_auth_token
-                self.set_admin_auth_token(config["api_auth_token"])
-                logger.debug("Migrated api_auth_token -> admin_auth_token")
-
+            config_loaded_from_file = True
             logger.debug("Loaded API config from CLI config file")
         except ImportError:
             # cli_config module not available (shouldn't happen in CLI context)
             pass
         except Exception as e:
-            logger.warning(f"Failed to load CLI config: {e}")
+            logger.debug(f"CLI config file not found or failed to load: {e}")
+
+        # Load API server URL
+        if "api_server_url" in config:
+            self.set_api_server_url(config["api_server_url"])
+        else:
+            # Check .env APFLOW_BASE_URL first, then construct from host:port
+            from apflow.core.utils.helpers import get_url_with_host_and_port
+            
+            base_url = os.getenv("APFLOW_BASE_URL")
+            if not base_url:
+                host = os.getenv("APFLOW_API_HOST", os.getenv("API_HOST", "localhost"))
+                port = int(os.getenv("APFLOW_API_PORT", os.getenv("API_PORT", "8000")))
+                base_url = get_url_with_host_and_port(host, port)
+            
+            self.set_api_server_url(base_url)
+            if not config_loaded_from_file:
+                logger.debug(f"Loaded API server URL from environment: {base_url}")
+
+        # Load admin_auth_token (migrated from api_auth_token)
+        if "admin_auth_token" in config:
+            self.set_admin_auth_token(config["admin_auth_token"])
+        elif "api_auth_token" in config:
+            # Backward compatibility: migrate api_auth_token -> admin_auth_token
+            self.set_admin_auth_token(config["api_auth_token"])
+            logger.debug("Migrated api_auth_token -> admin_auth_token")
+        else:
+            # Check environment variable if not in config file
+            auth_token = os.getenv("APFLOW_ADMIN_AUTH_TOKEN")
+            if auth_token:
+                self.set_admin_auth_token(auth_token)
+                logger.debug("Loaded admin auth token from environment")
 
     def set_task_model_class(self, task_model_class: Optional['TaskModel']) -> None:
         self._registry.set_task_model_class(task_model_class)

@@ -192,106 +192,6 @@ def validate_cli_config(config: dict) -> None:
         config["jwt_algorithm"] = "HS256"
 
 
-def migrate_json_to_yaml() -> Optional[dict]:
-    """
-    Migrate legacy JSON files (config.json + secrets.json) to unified YAML format.
-
-    Merges config.json and secrets.json into a single config.cli.yaml file.
-    Renames api_auth_token to admin_auth_token during migration.
-
-    Returns:
-        Merged configuration dictionary if migration occurred, None otherwise
-    """
-    config_dir = get_config_dir()
-    legacy_config_path = config_dir / LEGACY_CONFIG_FILE
-    legacy_secrets_path = config_dir / LEGACY_SECRETS_FILE
-    yaml_config_path = config_dir / CLI_CONFIG_FILE
-
-    # Check if YAML file already exists
-    if yaml_config_path.exists():
-        return None
-
-    # Check if legacy files exist
-    has_config = legacy_config_path.exists()
-    has_secrets = legacy_secrets_path.exists()
-
-    if not (has_config or has_secrets):
-        return None
-
-    logger.info("Migrating legacy JSON config files to YAML format...")
-
-    # Load legacy files
-    config = {}
-    secrets = {}
-
-    if has_config:
-        try:
-            with open(legacy_config_path, "r") as f:
-                config = json.load(f)
-            logger.debug(f"Loaded legacy config from {legacy_config_path}")
-        except Exception as e:
-            logger.warning(f"Failed to load legacy config: {e}")
-
-    if has_secrets:
-        try:
-            with open(legacy_secrets_path, "r") as f:
-                secrets = json.load(f)
-            logger.debug(f"Loaded legacy secrets from {legacy_secrets_path}")
-        except Exception as e:
-            logger.warning(f"Failed to load legacy secrets: {e}")
-
-    # Merge configs
-    merged = config.copy()
-
-    # Migrate api_auth_token -> admin_auth_token
-    if "api_auth_token" in secrets:
-        merged["admin_auth_token"] = secrets.pop("api_auth_token")
-        logger.debug("Migrated api_auth_token -> admin_auth_token")
-
-    # Add other secrets
-    for key, value in secrets.items():
-        if key not in merged:
-            merged[key] = value
-
-    # Remove deprecated fields
-    deprecated_fields = [
-        "api_timeout",
-        "api_retry_attempts",
-        "auto_use_api_if_configured",
-        "use_local_db",
-    ]
-    for field in deprecated_fields:
-        merged.pop(field, None)
-
-    # Validate merged config
-    try:
-        validate_cli_config(merged)
-    except ValueError as e:
-        logger.warning(f"Config validation warning after migration: {e}")
-
-    # Save as YAML
-    ensure_config_dir()
-    try:
-        save_cli_config_yaml(merged)
-        logger.info(f"Successfully migrated to {yaml_config_path}")
-
-        # Backup legacy files
-        if has_config:
-            backup_path = legacy_config_path.with_suffix(".json.bak")
-            shutil.copy2(legacy_config_path, backup_path)
-            logger.debug(f"Backed up {legacy_config_path} to {backup_path}")
-
-        if has_secrets:
-            backup_path = legacy_secrets_path.with_suffix(".json.bak")
-            shutil.copy2(legacy_secrets_path, backup_path)
-            logger.debug(f"Backed up {legacy_secrets_path} to {backup_path}")
-
-        return merged
-    except Exception as e:
-        logger.error(f"Failed to save migrated config: {e}")
-        raise
-
-
 def load_yaml_file(file_path: Path) -> dict:
     """
     Load YAML file.
@@ -358,10 +258,6 @@ def load_cli_config() -> dict:
     Returns:
         Dictionary with config, empty dict if no config found
     """
-    # Try to migrate from legacy JSON files first
-    migrated_config = migrate_json_to_yaml()
-    if migrated_config is not None:
-        return migrated_config
 
     # Load YAML config
     for config_path in get_all_cli_config_locations():
@@ -533,10 +429,6 @@ def get_config_file_path(filename: str = CLI_CONFIG_FILE) -> Path:
     """
     if filename == CLI_CONFIG_FILE:
         return get_cli_config_file_path()
-    elif filename in (LEGACY_CONFIG_FILE, LEGACY_SECRETS_FILE):
-        # Legacy support
-        config_dir = get_config_dir()
-        return config_dir / filename
     else:
         # Default to CLI config file
         return get_cli_config_file_path()

@@ -138,7 +138,7 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
                     "error": {
                         "code": -32001,
                         "message": "Unauthorized",
-                        "data": "Missing Authorization header or cookie"
+                        "data": "Missing Authorization header or cookie. JWT authentication is enabled. Please provide a valid token via 'Authorization: Bearer <token>' header or set an admin_auth_token in CLI config using: apflow config set admin_auth_token <token> or apflow config gen-token --role admin --save admin_auth_token"
                     }
                 }
             )
