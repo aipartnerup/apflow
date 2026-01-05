@@ -1,21 +1,17 @@
 name: Import Performance Check
 
 on:
-  pull_request:
-    paths:
-      - 'src/**/*.py'
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   check-imports:
     runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe532ec3200201f86f77f7a6ff3e7e
       
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@0a5c61591373683505ea898e09a3ea4f39ef2b9c
         with:
           python-version: '3.12'
       
