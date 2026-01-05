@@ -83,7 +83,7 @@ class ConfigRegistry:
             if not is_subclass and hasattr(task_model_class, '__mro__'):
                 for base in task_model_class.__mro__:
                     # Check if base is TaskModel (current) or has TaskModel name and correct module
-                    if (base is TaskModel or 
+                    if (base is ImportedTaskModel or 
                         (hasattr(base, '__name__') and base.__name__ == 'TaskModel' and 
                          hasattr(base, '__module__') and 'apflow.core.storage.sqlalchemy.models' in base.__module__)):
                         is_subclass = True
