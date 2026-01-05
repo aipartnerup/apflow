@@ -2,9 +2,6 @@
 Tests for CLI config command.
 """
 
-import os
-import tempfile
-from pathlib import Path
 from click.testing import CliRunner
 import pytest
 from apflow.cli.main import cli
@@ -215,7 +212,7 @@ class TestInitServerEnvSync:
         assert "admin_auth_token" in config
 
     def test_init_server_generates_secret_when_env_not_set(self, tmp_path, monkeypatch, isolated_config_dir):
-        """Test that init-server generates new secret when .env doesn't have APFLOW_JWT_SECRET."""
+        """Test that init-server disables auth when .env doesn't have APFLOW_JWT_SECRET."""
         # Create .env file without APFLOW_JWT_SECRET
         env_file = tmp_path / ".env"
         env_file.write_text("OTHER_VAR=some_value\n")
@@ -236,17 +233,16 @@ class TestInitServerEnvSync:
         # Should succeed
         assert result.exit_code == 0
         assert "✅" in result.stdout
-        assert "Generated new JWT secret" in result.stdout
+        assert "authentication disabled" in result.stdout
 
-        # Verify jwt_secret was generated and saved
+        # Verify jwt_secret was NOT created and auth is disabled
         config = load_cli_config()
-        assert "jwt_secret" in config
-        assert config["jwt_secret"]  # Should not be empty
+        assert "jwt_secret" not in config or not config.get("jwt_secret")
         assert config.get("api_server_url") == "http://localhost:8000"
-        assert "admin_auth_token" in config
+        assert "admin_auth_token" not in config or not config.get("admin_auth_token")
 
     def test_init_server_generates_secret_when_no_env_file(self, tmp_path, monkeypatch, isolated_config_dir):
-        """Test that init-server generates new secret when .env file doesn't exist."""
+        """Test that init-server disables auth when .env file doesn't exist."""
         # Don't create .env file
 
         # Change to tmp_path directory
@@ -265,14 +261,13 @@ class TestInitServerEnvSync:
         # Should succeed
         assert result.exit_code == 0
         assert "✅" in result.stdout
-        assert "Generated new JWT secret" in result.stdout
+        assert "authentication disabled" in result.stdout
 
-        # Verify jwt_secret was generated and saved
+        # Verify jwt_secret was NOT created and auth is disabled
         config = load_cli_config()
-        assert "jwt_secret" in config
-        assert config["jwt_secret"]  # Should not be empty
+        assert "jwt_secret" not in config or not config.get("jwt_secret")
         assert config.get("api_server_url") == "http://localhost:8000"
-        assert "admin_auth_token" in config
+        assert "admin_auth_token" not in config or not config.get("admin_auth_token")
 
     def test_init_server_env_secret_syncs_with_existing_config(self, tmp_path, monkeypatch, isolated_config_dir):
         """Test that env secret overrides existing jwt_secret in config."""

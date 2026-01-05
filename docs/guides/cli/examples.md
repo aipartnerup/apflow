@@ -199,8 +199,7 @@ Setup CLI with API server for continuous monitoring:
 apflow config init-server
 
 # Creates:
-# - .data/config.json with api_server
-# - .data/secrets.json with JWT token
+# - .data/config.cli.yaml with api_server_url and JWT token
 ```
 
 **Step 2: Start API server**

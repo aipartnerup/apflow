@@ -114,20 +114,19 @@ Configuration is managed through the `apflow config` command and stored securely
 apflow config init-server --url http://localhost:8000 --role admin
 
 # Or manually configure
-apflow config set api-server http://localhost:8000
-apflow config gen-token --role admin --save api_auth_token
+apflow config set api_server_url http://localhost:8000
+apflow config gen-token --role admin --save
 
 # View configuration (tokens masked)
 apflow config list
-apflow config path  # Show file locations and priorities
+apflow config show-path  # Show file locations and priorities
 ```
 
 **Configuration Storage**:
 - **Project-local** (highest priority): `.data/` directory
 - **User-global** (fallback): `~/.aipartnerup/apflow/` directory
 - **Files**:
-  - `config.json` (644) - Non-sensitive settings
-  - `secrets.json` (600) - Sensitive credentials and tokens
+  - `config.cli.yaml` (600) - All CLI settings (sensitive and non-sensitive)
 
 ### 4. Verify Installation
 

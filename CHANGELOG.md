@@ -83,14 +83,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Priority 2: Project-local `.data/` directory (if in project with pyproject.toml/.git)
     - Priority 3: User-global `~/.aipartnerup/apflow/` (default fallback)
   - **Separated secrets architecture**:
-    - `config.json` (644 permissions) - Non-sensitive config (api_server_url, timeouts, etc.)
-    - `secrets.json` (600 permissions) - Sensitive credentials (api_auth_token, jwt_secret)
-  - Both files support multi-location priority system (shared locations for project and user-global)
+    - `config.cli.yaml` (600 permissions) - Unified configuration (all settings: api_server_url, timeouts, tokens, jwt_secret, etc.)
+  - Single file with multi-location priority system (project-local and user-global)
   - API server can also read from same multi-location config structure
-  - `gen-token --save` parameter (simpler than `--save-as`) to save tokens to secrets.json
+  - `gen-token --save` parameter to save tokens to config.cli.yaml
   - Token security: Automatic masking in all outputs, expiry validation, signature verification
-  - Alias support for convenience: `api-server`/`api-url` → `api_server_url`, `api-token`/`token` → `api_auth_token`
-  - `apflow config validate` checks JSON syntax, API server connectivity, and token validity
+  - Alias support for convenience: `api-server`/`api-url` → `api_server_url`, `api-token`/`token` → `admin_auth_token`
+  - `apflow config validate` checks YAML syntax, API server connectivity, and token validity
   - `apflow config verify-token` displays token details (subject, issuer, expiry, role) with status indicators
   - `apflow config init` provides interactive wizard for first-time setup
   - Added `PyJWT>=2.8.0` to CLI dependencies for JWT token support

@@ -2,7 +2,6 @@
 Tests for CLI configuration management.
 """
 
-import json
 import yaml
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -18,7 +17,6 @@ from apflow.cli.cli_config import (
     list_config_values,
     is_localhost_url,
     validate_cli_config,
-    get_cli_config_file_path,
 )
 
 
@@ -67,9 +65,8 @@ class TestCLIConfigPersistence:
             with patch("apflow.cli.cli_config.get_config_dir", return_value=config_dir):
                 with patch("apflow.cli.cli_config.get_cli_config_file_path", return_value=nonexistent_file):
                     with patch("apflow.cli.cli_config.get_all_cli_config_locations", return_value=[nonexistent_file]):
-                        with patch("apflow.cli.cli_config.migrate_json_to_yaml", return_value=None):
-                            loaded = load_cli_config()
-                            assert loaded == {}
+                        loaded = load_cli_config()
+                        assert loaded == {}
 
     def test_get_set_config_value(self):
         """Test get/set individual config values."""
@@ -216,14 +213,14 @@ class TestConfigValidation:
         assert config["jwt_algorithm"] == "HS256"
 
     def test_validate_non_localhost_requires_jwt_secret(self):
-        """Test that jwt_secret is required for non-localhost."""
+        """Test that jwt_secret is NOT required for non-localhost (auth can be disabled)."""
         config = {
             "api_server_url": "http://api.example.com:8000",
             "admin_auth_token": "token-123",
         }
-        # Should raise ValueError
-        with pytest.raises(ValueError, match="jwt_secret is REQUIRED"):
-            validate_cli_config(config)
+        # Should NOT raise ValueError - auth can be disabled even for non-localhost
+        validate_cli_config(config)
+        assert config.get("api_server_url") == "http://api.example.com:8000"
 
     def test_validate_non_localhost_with_jwt_secret(self):
         """Test that non-localhost with jwt_secret is valid."""

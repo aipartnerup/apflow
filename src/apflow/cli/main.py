@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 
 import click
-import typer
 
 from apflow.core.config_manager import get_config_manager
 from apflow.logger import get_logger
@@ -59,7 +58,6 @@ def _setup_cli_logging() -> None:
 
 
 # Create main CLI app - using Click's LazyGroup for lazy command loading
-import click
 
 
 class LazyGroup(click.Group):
@@ -218,7 +216,6 @@ class LazyGroup(click.Group):
             import importlib
 
             import typer.main
-            import click
 
             module = importlib.import_module(module_path)
             typer_app = getattr(module, attr_name)

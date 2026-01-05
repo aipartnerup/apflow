@@ -142,7 +142,7 @@ class TestDaemonCommandIntegration:
     @pytest.mark.slow
     def test_daemon_start_real(self, cleanup_daemon_files):
         """Test daemon start with real process"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "daemon", "start",
             "--port", "9999",
             "--background"
@@ -152,12 +152,12 @@ class TestDaemonCommandIntegration:
         assert "started successfully" in result.stdout.lower() or "Daemon started" in result.stdout
         
         # Cleanup
-        runner.invoke(app, ["daemon", "stop"])
+        runner.invoke(cli, ["daemon", "stop"])
     
     @pytest.mark.slow
     def test_daemon_start_with_protocol_real(self, cleanup_daemon_files):
         """Test daemon start with protocol and real process"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "daemon", "start",
             "--port", "9997",
             "--protocol", "mcp",
@@ -168,23 +168,23 @@ class TestDaemonCommandIntegration:
         assert "started successfully" in result.stdout.lower() or "Daemon started" in result.stdout
         
         # Cleanup
-        runner.invoke(app, ["daemon", "stop"])
+        runner.invoke(cli, ["daemon", "stop"])
     
     @pytest.mark.slow
     def test_daemon_restart_real(self, cleanup_daemon_files):
         """Test daemon restart with real process"""
-        result = runner.invoke(app, [
+        result = runner.invoke(cli, [
             "daemon", "start",
             "--port", "9998",
             "--background"
         ])
         
         if result.exit_code == 0:
-            result = runner.invoke(app, [
+            result = runner.invoke(cli, [
                 "daemon", "restart",
                 "--port", "9998"
             ])
             assert "restart" in result.stdout.lower() or result.exit_code in [0, 1]
         
         # Cleanup
-        runner.invoke(app, ["daemon", "stop"])
+        runner.invoke(cli, ["daemon", "stop"])

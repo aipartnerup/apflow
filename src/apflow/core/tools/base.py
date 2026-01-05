@@ -7,7 +7,7 @@ Tools can be used independently or with CrewAI agents.
 Performance Note: CrewAI import is deferred to keep startup time fast.
 """
 
-from typing import Type, Optional, Any
+from typing import Any
 from abc import ABC
 
 # Try to use CrewAI's BaseTool if available, otherwise use our own implementation

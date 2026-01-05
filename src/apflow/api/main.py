@@ -94,7 +94,7 @@ def _load_env_file():
     
     # Try each path and load the first one that exists
     config_manager = get_config_manager()
-    config_manager.load_env_files(possible_paths, override=True)
+    config_manager.load_env_files(possible_paths, override=False)
     
     # If APFLOW_JWT_SECRET is not in any .env file, ensure it's not set in environment
     # This handles the case where the env var was previously set but is now commented out

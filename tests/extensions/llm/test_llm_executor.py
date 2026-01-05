@@ -139,8 +139,8 @@ async def test_llm_executor_real_api_call():
         model = "gpt-4o" 
         active_key_suffix = f"...{openai_key[-4:]}" if len(openai_key) > 8 else "****"
     else:
-        # Use claude-sonnet-4-5 for cheap testing
-        model = "claude-sonnet-4-5"
+        # Use claude-sonnet-4-5 for cheap testing (need provider prefix for litellm)
+        model = "anthropic/claude-sonnet-4-5"
         active_key_suffix = f"...{anthropic_key[-4:]}" if len(anthropic_key) > 8 else "****"
         
     inputs = {

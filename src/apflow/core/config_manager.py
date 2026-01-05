@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable, Iterable, List, Optional, Type
+from typing import TYPE_CHECKING, Callable, Iterable, List, Optional
 
 from apflow.core.config.registry import ConfigRegistry, get_config
 from apflow.core.types import TaskPostHook, TaskPreHook
@@ -126,22 +126,28 @@ class ConfigManager:
         except Exception as e:
             logger.debug(f"CLI config file not found or failed to load: {e}")
 
-        # Load API server URL
+        # Load API server URL (only if explicitly configured)
         if "api_server_url" in config:
             self.set_api_server_url(config["api_server_url"])
         else:
-            # Check .env APFLOW_BASE_URL first, then construct from host:port
+            # Check .env APFLOW_BASE_URL or APFLOW_API_HOST/APFLOW_API_PORT
+            # Only set URL if explicitly configured, don't default to localhost:8000
             from apflow.core.utils.helpers import get_url_with_host_and_port
             
             base_url = os.getenv("APFLOW_BASE_URL")
-            if not base_url:
-                host = os.getenv("APFLOW_API_HOST", os.getenv("API_HOST", "localhost"))
-                port = int(os.getenv("APFLOW_API_PORT", os.getenv("API_PORT", "8000")))
-                base_url = get_url_with_host_and_port(host, port)
-            
-            self.set_api_server_url(base_url)
-            if not config_loaded_from_file:
-                logger.debug(f"Loaded API server URL from environment: {base_url}")
+            if base_url:
+                self.set_api_server_url(base_url)
+                logger.debug(f"Loaded API server URL from APFLOW_BASE_URL: {base_url}")
+            else:
+                # Only use APFLOW_API_HOST/APFLOW_API_PORT if explicitly set
+                api_host = os.getenv("APFLOW_API_HOST")
+                api_port = os.getenv("APFLOW_API_PORT")
+                if api_host or api_port:
+                    host = api_host or os.getenv("API_HOST", "localhost")
+                    port = int(api_port or os.getenv("API_PORT", "8000"))
+                    base_url = get_url_with_host_and_port(host, port)
+                    self.set_api_server_url(base_url)
+                    logger.debug(f"Loaded API server URL from environment: {base_url}")
 
         # Load admin_auth_token (migrated from api_auth_token)
         if "admin_auth_token" in config:

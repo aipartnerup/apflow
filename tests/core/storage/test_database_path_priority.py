@@ -6,7 +6,6 @@ These tests focus on the file path resolution when connection strings are not se
 """
 
 import os
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -128,7 +127,7 @@ class TestDefaultDbPathPriority:
         with patch("pathlib.Path.cwd", return_value=temp_non_project_dir):
             with patch("pathlib.Path.home", return_value=mock_home_dir):
                 with patch.dict(os.environ, {}, clear=True):
-                    result = _get_default_db_path()
+                    _get_default_db_path()
                     
                     # Verify directory was created
                     expected_dir = mock_home_dir / ".aipartnerup" / "data"
@@ -142,7 +141,7 @@ class TestDefaultDbPathPriority:
         with patch("pathlib.Path.cwd", return_value=temp_project_with_pyproject):
             with patch("pathlib.Path.home", return_value=mock_home_dir):
                 with patch.dict(os.environ, {}, clear=True):
-                    result = _get_default_db_path()
+                    _get_default_db_path()
                     
                     # Verify .data directory was created
                     data_dir = temp_project_with_pyproject / ".data"
@@ -193,16 +192,15 @@ class TestDatabasePathLogging:
         """Test that debug log is emitted when using project-local path."""
         import logging
         
-        caplog.set_level(logging.DEBUG)
-        
-        with patch("pathlib.Path.cwd", return_value=temp_project_with_pyproject):
-            with patch("pathlib.Path.home", return_value=mock_home_dir):
-                with patch.dict(os.environ, {}, clear=True):
-                    result = _get_default_db_path()
-                    
-                    # Check that debug log was emitted
-                    assert any("Database path:" in record.message for record in caplog.records)
-                    assert any("project-local" in record.message.lower() for record in caplog.records)
+        with caplog.at_level(logging.DEBUG):
+            with patch("pathlib.Path.cwd", return_value=temp_project_with_pyproject):
+                with patch("pathlib.Path.home", return_value=mock_home_dir):
+                    with patch.dict(os.environ, {}, clear=True):
+                        _get_default_db_path()
+                        
+                        # Check that debug log was emitted
+                        assert any("Database path:" in record.message for record in caplog.records)
+                        assert any("project-local" in record.message.lower() for record in caplog.records)
 
     def test_debug_log_for_legacy_path(
         self, temp_project_with_pyproject, mock_home_dir, caplog
@@ -210,21 +208,20 @@ class TestDatabasePathLogging:
         """Test that debug log with tip is emitted when using legacy path."""
         import logging
         
-        caplog.set_level(logging.DEBUG)
-        
         # Create legacy database
         legacy_dir = mock_home_dir / ".aipartnerup" / "data"
         legacy_dir.mkdir(parents=True)
         legacy_db = legacy_dir / "apflow.duckdb"
         legacy_db.touch()
 
-        with patch("pathlib.Path.cwd", return_value=temp_project_with_pyproject):
-            with patch("pathlib.Path.home", return_value=mock_home_dir):
-                with patch.dict(os.environ, {}, clear=True):
-                    result = _get_default_db_path()
-                    
-                    # Check that debug log includes tip about copying
-                    assert any("consider copying to" in record.message.lower() for record in caplog.records)
+        with caplog.at_level(logging.DEBUG):
+            with patch("pathlib.Path.cwd", return_value=temp_project_with_pyproject):
+                with patch("pathlib.Path.home", return_value=mock_home_dir):
+                    with patch.dict(os.environ, {}, clear=True):
+                        _get_default_db_path()
+                        
+                        # Check that debug log includes tip about copying
+                        assert any("consider copying to" in record.message.lower() for record in caplog.records)
 
 
 class TestDatabasePathEdgeCases:

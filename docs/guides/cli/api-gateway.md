@@ -147,15 +147,14 @@ apflow tasks status task-001
 apflow config init-server
 
 # This creates:
-# - .data/config.json with api_server = "http://localhost:8000"
-# - .data/secrets.json with generated JWT secret
+# - .data/config.cli.yaml with api_server_url and generated JWT secret
 ```
 
 ### Manual Configuration
 
 ```bash
 # Set API server URL
-apflow config set api_server http://localhost:8000
+apflow config set api_server_url http://localhost:8000
 
 # Generate authentication token
 apflow config gen-token --role admin --save
@@ -173,24 +172,16 @@ export APFLOW_API_SERVER=http://api.example.com
 export APFLOW_API_AUTH_TOKEN=your-token
 ```
 
-### Configuration Files
+### Configuration File
 
-**config.json**:
-```json
-{
-  "api_server": "http://localhost:8000",
-  "api_timeout": 30,
-  "api_retry_count": 3,
-  "auto_use_api_if_configured": true
-}
-```
-
-**secrets.json**:
-```json
-{
-  "api_auth_token": "your-jwt-token",
-  "jwt_secret": "server-jwt-secret"
-}
+**config.cli.yaml**:
+```yaml
+api_server_url: http://localhost:8000
+api_timeout: 30
+api_retry_count: 3
+auto_use_api_if_configured: true
+admin_auth_token: your-jwt-token
+jwt_secret: server-jwt-secret
 ```
 
 ## CLI Usage with API Gateway
@@ -216,7 +207,7 @@ apflow run batch --tasks '[...]'
 
 Or remove configuration:
 ```bash
-rm -rf .data/config.json
+rm -rf .data/config.cli.yaml
 ```
 
 ## Error Handling

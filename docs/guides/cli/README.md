@@ -11,7 +11,7 @@ This directory contains comprehensive guides for using the apflow CLI.
 
 - **[configuration.md](./configuration.md)** - Configuration management
   - Multi-location system (project-local, user-global, environment override)
-  - File structure (config.json, secrets.json)
+  - File structure (config.cli.yaml)
   - Configuration commands (init-server, set, gen-token)
   - File permissions and security
   - Best practices
@@ -75,8 +75,7 @@ See [examples.md](./examples.md) for complex workflows, parallel execution, and 
 
 ### File Structure
 
-- `config.json` (644 permissions) - Non-sensitive settings
-- `secrets.json` (600 permissions) - Sensitive credentials
+- `config.cli.yaml` (600 permissions) - All CLI settings (sensitive and non-sensitive)
 
 ## Common Tasks
 

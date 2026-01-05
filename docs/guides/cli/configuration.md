@@ -2,10 +2,9 @@
 
 ## Overview
 
-The CLI configuration system supports both project-local and user-global configuration. Configuration is stored in two separate files for security:
+The CLI configuration system supports both project-local and user-global configuration. Configuration is stored in a unified YAML file:
 
-- **`config.json`** (644 permissions) - Non-sensitive settings
-- **`secrets.json`** (600 permissions, owner-only) - Sensitive credentials
+- **`config.cli.yaml`** (600 permissions, owner-only) - All CLI settings (sensitive and non-sensitive)
 
 ## Multi-Location Priority System
 
@@ -20,39 +19,28 @@ When you save configuration, it goes to the active location determined by this p
 
 ## File Structure
 
-### config.json (Non-Sensitive)
+### config.cli.yaml (All Settings)
 
-Non-sensitive configuration like API server URL:
+Unified configuration file with both settings and sensitive credentials:
 
-```json
-{
-  "api_server": "http://localhost:8000",
-  "api_timeout": 30,
-  "api_retry_count": 3,
-  "auto_use_api_if_configured": true
-}
-```
-
-**Permissions**: `644` (owner: read/write, group: read, others: read)
-
-**Who can read**: Everyone on the system  
-**Who can write**: Owner only
-
-### secrets.json (Sensitive)
-
-Sensitive credentials stored separately:
-
-```json
-{
-  "api_auth_token": "your-jwt-token-here",
-  "jwt_secret": "your-jwt-secret-here"
-}
+```yaml
+api_server_url: http://localhost:8000
+api_timeout: 30
+api_retry_count: 3
+auto_use_api_if_configured: true
+admin_auth_token: your-jwt-token-here
+jwt_secret: your-jwt-secret-here
 ```
 
 **Permissions**: `600` (owner: read/write, group: none, others: none)
 
 **Who can read**: Owner only  
 **Who can write**: Owner only
+
+**Why unified?**
+- All configuration in one place for easier management
+- Consistent permissions (600) for all settings
+- Still supports multi-location system (project-local and user-global)
 
 ## Configuration Commands
 
@@ -80,16 +68,15 @@ apflow config init-server
 ```
 
 This command:
-1. Creates `.data/config.json` in project (if not exists)
-2. Creates `.data/secrets.json` with JWT secret (if not exists)
-3. Sets `api_server` to `http://localhost:8000`
+1. Creates `.data/config.cli.yaml` in project (if not exists)
+2. Sets `api_server_url` to `http://localhost:8000`
+3. Generates and saves JWT secret
 4. Shows all file paths for verification
 
 Example output:
 ```
 Configuration initialized successfully:
-  Config:  .data/config.json (644)
-  Secrets: .data/secrets.json (600)
+  Config: .data/config.cli.yaml (600)
   API Server: http://localhost:8000
   JWT Secret: Generated and saved
 ```
@@ -97,11 +84,11 @@ Configuration initialized successfully:
 ### Set Configuration Value
 
 ```bash
-# Set non-sensitive value
-apflow config set api_server http://api.example.com
+# Set configuration value
+apflow config set api_server_url http://api.example.com
 
-# Set sensitive value
-apflow config set api_auth_token my-secret-token --sensitive
+# Set sensitive value (stored in same file with 600 permissions)
+apflow config set admin_auth_token my-secret-token
 ```
 
 ### Generate JWT Token
@@ -112,13 +99,13 @@ apflow config gen-token --role admin --save
 
 This command:
 1. Generates a new JWT token
-2. Saves to `secrets.json` (with 600 permissions)
+2. Saves to `config.cli.yaml` (with 600 permissions)
 3. Shows token value for reference
 
 Options:
-- `--role <role>` - User role (default: user)
+- `--role <role>` - User role (default: admin)
 - `--user-id <id>` - User ID (optional)
-- `--save` - Save to secrets.json
+- `--save` - Save to config.cli.yaml
 
 ## Environment Variables
 
@@ -160,14 +147,9 @@ apflow run flow --tasks '[...]'
 When you run CLI commands, configuration is loaded from:
 
 1. **Check APFLOW_CONFIG_DIR** - If set, load from here first
-2. **Check project-local** - If `.data/config.json` exists, load from here
-3. **Check user-global** - If `~/.aipartnerup/apflow/config.json` exists, load from here
+2. **Check project-local** - If `.data/config.cli.yaml` exists, load from here
+3. **Check user-global** - If `~/.aipartnerup/apflow/config.cli.yaml` exists, load from here
 4. **Use defaults** - If nothing found, use built-in defaults
-
-Configuration is merged, so you can have:
-- `config.json` in project-local
-- `secrets.json` in user-global
-- CLI will load both and merge them
 
 ### How API Server Loads Configuration
 
@@ -202,12 +184,12 @@ Use project-local configuration to keep settings separate:
 # Project A
 cd ~/project-a
 apflow config init-server
-# Creates .data/config.json and .data/secrets.json in project-a
+# Creates .data/config.cli.yaml in project-a
 
 # Project B
 cd ~/project-b
 apflow config init-server
-# Creates .data/config.json and .data/secrets.json in project-b
+# Creates .data/config.cli.yaml in project-b
 ```
 
 Each project has its own isolated configuration.
@@ -218,13 +200,13 @@ Use user-global configuration for shared settings:
 
 ```bash
 # Set up once in home directory
-apflow config set api_server http://team-api.example.com
-# Saves to ~/.aipartnerup/apflow/config.json
+apflow config set api_server_url http://team-api.example.com
+# Saves to ~/.aipartnerup/apflow/config.cli.yaml
 
 # Now use from any project
 cd ~/project-a
 apflow run flow --tasks '[...]'
-# Automatically uses ~/.aipartnerup/apflow/config.json
+# Automatically uses ~/.aipartnerup/apflow/config.cli.yaml
 ```
 
 All team members share the same API server.
@@ -316,23 +298,18 @@ Examples:
 # Generate and show token
 apflow config gen-token --role admin
 
-# Generate and save to secrets.json
+# Generate and save to config.cli.yaml
 apflow config gen-token --role admin --user-id user123 --save
 ```
 
 ## File Permissions Explanation
 
-### Why 644 for config.json?
+### Why 600 for config.cli.yaml?
 
-- **Readable by others**: System services, monitoring tools, or other users on the system may need to know the API server URL
-- **No secrets**: Only non-sensitive settings like `api_server` URL, timeouts, etc.
-- **Easier debugging**: Other processes can read config to troubleshoot connectivity issues
-
-### Why 600 for secrets.json?
-
-- **Owner only**: Sensitive credentials must not be readable by other users
+- **Owner only**: All configuration (including tokens and secrets) must not be readable by other users
 - **No compromise**: If a service is compromised, it cannot read other users' credentials
-- **Security principle**: Secrets are isolated per user
+- **Security principle**: Both settings and secrets are isolated per user
+- **Unified approach**: Single secure file is simpler and safer than splitting across files
 
 ### On macOS/Linux
 
@@ -340,14 +317,12 @@ Check permissions:
 ```bash
 ls -la ~/.aipartnerup/apflow/
 # Output:
-# -rw-r--r-- 1 user group config.json
-# -rw------- 1 user group secrets.json
+# -rw------- 1 user group config.cli.yaml
 ```
 
 Manually fix permissions (if needed):
 ```bash
-chmod 644 ~/.aipartnerup/apflow/config.json
-chmod 600 ~/.aipartnerup/apflow/secrets.json
+chmod 600 ~/.aipartnerup/apflow/config.cli.yaml
 ```
 
 ## Best Practices
@@ -365,16 +340,16 @@ apflow config init-server
 export APFLOW_CONFIG_DIR=/tmp/config
 ```
 
-### 2. Keep Secrets in secrets.json
+### 2. All Configuration in One File
 
-Never put secrets in config.json:
+Use the same `config.cli.yaml` for all settings (both settings and secrets):
 
 ```bash
-# ❌ Bad: API token in config.json
-apflow config set api_auth_token my-secret
+# ✅ Good: Set API URL
+apflow config set api_server_url http://api.example.com
 
-# ✅ Good: Use --sensitive flag
-apflow config set api_auth_token my-secret --sensitive
+# ✅ Good: Set auth token (stored securely in same file)
+apflow config set admin_auth_token my-secret-token
 ```
 
 ### 3. Use Project-Local for Team Settings
@@ -418,15 +393,15 @@ apflow config path
 apflow config init-server
 ```
 
-### Problem: "Permission denied on secrets.json"
+### Problem: "Permission denied on config.cli.yaml"
 
 **Solution**: Check permissions:
 ```bash
-ls -la ~/.aipartnerup/apflow/secrets.json
+ls -la ~/.aipartnerup/apflow/config.cli.yaml
 # Should show: -rw------- (600)
 
 # Fix if needed:
-chmod 600 ~/.aipartnerup/apflow/secrets.json
+chmod 600 ~/.aipartnerup/apflow/config.cli.yaml
 ```
 
 ### Problem: "API server URL not working"
@@ -460,10 +435,10 @@ export APFLOW_CONFIG_DIR=/etc/apflow
 
 ## Summary
 
-- ✅ Configuration stored in 2 files (config.json + secrets.json)
+- ✅ Configuration stored in 1 unified file (config.cli.yaml)
 - ✅ Multi-location support (project-local + user-global)
 - ✅ Environment variable override (APFLOW_CONFIG_DIR)
-- ✅ Proper file permissions (644 + 600)
+- ✅ Proper file permissions (600 - owner-only)
 - ✅ Easy commands to initialize and manage
 - ✅ Shared between CLI and API server
 

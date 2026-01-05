@@ -373,16 +373,13 @@ def init_server(
         apflow config init-server --url http://localhost:8000 --role user
     """
     try:
-        import os
         from pathlib import Path
 
         from apflow.cli.cli_config import (
             get_cli_config_file_path,
-            is_localhost_url,
             load_cli_config,
             save_cli_config_yaml,
         )
-        from apflow.core.config_manager import get_config_manager
 
         # Normalize URL (remove trailing slash)
         url = url.rstrip("/")
@@ -423,8 +420,7 @@ def init_server(
             config.pop("admin_auth_token", None)
             # Keep jwt_algorithm as it's a harmless default setting
             config["jwt_algorithm"] = "HS256"
-            typer.echo("ℹ️  No APFLOW_JWT_SECRET in .env - cleared auth config")
-            typer.echo("   API server authentication is disabled")
+            typer.echo("ℹ️  No APFLOW_JWT_SECRET in .env - authentication disabled")
 
         # Save config
         save_cli_config_yaml(config)
@@ -909,7 +905,6 @@ def init_interactive():
         
         from apflow.cli.cli_config import (
             get_cli_config_file_path,
-            load_cli_config,
             save_cli_config_yaml,
         )
 

@@ -8,10 +8,13 @@ passing parameters through multiple layers.
 
 import os
 from threading import local
-from typing import Callable, Dict, List, Optional, Type
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
 from apflow.core.types import TaskPreHook, TaskPostHook
 from apflow.logger import get_logger
+
+if TYPE_CHECKING:
+    from apflow.core.storage.sqlalchemy.models import TaskModel
 
 logger = get_logger(__name__)
 
@@ -562,6 +565,8 @@ def task_model_register():
     Returns:
         Decorator function
     """
+    # Import here to avoid circular imports at module level
+    from apflow.core.storage.sqlalchemy.models import TaskModel
 
     def decorator(cls: 'TaskModel') -> 'TaskModel':
         if not issubclass(cls, TaskModel):

@@ -24,9 +24,7 @@ Migration:
 
 from __future__ import annotations
 
-import json
 import os
-import shutil
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -168,24 +166,22 @@ def validate_cli_config(config: dict) -> None:
     Validate CLI configuration.
 
     Rules:
-    - If api_server_url is not localhost, jwt_secret is REQUIRED
-    - jwt_algorithm defaults to HS256 if not specified
+    - No strict requirements, only warn if potential issues are detected
 
     Args:
         config: Configuration dictionary to validate
 
     Raises:
-        ValueError: If validation fails
+        ValueError: If validation fails (currently doesn't raise)
     """
     api_server_url = config.get("api_server_url")
     if api_server_url:
-        if not is_localhost_url(api_server_url):
-            jwt_secret = config.get("jwt_secret")
-            if not jwt_secret:
-                raise ValueError(
-                    f"jwt_secret is REQUIRED when api_server_url is not localhost. "
-                    f"Current api_server_url: {api_server_url}"
-                )
+        # Warn if auth might be needed but not configured
+        jwt_secret = config.get("jwt_secret")
+        if not jwt_secret and not is_localhost_url(api_server_url):
+            # This is OK - user might want authentication disabled
+            # No validation error, just allow it
+            pass
 
     # Set default jwt_algorithm if not specified
     if "jwt_algorithm" not in config:

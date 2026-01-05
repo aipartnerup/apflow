@@ -533,8 +533,8 @@ def _get_default_db_path() -> str:
             return str(new_path)
         elif old_path.exists():
             logger.debug(
-                f"Database path: {old_path} (legacy location, "
-                f"consider copying to: {new_path})"
+                f"Database path: {old_path} (legacy location). "
+                f"Please consider copying to: {new_path}"
             )
             return str(old_path)
         else:
