@@ -25,18 +25,29 @@ def setup_logging(level: str = None) -> None:
     
     Args:
         level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-               If None, uses environment variables LOG_LEVEL or DEBUG
+               If None, uses APFLOW_LOG_LEVEL or falls back to LOG_LEVEL (defaults to INFO)
     """
     if level is None:
-        level = os.getenv("LOG_LEVEL", "").upper()
-        if not level:
-            level = "DEBUG" if os.getenv("DEBUG", "").lower() in ("true", "1", "yes") else "ERROR"
+        # Priority: APFLOW_LOG_LEVEL > LOG_LEVEL > INFO (default)
+        level = os.getenv("APFLOW_LOG_LEVEL") or os.getenv("LOG_LEVEL", "INFO")
+        level = level.upper()
     
+    # Convert string level to logging constant
+    numeric_level = getattr(logging, level, logging.INFO)
+    
+    # Configure basicConfig for general logging format
+    # Note: basicConfig only works on first call, but we still call it for format setup
     logging.basicConfig(
-        level=level,
+        level=numeric_level,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        stream=sys.stdout
+        stream=sys.stdout,
+        force=True  # Force reconfiguration even if basicConfig was called before
     )
+    
+    # Also explicitly set level for apflow namespace logger
+    # This ensures our loggers work even if basicConfig was previously called
+    apflow_logger = logging.getLogger("apflow")
+    apflow_logger.setLevel(numeric_level)
 
 
 def get_logger(name: str = None) -> logging.Logger:

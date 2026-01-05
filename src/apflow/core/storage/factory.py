@@ -505,25 +505,50 @@ def _ensure_database_directory_exists(db_path: Union[str, Path]) -> None:
 
 def _get_default_db_path() -> str:
     """
-    Get default database path.
-    If examples module is available, use persistent database.
-    Otherwise, use in-memory database.
+    Get default database path with project-aware priority.
+    
+    Priority order (only for DuckDB file path, not for DATABASE_URL):
+    1. Project-local .data/apflow.duckdb (if exists)
+    2. Legacy ~/.aipartnerup/data/apflow.duckdb (if exists - backward compatible)
+    3. Project-local .data/apflow.duckdb (default for new projects)
+    4. Global ~/.aipartnerup/data/apflow.duckdb (if not in project)
+    
+    Note: If DATABASE_URL or APFLOW_DATABASE_URL is set, this function is not used.
+          Use those environment variables for explicit path/connection control.
     
     Returns:
         Database path string
     """
-    # Check environment variable first
-    env_path = os.getenv("APFLOW_DB_PATH")
-    if env_path:
-        return env_path
+    from apflow.core.utils.project_detection import get_project_data_dir
     
-    # Examples module has been removed, use persistent database by default
-    # Default location: ~/.aipartnerup/data/apflow.duckdb
+    # Check if in project context
+    project_data_dir = get_project_data_dir()
+    if project_data_dir:
+        new_path = project_data_dir / "apflow.duckdb"
+        old_path = Path.home() / ".aipartnerup" / "data" / "apflow.duckdb"
+        
+        # Priority: new location exists, or old exists (backward compat), or create new
+        if new_path.exists():
+            logger.debug(f"Database path: {new_path} (project-local)")
+            return str(new_path)
+        elif old_path.exists():
+            logger.debug(
+                f"Database path: {old_path} (legacy location, "
+                f"consider copying to: {new_path})"
+            )
+            return str(old_path)
+        else:
+            # New project - use new location
+            project_data_dir.mkdir(parents=True, exist_ok=True)
+            logger.debug(f"Database path: {new_path} (new project-local)")
+            return str(new_path)
+    
+    # Not in project - use global location
     home_dir = Path.home()
     data_dir = home_dir / ".aipartnerup" / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
     db_path = str(data_dir / "apflow.duckdb")
-    logger.debug(f"Using persistent database: {db_path}")
+    logger.debug(f"Database path: {db_path} (global)")
     return db_path
 
 
@@ -745,7 +770,9 @@ def get_default_session(
             If None:
               - Checks DATABASE_URL or APFLOW_DATABASE_URL environment variable first
               - If PostgreSQL URL, uses PostgreSQL
-              - Otherwise, uses APFLOW_DB_PATH if set
+              - Otherwise, uses project-aware default path priority:
+                * Project-local .data/apflow.duckdb (if in project)
+                * Global ~/.aipartnerup/data/apflow.duckdb (if not in project)
               - Otherwise, uses persistent database at ~/.aipartnerup/data/apflow.duckdb
         async_mode: Whether to use async mode. If None:
                    - For PostgreSQL: defaults to True (async mode)

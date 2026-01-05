@@ -67,12 +67,15 @@ async def get_api_client_if_configured() -> Optional[APIClient]:
     retry_attempts = cm.api_retry_attempts
     retry_backoff = cm.api_retry_backoff
     
+    # Disable proxy by default to avoid environment variable interference
+    # Users can configure proxy via environment variables if needed
     client = APIClient(
         server_url=server_url,
         auth_token=auth_token,
         timeout=timeout,
         retry_attempts=retry_attempts,
         retry_backoff=retry_backoff,
+        proxies=None,  # Disable proxy to avoid environment variable issues
     )
     
     async with client:

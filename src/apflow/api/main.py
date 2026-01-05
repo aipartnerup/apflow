@@ -208,6 +208,10 @@ def create_runnable_app(**kwargs):
     if _start_time is None:
         _start_time = time.time()
     
+    # Setup logging based on environment variables (LOG_LEVEL or DEBUG)
+    from apflow.logger import setup_logging
+    setup_logging()
+    
     # Load .env file (from calling project's directory when used as library)
     # ConfigManager is the single entrypoint for env + hook registration across CLI/API
     _load_env_file()

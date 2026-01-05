@@ -58,35 +58,31 @@ def get_project_root() -> Optional[Path]:
     """
     Find project root by looking for pyproject.toml or .git directory.
 
+    DEPRECATED: Use apflow.core.utils.project_detection.get_project_root() instead.
+    This function is kept for backward compatibility.
+
     Walks up the directory tree from current working directory
     until it finds a project marker or reaches filesystem root.
 
     Returns:
         Project root path if found, None otherwise
     """
-    current = Path.cwd()
-
-    # Walk up the directory tree
-    for parent in [current] + list(current.parents):
-        # Check for project markers
-        if (parent / "pyproject.toml").exists() or (parent / ".git").exists():
-            logger.debug(f"Found project root: {parent}")
-            return parent
-
-    return None
+    from apflow.core.utils.project_detection import get_project_root as _get_project_root
+    return _get_project_root()
 
 
 def get_project_config_dir() -> Optional[Path]:
     """
     Get project-local config directory if in project context.
 
+    Note: This returns .data for consistency with project_detection module,
+    but CLI config still uses ~/.aipartnerup/apflow/ for user-global config.
+
     Returns:
         <project_root>/.data if in project, None otherwise
     """
-    project_root = get_project_root()
-    if project_root:
-        return project_root / ".data"
-    return None
+    from apflow.core.utils.project_detection import get_project_data_dir
+    return get_project_data_dir()
 
 
 def get_config_dir() -> Path:

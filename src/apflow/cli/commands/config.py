@@ -43,12 +43,14 @@ def set_config(
     Supports common aliases for convenience:
         api-server, api-url -> api_server_url
         api-token, token -> admin_auth_token
+        log-level -> log_level
 
     Examples:
         apflow config set api_server_url http://localhost:8000
         apflow config set api-server http://localhost:8000
         apflow config set admin_auth_token my-token-xyz
         apflow config set api-token my-token-xyz
+        apflow config set log-level DEBUG
     """
     try:
         # Resolve aliases for convenience
@@ -57,6 +59,7 @@ def set_config(
             "api-url": "api_server_url",
             "api-token": "admin_auth_token",
             "token": "admin_auth_token",
+            "log-level": "log_level",
         }
         actual_key = alias_map.get(key, key)
 
@@ -93,12 +96,14 @@ def get_config(
     Supports common aliases for convenience:
         api-server, api-url -> api_server_url
         api-token, token -> admin_auth_token
+        log-level -> log_level
     
     Examples:
         apflow config get api_server_url
         apflow config get api-server
         apflow config get admin_auth_token
         apflow config get api-token
+        apflow config get log-level
     """
     try:
         # Resolve aliases for convenience
@@ -107,6 +112,7 @@ def get_config(
             "api-url": "api_server_url",
             "api-token": "admin_auth_token",
             "token": "admin_auth_token",
+            "log-level": "log_level",
         }
         actual_key = alias_map.get(key, key)
         
@@ -192,12 +198,14 @@ def unset_config(
     Supports common aliases for convenience:
         api-server, api-url -> api_server_url
         api-token, token -> admin_auth_token
+        log-level -> log_level
     
     Examples:
         apflow config unset api_server_url
         apflow config unset api-server
         apflow config unset admin_auth_token --yes
         apflow config unset api-token --yes
+        apflow config unset log-level --yes
     """
     try:
         # Resolve aliases for convenience
@@ -206,6 +214,7 @@ def unset_config(
             "api-url": "api_server_url",
             "api-token": "admin_auth_token",
             "token": "admin_auth_token",
+            "log-level": "log_level",
         }
         actual_key = alias_map.get(key, key)
         

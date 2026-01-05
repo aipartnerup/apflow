@@ -94,6 +94,11 @@ def _start_server(
         
         # Dynamic import of uvicorn (only when needed)
         import uvicorn
+        import os
+        
+        # Determine log level from environment (defaults to info)
+        # Priority: APFLOW_LOG_LEVEL > LOG_LEVEL > INFO
+        log_level = (os.getenv("APFLOW_LOG_LEVEL") or os.getenv("LOG_LEVEL", "INFO")).lower()
         
         # Create app using create_runnable_app to ensure full initialization
         # (includes .env loading, extension initialization, custom TaskModel, etc.)
@@ -107,7 +112,7 @@ def _start_server(
             port=port,
             reload=reload,
             workers=workers if not reload else 1,
-            log_level="info",
+            log_level=log_level,
         )
         
     except KeyboardInterrupt:

@@ -74,22 +74,36 @@ Create a `.env` file in the project root (optional, for API service configuratio
 
 ```env
 # API Service Configuration
-API_HOST=0.0.0.0
-API_PORT=8000
+APFLOW_API_HOST=0.0.0.0  # Or use API_HOST (fallback)
+APFLOW_API_PORT=8000     # Or use API_PORT (fallback)
 
-# Database Configuration (optional, if using PostgreSQL)
-# DATABASE_URL=postgresql+asyncpg://user:password@localhost/apflow
+# Database Configuration
+# Priority: APFLOW_DATABASE_URL > DATABASE_URL (fallback)
+# 
+# Option 1: PostgreSQL
+# APFLOW_DATABASE_URL=postgresql+asyncpg://user:password@localhost/apflow
+#
+# Option 2: DuckDB with custom path
+# APFLOW_DATABASE_URL=duckdb:///.data/my_custom.duckdb
+#
+# Option 3: Default (auto-detected)
+# - In project: .data/apflow.duckdb (created automatically)
+# - Outside project: ~/.aipartnerup/data/apflow.duckdb
 
-# DuckDB (default, no configuration needed)
-# Uses embedded database, no external setup required
-
-# Development
-DEBUG=True
-LOG_LEVEL=INFO
+# Logging
+APFLOW_LOG_LEVEL=INFO  # Or use LOG_LEVEL (fallback). Options: DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 # CLI Configuration (optional, stored in .data/ or ~/.aipartnerup/apflow/)
 # APFLOW_CONFIG_DIR=/custom/config/path  # Override config directory location
 ```
+
+**Environment Variable Naming Convention:**
+
+apflow uses a consistent naming pattern:
+- **Preferred**: `APFLOW_*` prefix (e.g., `APFLOW_LOG_LEVEL`, `APFLOW_DATABASE_URL`)
+- **Fallback**: Generic names without prefix (e.g., `LOG_LEVEL`, `DATABASE_URL`)
+
+This allows apflow to work seamlessly in multi-service environments while maintaining isolation.
 
 #### CLI Configuration
 

@@ -31,6 +31,33 @@ def _load_env_file() -> None:
     config_manager.load_env_files(possible_paths, override=False)
 
 
+def _setup_cli_logging() -> None:
+    """
+    Setup logging for CLI based on config.cli.yaml.
+    
+    Priority:
+    1. config.cli.yaml: log_level or log-level
+    2. WARNING (default - keep CLI quiet)
+    """
+    try:
+        from apflow.cli.cli_config import load_cli_config
+        from apflow.logger import setup_logging
+        
+        # Load CLI config
+        config = load_cli_config()
+        
+        # Get log level from config (support both log_level and log-level)
+        log_level = config.get("log_level") or config.get("log-level") or "WARNING"
+        log_level = log_level.upper()
+        
+        # Use configured level or default to WARNING for CLI
+        setup_logging(level=log_level)
+    except Exception:
+        # If config loading fails, use default WARNING level
+        from apflow.logger import setup_logging
+        setup_logging(level="WARNING")
+
+
 # Create main CLI app - using Click's LazyGroup for lazy command loading
 import click
 
@@ -224,6 +251,7 @@ class LazyGroup(click.Group):
 def cli(ctx: click.Context) -> None:
     """Main CLI entry point."""
     _load_env_file()
+    _setup_cli_logging()
 
 
 @cli.command()

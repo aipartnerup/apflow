@@ -63,6 +63,7 @@ class APIClient:
         timeout: float = 30.0,
         retry_attempts: int = 3,
         retry_backoff: float = 1.0,
+        proxies: Optional[str] = None,
     ):
         """
         Initialize APIClient.
@@ -73,17 +74,33 @@ class APIClient:
             timeout: Request timeout in seconds
             retry_attempts: Number of retry attempts on failure
             retry_backoff: Initial backoff for exponential retry (seconds)
+            proxies: Proxy URL (e.g., http://127.0.0.1:7890). 
+                     If None, disables automatic proxy detection from environment.
+                     Use empty string "" to use environment proxy settings.
         """
         self.server_url = server_url.rstrip("/")
         self.auth_token = auth_token
         self.timeout = timeout
         self.retry_attempts = retry_attempts
         self.retry_backoff = retry_backoff
+        self.proxies = proxies
         self._client: Optional[httpx.AsyncClient] = None
 
     async def __aenter__(self) -> "APIClient":
         """Context manager entry."""
-        self._client = httpx.AsyncClient()
+        # Proxy configuration:
+        # - None: explicitly disable proxy (ignore environment variables)
+        # - "": use environment proxy (httpx default behavior)
+        # - "http://...": use specific proxy URL
+        if self.proxies is None:
+            # Explicitly disable proxy to avoid environment variable interference
+            self._client = httpx.AsyncClient(proxy=None, trust_env=False)
+        elif self.proxies == "":
+            # Use environment proxy (httpx default behavior)
+            self._client = httpx.AsyncClient(trust_env=True)
+        else:
+            # Use specific proxy URL
+            self._client = httpx.AsyncClient(proxy=self.proxies, trust_env=False)
         return self
 
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -139,7 +156,13 @@ class APIClient:
             headers["Authorization"] = f"Bearer {self.auth_token}"
 
         if not self._client:
-            self._client = httpx.AsyncClient()
+            # Use same proxy configuration logic as __aenter__
+            if self.proxies is None:
+                self._client = httpx.AsyncClient(proxy=None, trust_env=False)
+            elif self.proxies == "":
+                self._client = httpx.AsyncClient(trust_env=True)
+            else:
+                self._client = httpx.AsyncClient(proxy=self.proxies, trust_env=False)
 
         last_error = None
         backoff = self.retry_backoff

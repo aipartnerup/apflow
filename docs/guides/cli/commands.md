@@ -639,8 +639,12 @@ apflow executor list
 ### Debug mode:
 
 ```bash
-# Enable verbose logging
+# Enable verbose logging (preferred with APFLOW_ prefix)
 export APFLOW_LOG_LEVEL=DEBUG
+apflow run batch --tasks '[...]'
+
+# Or use generic LOG_LEVEL (fallback)
+export LOG_LEVEL=DEBUG
 apflow run batch --tasks '[...]'
 ```
 
