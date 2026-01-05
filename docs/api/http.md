@@ -1193,7 +1193,7 @@ Generates a valid task tree JSON array from a natural language requirement using
 - `requirement` (string, required): Natural language description of the desired task tree. Should describe the workflow, data flow, and operations needed.
 - `user_id` (string, optional): User ID for the generated tasks. If not provided and JWT is enabled, uses authenticated user's ID. If not provided and JWT is disabled, uses default user ID.
 - `llm_provider` (string, optional): LLM provider to use. Valid values: `"openai"`, `"anthropic"`. Default: `"openai"` or from environment variable `APFLOW_LLM_PROVIDER`.
-- `model` (string, optional): Specific LLM model name. Examples: `"gpt-4o"`, `"claude-3-5-sonnet-20241022"`. Default: Provider-specific default or from environment variable `APFLOW_LLM_MODEL`.
+- `model` (string, optional): Specific LLM model name. Examples: `"gpt-4o"`, `"claude-3-5-sonnet-20241022"`. Default: Provider-specific default (from `OPENAI_MODEL` or `ANTHROPIC_MODEL` environment variables).
 - `temperature` (float, optional): LLM temperature for generation (0.0 to 2.0). Higher values make output more creative, lower values more deterministic. Default: `0.7`.
 - `max_tokens` (integer, optional): Maximum number of tokens in LLM response. Default: `4000`.
 - `save` (boolean, optional): If `true`, automatically saves the generated tasks to the database using `TaskCreator.create_task_tree_from_array()`. When `true`, the response includes `root_task_id` of the saved task tree. Default: `false`.
@@ -2380,7 +2380,7 @@ Deletes an LLM API key for a user. This method removes the stored API key for a 
 
 The API supports optional JWT authentication. To enable:
 
-1. Set environment variable `APFLOW_JWT_SECRET_KEY`
+1. Set environment variable `APFLOW_JWT_SECRET`
 2. Include JWT token in request headers or cookies
 
 **Token Sources (Priority Order):**

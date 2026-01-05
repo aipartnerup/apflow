@@ -82,7 +82,7 @@ class DocsRoutes:
                 resolved_base_url = base_url
             else:
                 # Fallback to default
-                resolved_base_url = f"http://localhost:{os.getenv('APFLOW_PORT', '8000')}"
+                resolved_base_url = f"http://localhost:{os.getenv('APFLOW_API_PORT', os.getenv('APFLOW_PORT', '8000'))}"
             
             logger.debug(f"Generating OpenAPI schema with base_url: {resolved_base_url}")
             return generate_openapi_schema(base_url=resolved_base_url)

@@ -394,8 +394,8 @@ export GOOGLE_API_KEY="xxx"
 
 ```bash
 # Server configuration
-export APFLOW_HOST=0.0.0.0
-export APFLOW_PORT=8000
+export APFLOW_API_HOST=0.0.0.0
+export APFLOW_API_PORT=8000
 
 # Database configuration
 export APFLOW_DATABASE_URL=postgresql://user:pass@localhost/db

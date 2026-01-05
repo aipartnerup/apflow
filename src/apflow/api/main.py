@@ -96,7 +96,7 @@ def _load_env_file():
     config_manager = get_config_manager()
     config_manager.load_env_files(possible_paths, override=True)
     
-    # If APFLOW_JWT_SECRET_KEY is not in any .env file, ensure it's not set in environment
+    # If APFLOW_JWT_SECRET is not in any .env file, ensure it's not set in environment
     # This handles the case where the env var was previously set but is now commented out
     env_file_has_jwt_secret = False
     for env_path in possible_paths:
@@ -106,7 +106,7 @@ def _load_env_file():
                 for line in env_content.splitlines():
                     line = line.strip()
                     if line and not line.startswith("#"):
-                        if line.startswith("APFLOW_JWT_SECRET_KEY="):
+                        if line.startswith("APFLOW_JWT_SECRET="):
                             env_file_has_jwt_secret = True
                             break
             except Exception:
@@ -114,10 +114,10 @@ def _load_env_file():
         if env_file_has_jwt_secret:
             break
     
-    # If .env files don't have APFLOW_JWT_SECRET_KEY, remove it from environment
-    if not env_file_has_jwt_secret and "APFLOW_JWT_SECRET_KEY" in os.environ:
-        del os.environ["APFLOW_JWT_SECRET_KEY"]
-        logger.debug("Removed APFLOW_JWT_SECRET_KEY from environment (not found in .env files)")
+    # If .env files don't have APFLOW_JWT_SECRET, remove it from environment
+    if not env_file_has_jwt_secret and "APFLOW_JWT_SECRET" in os.environ:
+        del os.environ["APFLOW_JWT_SECRET"]
+        logger.debug("Removed APFLOW_JWT_SECRET from environment (not found in .env files)")
 
 
 def _setup_development_environment():
@@ -169,7 +169,7 @@ def create_runnable_app(**kwargs):
             - task_routes_class: Optional custom TaskRoutes class
             - verify_token_func: Optional custom JWT token verification function.
                               If provided, it will be used to verify JWT tokens.
-                              If None and APFLOW_JWT_SECRET_KEY is set, a default verifier will be created.
+                              If None and APFLOW_JWT_SECRET is set, a default verifier will be created.
                               Signature: verify_token_func(token: str) -> Optional[dict]
             - verify_permission_func: Optional function to verify user permissions.
                                     If provided, it will be used to verify user permissions for accessing resources.
@@ -306,7 +306,7 @@ def main(**kwargs):
                 - task_routes_class: Optional custom TaskRoutes class
                 - verify_token_func: Optional custom JWT token verification function.
                                   If provided, it will be used to verify JWT tokens.
-                                  If None and APFLOW_JWT_SECRET_KEY is set, a default verifier will be created.
+                                  If None and APFLOW_JWT_SECRET is set, a default verifier will be created.
                                   Signature: verify_token_func(token: str) -> Optional[dict]
                 - verify_permission_func: Optional function to verify user permissions.
                                         If provided, it will be used to verify user permissions for accessing resources.

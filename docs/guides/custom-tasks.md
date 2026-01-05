@@ -1414,8 +1414,9 @@ pip install anthropic
 
 **Configuration:**
 - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`: LLM API key (environment variable)
+- `OPENAI_MODEL` (for OpenAI): Model name (default: "gpt-4o")
+- `ANTHROPIC_MODEL` (for Anthropic): Model name (default: "claude-3-5-sonnet-20241022")
 - `APFLOW_LLM_PROVIDER`: Provider selection (default: "openai")
-- `APFLOW_LLM_MODEL`: Model name (optional)
 
 **Output:**
 Returns a JSON array of task objects that can be used with `TaskCreator.create_task_tree_from_array()`:

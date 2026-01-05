@@ -189,16 +189,16 @@ class TestInitServerEnvSync:
     """Test init-server command with .env file synchronization."""
 
     def test_init_server_uses_env_jwt_secret(self, tmp_path, monkeypatch, isolated_config_dir):
-        """Test that init-server uses APFLOW_JWT_SECRET_KEY from .env file."""
-        # Create .env file with APFLOW_JWT_SECRET_KEY
+        """Test that init-server uses APFLOW_JWT_SECRET from .env file."""
+        # Create .env file with APFLOW_JWT_SECRET
         env_file = tmp_path / ".env"
         test_secret = "test-jwt-secret-from-env-12345"
-        env_file.write_text(f"APFLOW_JWT_SECRET_KEY={test_secret}\n")
+        env_file.write_text(f"APFLOW_JWT_SECRET={test_secret}\n")
 
         # Change to tmp_path directory
         monkeypatch.chdir(tmp_path)
         # Clear any existing env var
-        monkeypatch.delenv("APFLOW_JWT_SECRET_KEY", raising=False)
+        monkeypatch.delenv("APFLOW_JWT_SECRET", raising=False)
 
         # Run init-server command
         result = runner.invoke(cli, ["config", "init-server"])
@@ -215,15 +215,15 @@ class TestInitServerEnvSync:
         assert "admin_auth_token" in config
 
     def test_init_server_generates_secret_when_env_not_set(self, tmp_path, monkeypatch, isolated_config_dir):
-        """Test that init-server generates new secret when .env doesn't have APFLOW_JWT_SECRET_KEY."""
-        # Create .env file without APFLOW_JWT_SECRET_KEY
+        """Test that init-server generates new secret when .env doesn't have APFLOW_JWT_SECRET."""
+        # Create .env file without APFLOW_JWT_SECRET
         env_file = tmp_path / ".env"
         env_file.write_text("OTHER_VAR=some_value\n")
 
         # Change to tmp_path directory
         monkeypatch.chdir(tmp_path)
         # Clear any existing env var
-        monkeypatch.delenv("APFLOW_JWT_SECRET_KEY", raising=False)
+        monkeypatch.delenv("APFLOW_JWT_SECRET", raising=False)
 
         # Clear any existing jwt_secret from config to ensure fresh test
         config = load_cli_config()
@@ -252,7 +252,7 @@ class TestInitServerEnvSync:
         # Change to tmp_path directory
         monkeypatch.chdir(tmp_path)
         # Clear any existing env var
-        monkeypatch.delenv("APFLOW_JWT_SECRET_KEY", raising=False)
+        monkeypatch.delenv("APFLOW_JWT_SECRET", raising=False)
 
         # Clear any existing jwt_secret from config to ensure fresh test
         config = load_cli_config()
@@ -276,15 +276,15 @@ class TestInitServerEnvSync:
 
     def test_init_server_env_secret_syncs_with_existing_config(self, tmp_path, monkeypatch, isolated_config_dir):
         """Test that env secret overrides existing jwt_secret in config."""
-        # Create .env file with APFLOW_JWT_SECRET_KEY
+        # Create .env file with APFLOW_JWT_SECRET
         env_file = tmp_path / ".env"
         test_secret = "env-secret-override-67890"
-        env_file.write_text(f"APFLOW_JWT_SECRET_KEY={test_secret}\n")
+        env_file.write_text(f"APFLOW_JWT_SECRET={test_secret}\n")
 
         # Change to tmp_path directory
         monkeypatch.chdir(tmp_path)
         # Clear any existing env var
-        monkeypatch.delenv("APFLOW_JWT_SECRET_KEY", raising=False)
+        monkeypatch.delenv("APFLOW_JWT_SECRET", raising=False)
 
         # First, set an existing jwt_secret
         runner.invoke(cli, ["config", "set", "jwt_secret", "old-secret-123"])

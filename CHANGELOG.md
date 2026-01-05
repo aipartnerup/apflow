@@ -705,7 +705,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Configuration via environment variables or input parameters:
     - `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` for LLM authentication
     - `APFLOW_LLM_PROVIDER` for provider selection (default: openai)
-    - `APFLOW_LLM_MODEL` for model selection
+    - `OPENAI_MODEL` or `ANTHROPIC_MODEL` for model selection
   - Full test coverage with 28+ executor test cases and 8 API endpoint test cases
   - Usage examples:
     ```python

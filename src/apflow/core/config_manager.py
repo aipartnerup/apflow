@@ -82,11 +82,11 @@ class ConfigManager:
                 if env_path.exists():
                     load_dotenv(env_path, override=override)
                     logger.info(f"Loaded .env file from {env_path}")
-                    # Log if APFLOW_JWT_SECRET_KEY is in the file
+                    # Log if APFLOW_JWT_SECRET is in the file
                     try:
                         env_content = env_path.read_text()
-                        if "APFLOW_JWT_SECRET_KEY" in env_content:
-                            logger.info("Found APFLOW_JWT_SECRET_KEY in .env file")
+                        if "APFLOW_JWT_SECRET" in env_content:
+                            logger.info("Found APFLOW_JWT_SECRET in .env file")
                     except Exception:
                         pass  # Ignore errors reading file content
                     return

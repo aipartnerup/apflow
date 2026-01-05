@@ -182,7 +182,7 @@ def create_app_by_protocol(
                           Example: [MyCustomMiddleware, AnotherMiddleware]
         verify_token_func: Optional custom JWT token verification function.
                          If provided, it will be used to verify JWT tokens.
-                         If None and APFLOW_JWT_SECRET_KEY is set, a default verifier will be created.
+                         If None and APFLOW_JWT_SECRET is set, a default verifier will be created.
                          Signature: verify_token_func(token: str) -> Optional[dict]
         verify_permission_func: Optional function to verify user permissions.
                                If provided, it will be used to verify user permissions for accessing resources.
@@ -213,7 +213,7 @@ def create_app_by_protocol(
     _, _, description = get_protocol_dependency_info(protocol)
     logger.info(f"Creating {description} application")
     
-    # Check if APFLOW_JWT_SECRET_KEY is actually in .env file
+    # Check if APFLOW_JWT_SECRET is actually in .env file
     # This handles the case where env var was previously set but is now commented out
     env_file_has_jwt_secret = False
     try:
@@ -224,26 +224,26 @@ def create_app_by_protocol(
             for line in env_content.splitlines():
                 line = line.strip()
                 if line and not line.startswith("#"):
-                    if line.startswith("APFLOW_JWT_SECRET_KEY="):
+                    if line.startswith("APFLOW_JWT_SECRET="):
                         env_file_has_jwt_secret = True
                         break
     except Exception:
         pass
     
-    # If .env doesn't have APFLOW_JWT_SECRET_KEY, remove it from environment
-    if not env_file_has_jwt_secret and "APFLOW_JWT_SECRET_KEY" in os.environ:
-        del os.environ["APFLOW_JWT_SECRET_KEY"]
-        logger.info("Cleared APFLOW_JWT_SECRET_KEY from environment (not found in .env file)")
+    # If .env doesn't have APFLOW_JWT_SECRET, remove it from environment
+    if not env_file_has_jwt_secret and "APFLOW_JWT_SECRET" in os.environ:
+        del os.environ["APFLOW_JWT_SECRET"]
+        logger.info("Cleared APFLOW_JWT_SECRET from environment (not found in .env file)")
     
     # Common configuration
-    jwt_secret_key = os.getenv("APFLOW_JWT_SECRET_KEY")
+    jwt_secret_key = os.getenv("APFLOW_JWT_SECRET")
     jwt_algorithm = os.getenv("APFLOW_JWT_ALGORITHM", "HS256")
     
     # Log JWT configuration status for debugging
     if jwt_secret_key:
         logger.info(f"JWT secret key found: {'*' * min(len(jwt_secret_key), 8)}... (length: {len(jwt_secret_key)})")
     else:
-        logger.info("JWT secret key not found (APFLOW_JWT_SECRET_KEY not set) - authentication will be disabled")
+        logger.info("JWT secret key not found (APFLOW_JWT_SECRET not set) - authentication will be disabled")
     enable_system_routes = (
         os.getenv("APFLOW_ENABLE_SYSTEM_ROUTES", "true").lower()
         in ("true", "1", "yes")

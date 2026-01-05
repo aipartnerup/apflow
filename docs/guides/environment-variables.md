@@ -87,12 +87,12 @@ API_PORT=8000
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `APFLOW_JWT_SECRET_KEY` | string | - | Secret key for JWT token signing |
+| `APFLOW_JWT_SECRET` | string | - | Secret key for JWT token signing |
 | `APFLOW_JWT_ALGORITHM` | string | HS256 | JWT signing algorithm |
 
 **Example:**
 ```bash
-APFLOW_JWT_SECRET_KEY=your-secret-key-here
+APFLOW_JWT_SECRET=your-secret-key-here
 APFLOW_JWT_ALGORITHM=HS256
 ```
 
@@ -223,7 +223,7 @@ APFLOW_API_PORT=8000
 APFLOW_API_PROTOCOL=a2a
 
 # Security
-APFLOW_JWT_SECRET_KEY=your-secret-key-change-in-production
+APFLOW_JWT_SECRET=your-secret-key-change-in-production
 APFLOW_JWT_ALGORITHM=HS256
 
 # CORS (adjust for production)
