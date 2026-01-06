@@ -226,10 +226,14 @@ class ConfigManager:
         """
         try:
             import httpx
+            headers = {}
+            token = self.get_admin_auth_token()
+            if token:
+                headers["Authorization"] = f"Bearer {token}"
 
             async with httpx.AsyncClient(timeout=timeout) as client:
                 # Try to reach the health endpoint
-                response = await client.post(f"{url.rstrip('/')}", json={})
+                response = await client.post(f"{url.rstrip('/')}", json={}, headers=headers)
                 return response.status_code == 200
         except Exception as exc:
             logger.debug(f"API server health check failed for {url}: {exc}")
