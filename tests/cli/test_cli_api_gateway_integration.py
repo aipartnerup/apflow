@@ -13,6 +13,7 @@ from apflow.cli.api_gateway_helper import (
     should_use_api,
     run_async_safe,
     log_api_usage,
+    reset_api_validation,
 )
 from apflow.core.config_manager import get_config_manager
 
@@ -27,10 +28,35 @@ def mock_cli_config_file(monkeypatch):
         yield
 
 
+@pytest.fixture(autouse=True)
+def reset_api_state():
+    """Reset API validation state and config between tests."""
+    reset_api_validation()
+    cm = get_config_manager()
+    cm.clear()
+    yield
+    reset_api_validation()
+    cm.clear()
+
+
+@pytest.fixture
+def api_accessible(monkeypatch):
+    """Mock API accessibility check to avoid real network calls."""
+
+    async def _accessible(*_args, **_kwargs) -> bool:
+        return True
+
+    monkeypatch.setattr(
+        "apflow.core.config_manager.ConfigManager.check_api_server_accessible",
+        _accessible,
+    )
+    return None
+
+
 class TestAPIGatewayHelper:
     """Test API gateway helper functions."""
 
-    def test_should_use_api_when_configured(self):
+    def test_should_use_api_when_configured(self, api_accessible):
         """Test that should_use_api returns True when API is configured."""
         with patch(
             "apflow.cli.cli_config.get_cli_config_file_path",
@@ -105,7 +131,9 @@ class TestCLIListCommandWithAPI:
     """Test CLI list command with API gateway integration."""
 
     @pytest.mark.asyncio
-    async def test_list_uses_api_when_configured(self, mock_cli_config_file):
+    async def test_list_uses_api_when_configured(
+        self, mock_cli_config_file, api_accessible
+    ):
         """Test that list command uses API when configured."""
         cm = get_config_manager()
         cm.clear()
@@ -129,7 +157,9 @@ class TestCLIStatusCommandWithAPI:
     """Test CLI status command with API gateway integration."""
 
     @pytest.mark.asyncio
-    async def test_status_uses_api_when_configured(self, mock_cli_config_file):
+    async def test_status_uses_api_when_configured(
+        self, mock_cli_config_file, api_accessible
+    ):
         """Test that status command uses API when configured."""
         cm = get_config_manager()
         cm.clear()
@@ -144,7 +174,9 @@ class TestCLICancelCommandWithAPI:
     """Test CLI cancel command with API gateway integration."""
 
     @pytest.mark.asyncio
-    async def test_cancel_uses_api_when_configured(self, mock_cli_config_file):
+    async def test_cancel_uses_api_when_configured(
+        self, mock_cli_config_file, api_accessible
+    ):
         """Test that cancel command uses API when configured."""
         cm = get_config_manager()
         cm.clear()
@@ -159,7 +191,9 @@ class TestCLIGetCommandWithAPI:
     """Test CLI get command with API gateway integration."""
 
     @pytest.mark.asyncio
-    async def test_get_uses_api_when_configured(self, mock_cli_config_file):
+    async def test_get_uses_api_when_configured(
+        self, mock_cli_config_file, api_accessible
+    ):
         """Test that get command uses API when configured."""
         cm = get_config_manager()
         cm.clear()

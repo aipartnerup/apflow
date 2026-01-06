@@ -10,11 +10,16 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, Coroutine, Optional
+
 from apflow.cli.api_client import APIClient, APIClientError
 from apflow.core.config_manager import get_config_manager
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Flag to track if API URL has been validated in this session
+_api_validated = False
+_api_accessible = False
 
 
 def should_use_api() -> bool:
@@ -22,21 +27,86 @@ def should_use_api() -> bool:
     Check if CLI should use API gateway based on configuration.
     
     Loads configuration from CLI config file if not already loaded.
+    Validates API server URL accessibility (only once per session).
+    Falls back to local database if server is not accessible.
     
     Returns:
-        True if api_server_url is configured, False otherwise
+        True if api_server_url is configured and accessible, False otherwise
     """
+    global _api_validated, _api_accessible
+    
     cm = get_config_manager()
+    
+    # If already validated in this session, use cached result
+    if _api_validated:
+        return _api_accessible
+    
+    # Mark as validated (even if loading fails, we only try once per session)
+    _api_validated = True
     
     # Try to load from CLI config file if not already loaded
     if not cm.is_api_configured():
         try:
             cm.load_cli_config()
-        except Exception:
-            # If loading fails, just continue without API
-            pass
+        except Exception as e:
+            logger.debug(f"Failed to load API config: {e}")
+            _api_accessible = False
+            return False
+
+    if not cm.is_api_configured():
+        # Try a sensible default once (developer UX): localhost:8000
+        default_url = "http://localhost:8000"
+        try:
+            is_accessible = run_async_safe(
+                cm.check_api_server_accessible(default_url, timeout=1.0)
+            )
+            if is_accessible:
+                cm.set_api_server_url(default_url)
+                logger.info("Auto-configured API server URL: %s", default_url)
+                _api_accessible = True
+                return True
+        except Exception as discover_exc:  # pragma: no cover - defensive
+            logger.debug(
+                "Default API auto-check failed for %s: %s", default_url, discover_exc
+            )
+        
+        # logger.warning(
+        #     "API server URL is not configured; using local database. "
+        #     "Set it via 'apflow config set api_server_url <url>' (aliases: "
+        #     "api-server, api-url) or by exporting APFLOW_BASE_URL or "
+        #     "APFLOW_API_HOST/APFLOW_API_PORT."
+        # )
+        _api_accessible = False
+        return False
     
-    return cm.is_api_configured()
+    # If URL is configured, verify it's accessible
+    if cm.is_api_configured():
+        url = cm.get_api_server_url()
+        try:
+            is_accessible = run_async_safe(
+                cm.check_api_server_accessible(url, timeout=3.0)
+            )
+            if not is_accessible:
+                logger.warning(
+                    f"API server at {url} is not accessible. "
+                    "Will use local database for this session."
+                )
+                # Clear URL to fall back to local DB
+                cm.set_api_server_url(None)
+                _api_accessible = False
+                return False
+        except Exception as e:
+            logger.warning(
+                f"Failed to validate API server accessibility: {e}. "
+                "Will use local database for this session."
+            )
+            # Clear URL to fall back to local DB
+            cm.set_api_server_url(None)
+            _api_accessible = False
+            return False
+    
+    _api_accessible = cm.is_api_configured()
+    return _api_accessible
 
 
 @asynccontextmanager
@@ -156,3 +226,15 @@ def log_api_usage(command_name: str, using_api: bool) -> None:
         )
     else:
         logger.debug(f"Command '{command_name}' using local database")
+
+
+def reset_api_validation() -> None:
+    """
+    Reset API validation state.
+    
+    Useful for testing or when you want to re-validate the API server
+    on the next should_use_api() call.
+    """
+    global _api_validated, _api_accessible
+    _api_validated = False
+    _api_accessible = False

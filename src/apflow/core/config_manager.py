@@ -58,6 +58,13 @@ class ConfigManager:
         cm.set_api_server_url("http://localhost:8000")
         cm.set_admin_auth_token("token-xyz")
         cm.set_api_timeout(60.0)
+    
+    Configure API gateway with validation:
+        cm = get_config_manager()
+        success = await cm.set_api_server_url_with_check("http://localhost:8000")
+        if success:
+            cm.set_admin_auth_token("token-xyz")
+
     """
 
     _registry: ConfigRegistry = field(default_factory=get_config)
@@ -110,6 +117,9 @@ class ConfigManager:
         - APFLOW_ADMIN_AUTH_TOKEN: Admin auth token
 
         This enables users to connect without initializing config.cli.yaml.
+        
+        Note: URL accessibility checks are NOT performed here. URLs are loaded
+        as-is. Validation happens automatically in CLI when needed (see should_use_api).
         """
         config = {}
         
@@ -138,11 +148,11 @@ class ConfigManager:
                 logger.debug(f"Loaded API server URL from APFLOW_BASE_URL: {base_url}")
             else:
                 # Only use APFLOW_API_HOST/APFLOW_API_PORT if explicitly set
-                api_host = os.getenv("APFLOW_API_HOST")
-                api_port = os.getenv("APFLOW_API_PORT")
-                if api_host or api_port:
-                    host = api_host or os.getenv("API_HOST", "localhost")
-                    port = int(api_port or os.getenv("API_PORT", "8000"))
+                api_host = os.getenv("APFLOW_API_HOST") or os.getenv("API_HOST")
+                api_port = os.getenv("APFLOW_API_PORT") or os.getenv("API_PORT")
+                if api_host:
+                    host = api_host
+                    port = int(api_port or "8000")
                     base_url = get_url_with_host_and_port(host, port)
                     self.set_api_server_url(base_url)
                     logger.debug(f"Loaded API server URL from environment: {base_url}")
@@ -202,6 +212,29 @@ class ConfigManager:
 
     def get_demo_sleep_scale(self) -> float:
         return self._registry.get_demo_sleep_scale()
+
+    async def check_api_server_accessible(self, url: str, timeout: float = 5.0) -> bool:
+        """
+        Check if API server is accessible by making a health check request.
+
+        Args:
+            url: API server URL to check
+            timeout: Request timeout in seconds (default: 5.0)
+
+        Returns:
+            True if server is accessible, False otherwise
+        """
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                # Try to reach the health endpoint
+                response = await client.post(f"{url.rstrip('/')}", json={})
+                return response.status_code == 200
+        except Exception as exc:
+            logger.debug(f"API server health check failed for {url}: {exc}")
+            return False
+        
 
     # API Gateway configuration methods
     def set_api_server_url(self, url: Optional[str]) -> None:
