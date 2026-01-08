@@ -69,6 +69,8 @@ postgres = [
 # CrewAI LLM task support (includes BatchCrewaiExecutor)
 crewai = [
     "crewai[tools]>=1.4.1",
+    "litellm>=1.0.0",
+    "anthropic>=0.34.0",
     # Fix compatibility issue: aiodns 3.6.0 is incompatible with pycares 5.0.0
     # aiodns 3.6.1+ works with pycares 4.x, and pip will automatically resolve pycares version
     "aiodns>=3.6.1",
@@ -95,8 +97,10 @@ docker = [
 
 # gRPC execution
 grpc = [
-    "grpcio>=1.60.0",
-    "grpcio-tools>=1.60.0",
+    "grpclib>=0.4.7",
+    "protobuf>=4.25.0",
+    # Optional: nicer stubs/dataclasses when generating code
+    # "betterproto>=2.0.0rc3",
 ]
 
 # MCP (Model Context Protocol) execution

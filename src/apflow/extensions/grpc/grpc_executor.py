@@ -14,17 +14,34 @@ from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 
+BACKEND: Optional[str]
+GRPC_AVAILABLE: bool
+
 try:
-    import grpc
-    from google.protobuf import json_format  # noqa: F401
-    from google.protobuf.message import Message  # noqa: F401
+    # Prefer pure-Python grpclib backend (fast install)
+    from grpclib.client import Channel as GrpcLibChannel  # type: ignore
+    BACKEND = "grpclib"
     GRPC_AVAILABLE = True
 except ImportError:
-    GRPC_AVAILABLE = False
-    logger.warning(
-        "grpcio is not installed. gRPC executor will not be available. "
-        "Install it with: pip install apflow[grpc]"
-    )
+    try:
+        # Fallback to grpcio if available in the environment
+        import grpc  # type: ignore
+        BACKEND = "grpcio"
+        GRPC_AVAILABLE = True
+    except ImportError:
+        BACKEND = None
+        GRPC_AVAILABLE = False
+        logger.warning(
+            "grpclib is not installed. gRPC executor will not be available. "
+            "Install it with: pip install apflow[grpc]"
+        )
+
+# Optional protobuf helpers if present (used in real implementations)
+try:
+    from google.protobuf import json_format  # noqa: F401
+    from google.protobuf.message import Message  # noqa: F401
+except Exception:  # noqa: BLE001
+    pass
 
 
 @executor_register()
@@ -90,9 +107,9 @@ class GrpcExecutor(BaseTask):
                 - success: Boolean indicating success
                 - metadata: Response metadata
         """
-        if not GRPC_AVAILABLE:
+        if not GRPC_AVAILABLE or BACKEND is None:
             raise ConfigurationError(
-                f"[{self.id}] grpcio is not installed. Install it with: pip install apflow[grpc]"
+                f"[{self.id}] gRPC backend is not available. Install it with: pip install apflow[grpc]"
             )
         
         server = inputs.get("server")
@@ -113,15 +130,23 @@ class GrpcExecutor(BaseTask):
         
         logger.info(f"Calling gRPC {service}.{method} on {server}")
         
-        # Create gRPC channel
-        # Exceptions (e.g., grpc.RpcError) will propagate to TaskManager
-        channel = grpc.aio.insecure_channel(server)
+        # Helper to create channel per backend
+        channel = None
+        if BACKEND == "grpclib":
+            # grpclib requires host and port separately
+            host, port = self._parse_server(server)
+            channel = GrpcLibChannel(host, port)
+        elif BACKEND == "grpcio":
+            # Exceptions (e.g., grpc.RpcError) will propagate to TaskManager
+            channel = grpc.aio.insecure_channel(server)  # type: ignore[attr-defined]
+        else:
+            raise ConfigurationError(f"[{self.id}] Unsupported gRPC backend: {BACKEND}")
         
         try:
             # Check for cancellation before making call
             if self.cancellation_checker and self.cancellation_checker():
                 logger.info("gRPC call cancelled before execution")
-                await channel.close()
+                await self._close_channel(channel)
                 return {
                     "success": False,
                     "error": "Call was cancelled",
@@ -160,7 +185,7 @@ class GrpcExecutor(BaseTask):
             # Check for cancellation after call
             if self.cancellation_checker and self.cancellation_checker():
                 logger.info("gRPC call cancelled after execution")
-                await channel.close()
+                await self._close_channel(channel)
                 return {
                     "success": False,
                     "error": "Call was cancelled",
@@ -187,7 +212,38 @@ class GrpcExecutor(BaseTask):
             return result
             
         finally:
-            await channel.close()
+            await self._close_channel(channel)
+
+    async def _close_channel(self, channel: Any) -> None:
+        """Close channel for either backend, awaiting if needed."""
+        if channel is None:
+            return
+        close = getattr(channel, "close", None)
+        if not close:
+            return
+        try:
+            result = close()
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception as exc:  # noqa: BLE001
+            logger.debug(f"[{self.id}] Error on channel close: {exc}")
+
+    def _parse_server(self, server: str) -> tuple[str, int]:
+        """Parse server string 'host:port' into components for grpclib.
+
+        Raises ValidationError if format is invalid.
+        """
+        if ":" not in server:
+            raise ValidationError(f"[{self.id}] server must be in 'host:port' format for grpclib")
+        host, port_str = server.rsplit(":", 1)
+        host = host.strip()
+        try:
+            port = int(port_str)
+        except ValueError as exc:
+            raise ValidationError(f"[{self.id}] invalid port in server: {server}") from exc
+        if not host or not (0 < port < 65536):
+            raise ValidationError(f"[{self.id}] invalid server address: {server}")
+        return host, port
     
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo gRPC call result"""
