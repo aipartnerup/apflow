@@ -108,7 +108,149 @@ apflow tasks list --local-only  # Force local database access
 
 ---
 
-### Priority 3: Protocol Adapter Abstraction Layer ⭐⭐⭐
+### Priority 3: Distributed Core Enablement ⭐⭐⭐
+
+**Goal:** Multi-node/instance orchestration with centralized coordination
+
+**Problem Statement:**
+- Current single-node limitation: only one API or CLI instance can safely write to DuckDB
+- No distributed task assignment across nodes
+- Cannot leverage multiple machines for horizontal scaling
+- No support for high availability and fault tolerance
+- Tasks must run on the same machine as TaskManager instance
+
+For detailed design rationale and architecture decisions, see [Distributed Orchestration Design](distributed-orchestration-design.md).
+
+**Implementation:**
+
+**Node Registry & Management** (`src/apflow/core/distributed/`)
+```python
+class NodeRegistry:
+    async def register_node(
+        self, 
+        node_id: str, 
+        capabilities: dict,  # CPU/GPU/memory/labels/executor_types
+        executor_types: list[str]
+    ) -> None: ...
+    
+    async def heartbeat(self, node_id: str) -> None: ...
+    
+    async def deregister_node(self, node_id: str) -> None: ...
+    
+    async def list_healthy_nodes(self) -> list[NodeInfo]: ...
+
+@dataclass
+class PlacementConstraints:
+    requires_executors: list[str]  # Must have one of these
+    requires_capabilities: dict  # e.g., {"gpu": "nvidia", "memory_gb": 16}
+    forbidden_nodes: set[str]  # Blacklist specific nodes
+    max_parallel_per_node: int = 1
+```
+
+**Task Leasing & Idempotency** (`src/apflow/core/distributed/leasing.py`)
+```python
+class TaskLease:
+    task_id: str
+    node_id: str
+    lease_token: str
+    acquired_at: datetime
+    expires_at: datetime
+    
+    async def renew(self, duration: timedelta) -> None: ...
+    async def release(self) -> None: ...
+
+@dataclass
+class ExecutionIdempotency:
+    idempotency_key: str  # Unique per (task_id, execution_attempt)
+    result_cache: dict  # Store result to return on retry
+```
+
+**Distributed TaskManager** (`src/apflow/core/distributed/manager.py`)
+```python
+class DistributedTaskManager(TaskManager):
+    async def acquire_lease(
+        self, 
+        task_id: str, 
+        node_id: str,
+        constraints: PlacementConstraints
+    ) -> TaskLease: ...
+    
+    async def find_executable_tasks(
+        self, 
+        node_id: str
+    ) -> list[Task]: ...
+    
+    async def renew_lease(self, lease: TaskLease) -> None: ...
+    
+    async def report_completion(
+        self, 
+        task_id: str,
+        node_id: str,
+        result: dict,
+        idempotency_key: str
+    ) -> None: ...
+```
+
+**Storage Layer Extensions**
+```python
+# Extend task model with:
+- lease_id: Optional[str]
+- lease_expires_at: Optional[datetime]
+- placement_constraints: dict
+- idempotency_key: Optional[str]
+- last_heartbeat_from: Optional[str]
+
+# New database operations:
+- acquire_lease(task_id, node_id, lease_duration)
+- release_lease(task_id)
+- find_tasks_by_placement(node_id, constraints)
+- record_completion(task_id, idempotency_key, result)
+```
+
+**Deployment Configuration**
+```bash
+# Mode 1: Single-node (default, no distributed)
+apflow serve --port 8000
+
+# Mode 2: Distributed coordinator (central write authority)
+apflow serve --port 8000 --distributed-mode coordinator --database-url postgresql://...
+
+# Mode 3: Distributed worker (executes tasks from coordinator)
+apflow serve --node-id worker-1 --coordinator-url http://coordinator:8000
+```
+
+**Deliverables:**
+- Node registry with health checks and capability tracking
+- Task leasing mechanism with automatic expiry and cleanup
+- Idempotent task execution with result caching
+- Placement constraints (executor type, labels, resource requirements)
+- Distributed TaskManager with task assignment APIs
+- PostgreSQL-based distributed locking (DuckDB remains read-only in distributed mode)
+- Heartbeat/health check system with stale lease detection
+- Task recovery on node failure (automatic reassignment)
+- Comprehensive test suite (25+ distributed scenarios)
+- Deployment documentation: topology, node setup, failover patterns
+- Migration guide: single-node to distributed mode
+
+**Key Decisions:**
+- Single writer (API/central coordinator) with optional read replicas
+- Lease-based (not lock-based) for graceful node failure handling
+- Optional feature (backward compatible single-node mode)
+- PostgreSQL support (existing dependency)
+- Coordinator can run in same process as API or standalone
+
+**Why:**
+- Unlocks multi-node deployments without architectural rework
+- Foundation for all protocol adapters (each can run on distributed node)
+- Prerequisite for horizontal scaling and high availability
+- Enables load distribution across machines/containers
+- Competitive with Celery/Prefect distributed capabilities
+- Enterprise requirement for production deployments
+- Solves DuckDB concurrency limitations definitively
+
+---
+
+### Priority 4: Protocol Adapter Abstraction Layer ⭐⭐⭐
 
 **Goal:** Unified protocol interface, framework-agnostic
 
@@ -127,14 +269,15 @@ class ProtocolAdapter(Protocol):
 - Testing framework for protocol adapters
 
 **Why:**
-- Foundation for multi-protocol support
+- Foundation for multi-protocol support (built on distributed core)
 - Enables GraphQL/MQTT/WebSocket additions
 - Improves testability
+- Each protocol can run on distributed nodes
 - No competitor has this abstraction
 
 ---
 
-### Priority 4: GraphQL Protocol Adapter ⭐⭐⭐
+### Priority 5: GraphQL Protocol Adapter ⭐⭐⭐
 
 **Goal:** GraphQL query interface for complex task trees
 
@@ -166,7 +309,7 @@ graphql = ["strawberry-graphql>=0.219.0"]
 
 ---
 
-### Priority 5: MQTT Protocol Adapter ⭐⭐
+### Priority 6: MQTT Protocol Adapter ⭐⭐
 
 **Goal:** IoT/Edge AI agent communication
 
@@ -197,7 +340,7 @@ mqtt = ["paho-mqtt>=1.6.1"]
 
 ---
 
-### Priority 6: Observability Hook System ⭐⭐
+### Priority 7: Observability Hook System ⭐⭐
 
 **Goal:** Pluggable metrics collection, user-chosen backends
 
@@ -226,7 +369,7 @@ tracer.register_collector(PrometheusCollector())  # User provides
 
 ---
 
-### Priority 7: Workflow Patterns Library ⭐⭐
+### Priority 8: Workflow Patterns Library ⭐⭐
 
 **Goal:** Common orchestration patterns as reusable functions
 
@@ -255,7 +398,7 @@ result = await map_reduce(
 
 ---
 
-### Priority 8: VS Code Extension ⭐
+### Priority 9: VS Code Extension ⭐
 
 **Goal:** Task tree visualization in editor
 
@@ -273,7 +416,7 @@ result = await map_reduce(
 
 ---
 
-### Priority 9: Testing Utilities ⭐
+### Priority 10: Testing Utilities ⭐
 
 **Goal:** Make workflow testing easy
 
@@ -299,7 +442,7 @@ result = await simulate_workflow(task_tree, speed_factor=10.0)
 
 ---
 
-### Priority 10: Hot Reload Development Mode ⭐
+### Priority 11: Hot Reload Development Mode ⭐
 
 **Goal:** Auto-reload on code changes
 
@@ -324,7 +467,7 @@ apflow dev --watch src/tasks/
 
 ---
 
-### Priority 11: Bidirectional WebSocket Server ⭐
+### Priority 12: Bidirectional WebSocket Server ⭐
 
 **Goal:** Real-time agent-to-agent collaboration
 
