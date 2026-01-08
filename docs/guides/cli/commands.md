@@ -61,7 +61,7 @@ apflow run batch-004 --tasks '[{...}]' \
 
 ## Task Querying
 
-### apflow tasks list
+### apflow tasks list / ls
 
 List all tasks in database:
 
@@ -105,7 +105,7 @@ List and sort by date:
 apflow tasks list --sort created_at --reverse
 ```
 
-### apflow tasks status
+### apflow tasks status / st
 
 Get status of a specific task:
 
@@ -136,7 +136,7 @@ apflow tasks status task-001 --watch
 # Press Ctrl+C to stop watching
 ```
 
-### apflow tasks watch
+### apflow tasks watch / w
 
 Monitor task execution in real-time:
 
@@ -173,7 +173,7 @@ Watch with slower polling:
 apflow tasks watch --all --interval 5
 ```
 
-### apflow tasks history
+### apflow tasks history / hi
 
 View task execution history:
 
@@ -200,7 +200,7 @@ apflow tasks history task-001 --days 30
 
 ## Task Cancellation
 
-### apflow tasks cancel
+### apflow tasks cancel / c
 
 Cancel a running task:
 
@@ -594,15 +594,18 @@ Task output depends on the executor method. Examples:
 }
 ```
 
+
 ## Command Aliases
 
-Shorter versions of common commands:
+All common subcommands support short aliases:
 
 - `apflow tasks list` → `apflow tasks ls`
 - `apflow tasks status` → `apflow tasks st`
 - `apflow tasks cancel` → `apflow tasks c`
 - `apflow tasks watch` → `apflow tasks w`
-- `apflow flow run` → `apflow f run`
+- `apflow tasks history` → `apflow tasks hi`
+
+You can use either the full name or the alias for these commands.
 
 ## Error Handling
 

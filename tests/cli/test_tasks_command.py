@@ -1,3 +1,40 @@
+import pytest
+
+# Alias and history tests for CLI tasks
+class TestTasksAliases:
+    @pytest.mark.parametrize("cmd", ["list", "ls"])
+    def test_tasks_list_empty_db(self, use_test_db_session, disable_api_for_tests, cmd):
+        result = runner.invoke(cli, ["tasks", cmd])
+        assert result.exit_code == 0
+        output = result.stdout
+        tasks = json.loads(output)
+        assert isinstance(tasks, list)
+        assert len(tasks) == 0
+
+    @pytest.mark.parametrize("cmd", ["status", "st"])
+    def test_tasks_status_not_found(self, use_test_db_session, disable_api_for_tests, cmd):
+        result = runner.invoke(cli, ["tasks", cmd, "not-found-id"])
+        assert result.exit_code == 0
+        output = result.stdout
+        statuses = json.loads(output)
+        assert isinstance(statuses, list)
+        assert len(statuses) > 0
+        status = statuses[0]
+        assert status["status"] == "not_found"
+        assert status["task_id"] == "not-found-id"
+        assert status["context_id"] == "not-found-id"
+
+    @pytest.mark.parametrize("cmd", ["watch", "w"])
+    def test_tasks_watch_no_tasks(self, disable_api_for_tests, cmd):
+        result = runner.invoke(cli, ["tasks", cmd, "--task-id", "dummy_id"])
+        assert result.exit_code in (0, 1)
+        assert "Error" not in result.output
+
+    @pytest.mark.parametrize("cmd", ["history", "hi"])
+    def test_tasks_history_not_found(self, disable_api_for_tests, cmd):
+        result = runner.invoke(cli, ["tasks", cmd, "nonexistent_id"])
+        assert result.exit_code == 1
+        assert "not found" in result.output or "No history" in result.output
 """
 Test CLI tasks command functionality
 

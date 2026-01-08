@@ -21,14 +21,77 @@ from rich.live import Live
 
 logger = get_logger(__name__)
 
+
 app = typer.Typer(name="tasks", help="Manage and query tasks")
 console = Console()
 
+# --- Added: history subcommand ---
+@app.command("history")
+@app.command("hi")
+def history(
+    task_id: str = typer.Argument(..., help="Task ID to show history for"),
+    user_id: Optional[str] = typer.Option(None, "--user-id", help="Filter by user ID"),
+    days: Optional[int] = typer.Option(7, "--days", help="Show last N days (default: 7)"),
+    limit: Optional[int] = typer.Option(100, "--limit", help="Limit results (default: 100)"),
+):
+    """
+    Show execution history for a specific task (status changes, retries, logs).
+    Args:
+        task_id: Task ID to show history for
+        user_id: Filter by user ID
+        days: Show last N days
+        limit: Limit results
+    """
+    try:
+        from apflow.core.storage import get_default_session
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.config import get_task_model_class
+        from datetime import datetime, timedelta
+
+        db_session = get_default_session()
+        task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+
+        # Get the task
+        task = run_async_safe(task_repository.get_task_by_id(task_id))
+        if not task:
+            typer.echo(f"Task {task_id} not found", err=True)
+            raise typer.Exit(1)
+
+        # Calculate time window
+        since = None
+        if days:
+            since = datetime.utcnow() - timedelta(days=days)
+
+        # Query history (status changes, logs, retries)
+        # This assumes a method get_task_history exists; if not, fallback to status log
+        try:
+            history_items = run_async_safe(task_repository.get_task_history(
+                task_id=task_id,
+                user_id=user_id,
+                since=since,
+                limit=limit
+            ))
+        except AttributeError:
+            # Fallback: show status change log if get_task_history not implemented
+            history_items = getattr(task, "status_log", [])
+
+        if not history_items:
+            typer.echo(f"No history found for task {task_id}")
+            return
+
+        typer.echo(json.dumps(history_items, indent=2, default=str))
+
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error getting task history")
+        raise typer.Exit(1)
 
 
 
 
-@app.command()
+
+@app.command("status")
+@app.command("st")
 def status(
     task_ids: List[str] = typer.Argument(..., help="Task IDs to check status for"),
 ):
@@ -282,7 +345,8 @@ def _print_count_table(counts: dict):
 
 
 
-@app.command()
+@app.command("cancel")
+@app.command("c")
 def cancel(
     task_ids: List[str] = typer.Argument(..., help="Task IDs to cancel"),
     force: bool = typer.Option(
@@ -999,6 +1063,7 @@ def children(
 
 
 @app.command("list")
+@app.command("ls")
 def list_tasks(
     user_id: Optional[str] = typer.Option(
         None, "--user-id", "-u", help="Filter by user ID",
@@ -1106,7 +1171,8 @@ def list_tasks(
         raise typer.Exit(1)
 
 
-@app.command()
+@app.command("watch")
+@app.command("w")
 def watch(
     task_id: Optional[str] = typer.Option(None, "--task-id", "-t", help="Watch specific task ID"),
     interval: float = typer.Option(1.0, "--interval", "-i", help="Update interval in seconds"),
@@ -1208,7 +1274,17 @@ def watch(
                 while True:
                     time.sleep(interval)
                     live.update(create_status_table(task_ids_to_watch))
-                    
+
+                    # Check if all watched tasks are missing (None)
+                    missing_count = 0
+                    for tid in task_ids_to_watch:
+                        task = run_async_safe(get_task_safe(tid))
+                        if task is None:
+                            missing_count += 1
+                    if missing_count == len(task_ids_to_watch):
+                        typer.echo("No such task(s) or database error, exiting.")
+                        break
+
                     # Check if all tasks are finished
                     if not all_tasks:
                         # For single task, check if it's finished
