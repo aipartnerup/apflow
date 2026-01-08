@@ -45,7 +45,7 @@ EXTENSION_CONFIG: dict[str, dict[str, Any]] = {
         "classes": [("DockerExecutor", "docker_executor")],
     },
     "grpc": {
-        "dependencies": ["grpcio"],  # From [grpc] extra
+        "dependencies": ["grpclib"],  # From [grpc] extra (pure-Python backend)
         "module": "apflow.extensions.grpc",
         "classes": [("GrpcExecutor", "grpc_executor")],
     },

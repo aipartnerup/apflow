@@ -109,7 +109,7 @@ class GrpcExecutor(BaseTask):
         """
         if not GRPC_AVAILABLE or BACKEND is None:
             raise ConfigurationError(
-                f"[{self.id}] gRPC backend is not available. Install it with: pip install apflow[grpc]"
+                f"[{self.id}] grpcio is not installed. Install it with: pip install apflow[grpc]"
             )
         
         server = inputs.get("server")

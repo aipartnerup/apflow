@@ -12,17 +12,15 @@ from apflow.extensions.grpc.grpc_executor import GrpcExecutor, GRPC_AVAILABLE
 class TestGrpcExecutor:
     """Test GrpcExecutor functionality"""
     
-    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
+    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpclib not installed")
     @pytest.mark.asyncio
     async def test_execute_grpc_call(self):
         """Test executing a gRPC call"""
         executor = GrpcExecutor()
         
-        with patch("grpc.aio.insecure_channel") as mock_channel:
+        with patch("apflow.extensions.grpc.grpc_executor.GrpcLibChannel") as mock_channel:
             mock_channel_instance = AsyncMock()
             mock_channel.return_value = mock_channel_instance
-            mock_channel_instance.__aenter__ = AsyncMock(return_value=mock_channel_instance)
-            mock_channel_instance.__aexit__ = AsyncMock(return_value=None)
             mock_channel_instance.close = AsyncMock()
             
             result = await executor.execute({
@@ -37,7 +35,7 @@ class TestGrpcExecutor:
             assert result["service"] == "Greeter"
             assert result["method"] == "SayHello"
     
-    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
+    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpclib not installed")
     @pytest.mark.asyncio
     async def test_execute_missing_server(self):
         """Test error when server is missing"""
@@ -51,7 +49,7 @@ class TestGrpcExecutor:
                 "request": {}
             })
     
-    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
+    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpclib not installed")
     @pytest.mark.asyncio
     async def test_execute_missing_service(self):
         """Test error when service is missing"""
@@ -65,7 +63,7 @@ class TestGrpcExecutor:
                 "request": {}
             })
     
-    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
+    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpclib not installed")
     @pytest.mark.asyncio
     async def test_execute_missing_method(self):
         """Test error when method is missing"""
@@ -81,7 +79,7 @@ class TestGrpcExecutor:
     
     @pytest.mark.asyncio
     async def test_execute_grpc_not_available(self):
-        """Test behavior when grpcio is not installed"""
+        """Test behavior when grpclib is not installed"""
         from apflow.core.execution.errors import ConfigurationError
         with patch("apflow.extensions.grpc.grpc_executor.GRPC_AVAILABLE", False):
             executor = GrpcExecutor()
@@ -93,17 +91,15 @@ class TestGrpcExecutor:
                     "request": {}
                 })
     
-    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
+    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpclib not installed")
     @pytest.mark.asyncio
     async def test_execute_grpc_call_with_metadata(self):
         """Test executing gRPC call with metadata"""
         executor = GrpcExecutor()
         
-        with patch("grpc.aio.insecure_channel") as mock_channel:
+        with patch("apflow.extensions.grpc.grpc_executor.GrpcLibChannel") as mock_channel:
             mock_channel_instance = AsyncMock()
             mock_channel.return_value = mock_channel_instance
-            mock_channel_instance.__aenter__ = AsyncMock(return_value=mock_channel_instance)
-            mock_channel_instance.__aexit__ = AsyncMock(return_value=None)
             mock_channel_instance.close = AsyncMock()
             
             result = await executor.execute({
@@ -117,17 +113,15 @@ class TestGrpcExecutor:
             assert result["success"] is True
             assert "metadata" in result
     
-    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
+    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpclib not installed")
     @pytest.mark.asyncio
     async def test_execute_grpc_call_with_timeout(self):
         """Test executing gRPC call with custom timeout"""
         executor = GrpcExecutor()
         
-        with patch("grpc.aio.insecure_channel") as mock_channel:
+        with patch("apflow.extensions.grpc.grpc_executor.GrpcLibChannel") as mock_channel:
             mock_channel_instance = AsyncMock()
             mock_channel.return_value = mock_channel_instance
-            mock_channel_instance.__aenter__ = AsyncMock(return_value=mock_channel_instance)
-            mock_channel_instance.__aexit__ = AsyncMock(return_value=None)
             mock_channel_instance.close = AsyncMock()
             
             result = await executor.execute({
@@ -140,27 +134,23 @@ class TestGrpcExecutor:
             
             assert result["success"] is True
     
-    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
+    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpclib not installed")
     @pytest.mark.asyncio
     async def test_execute_grpc_rpc_error(self):
         """Test handling gRPC RPC errors"""
         executor = GrpcExecutor()
+        from grpclib.exceptions import GRPCError, Status  # type: ignore[import-not-found]
+
+        mock_error = GRPCError(Status.NOT_FOUND, "not found", None)
         
-        import grpc
-        mock_error = grpc.RpcError()
-        mock_error.code = MagicMock(return_value=grpc.StatusCode.NOT_FOUND)
-        
-        with patch("grpc.aio.insecure_channel") as mock_channel:
+        with patch("apflow.extensions.grpc.grpc_executor.GrpcLibChannel") as mock_channel:
             mock_channel_instance = AsyncMock()
             mock_channel.return_value = mock_channel_instance
-            mock_channel_instance.__aenter__ = AsyncMock(return_value=mock_channel_instance)
-            mock_channel_instance.__aexit__ = AsyncMock(return_value=None)
             mock_channel_instance.close = AsyncMock()
             
             # Simulate RPC error by patching asyncio.sleep to raise error
-            # RpcError should propagate
             with patch("asyncio.sleep", side_effect=mock_error):
-                with pytest.raises(grpc.RpcError):
+                with pytest.raises(GRPCError):
                     await executor.execute({
                         "server": "localhost:50051",
                         "service": "Greeter",
@@ -168,18 +158,16 @@ class TestGrpcExecutor:
                         "request": {"name": "World"}
                     })
     
-    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
+    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpclib not installed")
     @pytest.mark.asyncio
     async def test_execute_grpc_cancellation_before_call(self):
         """Test cancellation before gRPC call"""
         executor = GrpcExecutor()
         executor.cancellation_checker = lambda: True
         
-        with patch("grpc.aio.insecure_channel") as mock_channel:
+        with patch("apflow.extensions.grpc.grpc_executor.GrpcLibChannel") as mock_channel:
             mock_channel_instance = AsyncMock()
             mock_channel.return_value = mock_channel_instance
-            mock_channel_instance.__aenter__ = AsyncMock(return_value=mock_channel_instance)
-            mock_channel_instance.__aexit__ = AsyncMock(return_value=None)
             mock_channel_instance.close = AsyncMock()
             
             result = await executor.execute({
@@ -192,7 +180,7 @@ class TestGrpcExecutor:
             assert result["success"] is False
             assert "cancelled" in result["error"].lower()
     
-    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
+    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpclib not installed")
     @pytest.mark.asyncio
     async def test_execute_grpc_cancellation_after_call(self):
         """Test cancellation after gRPC call"""
@@ -207,11 +195,9 @@ class TestGrpcExecutor:
         
         executor.cancellation_checker = check_cancellation
         
-        with patch("grpc.aio.insecure_channel") as mock_channel:
+        with patch("apflow.extensions.grpc.grpc_executor.GrpcLibChannel") as mock_channel:
             mock_channel_instance = AsyncMock()
             mock_channel.return_value = mock_channel_instance
-            mock_channel_instance.__aenter__ = AsyncMock(return_value=mock_channel_instance)
-            mock_channel_instance.__aexit__ = AsyncMock(return_value=None)
             mock_channel_instance.close = AsyncMock()
             
             result = await executor.execute({
@@ -224,7 +210,7 @@ class TestGrpcExecutor:
             assert result["success"] is False
             assert "cancelled" in result["error"].lower()
     
-    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpcio not installed")
+    @pytest.mark.skipif(not GRPC_AVAILABLE, reason="grpclib not installed")
     @pytest.mark.asyncio
     async def test_execute_grpc_different_services(self):
         """Test calling different gRPC services"""
@@ -233,11 +219,9 @@ class TestGrpcExecutor:
         services = ["Greeter", "Calculator", "UserService"]
         
         for service in services:
-            with patch("grpc.aio.insecure_channel") as mock_channel:
+            with patch("apflow.extensions.grpc.grpc_executor.GrpcLibChannel") as mock_channel:
                 mock_channel_instance = AsyncMock()
                 mock_channel.return_value = mock_channel_instance
-                mock_channel_instance.__aenter__ = AsyncMock(return_value=mock_channel_instance)
-                mock_channel_instance.__aexit__ = AsyncMock(return_value=None)
                 mock_channel_instance.close = AsyncMock()
                 
                 result = await executor.execute({
