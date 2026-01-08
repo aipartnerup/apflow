@@ -314,7 +314,7 @@ include additional FastAPI REST API endpoints for direct HTTP access without the
 
 ## Project Structure
 
-See [docs/architecture/DIRECTORY_STRUCTURE.md](docs/architecture/DIRECTORY_STRUCTURE.md) for detailed directory structure and module descriptions.
+See [docs/architecture/directory-structure.md](docs/architecture/directory-structure.md) for detailed directory structure and module descriptions.
 
 **Installation Strategy**:
 - `pip install apflow`: Core library only (execution, base, storage, utils) - **NO CrewAI**
@@ -329,28 +329,49 @@ See [docs/architecture/DIRECTORY_STRUCTURE.md](docs/architecture/DIRECTORY_STRUC
 ## 📚 Documentation
 
 **Quick Links:**
-- **[📖 Full Documentation](docs/index.md)** - Complete documentation index
 - **[🚀 Quick Start](docs/getting-started/quick-start.md)** - Get running in 10 minutes
-- **[📘 Tutorials](docs/tutorials/)** - Step-by-step tutorials
 - **[📝 Guides](docs/guides/)** - Comprehensive guides
 - **[💡 Examples](docs/examples/)** - Practical examples
 - **[🔧 API Reference](docs/api/)** - Complete API documentation
 
 **For New Users:**
 - Start with [Getting Started](docs/getting-started/index.md)
+- Read [Concepts](docs/getting-started/concepts.md)
 - Follow the [Quick Start Guide](docs/getting-started/quick-start.md)
-- Try the [First Steps Tutorial](docs/tutorials/tutorial-01-first-steps.md)
+- Try the [First Steps Tutorial](docs/getting-started/tutorials/tutorial-01-first-steps.md)
+- Explore more [Examples](docs/getting-started/examples.md)
 
 **For Developers:**
 - [Task Orchestration Guide](docs/guides/task-orchestration.md)
 - [Custom Tasks Guide](docs/guides/custom-tasks.md)
 - [Best Practices](docs/guides/best-practices.md)
-- [API Reference](docs/api/python.md)
+- [Library Usage Guide](docs/guides/library-usage.md)
+- [API Server Guide](docs/guides/api-server.md)
+- [CLI Reference](docs/guides/cli/)
+- [Environment Variables](docs/guides/environment-variables.md)
+- [FAQ](docs/guides/faq.md)
+- [Python API Reference](docs/api/python.md)
+- [HTTP API Reference](docs/api/http.md)
+
+**Architecture & Design:**
+- [Architecture Overview](docs/architecture/overview.md)
+- [Directory Structure](docs/architecture/directory-structure.md)
+- [Task Tree Lifecycle](docs/architecture/task-tree-lifecycle.md)
+- [Configuration](docs/architecture/configuration.md)
+- [Extension Registry Design](docs/architecture/extension-registry-design.md)
 
 **For Contributors:**
 - [Development Setup](docs/development/setup.md)
 - [Contributing Guide](docs/development/contributing.md)
-- [Architecture Overview](docs/architecture/overview.md)
+- [Extension Guide](docs/development/extending.md)
+- [Exception Handling](docs/development/exception.md)
+- [Roadmap](docs/development/roadmap.md)
+
+**Examples & Templates:**
+- [Basic Task Example](docs/examples/basic_task.md)
+- [Task Tree Example](docs/examples/task-tree.md)
+- [Generate Executor Example](docs/examples/generate-executor.md)
+- [Real-World Examples](docs/examples/real-world.md)
 
 Full documentation is also available at [flow-docs.aipartnerup.com](https://flow-docs.aipartnerup.com).
 
