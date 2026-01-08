@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+
+## [0.11.1] 2026-01-08
+
+### Added
+- Distributed core enablement for multi-node orchestration (experimental)
+- CLI: implement `task history` command and add short aliases for all major tasks subcommands:
+  - `list` → `ls`, `status` → `st`, `cancel` → `c`, `watch` → `w`, `history` → `hi`
+  - All aliases are documented and tested
+- gRPC executor: support multiple backends and improved channel management
+
+### Changed
+- Updated gRPC dependencies and test references from grpcio to grpclib
+
+
 ## [0.11.0] 2026-01-06
 
 ### Added

@@ -2,6 +2,25 @@
 
 Complete reference of all CLI commands for executing and managing tasks.
 
+## Command Aliases
+
+All major `apflow tasks` subcommands support short aliases for convenience:
+
+| Command         | Alias |
+|-----------------|-------|
+| list            | ls    |
+| status          | st    |
+| cancel          | c     |
+| watch           | w     |
+| history         | hi    |
+
+You can use either the full command or its alias interchangeably, e.g.:
+`apflow tasks ls` (same as `apflow tasks list`)
+`apflow tasks st <id>` (same as `apflow tasks status <id>`)
+`apflow tasks c <id>` (same as `apflow tasks cancel <id>`)
+`apflow tasks w --task-id <id>` (same as `apflow tasks watch --task-id <id>`)
+`apflow tasks hi <id>` (same as `apflow tasks history <id>`)
+
 ## Task Execution
 
 ### apflow run

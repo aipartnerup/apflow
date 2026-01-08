@@ -5,7 +5,7 @@ Tests for gRPC service execution functionality.
 """
 
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from apflow.extensions.grpc.grpc_executor import GrpcExecutor, GRPC_AVAILABLE
 
 

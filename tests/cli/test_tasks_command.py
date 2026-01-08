@@ -1,4 +1,23 @@
+"""
+Test CLI tasks command functionality
+
+Tests the core business scenarios for task management via CLI.
+"""
+
+import json
+import uuid
+
 import pytest
+import pytest_asyncio
+from click.testing import CliRunner
+
+from apflow.cli.main import cli
+from apflow.core.config import get_task_model_class
+from apflow.core.execution.task_executor import TaskExecutor
+from apflow.core.storage import reset_default_session, set_default_session
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+runner = CliRunner()
 
 # Alias and history tests for CLI tasks
 class TestTasksAliases:
@@ -35,25 +54,6 @@ class TestTasksAliases:
         result = runner.invoke(cli, ["tasks", cmd, "nonexistent_id"])
         assert result.exit_code == 1
         assert "not found" in result.output or "No history" in result.output
-"""
-Test CLI tasks command functionality
-
-Tests the core business scenarios for task management via CLI.
-"""
-
-import pytest
-import pytest_asyncio
-import json
-import uuid
-from click.testing import CliRunner
-from apflow.cli.main import cli
-from apflow.core.execution.task_executor import TaskExecutor
-from apflow.core.storage import set_default_session, reset_default_session
-from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from apflow.core.config import get_task_model_class
-
-runner = CliRunner()
-
 
 @pytest_asyncio.fixture
 async def sample_task(use_test_db_session):
