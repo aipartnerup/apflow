@@ -12,21 +12,23 @@ Complete reference for apflow's Python API. This document lists all available AP
 
 1. [Overview](#overview)
 2. [TaskManager](#taskmanager)
-3. [ExecutableTask](#executabletask)
-4. [BaseTask](#basetask)
-5. [TaskTreeNode](#tasktreenode)
-6. [TaskRepository](#taskrepository)
-7. [TaskExecutor](#taskexecutor)
-8. [TaskCreator](#taskcreator)
-9. [Extension Registry](#extension-registry)
-10. [Hooks](#hooks)
-11. [Common Patterns](#common-patterns)
+3. [TaskBuilder](#taskbuilder)
+4. [ExecutableTask](#executabletask)
+5. [BaseTask](#basetask)
+6. [TaskTreeNode](#tasktreenode)
+7. [TaskRepository](#taskrepository)
+8. [TaskExecutor](#taskexecutor)
+9. [TaskCreator](#taskcreator)
+10. [Extension Registry](#extension-registry)
+11. [Hooks](#hooks)
+12. [Common Patterns](#common-patterns)
 
 ## Overview
 
 The core API consists of:
 
 - **TaskManager**: Task orchestration and execution engine
+- **TaskBuilder**: Fluent API for creating and executing tasks
 - **ExecutableTask**: Interface for all task executors
 - **BaseTask**: Recommended base class for custom executors
 - **TaskTreeNode**: Task tree structure representation
@@ -139,6 +141,57 @@ result = await task_manager.cancel_task(
 - `streaming_callbacks` (StreamingCallbacks): Streaming callbacks instance
 
 **See**: Source code in `src/apflow/core/execution/task_manager.py` for all available methods and detailed documentation.
+
+## TaskBuilder
+
+Fluent API for creating and executing tasks with method chaining.
+
+### Initialization
+
+```python
+from apflow.core.builders import TaskBuilder
+
+builder = TaskBuilder(
+    task_manager: TaskManager,
+    executor_id: str,
+    name: str | None = None,
+    user_id: str | None = None,
+    # ... other parameters
+)
+```
+
+### Method Chaining
+
+```python
+result = await (
+    TaskBuilder(task_manager, "rest_executor")
+    .with_name("fetch_data")
+    .with_user("user_123")
+    .with_input("url", "https://api.example.com")
+    .with_input("method", "GET")
+    .depends_on("auth_task_id")
+    .execute()
+)
+```
+
+### Available Methods
+
+- `with_name(name: str)` - Set task name
+- `with_user(user_id: str)` - Set user ID
+- `with_parent(parent_id: str)` - Set parent task ID
+- `with_priority(priority: int)` - Set task priority (default: 2)
+- `with_inputs(inputs: Dict[str, Any])` - Set all input parameters
+- `with_input(key: str, value: Any)` - Set single input parameter
+- `with_params(params: Dict[str, Any])` - Set task parameters
+- `with_schemas(schemas: Dict[str, Any])` - Set task schemas
+- `with_dependencies(dependencies: Sequence[Dict[str, Any]])` - Set task dependencies
+- `depends_on(*task_ids: str)` - Add dependencies by task IDs
+- `copy_of(original_task_id: str)` - Create copy of existing task
+- `enable_streaming(context: Any | None = None)` - Enable streaming execution
+- `enable_demo_mode(sleep_scale: float | None = None)` - Enable demo mode
+- `execute()` - Execute the task and return result
+
+**See**: Source code in `src/apflow/core/builders.py` for complete implementation.
 
 ## BaseTask
 

@@ -195,6 +195,28 @@ class APICallTask(ExecutableTask):
         }
 ```
 
+### With Fluent API (TaskBuilder)
+
+**Using TaskBuilder for fluent task creation:**
+
+```python
+from apflow import TaskManager, TaskBuilder, create_session
+
+# Create database session and task manager
+db = create_session()
+task_manager = TaskManager(db)
+
+# Use fluent API to create and execute tasks
+result = await (
+    TaskBuilder(task_manager, "rest_executor")
+    .with_name("fetch_user_data")
+    .with_user("user_123")
+    .with_input("url", "https://api.example.com/users")
+    .with_input("method", "GET")
+    .execute()
+)
+```
+
 ### With CrewAI Support [crewai]
 
 **Executing CrewAI (LLM) Tasks:**
