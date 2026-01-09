@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+## [0.11.2] 2026-01-09
+
+### Added
+- Fluent API (TaskBuilder) for streamlined task creation and execution documents
+
+### Changed
+- Removed tasks command aliases from CLI documentation and implementation
+
+
 ## [0.11.1] 2026-01-08
 
 ### Added
