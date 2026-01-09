@@ -22,7 +22,6 @@ This directory contains comprehensive guides for using the apflow CLI.
   - Flow management
   - Executor methods
   - Input/output formats
-  - Command aliases
 
 - **[api-gateway.md](./api-gateway.md)** - CLI with API Server integration
   - Direct access vs API gateway modes

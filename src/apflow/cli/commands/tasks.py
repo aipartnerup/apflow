@@ -27,7 +27,6 @@ console = Console()
 
 # --- Added: history subcommand ---
 @app.command("history")
-@app.command("hi")
 def history(
     task_id: str = typer.Argument(..., help="Task ID to show history for"),
     user_id: Optional[str] = typer.Option(None, "--user-id", help="Filter by user ID"),
@@ -91,7 +90,6 @@ def history(
 
 
 @app.command("status")
-@app.command("st")
 def status(
     task_ids: List[str] = typer.Argument(..., help="Task IDs to check status for"),
 ):
@@ -346,7 +344,6 @@ def _print_count_table(counts: dict):
 
 
 @app.command("cancel")
-@app.command("c")
 def cancel(
     task_ids: List[str] = typer.Argument(..., help="Task IDs to cancel"),
     force: bool = typer.Option(
@@ -1063,7 +1060,6 @@ def children(
 
 
 @app.command("list")
-@app.command("ls")
 def list_tasks(
     user_id: Optional[str] = typer.Option(
         None, "--user-id", "-u", help="Filter by user ID",
@@ -1172,7 +1168,6 @@ def list_tasks(
 
 
 @app.command("watch")
-@app.command("w")
 def watch(
     task_id: Optional[str] = typer.Option(None, "--task-id", "-t", help="Watch specific task ID"),
     interval: float = typer.Option(1.0, "--interval", "-i", help="Update interval in seconds"),

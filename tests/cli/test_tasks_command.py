@@ -19,41 +19,45 @@ from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
 runner = CliRunner()
 
-# Alias and history tests for CLI tasks
-class TestTasksAliases:
-    @pytest.mark.parametrize("cmd", ["list", "ls"])
-    def test_tasks_list_empty_db(self, use_test_db_session, disable_api_for_tests, cmd):
-        result = runner.invoke(cli, ["tasks", cmd])
-        assert result.exit_code == 0
-        output = result.stdout
-        tasks = json.loads(output)
-        assert isinstance(tasks, list)
-        assert len(tasks) == 0
+# History tests for CLI tasks
+class TestTasksHistoryCommands:
 
-    @pytest.mark.parametrize("cmd", ["status", "st"])
-    def test_tasks_status_not_found(self, use_test_db_session, disable_api_for_tests, cmd):
-        result = runner.invoke(cli, ["tasks", cmd, "not-found-id"])
-        assert result.exit_code == 0
-        output = result.stdout
-        statuses = json.loads(output)
-        assert isinstance(statuses, list)
-        assert len(statuses) > 0
-        status = statuses[0]
-        assert status["status"] == "not_found"
-        assert status["task_id"] == "not-found-id"
-        assert status["context_id"] == "not-found-id"
-
-    @pytest.mark.parametrize("cmd", ["watch", "w"])
-    def test_tasks_watch_no_tasks(self, disable_api_for_tests, cmd):
-        result = runner.invoke(cli, ["tasks", cmd, "--task-id", "dummy_id"])
-        assert result.exit_code in (0, 1)
-        assert "Error" not in result.output
-
-    @pytest.mark.parametrize("cmd", ["history", "hi"])
+    @pytest.mark.parametrize("cmd", ["history"])
     def test_tasks_history_not_found(self, disable_api_for_tests, cmd):
         result = runner.invoke(cli, ["tasks", cmd, "nonexistent_id"])
         assert result.exit_code == 1
         assert "not found" in result.output or "No history" in result.output
+
+    @pytest.mark.asyncio
+    async def test_tasks_history_with_records(self, use_test_db_session, disable_api_for_tests, monkeypatch):
+        """Return stored history when repository provides records."""
+
+        task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
+        task_id = f"history-{uuid.uuid4()}"
+        await task_repository.create_task(
+            id=task_id,
+            name="History Task",
+            user_id="test_user",
+            status="in_progress",
+            priority=1,
+            has_children=False,
+        )
+
+        history_items = [
+            {"status": "in_progress", "message": "started", "timestamp": "2024-01-01T00:00:00Z"}
+        ]
+
+        async def fake_get_task_history(self, task_id: str, user_id=None, since=None, limit=None):
+            return history_items
+
+        monkeypatch.setattr(TaskRepository, "get_task_history", fake_get_task_history, raising=False)
+
+        result = runner.invoke(cli, ["tasks", "history", task_id])
+
+        assert result.exit_code == 0
+        output = json.loads(result.stdout)
+        assert isinstance(output, list)
+        assert output == history_items
 
 @pytest_asyncio.fixture
 async def sample_task(use_test_db_session):

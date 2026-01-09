@@ -2,25 +2,6 @@
 
 Complete reference of all CLI commands for executing and managing tasks.
 
-## Command Aliases
-
-All major `apflow tasks` subcommands support short aliases for convenience:
-
-| Command         | Alias |
-|-----------------|-------|
-| list            | ls    |
-| status          | st    |
-| cancel          | c     |
-| watch           | w     |
-| history         | hi    |
-
-You can use either the full command or its alias interchangeably, e.g.:
-`apflow tasks ls` (same as `apflow tasks list`)
-`apflow tasks st <id>` (same as `apflow tasks status <id>`)
-`apflow tasks c <id>` (same as `apflow tasks cancel <id>`)
-`apflow tasks w --task-id <id>` (same as `apflow tasks watch --task-id <id>`)
-`apflow tasks hi <id>` (same as `apflow tasks history <id>`)
-
 ## Task Execution
 
 ### apflow run
@@ -80,7 +61,7 @@ apflow run batch-004 --tasks '[{...}]' \
 
 ## Task Querying
 
-### apflow tasks list / ls
+### apflow tasks list
 
 List all tasks in database:
 
@@ -124,7 +105,7 @@ List and sort by date:
 apflow tasks list --sort created_at --reverse
 ```
 
-### apflow tasks status / st
+### apflow tasks status
 
 Get status of a specific task:
 
@@ -155,7 +136,7 @@ apflow tasks status task-001 --watch
 # Press Ctrl+C to stop watching
 ```
 
-### apflow tasks watch / w
+### apflow tasks watch
 
 Monitor task execution in real-time:
 
@@ -192,7 +173,7 @@ Watch with slower polling:
 apflow tasks watch --all --interval 5
 ```
 
-### apflow tasks history / hi
+### apflow tasks history
 
 View task execution history:
 
@@ -219,7 +200,7 @@ apflow tasks history task-001 --days 30
 
 ## Task Cancellation
 
-### apflow tasks cancel / c
+### apflow tasks cancel
 
 Cancel a running task:
 
@@ -612,19 +593,6 @@ Task output depends on the executor method. Examples:
   "elapsed_time": 1.234
 }
 ```
-
-
-## Command Aliases
-
-All common subcommands support short aliases:
-
-- `apflow tasks list` → `apflow tasks ls`
-- `apflow tasks status` → `apflow tasks st`
-- `apflow tasks cancel` → `apflow tasks c`
-- `apflow tasks watch` → `apflow tasks w`
-- `apflow tasks history` → `apflow tasks hi`
-
-You can use either the full name or the alias for these commands.
 
 ## Error Handling
 
