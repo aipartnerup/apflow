@@ -369,7 +369,7 @@ See [docs/architecture/directory-structure.md](docs/architecture/directory-struc
 - [Best Practices](docs/guides/best-practices.md)
 - [Library Usage Guide](docs/guides/library-usage.md)
 - [API Server Guide](docs/guides/api-server.md)
-- [CLI Reference](docs/guides/cli/)
+- [CLI Reference](docs/cli/index.md)
 - [Environment Variables](docs/guides/environment-variables.md)
 - [FAQ](docs/guides/faq.md)
 - [Python API Reference](docs/api/python.md)

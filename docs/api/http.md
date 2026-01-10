@@ -3581,6 +3581,6 @@ These resources provide comprehensive information about:
 ## See Also
 
 - [A2A Protocol Specification](https://github.com/aipartnerup/a2a-protocol)
-- [CLI Usage Guide](../guides/cli/index.md)
+- [CLI Usage Guide](../cli/index.md)
 - [Architecture Documentation](../architecture/overview.md)
 

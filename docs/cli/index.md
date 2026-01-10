@@ -2,12 +2,11 @@
 
 This directory contains comprehensive guides for using the apflow CLI.
 
-## Structure
+## Overview
 
-- **[index.md](./index.md)** - Overview and quick start guide
-  - CLI vs API comparison
-  - Architecture overview
-  - Common questions
+For a high-level overview and quick start, see **[CLI Usage Guide](../guides/cli.md)** in the guides directory.
+
+## Structure
 
 - **[configuration.md](./configuration.md)** - Configuration management
   - Multi-location system (project-local, user-global, environment override)
@@ -40,7 +39,7 @@ This directory contains comprehensive guides for using the apflow CLI.
 ## Quick Navigation
 
 ### For First-Time Users
-Start with [index.md](./index.md) to understand CLI basics, then [commands.md](./commands.md) for practical examples.
+Start with the **[CLI Usage Guide](../guides/cli.md)** to understand CLI basics, then [commands.md](./commands.md) for practical examples.
 
 ### For Configuration
 See [configuration.md](./configuration.md) for multi-location setup, file permissions, and management commands.

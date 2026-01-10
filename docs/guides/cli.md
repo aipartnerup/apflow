@@ -8,13 +8,15 @@ The CLI can work in two modes:
 
 When API server is configured via `apflow config`, CLI commands automatically use the API gateway, ensuring data consistency and enabling distributed deployments.
 
-## Guides
+## Documentation
 
-This guide is organized into the following sections:
+For detailed documentation, see:
 
-- **[Configuration](./configuration.md)** - Managing CLI and API configuration
-- **[Commands](./commands.md)** - Complete reference of all CLI commands  
-- **[API Gateway Integration](./api-gateway.md)** - Using CLI with API server
+- **[Configuration](../cli/configuration.md)** - Managing CLI and API configuration
+- **[Commands](../cli/commands.md)** - Complete reference of all CLI commands  
+- **[API Gateway Integration](../cli/api-gateway.md)** - Using CLI with API server
+- **[Examples](../cli/examples.md)** - Practical usage examples
+- **[CLI Directory Overview](../cli/index.md)** - Complete CLI documentation structure
 
 ## Quick Start
 
