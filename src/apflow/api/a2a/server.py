@@ -316,7 +316,6 @@ def create_a2a_server(
     task_routes_class: Optional[Type[TaskRoutes]] = None,
     custom_routes: Optional[List] = None,
     custom_middleware: Optional[List] = None,
-    auto_initialize_extensions: bool = False,
     verify_permission_func: Optional[Any] = None,
 ) -> CustomA2AStarletteApplication:
     """
@@ -363,9 +362,6 @@ def create_a2a_server(
                           Middleware will be added in the order provided, after default middleware (CORS, LLM API key, JWT).
                           Each middleware class should be a subclass of BaseHTTPMiddleware.
                           Example: [MyCustomMiddleware, AnotherMiddleware]
-        auto_initialize_extensions: If True, automatically initialize all extensions
-                                   before creating the server (default: False).
-                                   This matches the behavior of create_app_by_protocol().
         verify_permission_func: Optional function to verify user permissions.
                                If provided, it will be used to verify user permissions for accessing resources.
                                If None, permission checking is disabled.
@@ -383,10 +379,6 @@ def create_a2a_server(
         
         All decorators are available from: from apflow import ...
     """
-    # Auto-initialize extensions if requested
-    if auto_initialize_extensions:
-        from apflow.api.extensions import initialize_extensions
-        initialize_extensions()
     
     # Create request handler (reads from config registry)
     request_handler = _create_request_handler(

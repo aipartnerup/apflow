@@ -8,7 +8,7 @@ import os
 from typing import Any, Optional, Type, List, TYPE_CHECKING
 
 from apflow import __version__
-from apflow.api.extensions import initialize_extensions
+from apflow.core.extensions.manager import initialize_extensions
 from apflow.api.protocols import (
     check_protocol_dependency,
     get_protocol_dependency_info,
@@ -152,7 +152,6 @@ def create_rest_server() -> Any:
 
 def create_app_by_protocol(
     protocol: Optional[str] = None,
-    auto_initialize_extensions: bool = True,
     task_routes_class: Optional["Type[TaskRoutes]"] = None,
     custom_routes: Optional[List] = None,
     custom_middleware: Optional[List] = None,
@@ -168,8 +167,6 @@ def create_app_by_protocol(
     Args:
         protocol: Protocol type. If None, uses environment variable
                   APFLOW_API_PROTOCOL or defaults to "a2a"
-        auto_initialize_extensions: If True, automatically initialize all extensions
-                                   before creating the app (default: True)
         task_routes_class: Optional custom TaskRoutes class to use instead of default TaskRoutes.
                          Allows extending TaskRoutes functionality without monkey patching.
                          Example: task_routes_class=MyCustomTaskRoutes
@@ -196,9 +193,6 @@ def create_app_by_protocol(
         ValueError: If protocol is not supported
         ImportError: If protocol dependencies are not installed
     """
-    # Auto-initialize extensions if requested
-    if auto_initialize_extensions:
-        initialize_extensions()
 
     # Determine protocol
     if protocol is None:

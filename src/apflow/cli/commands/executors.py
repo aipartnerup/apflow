@@ -7,7 +7,7 @@ Provides command to query available executors based on APFLOW_EXTENSIONS configu
 import typer
 import json
 
-from apflow.api.extensions import get_available_executors
+from apflow.core.extensions.manager import get_available_executors
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)

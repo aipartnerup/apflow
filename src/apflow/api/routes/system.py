@@ -128,7 +128,7 @@ class SystemRoutes(BaseRouteHandler):
                 "allowed_ids": [...] (optional, only if restricted)
             }
         """
-        from apflow.api.extensions import get_available_executors
+        from apflow.core.extensions.manager import get_available_executors
 
         result = get_available_executors()
         logger.debug(
@@ -152,7 +152,7 @@ class SystemRoutes(BaseRouteHandler):
         try:
             # Check if llm-key-config extension is available
             try:
-                from apflow.extensions.llm_key_config import LLMKeyConfigManager
+                from apflow.core.extensions.manager.llm_key_config import LLMKeyConfigManager
             except ImportError:
                 raise ValueError(
                     "LLM key configuration extension not available. "
@@ -211,7 +211,7 @@ class SystemRoutes(BaseRouteHandler):
         try:
             # Check if llm-key-config extension is available
             try:
-                from apflow.extensions.llm_key_config import LLMKeyConfigManager
+                from apflow.core.extensions.manager.llm_key_config import LLMKeyConfigManager
             except ImportError:
                 # Extension not available, return empty status (graceful degradation)
                 logger.debug(
@@ -279,7 +279,7 @@ class SystemRoutes(BaseRouteHandler):
         try:
             # Check if llm-key-config extension is available
             try:
-                from apflow.extensions.llm_key_config import LLMKeyConfigManager
+                from apflow.core.extensions.manager.llm_key_config import LLMKeyConfigManager
             except ImportError:
                 raise ValueError(
                     "LLM key configuration extension not available. "

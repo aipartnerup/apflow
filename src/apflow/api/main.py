@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from apflow.api.app import create_app_by_protocol
-from apflow.api.extensions import initialize_extensions, _load_custom_task_model
+from apflow.core.extensions.manager import initialize_extensions, _load_custom_task_model
 from apflow.api.protocols import get_protocol_from_env
 from apflow.core.config_manager import get_config_manager
 from apflow.core.storage.factory import get_default_session
@@ -175,7 +175,6 @@ def create_runnable_app(**kwargs):
                                     If provided, it will be used to verify user permissions for accessing resources.
                                     If None, permission checking is disabled.
                                     Signature: verify_permission_func(user_id: str, target_user_id: Optional[str], roles: Optional[list]) -> bool
-            - auto_initialize_extensions: If True, automatically initialize extensions (default: True)
             - And any other arguments supported by create_app_by_protocol()
     
     Returns:
@@ -230,7 +229,7 @@ def create_runnable_app(**kwargs):
         except Exception as e:
             # Don't fail if extension initialization fails
             logger.warning(f"Failed to auto-initialize extensions: {e}")
-    
+
     # Log startup time
     startup_time = time.time() - _start_time
     logger.info(f"Service initialization completed in {startup_time:.2f} seconds")
@@ -282,7 +281,6 @@ def create_runnable_app(**kwargs):
     # Create app based on protocol (pass remaining kwargs)
     return create_app_by_protocol(
         protocol=protocol,
-        auto_initialize_extensions=False,  # Already initialized above if needed
         **kwargs
     )
 
@@ -312,7 +310,6 @@ def main(**kwargs):
                                         If provided, it will be used to verify user permissions for accessing resources.
                                         If None, permission checking is disabled.
                                         Signature: verify_permission_func(user_id: str, target_user_id: Optional[str], roles: Optional[list]) -> bool
-                - auto_initialize_extensions: If True, automatically initialize extensions (default: True)
             - Server configuration (for uvicorn.run()):
                 - host: Server host (default: from APFLOW_API_HOST or API_HOST env var, or "0.0.0.0")
                 - port: Server port (default: from APFLOW_API_PORT or API_PORT env var, or 8000)

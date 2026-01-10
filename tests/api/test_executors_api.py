@@ -4,7 +4,7 @@ Tests for executor listing API and functionality
 
 import os
 from unittest.mock import patch
-
+from apflow.core.extensions.manager import get_available_executors
 import pytest
 
 
@@ -13,7 +13,6 @@ class TestGetAvailableExecutors:
 
     def test_get_available_executors_no_restrictions(self):
         """Test getting executors with no APFLOW_EXTENSIONS restrictions"""
-        from apflow.api.extensions import get_available_executors
 
         with patch.dict(os.environ, {}, clear=True):
             result = get_available_executors()
@@ -28,7 +27,6 @@ class TestGetAvailableExecutors:
 
     def test_get_available_executors_with_restrictions(self):
         """Test getting executors with APFLOW_EXTENSIONS restrictions"""
-        from apflow.api.extensions import get_available_executors
 
         with patch.dict(os.environ, {"APFLOW_EXTENSIONS": "stdio"}):
             result = get_available_executors()
@@ -45,7 +43,6 @@ class TestGetAvailableExecutors:
 
     def test_get_available_executors_multiple_extensions(self):
         """Test getting executors with multiple extensions"""
-        from apflow.api.extensions import get_available_executors
 
         with patch.dict(os.environ, {"APFLOW_EXTENSIONS": "stdio,http"}):
             result = get_available_executors()
@@ -57,7 +54,6 @@ class TestGetAvailableExecutors:
 
     def test_executor_metadata_structure(self):
         """Test that returned executor metadata has expected structure"""
-        from apflow.api.extensions import get_available_executors
 
         with patch.dict(os.environ, {}, clear=True):
             result = get_available_executors()

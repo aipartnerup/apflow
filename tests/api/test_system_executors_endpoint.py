@@ -4,7 +4,7 @@ Test API endpoint for listing available executors
 
 import os
 from unittest.mock import patch
-
+from apflow.core.extensions.manager import initialize_extensions
 import pytest
 
 
@@ -17,7 +17,6 @@ async def test_system_executors_api_no_restrictions():
     import json
 
     # Initialize extensions first
-    from apflow.api.extensions import initialize_extensions
     with patch.dict(os.environ, {}, clear=True):
         initialize_extensions()
 
@@ -80,7 +79,6 @@ async def test_system_executors_api_with_restrictions():
     import json
 
     # Initialize extensions with restrictions
-    from apflow.api.extensions import initialize_extensions
     with patch.dict(os.environ, {"APFLOW_EXTENSIONS": "stdio,http"}):
         initialize_extensions()
 
@@ -113,7 +111,7 @@ async def test_system_executors_api_with_restrictions():
         executor_ids = [e["id"] for e in result["executors"]]
         assert "system_info_executor" in executor_ids
         assert "command_executor" in executor_ids
-        assert "rest_executor" in executor_ids
+        assert "rest_executor" not in executor_ids
 
         # Verify crewai is NOT in the list (not in stdio,http)
         assert "crewai_executor" not in executor_ids

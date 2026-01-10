@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pytest
 
-from apflow.api.extensions import get_allowed_executor_ids
+from apflow.core.extensions.manager import get_allowed_executor_ids
 
 
 class TestExecutorPermissions:
@@ -136,7 +136,7 @@ class TestTaskExecutionPermissions:
             task = TaskModel(
                 name="Test Task",
                 user_id="test_user",
-                schemas={"type": "crewai", "method": "run"},
+                schemas={"type": "crewai", "method": "crewai_executor"},
                 inputs={},
             )
             session.add(task)

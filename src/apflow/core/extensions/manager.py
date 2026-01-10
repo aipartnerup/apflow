@@ -6,8 +6,8 @@ Extensions are automatically detected based on installed dependencies.
 """
 
 import os
-from typing import Any, Optional
-
+from typing import Any, Optional, Dict
+from apflow.core.execution.errors import ExecutorError
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
@@ -15,6 +15,12 @@ logger = get_logger(__name__)
 # Extension configuration: maps extension names to their dependencies and module paths
 # This aligns with pyproject.toml optional-dependencies
 EXTENSION_CONFIG: dict[str, dict[str, Any]] = {
+    "core": {
+        "dependencies": [],  # Core extension, always available
+        "module": "apflow.extensions.core",
+        "classes": [("AggregateResultsExecutor", "aggregate_results_executor")],
+        "always_available": True,
+    },
     "stdio": {
         "dependencies": [],  # Always available (stdlib)
         "module": "apflow.extensions.stdio",
@@ -67,6 +73,14 @@ EXTENSION_CONFIG: dict[str, dict[str, Any]] = {
         "always_available": True,
     },
 }
+
+
+# Build mapping from executor_id to extension_name
+# This allows loading a specific extension when an executor is requested
+EXECUTOR_ID_TO_EXTENSION: dict[str, str] = {}
+for ext_name, ext_config in EXTENSION_CONFIG.items():
+    for _, executor_id in ext_config.get("classes", []):
+        EXECUTOR_ID_TO_EXTENSION[executor_id] = ext_name
 
 
 def _is_package_installed(package_name: str) -> bool:
@@ -142,36 +156,14 @@ def _is_package_installed(package_name: str) -> bool:
     return False
 
 
-def _get_extension_enablement_from_env() -> dict[str, bool]:
+def get_extension_env() ->Optional[str]:
     """
-    Parse environment variables to determine which extensions to enable
-
-    Supports two formats:
-    1. APFLOW_EXTENSIONS=stdio,http,crewai (comma-separated list)
-    2. APFLOW_ENABLE_<EXTENSION>=true/false (individual flags)
+    Get the value of the APFLOW_EXTENSIONS environment variable
 
     Returns:
-        Dictionary mapping extension names to enablement status
+        The value of APFLOW_EXTENSIONS, or None if not set
     """
-    result: dict[str, bool] = {}
-
-    # Format 1: Comma-separated list
-    extensions_env = os.getenv("APFLOW_EXTENSIONS", "").strip()
-    if extensions_env:
-        enabled_extensions = [e.strip().lower() for e in extensions_env.split(",") if e.strip()]
-        # If list is provided, only those are enabled
-        for ext_name in EXTENSION_CONFIG.keys():
-            result[ext_name] = ext_name.lower() in enabled_extensions
-
-    # Format 2: Individual flags (APFLOW_ENABLE_<EXTENSION>)
-    for ext_name in EXTENSION_CONFIG.keys():
-        env_var = f"APFLOW_ENABLE_{ext_name.upper()}"
-        env_value = os.getenv(env_var, "").strip().lower()
-        if env_value:
-            result[ext_name] = env_value in ("true", "1", "yes", "on")
-        # If not set, will be determined by auto-detection or APFLOW_EXTENSIONS above
-
-    return result
+    return os.getenv("APFLOW_EXTENSIONS")
 
 
 def get_allowed_executor_ids() -> Optional[set[str]]:
@@ -188,14 +180,16 @@ def get_allowed_executor_ids() -> Optional[set[str]]:
         APFLOW_EXTENSIONS=stdio,http -> Only stdio and http executors allowed
         APFLOW_EXTENSIONS not set -> All executors allowed (no restrictions)
     """
-    extensions_env = os.getenv("APFLOW_EXTENSIONS", "").strip()
-
-    # If APFLOW_EXTENSIONS is not set, allow all executors
-    if not extensions_env:
-        return None
-
+    extensions_env = get_extension_env()
+    if extensions_env is None:
+        return None  # No restrictions
+    
+    extensions_env = extensions_env.strip()
     # Parse enabled extensions
     enabled_extensions = [e.strip().lower() for e in extensions_env.split(",") if e.strip()]
+    
+    if not enabled_extensions:
+        return None  # Empty or whitespace-only treated as no restrictions
 
     # Collect executor IDs from enabled extensions
     allowed_executor_ids: set[str] = set()
@@ -206,7 +200,105 @@ def get_allowed_executor_ids() -> Optional[set[str]]:
             for _, executor_id in ext_config.get("classes", []):
                 allowed_executor_ids.add(executor_id)
 
-    return allowed_executor_ids if allowed_executor_ids else None
+    return allowed_executor_ids
+
+
+# Track whether all extensions have been loaded
+_all_extensions_loaded = False
+
+_loaded_extensions: Dict[str, bool] = {}  # Track which extensions have been loaded
+    
+
+def load_extension_by_name(extension_name: str) -> None:
+    """
+    Load a specific extension by name.
+    
+    Args:
+        extension_name: Name of the extension to load
+    """
+    global _loaded_extensions
+    if _loaded_extensions.get(extension_name):
+        # Already loaded
+        return
+    
+    ext_config = EXTENSION_CONFIG.get(extension_name)
+    if not ext_config:
+        raise ValueError(f"Unknown extension: {extension_name}")
+    
+    # Check dependencies if not always available
+    if not ext_config.get("always_available", False):
+        dependencies = ext_config.get("dependencies", [])
+        missing_deps = [dep for dep in dependencies if not _is_package_installed(dep)]
+        if missing_deps:
+            logger.warning(f"Extension '{extension_name}' skipped: missing dependencies {missing_deps}")
+            return
+    
+    module_path = ext_config["module"]
+    classes = ext_config["classes"]
+    try:
+        module = __import__(module_path, fromlist=[cls[0] for cls in classes])
+        logger.debug(f"Loaded extension '{extension_name}', module: {module.__name__}")
+        _loaded_extensions[extension_name] = True
+    except Exception as e:
+        logger.warning(f"Failed to load extension {extension_name}: {e}")
+
+
+def load_extension_by_id(executor_id: str) -> None:
+    """
+    Load extension for a specific executor ID.
+    
+    This is used when executing a task - loads only the extension needed
+    for that executor, avoiding unnecessary loading of all extensions.
+    
+    Args:
+        executor_id: Executor ID (e.g., "system_info_executor", "rest_executor")
+    """
+    ext_name = EXECUTOR_ID_TO_EXTENSION.get(executor_id)
+    if ext_name:
+        load_extension_by_name(ext_name)
+    else:
+        raise ExecutorError(f"Unknown executor: {executor_id}")
+
+
+
+def _load_all_extensions() -> None:
+    """
+    Dynamically load all extension modules to register executors.
+    
+    This function is called when listing available executors to ensure
+    the registry contains all available executors. Extensions are loaded
+    on-demand rather than at startup to minimize startup time.
+    
+    Respects APFLOW_EXTENSIONS environment variable - if set, only loads
+    specified extensions for security and performance reasons.
+    
+    This function uses a module-level flag to avoid reloading extensions
+    on subsequent calls - Python's import system caches modules, so
+    re-importing them is cheap and safe.
+    """
+    global _all_extensions_loaded
+    
+    # Skip if already loaded
+    if _all_extensions_loaded:
+        return
+    
+    # Check if APFLOW_EXTENSIONS is set - if so, only load specified extensions
+    extensions_env = get_extension_env()
+    if extensions_env:
+        # Parse enabled extensions from environment
+        enabled_extensions = [e.strip().lower() for e in extensions_env.split(",") if e.strip()]
+        extensions_to_load = [ext_name for ext_name in EXTENSION_CONFIG.keys() 
+                            if ext_name.lower() in enabled_extensions]
+        logger.debug(f"APFLOW_EXTENSIONS set, loading only specified extensions: {extensions_to_load}")
+    else:
+        # Load all extensions if no restrictions
+        extensions_to_load = list(EXTENSION_CONFIG.keys())
+        logger.debug("No APFLOW_EXTENSIONS restriction, loading all extensions")
+    
+    for ext_name in extensions_to_load:
+        load_extension_by_name(ext_name)
+
+    _all_extensions_loaded = True
 
 
 def get_available_executors() -> dict[str, Any]:
@@ -234,6 +326,9 @@ def get_available_executors() -> dict[str, Any]:
         }
     """
     from apflow.core.extensions import get_all_executor_metadata
+
+    # Load all extensions to populate registry
+    _load_all_extensions()
 
     # Get all executor metadata from registry
     all_metadata = get_all_executor_metadata()
@@ -321,113 +416,19 @@ def _load_custom_task_model() -> None:
 
 
 
-def initialize_extensions(
-    include_stdio: Optional[bool] = None,
-    include_crewai: Optional[bool] = None,
-    include_http: Optional[bool] = None,
-    include_ssh: Optional[bool] = None,
-    include_docker: Optional[bool] = None,
-    include_grpc: Optional[bool] = None,
-    include_websocket: Optional[bool] = None,
-    include_apflow: Optional[bool] = None,
-    include_mcp: Optional[bool] = None,
-    auto_init_examples: bool = True,
-    load_custom_task_model: bool = True,
-) -> None:
+def initialize_extensions() -> None:
     """
     Initialize apflow extensions intelligently
 
-    This function automatically detects installed optional dependencies and
-    only imports extensions that are available. It can be overridden via:
-    1. Function parameters (explicit control)
-    2. Environment variables (APFLOW_EXTENSIONS or APFLOW_ENABLE_*)
-    3. Auto-detection (default, based on installed packages)
-
-    Args:
-        include_stdio: Import stdio extensions (default: auto-detect or True)
-        include_crewai: Import CrewAI extension (default: auto-detect)
-        include_http: Import HTTP extension (default: auto-detect)
-        include_ssh: Import SSH extension (default: auto-detect)
-        include_docker: Import Docker extension (default: auto-detect)
-        include_grpc: Import gRPC extension (default: auto-detect)
-        include_websocket: Import WebSocket extension (default: auto-detect)
-        include_apflow: Import ApFlow extension (default: auto-detect or True)
-        include_mcp: Import MCP extension (default: auto-detect or True)
-        auto_init_examples: Auto-initialize examples data if database is empty
-        load_custom_task_model: Load custom TaskModel from environment variable
     """
     logger.info("Initializing apflow extensions...")
 
-    # Get environment variable overrides
-    env_overrides = _get_extension_enablement_from_env()
-
-    # Determine which extensions to load
-    # Priority: function param > env var > auto-detect
-    extension_enablement: dict[str, bool] = {}
-    function_params = {
-        "stdio": include_stdio,
-        "crewai": include_crewai,
-        "http": include_http,
-        "ssh": include_ssh,
-        "docker": include_docker,
-        "grpc": include_grpc,
-        "websocket": include_websocket,
-        "apflow": include_apflow,
-        "mcp": include_mcp,
-    }
-
-    for ext_name, ext_config in EXTENSION_CONFIG.items():
-        # Priority: function param > env var > auto-detect
-        param_value = function_params.get(ext_name)
-
-        if param_value is not None:
-            # Explicit function parameter
-            extension_enablement[ext_name] = param_value
-        elif ext_name in env_overrides:
-            # Environment variable override
-            extension_enablement[ext_name] = env_overrides[ext_name]
-        elif ext_config.get("always_available", False):
-            # Always available extensions
-            extension_enablement[ext_name] = True
-        else:
-            # Auto-detect: check if dependencies are installed
-            dependencies = ext_config.get("dependencies", [])
-            if not dependencies:
-                # No dependencies, assume available
-                extension_enablement[ext_name] = True
-            else:
-                # Check if all dependencies are installed
-                all_installed = all(_is_package_installed(dep) for dep in dependencies)
-                extension_enablement[ext_name] = all_installed
-
-    # Import and register enabled extensions
-    for ext_name, enabled in extension_enablement.items():
-        if not enabled:
-            logger.debug(f"Skipping {ext_name} extension (not enabled or dependencies not installed)")
-            continue
-
-        ext_config = EXTENSION_CONFIG[ext_name]
-        module_path = ext_config["module"]
-        classes = ext_config["classes"]
-
-        try:
-            # Import the module
-            module = __import__(module_path, fromlist=[cls[0] for cls in classes])
-
-            # Register each class
-            for class_name, extension_id in classes:
-                executor_class = getattr(module, class_name)
-                _ensure_extension_registered(executor_class, extension_id)
-
-            logger.debug(f"Initialized {ext_name} extension")
-        except ImportError as e:
-            logger.debug(f"{ext_name} extension not available: {e}")
-        except Exception as e:
-            logger.warning(f"Failed to initialize {ext_name} extension: {e}")
-
-    # Load custom TaskModel if specified
-    if load_custom_task_model:
-        _load_custom_task_model()
+    _load_all_extensions()
+    # Load custom TaskModel
+    _load_custom_task_model()
 
     logger.info("Extension initialization completed")
 
+
+# Auto-initialize core extension on module import
+load_extension_by_name("core")

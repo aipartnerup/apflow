@@ -4,10 +4,9 @@ Test main.py API functions: initialize_extensions and create_app_by_protocol
 import os
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
-from apflow.api.extensions import (
+from apflow.core.extensions.manager import (
     initialize_extensions,
     _is_package_installed,
-    _get_extension_enablement_from_env,
 )
 from apflow.api.app import create_app_by_protocol
 from apflow.core.extensions import get_registry
@@ -25,66 +24,6 @@ class TestInitializeExtensions:
         registry._by_id.clear()
         registry._by_category.clear()
     
-    def test_initialize_extensions_registers_stdio(self):
-        """Test that initialize_extensions() can import and register stdio extensions"""
-        registry = get_registry()
-        
-        # Clear registry to test re-registration
-        # This simulates the case where modules were imported but registry was cleared
-        registry._by_id.clear()
-        registry._by_category.clear()
-        registry._executor_classes.clear()
-        registry._factory_functions.clear()
-        
-        # Verify extensions are not registered
-        assert not registry.is_registered("system_info_executor")
-        assert not registry.is_registered("command_executor")
-        
-        # Initialize extensions - should re-register them
-        initialize_extensions(include_stdio=True)
-        
-        # Verify extensions are now registered
-        system_info = registry.get_by_id("system_info_executor")
-        command_exec = registry.get_by_id("command_executor")
-        
-        # Both stdio executors should be registered
-        assert system_info is not None, "SystemInfoExecutor should be registered"
-        assert command_exec is not None, "CommandExecutor should be registered"
-    
-    def test_initialize_extensions_selective(self):
-        """Test that initialize_extensions() can selectively initialize extensions"""
-        registry = get_registry()
-        
-        # Clear registry to test selective re-registration
-        registry._by_id.clear()
-        registry._by_category.clear()
-        registry._executor_classes.clear()
-        registry._factory_functions.clear()
-        
-        # Initialize only stdio (other extensions disabled)
-        initialize_extensions(
-            include_stdio=True,
-            include_crewai=False,
-            include_http=False,
-            include_ssh=False,
-            include_docker=False,
-            include_grpc=False,
-            include_websocket=False,
-            include_apflow=False,
-            include_mcp=False,
-        )
-        
-        # Verify stdio extensions are registered
-        system_info = registry.get_by_id("system_info_executor")
-        command_exec = registry.get_by_id("command_executor")
-        assert system_info is not None, "SystemInfoExecutor should be registered"
-        assert command_exec is not None, "CommandExecutor should be registered"
-        
-        # Verify other extensions are NOT registered (selective initialization)
-        registry.get_by_id("crewai_executor")
-        registry.get_by_id("rest_executor")
-        # These may be None if they weren't imported, which is expected for selective init
-        # We just verify the function completed without error
     
     def test_initialize_extensions_idempotent(self):
         """Test that initialize_extensions() is idempotent (safe to call multiple times)"""
@@ -100,33 +39,6 @@ class TestInitializeExtensions:
         # Should not cause errors and should have same or more extensions
         assert count_after_second >= count_after_first
     
-    def test_initialize_extensions_handles_missing_extensions(self):
-        """Test that initialize_extensions() handles missing optional extensions gracefully"""
-        # Should not raise exception even if some extensions are not available
-        try:
-            initialize_extensions(
-                include_crewai=True,  # May not be available
-                include_ssh=True,  # May not be available
-                include_docker=True,  # May not be available
-                include_grpc=True,  # May not be available
-            )
-        except Exception as e:
-            pytest.fail(f"initialize_extensions() should handle missing extensions gracefully, but raised: {e}")
-    
-    @patch.dict(os.environ, {"APFLOW_TASK_MODEL_CLASS": ""}, clear=False)
-    def test_initialize_extensions_loads_custom_task_model(self):
-        """Test that initialize_extensions() loads custom TaskModel when specified"""
-        # This test verifies the function doesn't crash when custom TaskModel env var is set
-        # Actual loading would require a valid module path, so we just test it doesn't crash
-        try:
-            initialize_extensions(load_custom_task_model=True)
-        except Exception as e:
-            # Should only fail if the module path is invalid, not if env var is empty
-            if "APFLOW_TASK_MODEL_CLASS" in str(e):
-                pass  # Expected if env var is set but invalid
-            else:
-                raise
-
 
 class TestCreateAppByProtocol:
     """Test create_app_by_protocol() function"""
@@ -146,7 +58,7 @@ class TestCreateAppByProtocol:
         registry = get_registry()
         
         try:
-            app = create_app_by_protocol(protocol="a2a", auto_initialize_extensions=True)
+            app = create_app_by_protocol(protocol="a2a")
             
             # App should be created successfully
             assert app is not None
@@ -170,7 +82,7 @@ class TestCreateAppByProtocol:
             count_after_manual = len(registry._by_id)
             
             # Create app without auto-initialization
-            app = create_app_by_protocol(protocol="a2a", auto_initialize_extensions=False)
+            app = create_app_by_protocol(protocol="a2a")
             
             # Extension count should be same (no additional initialization)
             assert len(registry._by_id) == count_after_manual
@@ -333,29 +245,6 @@ class TestPackageDetection:
         assert _is_package_installed("nonexistent_package_xyz_123") is False
 
 
-class TestEnvironmentVariableParsing:
-    """Test environment variable parsing for extension enablement"""
-    
-    def test_get_extension_enablement_from_env_comma_separated(self):
-        """Test parsing comma-separated extension list"""
-        with patch.dict(os.environ, {"APFLOW_EXTENSIONS": "stdio,http,crewai"}):
-            result = _get_extension_enablement_from_env()
-            
-            assert result["stdio"] is True
-            assert result["http"] is True
-            assert result["crewai"] is True
-            assert result["ssh"] is False  # Not in list
-            assert result["docker"] is False  # Not in list
-    
-
-    def test_get_extension_enablement_from_env_no_vars(self):
-        """Test that empty result when no env vars are set"""
-        with patch.dict(os.environ, {}, clear=True):
-            result = _get_extension_enablement_from_env()
-            # Should return empty dict (all will be auto-detected)
-            assert result == {}
-
-
 class TestDynamicExtensionInitialization:
     """Test dynamic extension initialization with auto-detection"""
     
@@ -367,57 +256,6 @@ class TestDynamicExtensionInitialization:
         registry._by_id.clear()
         registry._by_category.clear()
     
-    def test_initialize_extensions_auto_detects_installed(self):
-        """Test that initialize_extensions() auto-detects installed packages"""
-        registry = get_registry()
-        
-        # Clear registry
-        registry._by_id.clear()
-        registry._by_category.clear()
-        registry._executor_classes.clear()
-        registry._factory_functions.clear()
-        
-        # Initialize with auto-detection (all params None)
-        initialize_extensions(
-            include_stdio=None,
-            include_crewai=None,
-            include_http=None,
-            include_ssh=None,
-            include_docker=None,
-            include_grpc=None,
-            include_websocket=None,
-            include_apflow=None,
-            include_mcp=None,
-        )
-        
-        # Stdio should always be available (always_available=True)
-        assert registry.is_registered("system_info_executor") or registry.is_registered("command_executor")
-    
-    def test_initialize_extensions_respects_function_params(self):
-        """Test that function parameters override auto-detection"""
-        registry = get_registry()
-        
-        # Clear registry
-        registry._by_id.clear()
-        registry._by_category.clear()
-        registry._executor_classes.clear()
-        registry._factory_functions.clear()
-        
-        # Force enable stdio, disable others
-        initialize_extensions(
-            include_stdio=True,
-            include_crewai=False,
-            include_http=False,
-            include_ssh=False,
-            include_docker=False,
-            include_grpc=False,
-            include_websocket=False,
-            include_apflow=False,
-            include_mcp=False,
-        )
-        
-        # Stdio should be registered
-        assert registry.is_registered("system_info_executor") or registry.is_registered("command_executor")
     
     @patch.dict(os.environ, {"APFLOW_EXTENSIONS": "stdio,http"})
     def test_initialize_extensions_respects_env_var_comma_list(self):
@@ -440,19 +278,3 @@ class TestDynamicExtensionInitialization:
         # But we verify the function completed without error
         assert True  # Function completed
     
-    def test_initialize_extensions_priority_function_param_over_env(self):
-        """Test that function parameters have priority over environment variables"""
-        registry = get_registry()
-        
-        # Clear registry
-        registry._by_id.clear()
-        registry._by_category.clear()
-        registry._executor_classes.clear()
-        registry._factory_functions.clear()
-
-        # But function param says enable
-        initialize_extensions(include_stdio=True)
-        
-        # Function param should win - stdio should be registered
-        assert registry.is_registered("system_info_executor") or registry.is_registered("command_executor")
-

@@ -12,6 +12,21 @@ from starlette.testclient import TestClient
 from apflow.api.a2a.server import create_a2a_server
 from apflow.core.storage import get_default_session
 
+# Import executors to trigger @executor_register decorator
+# This ensures the executors are registered before tests run
+try:
+    from apflow.extensions.stdio import SystemInfoExecutor, CommandExecutor  # noqa: F401
+except ImportError:
+    # If stdio extension is not available, tests will fail appropriately
+    SystemInfoExecutor = None
+    CommandExecutor = None
+
+try:
+    from apflow.extensions.core import AggregateResultsExecutor  # noqa: F401
+except ImportError:
+    # If core extension is not available, tests will fail appropriately
+    AggregateResultsExecutor = None
+
 
 @pytest.fixture(scope="function")
 def json_rpc_client(use_test_db_session):
@@ -992,7 +1007,7 @@ def test_jsonrpc_tasks_execute_with_streaming(json_rpc_client):
         "has_children": False,
         "dependencies": [],
         "schemas": {
-            "method": "system_info",
+            "method": "system_info_executor",
             "type": "stdio"
         },
         "inputs": {}
@@ -1796,7 +1811,7 @@ def test_a2a_execute_task_tree_with_streaming(json_rpc_client):
         "name": "A2A Streaming Task",
         "user_id": "test-user",
         "schemas": {
-            "method": "system_info",
+            "method": "system_info_executor",
             "type": "stdio"
         },
         "inputs": {}

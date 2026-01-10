@@ -254,25 +254,6 @@ class TestCreateRunnableApp:
                             mock_init.assert_called_once()
                             assert app is not None
     
-    @pytest.mark.asyncio
-    async def test_create_runnable_app_skips_extension_init_when_disabled(self, monkeypatch):
-        """Test that create_runnable_app() can skip extension initialization"""
-        with patch("apflow.api.main.create_app_by_protocol") as mock_create:
-            mock_app = MagicMock()
-            mock_create.return_value = mock_app
-            
-            with patch("apflow.api.main.initialize_extensions") as mock_init:
-                with patch("apflow.api.main._load_custom_task_model"):
-                    with patch("apflow.api.main._load_env_file"):
-                        with patch("apflow.api.main._setup_development_environment"):
-                            app = create_runnable_app(
-                                protocol="a2a",
-                                auto_initialize_extensions=False
-                            )
-                            
-                            # Should not initialize extensions
-                            mock_init.assert_not_called()
-                            assert app is not None
     
     @pytest.mark.asyncio
     async def test_create_runnable_app_passes_kwargs_to_create_app(self, monkeypatch):

@@ -218,7 +218,7 @@ def flow(
         
         # Initialize extensions before executing tasks
         # This ensures all executors (including stdio extensions) are registered
-        from apflow.api.extensions import initialize_extensions
+        from apflow.core.extensions.manager import initialize_extensions
         initialize_extensions()
         
         # Group tasks by root (handle multiple unrelated tasks)

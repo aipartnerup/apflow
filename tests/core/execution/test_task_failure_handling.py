@@ -16,6 +16,14 @@ from apflow.core.extensions import get_registry
 from typing import Dict, Any
 
 
+@pytest.fixture(autouse=True)
+def _register_failing_executor():
+    registry = get_registry()
+    registry.register(FailingExecutor(), executor_class=FailingExecutor, override=True)
+    yield
+    registry.unregister("failing_executor")
+
+
 class FailingExecutor(BaseTask):
     """Test executor that raises exceptions"""
     

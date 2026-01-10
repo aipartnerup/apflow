@@ -28,6 +28,12 @@ except ImportError:
     SystemInfoExecutor = None
     CommandExecutor = None
 
+try:
+    from apflow.extensions.core import AggregateResultsExecutor  # noqa: F401
+except ImportError:
+    # If core extension is not available, tests will fail appropriately
+    AggregateResultsExecutor = None
+
 logger = get_logger(__name__)
 
 

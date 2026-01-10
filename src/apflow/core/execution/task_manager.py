@@ -13,7 +13,7 @@ from apflow.core.storage.sqlalchemy.models import TaskModel
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from apflow.core.storage.context import set_hook_context, clear_hook_context
 from apflow.core.execution.streaming_callbacks import StreamingCallbacks
-from apflow.core.extensions import get_registry, ExtensionCategory
+from apflow.core.extensions import get_registry, ExtensionCategory, Extension
 from apflow.core.types import (
     TaskTreeNode,
     TaskPreHook,
@@ -25,7 +25,7 @@ from apflow.core.execution.dependency_resolver import (
     resolve_task_dependencies,
     get_completed_tasks_by_id,
 )
-from apflow.core.execution.errors import BusinessError
+from apflow.core.execution.errors import BusinessError, ExecutorError
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
@@ -1010,10 +1010,7 @@ class TaskManager:
     def _check_executor_permission(
         self,
         executor_id: str,
-        allowed_executor_ids: Optional[set[str]],
-        task: TaskModel,
-        task_type: Optional[str] = None
-    ) -> Optional[Dict[str, Any]]:
+    ) -> bool:
         """
         Check if executor is allowed based on APFLOW_EXTENSIONS configuration
         
@@ -1026,35 +1023,19 @@ class TaskManager:
         Returns:
             Error dictionary if executor is not allowed, None if allowed
         """
+
+        # Check executor permissions (if APFLOW_EXTENSIONS is set)
+        # Import here to avoid circular dependency
+        from apflow.core.extensions.manager import get_allowed_executor_ids
+        allowed_executor_ids = get_allowed_executor_ids()
+
         if allowed_executor_ids is None:
-            return None
+            return True
         
-        if executor_id not in allowed_executor_ids:
-            error_msg = (
-                f"Executor '{executor_id}' is not allowed. "
-                f"Allowed executors: {sorted(allowed_executor_ids)}. "
-                f"Configure APFLOW_EXTENSIONS environment variable to enable more executors."
-            )
-            if task_type:
-                error_msg = (
-                    f"Executor '{executor_id}' (type='{task_type}') is not allowed. "
-                    f"Allowed executors: {sorted(allowed_executor_ids)}. "
-                    f"Configure APFLOW_EXTENSIONS environment variable to enable more executors."
-                )
-            
-            logger.error(error_msg)
-            error_result = {
-                "error": error_msg,
-                "task_id": task.id,
-                "executor_id": executor_id,
-                "allowed_executors": sorted(allowed_executor_ids)
-            }
-            if task_type:
-                error_result["task_type"] = task_type
-            
-            return error_result
+        if executor_id in allowed_executor_ids:
+            return True
         
-        return None
+        return False
 
     async def _call_task_tree_hooks(self, hook_type: str, root_task: TaskModel, *args):
         """
@@ -1195,6 +1176,56 @@ class TaskManager:
         except Exception as e:
             logger.error(f"Error in execute_after_task for {completed_task.id}: {str(e)}", exc_info=True)
     
+    def _get_executor_id(self, task: TaskModel) -> Optional[str]:
+        """
+        Get executor ID for the task from params or schemas
+        
+        Args:
+            task: Task to get executor ID for   
+
+        Returns:
+            Executor ID if found, None otherwise
+        """
+        # Check params first
+        params = task.params or {}
+        schemas = task.schemas or {}
+        return params.get("executor_id") or schemas.get("method")
+        
+    
+    def _load_executor(self, task: TaskModel) -> Extension:
+        """
+        Load executor instance for the task and store in _executor_instances
+        
+        Args:
+            task: Task to load executor for
+        """
+
+        executor_id = self._get_executor_id(task)
+        if not executor_id:
+            raise ExecutorError(f"Executor ID not specified for task {task.id}")
+
+        # Get executor from unified extension registry
+        registry = get_registry()
+        extension = registry.get_by_id(executor_id)
+        if not extension:
+            from apflow.core.extensions.manager import load_extension_by_id
+            # Try to load extension by executor_id
+            load_extension_by_id(executor_id)
+            
+            # Get executor again after loading
+            extension = registry.get_by_id(executor_id)
+            if not extension:
+                raise ExecutorError(f"Executor '{executor_id}' could not be loaded for task {task.id}")
+        
+        if extension.category != ExtensionCategory.EXECUTOR:
+            raise ExecutorError(f"Executor '{executor_id}' ({extension.category}) is not an executor for task {task.id}")
+        
+        # Check permission before proceeding
+        if not self._check_executor_permission(executor_id):
+            raise ExecutorError(f"Executor '{executor_id}' is not allowed by APFLOW_EXTENSIONS configuration for task {task.id}")
+    
+        return extension
+    
     async def _execute_task_with_schemas(
         self,
         task: TaskModel,
@@ -1218,118 +1249,37 @@ class TaskManager:
         """
         schemas = task.schemas or {}
         task_type = schemas.get("type")  # Optional: only used if method is not an executor id
-        task_method = schemas.get("method", "command")
-        
-        # ============================================================
-        # 1. get executor id from params (check this FIRST, before logging)
-        # ============================================================
+        task_method = self._get_executor_id(task)
         params = task.params or {}
-        executor_id = params.get("executor_id")
-        
-        # Log after we have executor_id info
-        logger.info(f"Executing task {task.id} with type={task_type}, method={task_method}, executor_id={executor_id}")
-        logger.debug(f"Task {task.id} params: {params}, executor_id from params: {executor_id}")
+        # ============================================================
+        # 1. load extension based on executor_id in params (highest priority)
+        # ============================================================
+        try:
+            extension = self._load_executor(task) 
+            executor_id = extension.id
+            # Log after we have executor_id info
+            logger.info(f"Executing task {task.id} with type={task_type}, method={task_method}, executor_id={executor_id}")
+            logger.debug(f"Task {task.id} params: {params}, executor_id from params: {executor_id}")
 
-        # Get executor from unified extension registry
-        registry = get_registry()
-        
-        # Strategy: Try to use method as executor id first, then fall back to type-based lookup
-        # This allows:
-        # 1. Direct id-based lookup: method="crewai_executor" (no type needed)
-        # 2. Type-based lookup: type="stdio", method="command" (method is execution method, not id)
-        extension_id = None
-        extension = None
-        
-        # Check executor permissions (if APFLOW_EXTENSIONS is set)
-        # Import here to avoid circular dependency
-        from apflow.api.extensions import get_allowed_executor_ids
-        allowed_executor_ids = get_allowed_executor_ids()
-        
-        # If executor_id is already set from params or schemas.method, use it
-        if executor_id:
-            # Check permission before proceeding
-            permission_error = self._check_executor_permission(
-                executor_id, allowed_executor_ids, task
-            )
-            if permission_error:
-                return permission_error
-            
-            extension = registry.get_by_id(executor_id)
-            if extension and extension.category == ExtensionCategory.EXECUTOR:
-                extension_id = executor_id
-                logger.info(f"Using executor_id '{executor_id}' from params (task {task.id})")
-        
-        # If not found, try to use method as executor id
-        if extension is None or (extension and extension.category != ExtensionCategory.EXECUTOR):
-            if task_method:
-                # Check permission before proceeding
-                permission_error = self._check_executor_permission(
-                    task_method, allowed_executor_ids, task
-                )
-                if permission_error:
-                    return permission_error
-                
-                extension = registry.get_by_id(task_method)
-                if extension and extension.category == ExtensionCategory.EXECUTOR:
-                    extension_id = task_method
-                    executor_id = task_method
-                    logger.debug(f"Using method '{task_method}' as executor id (type not needed)")
-        
-        # If method is not an executor id, fall back to type-based lookup
-        if extension is None or (extension and extension.category != ExtensionCategory.EXECUTOR):
-            if not task_type:
-                # If no type specified and method is not an executor id, use default
-                task_type = "stdio"
-                logger.debug("No type specified, defaulting to 'stdio'")
-            extension = registry.get_by_type(ExtensionCategory.EXECUTOR, task_type)
-            if extension:
-                extension_id = extension.id
-                executor_id = extension_id
-                # Check permission after resolving executor_id
-                permission_error = self._check_executor_permission(
-                    executor_id, allowed_executor_ids, task, task_type
-                )
-                if permission_error:
-                    return permission_error
-                logger.debug(f"Using type '{task_type}' to find executor '{extension_id}'")
-        
-        if extension is None or extension.category != ExtensionCategory.EXECUTOR:
-            # Task type not registered
-            registry.list_by_category(ExtensionCategory.EXECUTOR)
-            error_msg = (
-                f"Task executor not found. "
-                f"type='{task_type}', method='{task_method}'. "
-                f"Registered executor types: {[ext.type for ext in registry.get_all_by_category(ExtensionCategory.EXECUTOR) if ext.type]}. "
-                f"Registered executor ids: {registry.list_by_category(ExtensionCategory.EXECUTOR)}. "
-                f"Please register an executor for this task type using "
-                f"register_extension(YourExecutorInstance, executor_class=YourExecutorClass)."
-            )
-            logger.error(error_msg)
-            return {
+        except ExecutorError as e:
+            error_msg = f"{str(e)}"
+            logger.error(f"Executor loading error for task {task.id}: {str(e)}")
+            result = {
                 "error": error_msg,
                 "task_id": task.id,
                 "name": task.name,
                 "task_type": task_type,
-                "task_method": task_method,
-                "registered_types": [ext.type for ext in registry.get_all_by_category(ExtensionCategory.EXECUTOR) if ext.type],
-                "registered_ids": registry.list_by_category(ExtensionCategory.EXECUTOR),
+                "task_params": task_method,
                 "inputs": inputs,
-                "schemas": schemas
             }
+            # If permission error, include allowed executors
+            if "not allowed" in error_msg:
+                from apflow.core.extensions.manager import get_allowed_executor_ids
+                allowed = get_allowed_executor_ids()
+                if allowed is not None:
+                    result["allowed_executors"] = list(allowed)
+            return result
         
-        if not executor_id:
-            executor_id = extension_id
-        
-        if not executor_id:
-            error_msg = (
-                f"Task {task.id}: executor_id is required in params. "
-                f"Please specify params.executor_id (e.g., 'crewai_executor', 'command_executor')."
-            )
-            logger.error(error_msg)
-            return {
-                "error": error_msg,
-                "task_id": task.id
-            }
         
         # ============================================================
         # 2. extract executor initialization parameters from params
@@ -1364,6 +1314,7 @@ class TaskManager:
         # - Access all task fields (including custom TaskModel fields)
         # - Modify task context (e.g., update status, progress, custom fields)
         # - Share task object efficiently (lifecycle managed by TaskManager)
+        registry = get_registry()
         executor = registry.create_executor_instance(
             extension_id=executor_id,
             inputs=inputs,  # inputs for execution (will be validated by executor)
