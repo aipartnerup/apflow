@@ -409,179 +409,195 @@ class TaskManager:
         """
         Execute task tree recursively with proper dependency checking
         
-        This method implements the re-execution logic:
+        Implements re-execution logic:
         - Failed tasks are always re-executed
         - Completed tasks are re-executed if marked in `_tasks_to_reexecute`
         - Pending tasks execute normally
         - In-progress tasks are skipped unless marked for re-execution
         
+        Process:
+        1. Check streaming final status and task re-execution eligibility
+        2. Group children by priority level
+        3. Execute each priority group (ready tasks in parallel, waiting tasks deferred)
+        4. Execute current task if dependencies satisfied
+        
         Args:
             node: Task tree node to execute
             use_callback: Whether to use callbacks
         """
-        # Save task ID at the beginning to avoid accessing it after session rollback
-        # Use SQLAlchemy inspect to safely get ID without triggering lazy loading
-        from sqlalchemy import inspect as sa_inspect
-        node_task_id_for_error_handling = None
-        if node and node.task:
-            try:
-                # Try to get ID directly from the object's dict to avoid triggering SQLAlchemy lazy loading
-                node_task_id_for_error_handling = node.task.__dict__.get('id') if hasattr(node.task, '__dict__') else None
-                # If not in __dict__, try using inspect to get the identity
-                if node_task_id_for_error_handling is None:
-                    insp = sa_inspect(node.task)
-                    if insp.persistent or insp.detached:
-                        # Get identity key (primary key)
-                        identity = insp.identity
-                        if identity:
-                            node_task_id_for_error_handling = identity[0] if identity else None
-                # Last resort: try direct attribute access (may trigger lazy loading)
-                if node_task_id_for_error_handling is None:
-                    node_task_id_for_error_handling = node.task.id
-            except Exception:
-                # If all methods fail, set to None
-                node_task_id_for_error_handling = None
+        node_task_id = self._get_safe_task_id(node.task)
         
         try:
             # Check if streaming has been marked as final
             if self.streaming_final:
-                logger.info(f"Streaming marked as final, stopping task tree execution for {node.task.id}")
+                logger.info(f"Streaming marked as final, stopping task tree execution for {node_task_id}")
                 return
             
-            # Allow re-execution of failed tasks and pending tasks
-            # Skip only completed and in_progress tasks (unless marked for re-execution)
+            # Check if node task should be processed
             task_id = str(node.task.id)
             if node.task.status in ["completed", "in_progress"]:
-                # Check if task is marked for re-execution
                 if task_id not in self._tasks_to_reexecute:
-                    logger.info(f"Task {node.task.id} already {node.task.status}, skipping distribution")
+                    logger.info(f"Task {node_task_id} already {node.task.status}, skipping distribution")
                     return
                 else:
-                    logger.info(f"Task {node.task.id} is {node.task.status} but marked for re-execution, will re-execute")
+                    logger.info(f"Task {node_task_id} is {node.task.status} but marked for re-execution, will re-execute")
             elif node.task.status == "failed":
-                # Failed tasks can always be re-executed
-                logger.info(f"Task {node.task.id} is failed, will re-execute")
+                logger.info(f"Task {node_task_id} is failed, will re-execute")
             
-            # Note: Parent-child relationship is only for tree organization, not execution order
-            # Only dependencies affect execution order - a task executes when its dependencies are satisfied
-            # We process children first (for tree traversal), then check if task should execute based on dependencies
+            # Group children by priority for execution
+            priority_groups = self._group_children_by_priority_for_execution(node)
             
-            # Group children by priority
-            priority_groups = {}
-            for child_node in node.children:
-                priority = child_node.task.priority or 999
-                if priority not in priority_groups:
-                    priority_groups[priority] = []
-                child_id = str(child_node.task.id)
-                # Include pending tasks, failed tasks, and completed tasks marked for re-execution
-                if child_node.task.status not in ["completed", "failed"]:
-                    priority_groups[priority].append(child_node)
-                    self._add_children_to_priority_groups(child_node, priority_groups)
-                elif child_node.task.status == "failed":
-                    # Failed tasks should be re-executed
-                    priority_groups[priority].append(child_node)
-                    self._add_children_to_priority_groups(child_node, priority_groups)
-                elif child_node.task.status == "completed" and child_id in self._tasks_to_reexecute:
-                    # Completed tasks marked for re-execution should be re-executed
-                    priority_groups[priority].append(child_node)
-                    self._add_children_to_priority_groups(child_node, priority_groups)
-            
+            # If no children, check if current task should execute based on dependencies
             if not priority_groups:
-                # No children to execute - check if task should be executed based on dependencies
-                # Note: Parent-child relationship is only for organization, not execution order
-                # Task execution depends on dependencies, not children status
                 deps_satisfied = await are_dependencies_satisfied(
                     node.task, self.task_repository, self._tasks_to_reexecute
                 )
                 if deps_satisfied and node.task.status != "completed":
-                    logger.debug(f"All dependencies for task {node.task.id} are satisfied, executing task")
+                    logger.debug(f"All dependencies for task {node_task_id} are satisfied, executing task")
                     await self._execute_single_task(node.task, use_callback)
                 else:
-                    logger.debug(f"No children to execute for task {node.task.id}, and dependencies not satisfied or task already completed")
+                    logger.debug(f"No children to execute for task {node_task_id}, dependencies not satisfied or already completed")
                 return
             
-            # Sort priorities in ascending order (lower numbers = higher priority)
-            # Industry standard: smaller numbers execute first (higher priority)
+            # Execute each priority group
             sorted_priorities = sorted(priority_groups.keys())
-            logger.debug(f"Executing {len(node.children)} children for task {node.task.id} in {len(sorted_priorities)} priority groups")
+            logger.debug(f"Executing {len(node.children)} children for task {node_task_id} in {len(sorted_priorities)} priority groups")
             
             for priority in sorted_priorities:
-                children_with_same_priority = priority_groups[priority]
-                logger.debug(f"Processing {len(children_with_same_priority)} tasks with priority {priority}")
-                
-                # Check dependencies
-                ready_tasks = []
-                waiting_tasks = []
-                
-                for child_node in children_with_same_priority:
-                    child_task = child_node.task
-                    deps_satisfied = await are_dependencies_satisfied(
-                        child_task, self.task_repository, self._tasks_to_reexecute
-                    )
-                    if deps_satisfied:
-                        ready_tasks.append(child_node)
-                    else:
-                        waiting_tasks.append(child_node)
-                
-                # Execute ready tasks
-                if ready_tasks:
-                    if len(ready_tasks) == 1:
-                        # Single task - execute directly
-                        child_node = ready_tasks[0]
-                        await self._execute_single_task(child_node.task, use_callback)
-                        await self._execute_task_tree_recursive(child_node, use_callback)
-                    else:
-                        # Multiple tasks - execute in parallel
-                        logger.debug(f"Executing {len(ready_tasks)} ready tasks in parallel with priority {priority}")
-                        
-                        async def execute_child_and_children(child_node):
-                            await self._execute_single_task(child_node.task, use_callback)
-                            await self._execute_task_tree_recursive(child_node, use_callback)
-                        
-                        parallel_tasks = [
-                            execute_child_and_children(child_node)
-                            for child_node in ready_tasks
-                        ]
-                        
-                        await asyncio.gather(*parallel_tasks)
-                        logger.debug(f"Completed parallel execution of {len(ready_tasks)} ready tasks")
-                
-                # Waiting tasks will be triggered by callbacks when dependencies are satisfied
-                if waiting_tasks:
-                    logger.debug(f"Leaving {len(waiting_tasks)} tasks waiting for dependencies")
+                await self._execute_priority_group(priority_groups[priority], priority)
             
-            # After processing all children, check if task should be executed based on dependencies
-            # Note: Parent-child relationship is only for tree organization, not execution order
-            # Only dependencies affect execution order - if a task's dependencies are satisfied, it can execute
-            # This handles both pending tasks and failed tasks that need re-execution
-            # Tasks execute when their dependencies are satisfied, regardless of children status
+            # After processing all children, check if current task should execute
             deps_satisfied = await are_dependencies_satisfied(
                 node.task, self.task_repository, self._tasks_to_reexecute
             )
             if deps_satisfied and node.task.status != "completed":
-                logger.debug(f"All dependencies for task {node.task.id} are satisfied, executing task")
+                logger.debug(f"All dependencies for task {node_task_id} are satisfied, executing task")
                 await self._execute_single_task(node.task, use_callback)
                     
         except Exception as e:
-            # Use saved task ID to avoid accessing node.task.id after session rollback
-            task_id = str(node_task_id_for_error_handling) if node_task_id_for_error_handling else "unknown"
+            task_id_str = str(node_task_id) if node_task_id else "unknown"
             # Log business errors without stack trace, unexpected errors with stack trace
             if isinstance(e, BusinessError):
-                logger.error(f"Business error in _execute_task_tree_recursive for task {task_id}: {str(e)}")
+                logger.error(f"Business error in _execute_task_tree_recursive for task {task_id_str}: {str(e)}")
             else:
-                logger.error(f"Error in _execute_task_tree_recursive for task {task_id}: {str(e)}", exc_info=True)
+                logger.error(f"Error in _execute_task_tree_recursive for task {task_id_str}: {str(e)}", exc_info=True)
+            
+            # Update task status if possible
             try:
-                # Update task status using repository (only if we have a valid task ID)
-                if node_task_id_for_error_handling:
+                if node_task_id:
                     await self.task_repository.update_task_status(
-                        task_id=node_task_id_for_error_handling,
+                        task_id=node_task_id,
                         status="failed",
                         error=str(e),
                         completed_at=datetime.now(timezone.utc)
-                )
+                    )
             except Exception as db_error:
                 logger.error(f"Error updating task status in database: {str(db_error)}")
             raise
+    
+    def _group_children_by_priority_for_execution(
+        self,
+        node: TaskTreeNode
+    ) -> Dict[int, List[TaskTreeNode]]:
+        """
+        Group children by priority level, respecting task re-execution rules
+        
+        Includes:
+        - Pending/failed tasks
+        - Completed tasks marked for re-execution
+        - All their descendants recursively
+        
+        Args:
+            node: Parent task tree node
+            
+        Returns:
+            Dictionary mapping priority level to list of task nodes
+        """
+        priority_groups = {}
+        
+        for child_node in node.children:
+            priority = child_node.task.priority or 999
+            if priority not in priority_groups:
+                priority_groups[priority] = []
+            
+            child_id = str(child_node.task.id)
+            
+            # Check if child should be included based on status and re-execution rules
+            should_include = False
+            
+            if child_node.task.status not in ["completed", "failed"]:
+                # Pending tasks always included
+                should_include = True
+            elif child_node.task.status == "failed":
+                # Failed tasks always included
+                should_include = True
+            elif child_node.task.status == "completed" and child_id in self._tasks_to_reexecute:
+                # Completed tasks only included if marked for re-execution
+                should_include = True
+            
+            if should_include:
+                priority_groups[priority].append(child_node)
+                # Recursively add descendants
+                self._add_children_to_priority_groups(child_node, priority_groups)
+        
+        return priority_groups
+    
+    async def _execute_priority_group(
+        self,
+        tasks: List[TaskTreeNode],
+        priority: int
+    ) -> None:
+        """
+        Execute a group of tasks with the same priority level
+        
+        Separates tasks into ready (dependencies satisfied) and waiting (dependencies pending)
+        Ready tasks execute in parallel. Waiting tasks are left for later triggering.
+        
+        Args:
+            tasks: List of task nodes with same priority
+            priority: Priority level being processed
+        """
+        logger.debug(f"Processing {len(tasks)} tasks with priority {priority}")
+        
+        # Separate ready and waiting tasks
+        ready_tasks = []
+        waiting_tasks = []
+        
+        for task_node in tasks:
+            deps_satisfied = await are_dependencies_satisfied(
+                task_node.task, self.task_repository, self._tasks_to_reexecute
+            )
+            if deps_satisfied:
+                ready_tasks.append(task_node)
+            else:
+                waiting_tasks.append(task_node)
+        
+        # Execute ready tasks
+        if ready_tasks:
+            if len(ready_tasks) == 1:
+                # Single task - execute directly
+                child_node = ready_tasks[0]
+                await self._execute_single_task(child_node.task, use_callback=True)
+                await self._execute_task_tree_recursive(child_node, use_callback=True)
+            else:
+                # Multiple tasks - execute in parallel
+                logger.debug(f"Executing {len(ready_tasks)} ready tasks in parallel with priority {priority}")
+                
+                async def execute_child_and_descendants(child_node):
+                    await self._execute_single_task(child_node.task, use_callback=True)
+                    await self._execute_task_tree_recursive(child_node, use_callback=True)
+                
+                parallel_tasks = [
+                    execute_child_and_descendants(child_node)
+                    for child_node in ready_tasks
+                ]
+                
+                await asyncio.gather(*parallel_tasks)
+                logger.debug(f"Completed parallel execution of {len(ready_tasks)} ready tasks")
+        
+        # Log waiting tasks for later execution
+        if waiting_tasks:
+            logger.debug(f"Leaving {len(waiting_tasks)} tasks waiting for dependencies")
     
     def _add_children_to_priority_groups(
         self,
@@ -606,6 +622,258 @@ class TaskManager:
                 # Completed tasks marked for re-execution should be re-executed
                 priority_groups[priority].append(child_node)
                 self._add_children_to_priority_groups(child_node, priority_groups)
+
+    
+    def _get_safe_task_id(self, task: TaskModel) -> Optional[str]:
+        """
+        Safely extract task ID avoiding SQLAlchemy lazy loading after session rollback
+        
+        Uses multiple strategies to get the ID:
+        1. Direct __dict__ access (no SQLAlchemy trigger)
+        2. SQLAlchemy inspect for persistent/detached objects
+        3. Direct attribute access (fallback, may trigger lazy loading)
+        
+        Args:
+            task: Task object to extract ID from
+            
+        Returns:
+            Task ID string, or None if ID cannot be extracted
+        """
+        if not task:
+            return None
+        
+        try:
+            # Strategy 1: Try direct __dict__ access to avoid SQLAlchemy lazy loading
+            task_id = task.__dict__.get('id') if hasattr(task, '__dict__') else None
+            if task_id:
+                return str(task_id)
+            
+            # Strategy 2: Use SQLAlchemy inspect for persistent/detached objects
+            from sqlalchemy import inspect as sa_inspect
+            insp = sa_inspect(task)
+            if insp.persistent or insp.detached:
+                identity = insp.identity
+                if identity:
+                    return str(identity[0])
+            
+            # Strategy 3: Direct attribute access (last resort, may trigger lazy loading)
+            return str(task.id)
+        except Exception:
+            # If all methods fail, return None
+            return None
+
+    async def _check_task_execution_preconditions(
+        self,
+        task: TaskModel,
+        task_id: str
+    ) -> bool:
+        """
+        Check if task can be executed (status, streaming final, cancellation, in-progress)
+        
+        Args:
+            task: Task to check
+            task_id: Task ID string
+            
+        Returns:
+            True if task should proceed with execution, False if it should be skipped
+        """
+        # Check if streaming has been marked as final
+        if self.streaming_final:
+            logger.info(f"Streaming marked as final, stopping single task execution for {task_id}")
+            return False
+        
+        # Skip completed/cancelled tasks unless marked for re-execution
+        if task.status in ["completed", "cancelled"]:
+            if task_id not in self._tasks_to_reexecute:
+                logger.info(f"Task {task_id} already {task.status}, skipping execution")
+                return False
+            else:
+                logger.info(f"Task {task_id} is {task.status} but marked for re-execution, will re-execute")
+                return True
+        
+        # Skip in_progress tasks (already being executed)
+        if task.status == "in_progress":
+            logger.info(f"Task {task_id} already in_progress, skipping execution")
+            return False
+        
+        # Failed tasks should be re-executed if marked, otherwise skip
+        if task.status == "failed":
+            if task_id in self._tasks_to_reexecute:
+                logger.info(f"Task {task_id} is failed and marked for re-execution, will re-execute")
+                return True
+            else:
+                logger.info(f"Task {task_id} is failed but not marked for re-execution, skipping execution")
+                return False
+        
+        # Pending tasks proceed normally
+        return True
+    
+    async def _check_cancellation_and_refresh_task(
+        self,
+        task_id: str,
+        stage: str = "pre-execution"
+    ) -> Optional[TaskModel]:
+        """
+        Check if task was cancelled and refresh task from database
+        
+        Args:
+            task_id: Task ID to check
+            stage: Current stage of execution (for logging)
+            
+        Returns:
+            Refreshed task if not cancelled, None if task was cancelled
+        """
+        task = await self.task_repository.get_task_by_id(task_id)
+        if not task:
+            raise ValueError(f"Task {task_id} not found")
+        
+        if task.status == "cancelled":
+            logger.info(f"Task {task_id} was cancelled {stage}, stopping execution")
+            return None
+        
+        return task
+
+    async def _resolve_and_update_task_inputs(
+        self,
+        task: TaskModel,
+        task_id: str
+    ) -> Dict[str, Any]:
+        """
+        Resolve task dependencies and update inputs in database if changed
+        
+        Args:
+            task: Task to resolve dependencies for
+            task_id: Task ID string
+            
+        Returns:
+            Resolved task inputs
+        """
+        # Resolve dependencies first (merge dependency results into inputs)
+        resolved_inputs = await resolve_task_dependencies(task, self.task_repository)
+        
+        # Check cancellation before proceeding
+        task = await self._check_cancellation_and_refresh_task(task_id, "during dependency resolution")
+        if not task:
+            return {}
+        
+        # Update inputs if they changed
+        if resolved_inputs != (task.inputs or {}):
+            logger.debug(f"Dependency resolution modified inputs for task {task_id}")
+            await self.task_repository.update_task_inputs(task_id, resolved_inputs)
+            # Refresh task object
+            task = await self._check_cancellation_and_refresh_task(task_id, "after input update")
+            if not task:
+                return {}
+        
+        return resolved_inputs
+    
+    async def _execute_and_apply_pre_hooks(
+        self,
+        task: TaskModel,
+        task_id: str
+    ) -> Dict[str, Any]:
+        """
+        Execute pre-hooks and apply any input modifications to database
+        
+        Args:
+            task: Task to execute pre-hooks for
+            task_id: Task ID string
+            
+        Returns:
+            Final inputs after pre-hook modifications
+        """
+        import copy
+        
+        # Store inputs before pre-hooks to detect changes
+        inputs_before_pre_hooks = copy.deepcopy(task.inputs) if task.inputs else {}
+        
+        # Execute pre-hooks
+        await self._execute_pre_hooks(task)
+        
+        # Check if pre-hooks modified inputs
+        inputs_after_pre_hooks = task.inputs or {}
+        
+        if inputs_after_pre_hooks != inputs_before_pre_hooks:
+            logger.info(
+                f"Pre-hooks modified inputs for task {task_id}: "
+                f"before_keys={list(inputs_before_pre_hooks.keys())}, "
+                f"after_keys={list(inputs_after_pre_hooks.keys())}"
+            )
+            # Save modified inputs
+            inputs_to_save = copy.deepcopy(inputs_after_pre_hooks) if inputs_after_pre_hooks else {}
+            await self.task_repository.update_task_inputs(task_id, inputs_to_save)
+            
+            # Refresh task and check cancellation
+            task = await self._check_cancellation_and_refresh_task(task_id, "after pre-hook input update")
+            if not task:
+                return {}
+            
+            logger.info(f"Pre-hooks modified inputs for task {task_id}, updated in database")
+        else:
+            logger.debug(f"Pre-hooks did not modify inputs for task {task_id}")
+        
+        return task.inputs or {}
+
+    async def _handle_task_execution_result(
+        self,
+        task: TaskModel,
+        task_id: str,
+        task_result: Dict[str, Any]
+    ) -> None:
+        """
+        Handle task execution result: update status, clear executor, call post-hooks
+        
+        Args:
+            task: Executed task
+            task_id: Task ID string
+            task_result: Result from executor
+        """
+        # Check if task was cancelled during execution
+        task = await self.task_repository.get_task_by_id(task_id)
+        if task and task.status == "cancelled":
+            logger.info(f"Task {task_id} was cancelled during execution, stopping")
+            # Clear executor reference
+            executor = self._executor_instances.pop(task_id, None)
+            if executor and hasattr(executor, 'clear_task_context'):
+                executor.clear_task_context()
+                logger.debug(f"Cleared task context for task {task_id} after cancellation")
+            
+            if self.stream:
+                if hasattr(self.streaming_callbacks, 'task_cancelled'):
+                    self.streaming_callbacks.task_cancelled(task_id)
+                else:
+                    self.streaming_callbacks.task_failed(task_id, "Task was cancelled")
+            return
+        
+        # Clear executor reference after successful execution
+        executor = self._executor_instances.pop(task_id, None)
+        if executor and hasattr(executor, 'clear_task_context'):
+            executor.clear_task_context()
+            logger.debug(f"Cleared task context for task {task_id} after successful execution")
+        
+        # Update task status to completed
+        await self.task_repository.update_task_status(
+            task_id=task_id,
+            status="completed",
+            progress=1.0,
+            result=task_result,
+            error=None,
+            completed_at=datetime.now(timezone.utc)
+        )
+        
+        # Refresh and notify
+        task = await self.task_repository.get_task_by_id(task_id)
+        if not task:
+            raise ValueError(f"Task {task_id} not found after completion update")
+        
+        if self.stream:
+            self.streaming_callbacks.task_completed(task_id, result=task.result)
+        
+        # Trigger dependent tasks and execute post-hooks
+        try:
+            await self.execute_after_task(task)
+        except Exception as e:
+            logger.error(f"Error triggering dependent tasks for {task_id}: {str(e)}")
     
     async def _are_dependencies_satisfied(self, task: TaskModel) -> bool:
         """
@@ -630,270 +898,95 @@ class TaskManager:
         use_callback: bool = True
     ):
         """
-        Execute a single task
+        Execute a single task with proper status management and error handling
+        
+        Orchestrates the complete task execution lifecycle:
+        1. Pre-execution checks (status, streaming, cancellation)
+        2. Status update to in_progress
+        3. Dependency resolution and input preparation
+        4. Pre-hook execution
+        5. Task execution via executor
+        6. Result handling and post-hook execution
+        7. Dependent task triggering
         
         Args:
             task: Task to execute
             use_callback: Whether to use callbacks
         """
-        # Save task ID at the beginning to avoid accessing it after session rollback
-        # Use SQLAlchemy inspect to safely get ID without triggering lazy loading
-        from sqlalchemy import inspect as sa_inspect
-        task_id_for_error_handling = None
-        if task:
-            try:
-                # Try to get ID directly from the object's dict to avoid triggering SQLAlchemy lazy loading
-                task_id_for_error_handling = task.__dict__.get('id') if hasattr(task, '__dict__') else None
-                # If not in __dict__, try using inspect to get the identity
-                if task_id_for_error_handling is None:
-                    insp = sa_inspect(task)
-                    if insp.persistent or insp.detached:
-                        # Get identity key (primary key)
-                        identity = insp.identity
-                        if identity:
-                            task_id_for_error_handling = identity[0] if identity else None
-                # Last resort: try direct attribute access (may trigger lazy loading)
-                if task_id_for_error_handling is None:
-                    task_id_for_error_handling = task.id
-            except Exception:
-                # If all methods fail, set to None
-                task_id_for_error_handling = None
+        task_id = self._get_safe_task_id(task)
         
         try:
-            # Check if streaming has been marked as final
-            if self.streaming_final:
-                logger.info(f"Streaming marked as final, stopping single task execution for {task_id_for_error_handling or 'unknown'}")
-                return
-                
-            # Check if task is already finished or cancelled
-            # Allow re-execution of failed tasks if they are marked for re-execution
-            # Use saved task_id_for_error_handling if available, otherwise try to get from task
-            try:
-                task_id = str(task_id_for_error_handling) if task_id_for_error_handling else str(task.id)
-            except Exception:
-                task_id = str(task_id_for_error_handling) if task_id_for_error_handling else "unknown"
-            if task.status in ["completed", "cancelled"]:
-                # Check if task is marked for re-execution
-                if task_id not in self._tasks_to_reexecute:
-                    logger.info(f"Task {task_id} already {task.status}, skipping execution")
-                    return
-                else:
-                    logger.info(f"Task {task_id} is {task.status} but marked for re-execution, will re-execute")
-            elif task.status == "failed":
-                # Failed tasks can be re-executed if marked for re-execution
-                if task_id in self._tasks_to_reexecute:
-                    logger.info(f"Task {task_id} is failed and marked for re-execution, will re-execute")
-                else:
-                    # If not marked for re-execution, skip (shouldn't happen in normal flow)
-                    logger.info(f"Task {task_id} is failed but not marked for re-execution, skipping execution")
-                    return
-            
-            # Check if task is already in progress (may have been started by another process)
-            if task.status == "in_progress":
-                logger.info(f"Task {task_id} already in_progress, skipping execution")
+            # Check pre-execution conditions
+            if not await self._check_task_execution_preconditions(task, task_id):
                 return
             
-            # Check if task was cancelled before starting (double-check after potential race condition)
-            # Refresh task from database to get latest status
-            # Use saved task_id_for_error_handling to avoid accessing task.id after potential session rollback
-            refresh_task_id = task_id_for_error_handling if task_id_for_error_handling else (task.id if task else None)
-            if not refresh_task_id:
-                raise ValueError("Task ID not available for refresh")
-            task = await self.task_repository.get_task_by_id(refresh_task_id)
+            # Refresh task and update status
+            task = await self._check_cancellation_and_refresh_task(task_id)
             if not task:
-                raise ValueError(f"Task {refresh_task_id} not found")
-            
-            if task.status == "cancelled":
-                logger.info(f"Task {task.id} was cancelled, skipping execution")
                 return
-            
-            # Send task start status if streaming is enabled
-            # Use saved task_id_for_error_handling for all task.id accesses to avoid session rollback issues
-            current_task_id = task_id_for_error_handling if task_id_for_error_handling else (task.id if task else None)
             
             if self.stream:
-                self.streaming_callbacks.task_start(current_task_id)
+                self.streaming_callbacks.task_start(task_id)
             
-            # Update task status to in_progress using repository
+            # Update status to in_progress
             await self.task_repository.update_task_status(
-                task_id=current_task_id,
+                task_id=task_id,
                 status="in_progress",
                 error=None,
                 started_at=datetime.now(timezone.utc)
             )
-            # Refresh task object
-            task = await self.task_repository.get_task_by_id(current_task_id)
-            if not task:
-                raise ValueError(f"Task {current_task_id} not found after status update")
             
-            # Final check: if task was cancelled between status update and refresh
-            if task.status == "cancelled":
-                logger.info(f"Task {current_task_id} was cancelled after status update, stopping execution")
+            logger.info(f"Task {task_id} status updated to in_progress")
+            
+            # Resolve dependencies and update inputs
+            await self._resolve_and_update_task_inputs(task, task_id)
+            
+            # Final cancellation check
+            task = await self._check_cancellation_and_refresh_task(task_id, "before execution")
+            if not task:
                 return
             
-            logger.info(f"Task {current_task_id} status updated to in_progress")
+            # Execute pre-hooks
+            final_inputs = await self._execute_and_apply_pre_hooks(task, task_id)
             
-            # Resolve dependencies first (merge dependency results into inputs)
-            resolved_inputs = await resolve_task_dependencies(task, self.task_repository)
-            
-            # Check cancellation before proceeding
-            task = await self.task_repository.get_task_by_id(current_task_id)
+            # Final cancellation check before execution
+            task = await self._check_cancellation_and_refresh_task(task_id, "before executor call")
             if not task:
-                raise ValueError(f"Task {current_task_id} not found")
-            if task.status == "cancelled":
-                logger.info(f"Task {current_task_id} was cancelled during dependency resolution, stopping execution")
                 return
             
-            if resolved_inputs != (task.inputs or {}):
-                # Update inputs using repository
-                await self.task_repository.update_task_inputs(current_task_id, resolved_inputs)
-                # Refresh task object
-                task = await self.task_repository.get_task_by_id(current_task_id)
-                if not task:
-                    raise ValueError(f"Task {current_task_id} not found after input data update")
-                
-                # Check cancellation again
-                if task.status == "cancelled":
-                    logger.info(f"Task {current_task_id} was cancelled after input data update, stopping execution")
-                    return
+            logger.info(f"Task {task_id} execution - calling agent executor (name: {task.name})")
             
-            # Execute pre-hooks (after dependency resolution, to allow user adjustment based on complete data)
-            # Pre-hooks can access and modify task.inputs directly
-            # Store inputs before pre-hooks to detect changes (deep copy for nested dicts)
-            import copy
-            inputs_before_pre_hooks = copy.deepcopy(task.inputs) if task.inputs else {}
-            await self._execute_pre_hooks(task)
-            
-            # Update inputs if pre-hooks modified task.inputs
-            # Use deep comparison to detect any changes (including nested dict modifications)
-            inputs_after_pre_hooks = task.inputs or {}
-            # Deep comparison to detect changes in nested structures
-            if inputs_after_pre_hooks != inputs_before_pre_hooks:
-                # Pre-hooks modified inputs, update database
-                # Make a deep copy to ensure we're saving the current state
-                inputs_to_save = copy.deepcopy(inputs_after_pre_hooks) if inputs_after_pre_hooks else {}
-                logger.info(
-                    f"Pre-hooks modified inputs for task {current_task_id}: "
-                    f"before_keys={list(inputs_before_pre_hooks.keys())}, "
-                    f"after_keys={list(inputs_after_pre_hooks.keys())}"
-                )
-                await self.task_repository.update_task_inputs(current_task_id, inputs_to_save)
-                # Refresh task object to get latest state from database
-                task = await self.task_repository.get_task_by_id(current_task_id)
-                if not task:
-                    raise ValueError(f"Task {current_task_id} not found after pre-hook inputs update")
-                logger.info(f"Pre-hooks modified inputs for task {current_task_id}, updated in database")
-            else:
-                logger.debug(f"Pre-hooks did not modify inputs for task {current_task_id}")
-            
-            # Check cancellation before executing
-            task = await self.task_repository.get_task_by_id(current_task_id)
-            if not task:
-                raise ValueError(f"Task {current_task_id} not found")
-            if task.status == "cancelled":
-                logger.info(f"Task {current_task_id} was cancelled before execution, stopping")
-                return
-            
-            # Execute task using agent executor
-            # Use task.inputs (which may have been modified by pre-hooks)
-            final_inputs = task.inputs or {}
-            logger.info(f"Task {current_task_id} execution - calling agent executor (name: {task.name})")
-            
-            # Execute task based on schemas
-            # Note: For long-running executors, cancellation check should be done inside executor
-            # TaskManager can only check before and after executor execution
+            # Execute task using executor
             task_result = await self._execute_task_with_schemas(task, final_inputs)
             
-            # Check cancellation after execution (in case it was cancelled during execution)
-            # Note: If task was cancelled, cancel_task() was already called by external source,
-            # so we just need to stop execution and preserve the cancelled status
-            task = await self.task_repository.get_task_by_id(current_task_id)
-            if task and task.status == "cancelled":
-                logger.info(f"Task {current_task_id} was cancelled during execution, stopping")
-                
-                # Clear executor reference
-                # Also clear task context to prevent memory leaks
-                executor = self._executor_instances.pop(current_task_id, None)
-                if executor and hasattr(executor, 'clear_task_context'):
-                    executor.clear_task_context()
-                    logger.debug(f"Cleared task context for task {current_task_id} after cancellation")
-                
-                # Don't update to completed, keep cancelled status
-                if self.stream:
-                    # StreamingCallbacks may not have task_cancelled method, use task_failed as fallback
-                    if hasattr(self.streaming_callbacks, 'task_cancelled'):
-                        self.streaming_callbacks.task_cancelled(current_task_id)
-                    else:
-                        self.streaming_callbacks.task_failed(current_task_id, "Task was cancelled")
-                return
-            
-            # Clear executor reference after successful execution
-            # Also clear task context to prevent memory leaks
-            executor = self._executor_instances.pop(current_task_id, None)
-            if executor and hasattr(executor, 'clear_task_context'):
-                executor.clear_task_context()
-                logger.debug(f"Cleared task context for task {current_task_id} after successful execution")
-            
-            # Update task status using repository
-            # Clear error field when task completes successfully (for re-execution scenarios)
-            await self.task_repository.update_task_status(
-                task_id=current_task_id,
-                status="completed",
-                progress=1.0,
-                result=task_result,
-                error=None,  # Clear error when task completes successfully
-                completed_at=datetime.now(timezone.utc)
-            )
-            # Refresh task object
-            task = await self.task_repository.get_task_by_id(current_task_id)
-            if not task:
-                raise ValueError(f"Task {current_task_id} not found after completion update")
-            
-            if self.stream:
-                self.streaming_callbacks.task_completed(current_task_id, result=task.result)
-            
-            # System-internal dependency task triggering
-            # execute_after_task is always executed to trigger dependent tasks
-            # This is independent of use_callback (which controls external URL notifications)
-            # Post-hooks will be executed in execute_after_task BEFORE triggering dependent tasks
-            # This ensures immediate response for notifications/logging without waiting for dependencies
-            try:
-                await self.execute_after_task(task)
-            except Exception as e:
-                logger.error(f"Error triggering dependent tasks for {current_task_id}: {str(e)}")
-                # Don't fail the current task if dependency triggering fails
-            
-            # Note: use_callback is for external URL callback notifications (if configured)
-            # It doesn't affect execute_after_task which handles internal dependency triggering
+            # Handle execution result
+            await self._handle_task_execution_result(task, task_id, task_result)
                 
         except Exception as e:
-            # Use saved task ID to avoid accessing task after session rollback
-            task_id_str = str(task_id_for_error_handling) if task_id_for_error_handling else "unknown"
             # Log business errors without stack trace, unexpected errors with stack trace
             if isinstance(e, BusinessError):
-                logger.error(f"Business error executing task {task_id_str}: {str(e)}")
+                logger.error(f"Business error executing task {task_id}: {str(e)}")
             else:
-                logger.error(f"Error executing task {task_id_str}: {str(e)}", exc_info=True)
+                logger.error(f"Error executing task {task_id}: {str(e)}", exc_info=True)
             
-            # Update task status using repository (only if we have a valid task ID)
-            if task_id_for_error_handling:
+            # Update task status
+            if task_id:
                 try:
                     await self.task_repository.update_task_status(
-                        task_id=task_id_for_error_handling,
+                        task_id=task_id,
                         status="failed",
                         error=str(e),
                         completed_at=datetime.now(timezone.utc)
                     )
                 except Exception as update_error:
-                    # If update fails (e.g., session already rolled back), log but don't fail
-                    logger.warning(f"Failed to update task status for {task_id_str}: {update_error}")
+                    logger.warning(f"Failed to update task status for {task_id}: {update_error}")
             
-            if self.stream and task_id_for_error_handling:
+            # Notify streaming callback
+            if self.stream and task_id:
                 try:
-                    self.streaming_callbacks.task_failed(task_id_for_error_handling, str(e))
+                    self.streaming_callbacks.task_failed(task_id, str(e))
                 except Exception as callback_error:
-                    # If callback fails (e.g., accessing task.id triggers session reload), log but don't fail
-                    logger.warning(f"Failed to call task_failed callback for {task_id_str}: {callback_error}")
+                    logger.warning(f"Failed to call task_failed callback for {task_id}: {callback_error}")
     
     async def _execute_pre_hooks(self, task: TaskModel) -> None:
         """
