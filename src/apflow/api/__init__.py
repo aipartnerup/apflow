@@ -5,7 +5,6 @@ This module provides functions for creating and configuring API applications.
 """
 
 from apflow.api.app import create_app_by_protocol
-from apflow.core.extensions.manager import initialize_extensions
 from apflow.api.main import create_runnable_app, main
 
 __all__ = [
@@ -18,7 +17,6 @@ __all__ = [
 
 def setup_app(
     protocol: str = "a2a",
-    load_custom_task_model: bool = True,
     custom_routes=None,
     custom_middleware=None,
     task_routes_class=None,
@@ -32,8 +30,6 @@ def setup_app(
     
     Args:
         protocol: Protocol type ("a2a", "mcp", etc.). Default: "a2a"
-        load_custom_task_model: If True, load custom TaskModel from environment variable
-                               APFLOW_TASK_MODEL_CLASS (default: True)
         custom_routes: Optional list of custom Starlette Route objects
         custom_middleware: Optional list of custom Starlette BaseHTTPMiddleware classes
         task_routes_class: Optional custom TaskRoutes class

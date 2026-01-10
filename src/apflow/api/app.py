@@ -8,7 +8,6 @@ import os
 from typing import Any, Optional, Type, List, TYPE_CHECKING
 
 from apflow import __version__
-from apflow.core.extensions.manager import initialize_extensions
 from apflow.api.protocols import (
     check_protocol_dependency,
     get_protocol_dependency_info,

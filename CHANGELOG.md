@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
+## [Unreleased] 2026-01-10
+
+### Added
+- **Task Model Enhancements**
+  - Added `task_tree_id` field to TaskModel for managing task hierarchy and relationships
+  - Introduced `origin_type` field to track task origin (own, link, copy, reference, snapshot)
+  - Implemented `SchemaMigration` model to track migration history for schema evolution
+  - Added `has_references` flag validation in task creation tests
+  
+- **Executor Access Control System**
+  - Implemented executor access control via `APFLOW_EXTENSIONS` environment variable
+  - Added functions to retrieve allowed executor IDs and filter available executors
+  - Created new API endpoint (`/system/executors`) to list available executors with restriction support
+  - Introduced CLI commands to list executors with various output formats (table, json, yaml)
+  - Added permission checks in TaskManager to enforce executor access control during task execution
+  - Comprehensive test coverage for executor permissions and API functionality
+
+- **CLI Documentation**
+  - Added comprehensive CLI documentation with configuration management guide (`cli/configuration.md`)
+  - Created practical usage examples (`cli/examples.md`)
+  - Developed detailed CLI usage guide covering installation, modes, and best practices (`cli.md`)
+  - Introduced CLI documentation index for improved navigation
+
+### Changed
+- **Extension Management Refactoring**
+  - Moved executor-related functions from `apflow.api.extensions` to `apflow.core.extensions.manager` for better code organization
+  - Updated import paths across the entire codebase to reflect new structure
+  - Enhanced TaskManager to load executors dynamically with permission checks
+  - Improved on-demand extension loading for better performance and security
+
+- **Task Execution Improvements**
+  - Enhanced task execution logic with improved error handling
+  - Implemented priority grouping for better task scheduling
+  - Optimized task tree retrieval using `task_tree_id` with fallback mechanism
+
+### Fixed
+- **Database Schema Management**
+  - Simplified TaskRepository initialization by removing custom column checks
+  - Added migration tests to ensure proper schema evolution and idempotent execution
+  - Improved database schema handling for more reliable operations
+
+
 ## [0.11.2] 2026-01-09
 
 ### Added

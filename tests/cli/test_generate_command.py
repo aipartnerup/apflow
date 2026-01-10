@@ -93,29 +93,29 @@ class TestGenerateCommand:
     @pytest.mark.asyncio
     async def test_generate_basic(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):
         """Test basic task tree generation"""
+        # Mock task repository
+        mock_repository = Mock(spec=TaskRepository)
+        mock_generate_task = Mock()
+        mock_generate_task.id = "generate-task-id"
+        mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
+        
+        mock_result_task = Mock()
+        mock_result_task.status = "completed"
+        mock_result_task.result = {"tasks": mock_generated_tasks}
+        mock_result_task.error = None
+        mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
+        
+        # Mock TaskExecutor to avoid actual execution
+        mock_task_executor = Mock()
+        mock_task_executor.execute_task_tree = AsyncMock()
+        
         with patch('apflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
-            with patch('apflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
-                mock_task_executor = Mock()
-                mock_task_executor.execute_task_tree = AsyncMock()
-                mock_task_executor_class.return_value = mock_task_executor
-                
-                # Mock task repository
-                mock_repository = Mock(spec=TaskRepository)
-                mock_generate_task = Mock()
-                mock_generate_task.id = "generate-task-id"
-                mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
-                
-                mock_result_task = Mock()
-                mock_result_task.status = "completed"
-                mock_result_task.result = {"tasks": mock_generated_tasks}
-                mock_result_task.error = None
-                mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
-                
-                with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+            with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+                with patch('apflow.cli.commands.generate.TaskExecutor', return_value=mock_task_executor):
                     result = runner.invoke(cli, [
                         "generate", "task-tree", "Fetch data from API and process it"
                     ])
-                    assert result.exit_code == 0
+                    assert result.exit_code == 0, f"Command failed with output: {result.output}"
                     output = result.stdout
                     # Should contain generated tasks JSON
                     assert "rest_executor" in output or "task_1" in output
@@ -123,116 +123,116 @@ class TestGenerateCommand:
     @pytest.mark.asyncio
     async def test_generate_with_temperature(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):
         """Test generate command with --temperature parameter"""
+        # Mock task repository
+        mock_repository = Mock(spec=TaskRepository)
+        mock_generate_task = Mock()
+        mock_generate_task.id = "generate-task-id"
+        
+        # Track the inputs passed to create_task
+        captured_inputs = {}
+        
+        async def mock_create_task(*args, **kwargs):
+            if 'inputs' in kwargs:
+                captured_inputs.update(kwargs['inputs'])
+            return mock_generate_task
+        
+        mock_repository.create_task = AsyncMock(side_effect=mock_create_task)
+        
+        mock_result_task = Mock()
+        mock_result_task.status = "completed"
+        mock_result_task.result = {"tasks": mock_generated_tasks}
+        mock_result_task.error = None
+        mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
+        
+        # Mock TaskExecutor to avoid actual execution
+        mock_task_executor = Mock()
+        mock_task_executor.execute_task_tree = AsyncMock()
+        
         with patch('apflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
-            with patch('apflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
-                mock_task_executor = Mock()
-                mock_task_executor.execute_task_tree = AsyncMock()
-                mock_task_executor_class.return_value = mock_task_executor
-                
-                # Mock task repository
-                mock_repository = Mock(spec=TaskRepository)
-                mock_generate_task = Mock()
-                mock_generate_task.id = "generate-task-id"
-                
-                # Track the inputs passed to create_task
-                captured_inputs = {}
-                
-                async def mock_create_task(*args, **kwargs):
-                    if 'inputs' in kwargs:
-                        captured_inputs.update(kwargs['inputs'])
-                    return mock_generate_task
-                
-                mock_repository.create_task = AsyncMock(side_effect=mock_create_task)
-                
-                mock_result_task = Mock()
-                mock_result_task.status = "completed"
-                mock_result_task.result = {"tasks": mock_generated_tasks}
-                mock_result_task.error = None
-                mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
-                
-                with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+            with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+                with patch('apflow.cli.commands.generate.TaskExecutor', return_value=mock_task_executor):
                     result = runner.invoke(cli, [
                         "generate", "task-tree",
                         "Test requirement",
                         "--temperature", "0.9"
                     ])
                     
-                    assert result.exit_code == 0
+                    assert result.exit_code == 0, f"Command failed with output: {result.output}"
                     # Verify temperature was passed to generate_executor
                     assert captured_inputs.get("temperature") == 0.9
     
     @pytest.mark.asyncio
     async def test_generate_with_max_tokens(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):
         """Test generate command with --max-tokens parameter"""
+        # Mock task repository
+        mock_repository = Mock(spec=TaskRepository)
+        mock_generate_task = Mock()
+        mock_generate_task.id = "generate-task-id"
+        
+        # Track the inputs passed to create_task
+        captured_inputs = {}
+        
+        async def mock_create_task(*args, **kwargs):
+            if 'inputs' in kwargs:
+                captured_inputs.update(kwargs['inputs'])
+            return mock_generate_task
+        
+        mock_repository.create_task = AsyncMock(side_effect=mock_create_task)
+        
+        mock_result_task = Mock()
+        mock_result_task.status = "completed"
+        mock_result_task.result = {"tasks": mock_generated_tasks}
+        mock_result_task.error = None
+        mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
+        
+        # Mock TaskExecutor to avoid actual execution
+        mock_task_executor = Mock()
+        mock_task_executor.execute_task_tree = AsyncMock()
+        
         with patch('apflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
-            with patch('apflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
-                mock_task_executor = Mock()
-                mock_task_executor.execute_task_tree = AsyncMock()
-                mock_task_executor_class.return_value = mock_task_executor
-                
-                # Mock task repository
-                mock_repository = Mock(spec=TaskRepository)
-                mock_generate_task = Mock()
-                mock_generate_task.id = "generate-task-id"
-                
-                # Track the inputs passed to create_task
-                captured_inputs = {}
-                
-                async def mock_create_task(*args, **kwargs):
-                    if 'inputs' in kwargs:
-                        captured_inputs.update(kwargs['inputs'])
-                    return mock_generate_task
-                
-                mock_repository.create_task = AsyncMock(side_effect=mock_create_task)
-                
-                mock_result_task = Mock()
-                mock_result_task.status = "completed"
-                mock_result_task.result = {"tasks": mock_generated_tasks}
-                mock_result_task.error = None
-                mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
-                
-                with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+            with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+                with patch('apflow.cli.commands.generate.TaskExecutor', return_value=mock_task_executor):
                     result = runner.invoke(cli, [
                         "generate", "task-tree",
                         "Test requirement",
                         "--max-tokens", "6000"
                     ])
                     
-                    assert result.exit_code == 0
+                    assert result.exit_code == 0, f"Command failed with output: {result.output}"
                     # Verify max_tokens was passed to generate_executor
                     assert captured_inputs.get("max_tokens") == 6000
     
     @pytest.mark.asyncio
     async def test_generate_with_all_parameters(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):
         """Test generate command with all LLM parameters"""
+        # Mock task repository
+        mock_repository = Mock(spec=TaskRepository)
+        mock_generate_task = Mock()
+        mock_generate_task.id = "generate-task-id"
+        
+        # Track the inputs passed to create_task
+        captured_inputs = {}
+        
+        async def mock_create_task(*args, **kwargs):
+            if 'inputs' in kwargs:
+                captured_inputs.update(kwargs['inputs'])
+            return mock_generate_task
+        
+        mock_repository.create_task = AsyncMock(side_effect=mock_create_task)
+        
+        mock_result_task = Mock()
+        mock_result_task.status = "completed"
+        mock_result_task.result = {"tasks": mock_generated_tasks}
+        mock_result_task.error = None
+        mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
+        
+        # Mock TaskExecutor to avoid actual execution
+        mock_task_executor = Mock()
+        mock_task_executor.execute_task_tree = AsyncMock()
+        
         with patch('apflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
-            with patch('apflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
-                mock_task_executor = Mock()
-                mock_task_executor.execute_task_tree = AsyncMock()
-                mock_task_executor_class.return_value = mock_task_executor
-                
-                # Mock task repository
-                mock_repository = Mock(spec=TaskRepository)
-                mock_generate_task = Mock()
-                mock_generate_task.id = "generate-task-id"
-                
-                # Track the inputs passed to create_task
-                captured_inputs = {}
-                
-                async def mock_create_task(*args, **kwargs):
-                    if 'inputs' in kwargs:
-                        captured_inputs.update(kwargs['inputs'])
-                    return mock_generate_task
-                
-                mock_repository.create_task = AsyncMock(side_effect=mock_create_task)
-                
-                mock_result_task = Mock()
-                mock_result_task.status = "completed"
-                mock_result_task.result = {"tasks": mock_generated_tasks}
-                mock_result_task.error = None
-                mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
-                
-                with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+            with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+                with patch('apflow.cli.commands.generate.TaskExecutor', return_value=mock_task_executor):
                     result = runner.invoke(cli, [
                         "generate", "task-tree",
                         "Test requirement",
@@ -243,7 +243,7 @@ class TestGenerateCommand:
                         "--max-tokens", "6000"
                     ])
                     
-                    assert result.exit_code == 0
+                    assert result.exit_code == 0, f"Command failed with output: {result.output}"
                     # Verify all parameters were passed correctly
                     assert captured_inputs.get("requirement") == "Test requirement"
                     assert captured_inputs.get("user_id") == "test_user"
@@ -255,25 +255,25 @@ class TestGenerateCommand:
     @pytest.mark.asyncio
     async def test_generate_with_output_file(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):
         """Test generate command with --output parameter"""
+        # Mock task repository
+        mock_repository = Mock(spec=TaskRepository)
+        mock_generate_task = Mock()
+        mock_generate_task.id = "generate-task-id"
+        mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
+        
+        mock_result_task = Mock()
+        mock_result_task.status = "completed"
+        mock_result_task.result = {"tasks": mock_generated_tasks}
+        mock_result_task.error = None
+        mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
+        
+        # Mock TaskExecutor to avoid actual execution
+        mock_task_executor = Mock()
+        mock_task_executor.execute_task_tree = AsyncMock()
+        
         with patch('apflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
-            with patch('apflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
-                mock_task_executor = Mock()
-                mock_task_executor.execute_task_tree = AsyncMock()
-                mock_task_executor_class.return_value = mock_task_executor
-                
-                # Mock task repository
-                mock_repository = Mock(spec=TaskRepository)
-                mock_generate_task = Mock()
-                mock_generate_task.id = "generate-task-id"
-                mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
-                
-                mock_result_task = Mock()
-                mock_result_task.status = "completed"
-                mock_result_task.result = {"tasks": mock_generated_tasks}
-                mock_result_task.error = None
-                mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
-                
-                with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+            with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+                with patch('apflow.cli.commands.generate.TaskExecutor', return_value=mock_task_executor):
                     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as tmp_file:
                             tmp_path = tmp_file.name
                     
@@ -284,7 +284,7 @@ class TestGenerateCommand:
                             "--output", tmp_path
                         ])
                         
-                        assert result.exit_code == 0
+                        assert result.exit_code == 0, f"Command failed with output: {result.output}"
                         # Verify file was created
                         assert Path(tmp_path).exists()
                         # Verify file contains generated tasks
@@ -300,41 +300,40 @@ class TestGenerateCommand:
     @pytest.mark.asyncio
     async def test_generate_with_save(self, mock_llm_api_key, mock_generated_tasks, use_test_db_session):
         """Test generate command with --save parameter"""
+        # Mock task repository
+        mock_repository = Mock(spec=TaskRepository)
+        mock_generate_task = Mock()
+        mock_generate_task.id = "generate-task-id"
+        mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
+        
+        mock_result_task = Mock()
+        mock_result_task.status = "completed"
+        mock_result_task.result = {"tasks": mock_generated_tasks}
+        mock_result_task.error = None
+        mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
+        
+        # Mock TaskExecutor to avoid actual execution
+        mock_task_executor = Mock()
+        mock_task_executor.execute_task_tree = AsyncMock()
+        
+        # Mock TaskCreator (it's imported inside the function, so we patch the import path)
+        mock_task_creator = Mock()
+        mock_task_tree = Mock()
+        mock_task_tree.task = Mock()
+        mock_task_tree.task.id = "saved-root-task-id"
+        mock_task_creator.create_task_tree_from_array = AsyncMock(return_value=mock_task_tree)
+        
         with patch('apflow.cli.commands.generate.get_default_session', return_value=use_test_db_session):
-            with patch('apflow.cli.commands.generate.TaskExecutor') as mock_task_executor_class:
-                mock_task_executor = Mock()
-                mock_task_executor.execute_task_tree = AsyncMock()
-                mock_task_executor_class.return_value = mock_task_executor
-                
-                # Mock task repository
-                mock_repository = Mock(spec=TaskRepository)
-                mock_generate_task = Mock()
-                mock_generate_task.id = "generate-task-id"
-                mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
-                
-                mock_result_task = Mock()
-                mock_result_task.status = "completed"
-                mock_result_task.result = {"tasks": mock_generated_tasks}
-                mock_result_task.error = None
-                mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
-                
-                # Mock TaskCreator (it's imported inside the function, so we patch the import path)
-                with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
-                    with patch('apflow.core.execution.task_creator.TaskCreator') as mock_task_creator_class:
-                        mock_task_creator = Mock()
-                        mock_task_tree = Mock()
-                        mock_task_tree.task = Mock()
-                        mock_task_tree.task.id = "saved-root-task-id"
-                        mock_task_creator.create_task_tree_from_array = AsyncMock(return_value=mock_task_tree)
-                        mock_task_creator_class.return_value = mock_task_creator
-                        
+            with patch('apflow.cli.commands.generate.TaskRepository', return_value=mock_repository):
+                with patch('apflow.cli.commands.generate.TaskExecutor', return_value=mock_task_executor):
+                    with patch('apflow.core.execution.task_creator.TaskCreator', return_value=mock_task_creator):
                         result = runner.invoke(cli, [
                             "generate", "task-tree",
                             "Test requirement",
                             "--save"
                         ])
                         
-                        assert result.exit_code == 0
+                        assert result.exit_code == 0, f"Command failed with output: {result.output}"
                         # Verify TaskCreator.create_task_tree_from_array was called
                         mock_task_creator.create_task_tree_from_array.assert_called_once()
                         # Verify output mentions saving

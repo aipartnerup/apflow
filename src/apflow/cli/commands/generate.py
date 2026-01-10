@@ -139,7 +139,7 @@ def task_tree(
             
             # Initialize extensions before executing tasks
             # This ensures all executors (including generate_executor) are registered
-            from apflow.api import initialize_extensions
+            from apflow.core.extensions.manager import initialize_extensions
             initialize_extensions()
             
             # Execute generate_executor
