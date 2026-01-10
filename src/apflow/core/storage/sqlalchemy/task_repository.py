@@ -5,6 +5,7 @@ This module provides a TaskRepository class that encapsulates all database opera
 for tasks. TaskManager should use TaskRepository instead of directly operating on db session.
 """
 
+from asyncio import Task
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +13,7 @@ from sqlalchemy import select, delete
 from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING, Type, TypeVar
 from datetime import datetime
 from apflow.core.storage.sqlalchemy.models import TaskModel, TaskOriginType
+from apflow.core.execution.errors import ValidationError
 from apflow.logger import get_logger
 
 if TYPE_CHECKING:
@@ -562,6 +564,23 @@ class TaskRepository:
         Returns:
             List of all tasks in the tree (or custom TaskModel subclass)
         """
+
+        task_tree_id = getattr(root_task, 'task_tree_id', None)
+        is_root_task = root_task.parent_id is None
+        if is_root_task and task_tree_id:
+            try:
+                # Fast path: single query to get all tasks in tree
+                all_tasks = await self.get_tasks_by_tree_id(task_tree_id)
+                logger.debug(f"✅ [OPTIMIZED] Used task_tree_id fast path for task {root_task.id}")
+                return all_tasks
+            except (ValueError, AttributeError) as e:
+                # task_tree_id exists but get_tasks_by_tree_id failed (data inconsistency)
+                # Fall back to slow path
+                logger.warning(
+                    f"⚠️ [FALLBACK] Fast path failed for task {root_task.id} with task_tree_id={task_tree_id}: {str(e)}. "
+                    f"Falling back to slow path (get_root_task + build_task_tree)."
+                )
+
         all_tasks = [root_task]
         
         # Get all child tasks recursively
@@ -573,6 +592,128 @@ class TaskRepository:
         
         await get_children(root_task.id)
         return all_tasks
+
+    async def get_tasks_by_tree_id(self, tree_id: str) -> List[TaskModelType]:
+        """
+        Get tasks by task tree ID.
+        All tasks in the same task tree share the same tree_id value,
+        which allows efficient querying and tree reconstruction without traversing
+        parent_id relationships.
+
+        This method is optimized for recursive query scenarios where you need to
+        get all tasks in a tree with a single query instead of recursive parent_id
+        traversals.
+
+        Note:
+            This method does NOT validate root task existence. If you need to ensure
+            a root task exists (e.g., for tree building), validate it yourself:
+            parent_task = [task for task in tasks if task.parent_id is None]
+
+        Args:
+            tree_id: The tree_id value shared by all tasks in the tree.
+
+        Returns:
+            List of all tasks with the given tree_id (may include root task or not)
+
+        """
+        # CRITICAL: Use expire_all() before query to ensure fresh data in concurrent environments
+        # This prevents stale data when other servers update task status in load-balanced environments
+        # Avoid using refresh() as it can hang if there are database locks
+        self.db.expire_all()
+        if self.is_async:
+            stmt = select(self.task_model_class).filter(
+                self.task_model_class.task_tree_id == tree_id
+            ).order_by(self.task_model_class.priority.asc())
+            result = await self.db.execute(stmt)
+            tasks = result.scalars().all()
+        else:
+            tasks = self.db.query(self.task_model_class).filter(
+                self.task_model_class.task_tree_id == tree_id
+            ).order_by(self.task_model_class.priority.asc()).all()
+        return tasks
+
+
+    async def build_task_tree_by_tree_id(self, tree_id: str) -> "TaskTreeNode":
+        """
+        Build a complete task tree structure by tree_id.
+        
+        All tasks in the same task tree share the same tree_id value,
+        which allows efficient querying and tree reconstruction without traversing
+        parent_id relationships.
+        
+        Process:
+        1. Query all tasks with the given tree_id
+        2. Validate that tasks exist and root task is found
+        3. Build tree structure recursively starting from root task
+        
+        Args:
+            tree_id: The tree_id value shared by all tasks in the tree.
+        
+        Returns:
+            TaskTreeNode representing the root of the task tree with all children recursively built.
+        
+        Note:
+            This method assumes all tasks with the same tree_id belong to the same tree.
+        """
+        # Get all tasks in tree - get_tasks_by_tree_id validates data integrity
+        # but does not validate root task existence (for flexibility)
+        # CRITICAL: get_tasks_by_tree_id now uses expire_all() to ensure fresh data
+        # in concurrent environments, but we should still refresh tasks before building tree
+        # to ensure we have the absolute latest state from database
+        tasks = await self.get_tasks_by_tree_id(tree_id)
+        
+        # CRITICAL: Refresh all tasks to ensure we have latest state from database
+        # This is important in concurrent environments where task status may have changed
+        # between query and tree building
+        for task in tasks:
+            try:
+                self.db.refresh(task)
+            except Exception as refresh_error:
+                # If refresh fails (e.g., task was deleted), log and continue
+                logger.warning(f"Failed to refresh task {task.id} in build_task_tree_by_tree_id: {refresh_error}")
+
+        # Find root task - required for tree building
+        root_task = [task for task in tasks if task.parent_id is None]
+        if not root_task:
+            logger.error(f"Root task not found for tree_id {tree_id}")
+            raise ValidationError(f"Root task not found for tree_id {tree_id}")
+        
+        # Lazy import to avoid circular dependency
+        from apflow.core.types import TaskTreeNode
+        
+        # Build tree structure starting from root task
+        task_tree = TaskTreeNode(task=root_task[0])
+
+        def add_children(task: Task, task_tree: TaskTreeNode):
+            """
+            Recursively add child tasks to the tree structure.
+            
+            For each task in the flat list, if it has the current task as parent,
+            add it as a child node. If the child has children (has_children=True),
+            recursively build its subtree before adding.
+            
+            Args:
+                task: Current parent task to find children for
+                task_tree: Current tree node to add children to
+            """
+            for child in tasks:
+                # Check if this task is a child of the current parent task
+                if str(child.parent_id) == str(task.id):
+                    if bool(child.has_children):
+                        # Child has children: create subtree and recursively add grandchildren
+                        child_task_tree = TaskTreeNode(task=child)
+                        add_children(child, child_task_tree)
+                        # CRITICAL: Add the child subtree to the parent tree
+                        # This was missing in the original implementation
+                        task_tree.add_child(child_task_tree)
+                    else:
+                        # Leaf node: add directly without recursion
+                        task_tree.add_child(TaskTreeNode(task=child))
+
+        # Start recursive tree building from root task
+        add_children(root_task[0], task_tree)
+        
+        return task_tree
     
     async def build_task_tree(self, task: TaskModelType) -> "TaskTreeNode":
         """
@@ -584,6 +725,22 @@ class TaskRepository:
         Returns:
             TaskTreeNode instance with all children recursively built
         """
+        task_tree_id = getattr(task, 'task_tree_id', None)
+        is_root_task = task.parent_id is None
+        if is_root_task and task_tree_id:
+            try:
+                # Fast path: single query to get all tasks in tree
+                task_tree = await self.build_task_tree_by_tree_id(task_tree_id)
+                logger.debug(f"✅ [OPTIMIZED] Used task_tree_id fast path for task {task.id}")
+                return task_tree
+            except (ValueError, AttributeError) as e:
+                # task_tree_id exists but tree build failed (data inconsistency)
+                # Fall back to slow path
+                logger.warning(
+                    f"⚠️ [FALLBACK] Fast path failed for task {task.id} with task_tree_id={task_tree_id}: {str(e)}. "
+                    f"Falling back to slow path (get_root_task + build_task_tree)."
+                )
+                
         # Lazy import to avoid circular dependency
         from apflow.core.types import TaskTreeNode
         
