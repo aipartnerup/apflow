@@ -10,7 +10,6 @@ Provides commands to manage CLI configuration including:
 
 import typer
 import json
-import subprocess
 from typing import Optional
 
 from apflow.cli.cli_config import (
@@ -631,55 +630,6 @@ def verify_token_cmd(
         
     except Exception as e:
         typer.echo(f"❌ Error verifying token: {str(e)}", err=True)
-        raise typer.Exit(1)
-
-
-@app.command("edit")
-def edit_config():
-    """
-    Open configuration file in default editor.
-    
-    Opens the config file with $EDITOR or falls back to system default.
-    
-    Example:
-        apflow config edit
-    """
-    import os
-    
-    try:
-        from apflow.cli.cli_config import get_cli_config_file_path, ensure_config_dir
-
-        path = get_cli_config_file_path()
-
-        # Create file if it doesn't exist
-        if not path.exists():
-            ensure_config_dir()
-            # Create empty YAML file
-            path.write_text("# CLI Configuration\n# See docs for configuration options\n")
-            typer.echo(f"Created empty config file: {path}")
-        
-        # Get editor from environment or use defaults
-        editor = os.environ.get('EDITOR') or os.environ.get('VISUAL')
-        
-        if editor:
-            subprocess.run([editor, str(path)])
-        else:
-            # Try common editors or use system default
-            if subprocess.run(['which', 'nano'], capture_output=True).returncode == 0:
-                subprocess.run(['nano', str(path)])
-            elif subprocess.run(['which', 'vim'], capture_output=True).returncode == 0:
-                subprocess.run(['vim', str(path)])
-            else:
-                # Use system open
-                if os.name == 'darwin':  # macOS
-                    subprocess.run(['open', str(path)])
-                elif os.name == 'posix':  # Linux
-                    subprocess.run(['xdg-open', str(path)])
-                else:  # Windows
-                    os.startfile(str(path))
-        
-    except Exception as e:
-        typer.echo(f"❌ Error opening editor: {str(e)}", err=True)
         raise typer.Exit(1)
 
 

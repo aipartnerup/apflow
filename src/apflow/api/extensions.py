@@ -174,6 +174,102 @@ def _get_extension_enablement_from_env() -> dict[str, bool]:
     return result
 
 
+def get_allowed_executor_ids() -> Optional[set[str]]:
+    """
+    Get the set of allowed executor IDs from environment configuration
+
+    If APFLOW_EXTENSIONS is set, only executors from those extensions are allowed.
+    This provides security control to restrict which executors users can access.
+
+    Returns:
+        Set of allowed executor IDs, or None if no restrictions (allow all)
+
+    Example:
+        APFLOW_EXTENSIONS=stdio,http -> Only stdio and http executors allowed
+        APFLOW_EXTENSIONS not set -> All executors allowed (no restrictions)
+    """
+    extensions_env = os.getenv("APFLOW_EXTENSIONS", "").strip()
+
+    # If APFLOW_EXTENSIONS is not set, allow all executors
+    if not extensions_env:
+        return None
+
+    # Parse enabled extensions
+    enabled_extensions = [e.strip().lower() for e in extensions_env.split(",") if e.strip()]
+
+    # Collect executor IDs from enabled extensions
+    allowed_executor_ids: set[str] = set()
+    for ext_name in enabled_extensions:
+        ext_config = EXTENSION_CONFIG.get(ext_name)
+        if ext_config:
+            # Get executor IDs from this extension
+            for _, executor_id in ext_config.get("classes", []):
+                allowed_executor_ids.add(executor_id)
+
+    return allowed_executor_ids if allowed_executor_ids else None
+
+
+def get_available_executors() -> dict[str, Any]:
+    """
+    Get list of available executors based on APFLOW_EXTENSIONS configuration
+
+    This function returns metadata for all executors that are currently accessible,
+    considering APFLOW_EXTENSIONS restrictions. Used by API/CLI to show users
+    which executors they can use.
+
+    Returns:
+        Dictionary with:
+            - executors: List of available executor metadata
+            - restricted: Boolean indicating if access is restricted by APFLOW_EXTENSIONS
+            - allowed_ids: List of allowed executor IDs (if restricted)
+
+    Example:
+        {
+            "executors": [
+                {"id": "system_info_executor", "name": "System Info", ...},
+                {"id": "command_executor", "name": "Command", ...}
+            ],
+            "restricted": True,
+            "allowed_ids": ["system_info_executor", "command_executor"]
+        }
+    """
+    from apflow.core.extensions import get_all_executor_metadata
+
+    # Get all executor metadata from registry
+    all_metadata = get_all_executor_metadata()
+
+    # Check if access is restricted
+    allowed_executor_ids = get_allowed_executor_ids()
+    is_restricted = allowed_executor_ids is not None
+
+    # Filter executors based on restrictions
+    if is_restricted:
+        available_metadata = {
+            executor_id: metadata
+            for executor_id, metadata in all_metadata.items()
+            if executor_id in allowed_executor_ids
+        }
+    else:
+        available_metadata = all_metadata
+
+    # Convert to list format
+    executors_list = [
+        {"id": executor_id, **metadata}
+        for executor_id, metadata in available_metadata.items()
+    ]
+
+    result = {
+        "executors": executors_list,
+        "count": len(executors_list),
+        "restricted": is_restricted,
+    }
+
+    if is_restricted:
+        result["allowed_ids"] = sorted(allowed_executor_ids)
+
+    return result
+
+
 def _ensure_extension_registered(executor_class: Any, extension_id: str) -> None:
     """
     Ensure an extension is registered in the registry

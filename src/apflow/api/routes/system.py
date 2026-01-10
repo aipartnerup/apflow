@@ -47,6 +47,8 @@ class SystemRoutes(BaseRouteHandler):
             # Route to specific handler based on method
             if method == "system.health":
                 result = await self.handle_health(params, request_id)
+            elif method == "system.executors":
+                result = await self.handle_executors(params, request_id)
             elif method == "config.llm_key.set":
                 result = await self.handle_llm_key_set(params, request, request_id)
             elif method == "config.llm_key.get":
@@ -107,6 +109,33 @@ class SystemRoutes(BaseRouteHandler):
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "running_tasks_count": running_count,
         }
+
+    async def handle_executors(self, params: dict, request_id: str) -> dict:
+        """
+        Handle executor query - get list of available executors
+
+        Returns metadata for all executors that are currently accessible,
+        considering APFLOW_EXTENSIONS restrictions.
+
+        Returns:
+            {
+                "executors": [
+                    {"id": "system_info_executor", "name": "System Info", ...},
+                    ...
+                ],
+                "count": int,
+                "restricted": bool,
+                "allowed_ids": [...] (optional, only if restricted)
+            }
+        """
+        from apflow.api.extensions import get_available_executors
+
+        result = get_available_executors()
+        logger.debug(
+            f"[{request_id}] Returning {result['count']} available executors "
+            f"(restricted={result['restricted']})"
+        )
+        return result
 
     async def handle_llm_key_set(self, params: dict, request: Request, request_id: str) -> dict:
         """

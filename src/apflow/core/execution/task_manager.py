@@ -1007,6 +1007,55 @@ class TaskManager:
         # Use repository method
         return await self.task_repository.get_all_tasks_in_tree(root_task)
     
+    def _check_executor_permission(
+        self,
+        executor_id: str,
+        allowed_executor_ids: Optional[set[str]],
+        task: TaskModel,
+        task_type: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Check if executor is allowed based on APFLOW_EXTENSIONS configuration
+        
+        Args:
+            executor_id: Executor ID to check
+            allowed_executor_ids: Set of allowed executor IDs (None means no restrictions)
+            task: Task being executed
+            task_type: Optional task type for error message
+            
+        Returns:
+            Error dictionary if executor is not allowed, None if allowed
+        """
+        if allowed_executor_ids is None:
+            return None
+        
+        if executor_id not in allowed_executor_ids:
+            error_msg = (
+                f"Executor '{executor_id}' is not allowed. "
+                f"Allowed executors: {sorted(allowed_executor_ids)}. "
+                f"Configure APFLOW_EXTENSIONS environment variable to enable more executors."
+            )
+            if task_type:
+                error_msg = (
+                    f"Executor '{executor_id}' (type='{task_type}') is not allowed. "
+                    f"Allowed executors: {sorted(allowed_executor_ids)}. "
+                    f"Configure APFLOW_EXTENSIONS environment variable to enable more executors."
+                )
+            
+            logger.error(error_msg)
+            error_result = {
+                "error": error_msg,
+                "task_id": task.id,
+                "executor_id": executor_id,
+                "allowed_executors": sorted(allowed_executor_ids)
+            }
+            if task_type:
+                error_result["task_type"] = task_type
+            
+            return error_result
+        
+        return None
+
     async def _call_task_tree_hooks(self, hook_type: str, root_task: TaskModel, *args):
         """
         Call task tree lifecycle hooks
@@ -1191,8 +1240,20 @@ class TaskManager:
         extension_id = None
         extension = None
         
+        # Check executor permissions (if APFLOW_EXTENSIONS is set)
+        # Import here to avoid circular dependency
+        from apflow.api.extensions import get_allowed_executor_ids
+        allowed_executor_ids = get_allowed_executor_ids()
+        
         # If executor_id is already set from params or schemas.method, use it
         if executor_id:
+            # Check permission before proceeding
+            permission_error = self._check_executor_permission(
+                executor_id, allowed_executor_ids, task
+            )
+            if permission_error:
+                return permission_error
+            
             extension = registry.get_by_id(executor_id)
             if extension and extension.category == ExtensionCategory.EXECUTOR:
                 extension_id = executor_id
@@ -1201,6 +1262,13 @@ class TaskManager:
         # If not found, try to use method as executor id
         if extension is None or (extension and extension.category != ExtensionCategory.EXECUTOR):
             if task_method:
+                # Check permission before proceeding
+                permission_error = self._check_executor_permission(
+                    task_method, allowed_executor_ids, task
+                )
+                if permission_error:
+                    return permission_error
+                
                 extension = registry.get_by_id(task_method)
                 if extension and extension.category == ExtensionCategory.EXECUTOR:
                     extension_id = task_method
@@ -1217,6 +1285,12 @@ class TaskManager:
             if extension:
                 extension_id = extension.id
                 executor_id = extension_id
+                # Check permission after resolving executor_id
+                permission_error = self._check_executor_permission(
+                    executor_id, allowed_executor_ids, task, task_type
+                )
+                if permission_error:
+                    return permission_error
                 logger.debug(f"Using type '{task_type}' to find executor '{extension_id}'")
         
         if extension is None or extension.category != ExtensionCategory.EXECUTOR:

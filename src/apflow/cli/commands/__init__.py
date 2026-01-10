@@ -7,6 +7,7 @@ from apflow.cli.commands.serve import app as serve_app
 from apflow.cli.commands.daemon import app as daemon_app
 from apflow.cli.commands.tasks import app as tasks_app
 from apflow.cli.commands.generate import app as generate_app
+from apflow.cli.commands.executors import app as executors_app
 
 __all__ = [
     "run",
@@ -14,6 +15,7 @@ __all__ = [
     "daemon",
     "tasks",
     "generate",
+    "executors",
 ]
 
 # Expose apps for main.py
@@ -22,4 +24,5 @@ serve = type("serve", (), {"app": serve_app})()
 daemon = type("daemon", (), {"app": daemon_app})()
 tasks = type("tasks", (), {"app": tasks_app})()
 generate = type("generate", (), {"app": generate_app})()
+executors = type("executors", (), {"app": executors_app})()
 

@@ -35,6 +35,11 @@ except ImportError:
     pass  # Extension not available, tests will handle this
 
 try:
+    from apflow.extensions.http import RestExecutor  # noqa: F401
+except ImportError:
+    pass  # Extension not available, tests will handle this
+
+try:
     from apflow.extensions.crewai import CrewaiExecutor, BatchCrewaiExecutor  # noqa: F401
 except ImportError:
     pass  # Extension not available, tests will handle this
@@ -458,6 +463,30 @@ def sample_task_tree_data():
     }
 
 
+@pytest_asyncio.fixture(scope="function")
+async def task_manager_with_session(async_db_session):
+    """
+    Fixture providing a TaskManager instance with an async database session.
+    
+    Returns a tuple of (TaskManager, AsyncSession) for tests that need to
+    execute tasks and check their status in the database.
+    
+    Usage:
+        async def test_something(self, task_manager_with_session):
+            task_manager, session = task_manager_with_session
+            # Use both task_manager and session
+    """
+    from apflow.core.execution.task_manager import TaskManager
+    
+    # Create TaskManager with async session
+    task_manager = TaskManager(
+        db=async_db_session,
+        executor_instances={}
+    )
+    
+    return (task_manager, async_db_session)
+
+
 @pytest.fixture(autouse=True)
 def reset_storage_singleton():
     """Reset storage singleton before each test"""
@@ -776,6 +805,36 @@ def integration_test(func):
     """Decorator to mark integration tests that require external services"""
     return pytest.mark.integration(pytest.mark.requires_api_keys(pytest.mark.asyncio(func)))
 
+
+
+@pytest.fixture(autouse=True)
+def disable_executor_restrictions():
+    """
+    Fixture to disable executor restrictions for all tests.
+    
+    When APFLOW_EXTENSIONS is set in .env, it restricts executor access.
+    This fixture clears it for all tests to allow test executors to run.
+    
+    This is automatically applied to all tests (autouse=True) to prevent
+    permission errors when using custom test executors.
+    
+    Tests can still explicitly set APFLOW_EXTENSIONS using patch.dict
+    to test permission checking behavior specifically.
+    """
+    from unittest.mock import patch
+    import copy
+    
+    # Save the original environment
+    original_env = copy.copy(os.environ)
+    
+    # Remove APFLOW_EXTENSIONS from environment for tests
+    # This allows all registered executors to be used
+    env_to_patch = {k: v for k, v in original_env.items() if k != "APFLOW_EXTENSIONS"}
+    
+    with patch.dict(os.environ, env_to_patch, clear=True):
+        yield
+    
+    # Environment is automatically restored after the test
 
 
 @pytest.fixture(scope="function")

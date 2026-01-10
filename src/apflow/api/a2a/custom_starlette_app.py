@@ -287,7 +287,7 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                 return args[0].url
             elif "agent_card" in kwargs and hasattr(kwargs["agent_card"], "url"):
                 return kwargs["agent_card"].url
-            return f"http://localhost:{os.getenv('APFLOW_API_PORT', os.getenv('APFLOW_PORT', '8000'))}"
+            return f"http://localhost:{os.getenv('APFLOW_API_PORT', os.getenv('API_PORT', '8000'))}"
         
         self.docs_routes = DocsRoutes(
             enable_docs=self.enable_docs,

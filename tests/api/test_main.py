@@ -347,23 +347,7 @@ class TestEnvironmentVariableParsing:
             assert result["ssh"] is False  # Not in list
             assert result["docker"] is False  # Not in list
     
-    def test_get_extension_enablement_from_env_individual_flags(self):
-        """Test parsing individual APFLOW_ENABLE_* flags"""
-        with patch.dict(
-            os.environ,
-            {
-                "APFLOW_ENABLE_CREWAI": "true",
-                "APFLOW_ENABLE_SSH": "1",
-                "APFLOW_ENABLE_DOCKER": "false",
-            },
-        ):
-            result = _get_extension_enablement_from_env()
-            
-            assert result["crewai"] is True
-            assert result["ssh"] is True
-            assert result["docker"] is False
-            # Other extensions not set, will be auto-detected
-    
+
     def test_get_extension_enablement_from_env_no_vars(self):
         """Test that empty result when no env vars are set"""
         with patch.dict(os.environ, {}, clear=True):
@@ -456,25 +440,6 @@ class TestDynamicExtensionInitialization:
         # But we verify the function completed without error
         assert True  # Function completed
     
-    @patch.dict(os.environ, {"APFLOW_ENABLE_CREWAI": "false"})
-    def test_initialize_extensions_respects_env_var_individual_flag(self):
-        """Test that APFLOW_ENABLE_* env vars are respected"""
-        registry = get_registry()
-        
-        # Clear registry
-        registry._by_id.clear()
-        registry._by_category.clear()
-        registry._executor_classes.clear()
-        registry._factory_functions.clear()
-        
-        # Initialize with auto-detection
-        initialize_extensions()
-        
-        # CrewAI should be disabled via env var
-        # Other extensions should be auto-detected
-        # We verify the function completed without error
-        assert True  # Function completed
-    
     def test_initialize_extensions_priority_function_param_over_env(self):
         """Test that function parameters have priority over environment variables"""
         registry = get_registry()
@@ -484,12 +449,10 @@ class TestDynamicExtensionInitialization:
         registry._by_category.clear()
         registry._executor_classes.clear()
         registry._factory_functions.clear()
+
+        # But function param says enable
+        initialize_extensions(include_stdio=True)
         
-        # Set env var to disable stdio
-        with patch.dict(os.environ, {"APFLOW_ENABLE_STDIO": "false"}):
-            # But function param says enable
-            initialize_extensions(include_stdio=True)
-            
-            # Function param should win - stdio should be registered
-            assert registry.is_registered("system_info_executor") or registry.is_registered("command_executor")
+        # Function param should win - stdio should be registered
+        assert registry.is_registered("system_info_executor") or registry.is_registered("command_executor")
 

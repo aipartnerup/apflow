@@ -143,14 +143,18 @@ APFLOW_CORS_ALLOW_ALL=true
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `APFLOW_EXTENSIONS` | string | - | Comma-separated extension names to load |
+| `APFLOW_EXTENSIONS` | string | - | Comma-separated extension names to load (also restricts available executors for security) |
 | `APFLOW_LLM_PROVIDER` | string | - | LLM provider for AI extensions |
 
 **Example:**
 ```bash
-APFLOW_EXTENSIONS=llm,docker,http
+# Load only stdio and http extensions (security: only these executors are accessible)
+APFLOW_EXTENSIONS=stdio,http
 APFLOW_LLM_PROVIDER=openai
 ```
+
+**Security Note:**
+When `APFLOW_EXTENSIONS` is set, only executors from the specified extensions can be accessed via API endpoints (`tasks.execute`, `tasks.generate`). This provides access control to restrict which executors users can invoke. If not set, all installed executors are available.
 
 ## Extension-Specific Variables
 
