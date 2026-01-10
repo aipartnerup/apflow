@@ -365,6 +365,79 @@ Task status constants and utilities.
 - `register_post_hook(hook)`: Register post-execution hook
 - `register_task_tree_hook(event, hook)`: Register task tree lifecycle hook
 - `get_registry()`: Get extension registry instance
+- `get_available_executors()`: Get list of available executors based on APFLOW_EXTENSIONS configuration
+
+### Getting Available Executors
+
+The `get_available_executors()` function provides discovery of available executor types. This is useful for validating task schemas, generating UI options, or restricting executor access.
+
+**Function Signature:**
+```python
+def get_available_executors() -> dict[str, Any]:
+    """
+    Get list of available executors based on APFLOW_EXTENSIONS configuration.
+    
+    Returns:
+        Dictionary with:
+            - executors: List of available executor metadata
+            - count: Number of available executors
+            - restricted: Boolean indicating if access is restricted
+            - allowed_ids: List of allowed executor IDs (if restricted)
+    """
+```
+
+**Basic Usage:**
+```python
+from apflow.api.extensions import get_available_executors
+
+# Get all available executors
+result = get_available_executors()
+
+print(f"Available executors: {result['count']}")
+print(f"Restricted: {result['restricted']}")
+
+for executor in result['executors']:
+    print(f"  - {executor['id']}: {executor['name']}")
+    print(f"    Extension: {executor['extension']}")
+    print(f"    Description: {executor['description']}")
+```
+
+**Response Structure:**
+```python
+{
+    "executors": [
+        {
+            "id": "system_info_executor",
+            "name": "System Info Executor",
+            "extension": "stdio",
+            "description": "Retrieve system information like CPU, memory, disk usage"
+        },
+        {
+            "id": "command_executor",
+            "name": "Command Executor",
+            "extension": "stdio",
+            "description": "Execute shell commands on the local system"
+        },
+        # ... more executors
+    ],
+    "count": 2,
+    "restricted": False,
+}
+```
+
+**With APFLOW_EXTENSIONS Restriction:**
+When `APFLOW_EXTENSIONS=stdio,http` is set, only executors from those extensions are returned:
+```python
+result = get_available_executors()
+# result['restricted'] == True
+# result['allowed_ids'] == ['system_info_executor', 'command_executor', 'rest_executor']
+```
+
+**Use Cases:**
+- Validate task schemas against available executors before execution
+- Generate API/UI responses showing which executors users can access
+- Enforce security restrictions by limiting executor availability
+- Debug executor availability issues
 
 ### Hook Database Access
 

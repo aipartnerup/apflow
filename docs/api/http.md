@@ -2148,6 +2148,7 @@ JSON-RPC 2.0 format with method-specific parameters:
 
 **Supported Methods:**
 - `system.health` - Check system health status
+- `system.executors` - Get available executors based on configuration
 - `config.llm_key.set` - Set LLM API key for user
 - `config.llm_key.get` - Get LLM API key status
 - `config.llm_key.delete` - Delete LLM API key
@@ -2205,6 +2206,109 @@ None
 - This endpoint does not require authentication
 - Useful for load balancer health checks
 - Returns basic system information for monitoring
+
+#### `system.executors`
+
+**Description:**  
+Gets the list of available executors based on the APFLOW_EXTENSIONS configuration. This method returns metadata for all executors that are currently accessible. If APFLOW_EXTENSIONS is set, only executors from enabled extensions are returned (security restriction).
+
+**Method:** `system.executors`
+
+**Parameters:**  
+None
+
+**Example Request:**
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "system.executors",
+  "params": {},
+  "id": "executors-request-1"
+}
+```
+
+**Example Response:**
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "executors-request-1",
+  "result": {
+    "executors": [
+      {
+        "id": "system_info_executor",
+        "name": "System Info Executor",
+        "extension": "stdio",
+        "description": "Retrieve system information like CPU, memory, disk usage"
+      },
+      {
+        "id": "command_executor",
+        "name": "Command Executor",
+        "extension": "stdio",
+        "description": "Execute shell commands on the local system"
+      },
+      {
+        "id": "rest_executor",
+        "name": "REST Executor",
+        "extension": "http",
+        "description": "Make HTTP REST API calls"
+      }
+    ],
+    "count": 3,
+    "restricted": false
+  }
+}
+```
+
+**Response Fields:**
+- `executors` (array): List of available executors, each with:
+  - `id` (string): Unique executor identifier (e.g., "command_executor")
+  - `name` (string): Human-readable executor name
+  - `extension` (string): Extension this executor belongs to
+  - `description` (string): Detailed description of what the executor does
+- `count` (integer): Total number of available executors
+- `restricted` (boolean): Whether executor access is restricted by APFLOW_EXTENSIONS
+- `allowed_ids` (array, optional): List of allowed executor IDs (only present if `restricted` is true)
+
+**Restricted Response Example:**
+When APFLOW_EXTENSIONS environment variable is set to "stdio,http":
+```json
+{
+  "jsonrpc": "2.0",
+  "id": "executors-request-1",
+  "result": {
+    "executors": [
+      {
+        "id": "system_info_executor",
+        "name": "System Info Executor",
+        "extension": "stdio",
+        "description": "Retrieve system information like CPU, memory, disk usage"
+      },
+      {
+        "id": "command_executor",
+        "name": "Command Executor",
+        "extension": "stdio",
+        "description": "Execute shell commands on the local system"
+      },
+      {
+        "id": "rest_executor",
+        "name": "REST Executor",
+        "extension": "http",
+        "description": "Make HTTP REST API calls"
+      }
+    ],
+    "count": 3,
+    "restricted": true,
+    "allowed_ids": ["system_info_executor", "command_executor", "rest_executor"]
+  }
+}
+```
+
+**Notes:**
+- This endpoint does not require authentication
+- Returns all available executors if APFLOW_EXTENSIONS is not set
+- Returns only restricted executors if APFLOW_EXTENSIONS is set
+- Useful for discovery of available executor types before executing tasks
+- The executor metadata can be used to validate task schemas against available executors
 
 #### `config.llm_key.set`
 

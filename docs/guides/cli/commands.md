@@ -464,6 +464,124 @@ apflow tasks list --batch-id batch-001 --status failed
 apflow tasks list --user-id alice --status running
 ```
 
+## Executor Discovery
+
+### apflow executors list
+
+List all available executors:
+
+```bash
+apflow executors list [OPTIONS]
+```
+
+**Description:**  
+Shows all executors that are currently accessible based on APFLOW_EXTENSIONS environment variable configuration. If APFLOW_EXTENSIONS is set, only executors from those extensions are shown (security restriction).
+
+**Options:**
+- `--format <format>` - Output format: table (default), json, ids
+- `--verbose` - Show detailed executor information (with descriptions)
+
+**Examples:**
+
+Default table format:
+```bash
+apflow executors list
+```
+
+Output:
+```
+Executor ID            Name                      Extension
+────────────────────── ───────────────────────── ──────────
+system_info_executor   System Info Executor      stdio
+command_executor       Command Executor          stdio
+rest_executor          REST Executor             http
+apflow_api_executor    ApFlow API Executor       apflow
+```
+
+JSON format (useful for scripts and tools):
+```bash
+apflow executors list --format json
+```
+
+Output:
+```json
+{
+  "executors": [
+    {
+      "id": "system_info_executor",
+      "name": "System Info Executor",
+      "extension": "stdio",
+      "description": "Retrieve system information like CPU, memory, disk usage"
+    },
+    {
+      "id": "command_executor",
+      "name": "Command Executor",
+      "extension": "stdio",
+      "description": "Execute shell commands on the local system"
+    },
+    {
+      "id": "rest_executor",
+      "name": "REST Executor",
+      "extension": "http",
+      "description": "Make HTTP REST API calls"
+    }
+  ],
+  "count": 3,
+  "restricted": false
+}
+```
+
+IDs only format (simple list of executor IDs):
+```bash
+apflow executors list --format ids
+```
+
+Output:
+```
+system_info_executor
+command_executor
+rest_executor
+apflow_api_executor
+```
+
+Verbose output with descriptions:
+```bash
+apflow executors list --verbose
+```
+
+Output:
+```
+Executor ID            Name                      Extension  Description
+────────────────────── ───────────────────────── ────────── ────────────────────────────────
+system_info_executor   System Info Executor      stdio      Retrieve system information...
+command_executor       Command Executor          stdio      Execute shell commands on...
+rest_executor          REST Executor             http       Make HTTP REST API calls
+apflow_api_executor    ApFlow API Executor       apflow     Execute tasks through ApFlow API
+```
+
+**Restricted Access Example:**
+
+When APFLOW_EXTENSIONS environment variable is set:
+```bash
+export APFLOW_EXTENSIONS=stdio,http
+apflow executors list
+```
+
+Output shows only executors from stdio and http extensions:
+```
+Executor ID            Name                      Extension
+────────────────────── ───────────────────────── ──────────
+system_info_executor   System Info Executor      stdio
+command_executor       Command Executor          stdio
+rest_executor          REST Executor             http
+```
+
+**Notes:**
+- Executor availability depends on installed optional dependencies
+- Use `--format json` for programmatic access in scripts
+- The executor IDs are used in task schemas when executing tasks
+- Check installed extensions with `apflow config list`
+
 ## Executor Methods
 
 Common executor methods available:

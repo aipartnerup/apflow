@@ -8,11 +8,12 @@ Quick reference cheat sheet for apflow APIs. Perfect for when you know what you 
 
 1. [Core APIs](#core-apis)
 2. [Task Management](#task-management)
-3. [Custom Executors](#custom-executors)
-4. [Task Orchestration](#task-orchestration)
-5. [Hooks](#hooks)
-6. [Storage](#storage)
-7. [Common Patterns](#common-patterns)
+3. [Executor Discovery](#executor-discovery)
+4. [Custom Executors](#custom-executors)
+5. [Task Orchestration](#task-orchestration)
+6. [Hooks](#hooks)
+7. [Storage](#storage)
+8. [Common Patterns](#common-patterns)
 
 ## Core APIs
 
@@ -125,6 +126,50 @@ tasks = await task_manager.task_repository.list_tasks(
     status="completed",
     limit=100
 )
+```
+
+## Executor Discovery
+
+### Get Available Executors
+
+```python
+from apflow.api.extensions import get_available_executors
+
+# Get all available executors
+result = get_available_executors()
+
+# Access executor data
+executors = result["executors"]  # List of executor metadata
+count = result["count"]           # Number of executors
+restricted = result["restricted"] # Whether access is restricted
+
+for executor in executors:
+    print(f"{executor['id']}: {executor['name']} ({executor['extension']})")
+```
+
+### HTTP API
+
+```bash
+# Get available executors via HTTP API
+curl -X POST http://localhost:8000/system \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "method": "system.executors", "params": {}, "id": "1"}'
+```
+
+### CLI
+
+```bash
+# List all available executors (table format)
+apflow executors list
+
+# JSON format (for scripts)
+apflow executors list --format json
+
+# Just executor IDs
+apflow executors list --format ids
+
+# With descriptions
+apflow executors list --verbose
 ```
 
 ## Custom Executors
