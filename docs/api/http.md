@@ -1033,7 +1033,9 @@ Creates a new executable copy of an existing task tree for re-execution. Support
 
 **Metadata:**
 - `original_task_id`: Links copied task to original task's root ID
-- `has_copy`: Set to `true` on all original tasks that were copied
+- `origin_type`: Task origin type (own, copy, reference, link, snapshot)
+- `task_tree_id`: Task tree identifier for grouping and querying across trees
+- `has_references`: Set to `true` on all original tasks that were copied
 
 **Parameters:**
 - `task_id` (string, required): ID of the task to copy. Can be root task or any task in the tree. The method will copy the minimal subtree containing the task and all its dependencies.
@@ -1175,7 +1177,7 @@ Creates a new executable copy of an existing task tree for re-execution. Support
 **Notes:**
 - The copied task tree has new task IDs (UUIDs) but preserves the original structure
 - All execution fields are reset (status="pending", progress=0.0, result=null) unless `reset_fields` is specified
-- The original task's `has_copy` flag is set to `true` when `save=true`
+- The original task's `has_references` flag is set to `true` when `save=true`
 - Dependencies correctly reference new task IDs within the copied tree
 - When `save=false`, the returned task array is compatible with `tasks.create` API
 - Each copied task's `original_task_id` points to its direct original counterpart (not root)
@@ -1647,7 +1649,7 @@ data: {"type": "stream_end", "task_id": "task-abc-123"}
 - The `copy_execution` parameter only applies to `task_id` mode (executing existing tasks), not `tasks_array` mode (creating new tasks).
 - When `copy_children=true` and `copy_execution=true`, each direct child task of the original task is also copied with its dependencies. Tasks that depend on multiple copied tasks are only copied once (deduplication by task ID).
 - The copied task tree has new task IDs but preserves the original structure. All execution fields are reset (status="pending", progress=0.0, result=null).
-- The original task's `has_copy` flag is set to `true` after copying.
+- The original task's `has_references` flag is set to `true` after copying.
 
 **Webhook Callback Format:**
 

@@ -1052,9 +1052,9 @@ class TestTaskCreatorCopy:
         assert new_tree.task.result is None
         assert new_tree.task.progress == 0.0
         
-        # Verify has_copy flag is set on original
+        # Verify has_references flag is set on original
         sync_db_session.refresh(root_task)
-        assert root_task.has_copy is True
+        assert root_task.has_references is True
         
         # Verify child tasks are copied
         assert len(new_tree.children) == 1
@@ -1264,8 +1264,8 @@ class TestTaskCreatorCopy:
         assert child1_copy.children[0].task.name == "Grandchild 1"
     
     @pytest.mark.asyncio
-    async def test_create_task_copy_marks_has_copy_flag(self, sync_db_session):
-        """Test that has_copy flag is set on all original tasks"""
+    async def test_create_task_copy_marks_has_references_flag(self, sync_db_session):
+        """Test that has_references flag is set on all original tasks"""
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         
         task_repository = TaskRepository(sync_db_session)
@@ -1301,11 +1301,11 @@ class TestTaskCreatorCopy:
         sync_db_session.refresh(child2)
         sync_db_session.refresh(grandchild)
         
-        # Verify has_copy is set on all original tasks
-        assert root_task.has_copy is True
-        assert child1.has_copy is True
-        assert child2.has_copy is True
-        assert grandchild.has_copy is True
+        # Verify has_references is set on all original tasks
+        assert root_task.has_references is True
+        assert child1.has_references is True
+        assert child2.has_references is True
+        assert grandchild.has_references is True
     
     @pytest.mark.asyncio
     async def test_create_task_copy_resets_execution_fields(self, sync_db_session):
@@ -2010,7 +2010,7 @@ class TestTaskCreatorCopyWithSave:
             # Should not have auto-generated fields
             assert "created_at" not in task_dict
             assert "updated_at" not in task_dict
-            assert "has_copy" not in task_dict
+            assert "has_references" not in task_dict
             
             # Should have parent_id as id reference (if not root)
             if task_dict["name"] == "Child Task":
@@ -2450,7 +2450,7 @@ class TestTaskCreatorCopyWithSave:
         # Note: id is now included for id-based mode
         valid_fields.discard("created_at")
         valid_fields.discard("updated_at")
-        valid_fields.discard("has_copy")
+        valid_fields.discard("has_references")
         
         # Verify all fields in array are valid TaskModel fields
         root_dict = task_array[0]

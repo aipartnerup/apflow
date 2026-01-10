@@ -323,11 +323,11 @@ Database model for tasks.
 
 ### Main Fields
 
-- `id`, `parent_id`, `user_id`, `name`, `status`, `priority`
+- `id`, `parent_id`, `task_tree_id`, `user_id`, `name`, `status`, `priority`
 - `dependencies`, `inputs`, `params`, `result`, `error`, `schemas`
 - `progress`, `has_children`
 - `created_at`, `started_at`, `updated_at`, `completed_at`
-- `original_task_id`, `has_copy`
+- `original_task_id`, `task_tree_id`, `origin_type`, `has_references`
 
 ### Methods
 

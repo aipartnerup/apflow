@@ -220,12 +220,11 @@ def log_api_usage(command_name: str, using_api: bool) -> None:
     """
     if using_api:
         cm = get_config_manager()
-        logger.debug(
+        logger.info(
             f"Command '{command_name}' using API gateway: "
             f"{cm.api_server_url}"
         )
-    else:
-        logger.debug(f"Command '{command_name}' using local database")
+    # Don't log when using local database to avoid polluting test output
 
 
 def reset_api_validation() -> None:

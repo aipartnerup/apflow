@@ -39,7 +39,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from apflow.core.execution.task_manager import TaskManager
 from apflow.core.types import TaskTreeNode
-from apflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.storage.sqlalchemy.models import TaskModel, TaskOriginType
 from apflow.logger import get_logger
 from apflow.core.config import get_task_model_class
 
@@ -253,7 +253,9 @@ class TaskCreator:
                 inputs=task_data.get("inputs"),
                 schemas=task_data.get("schemas"),
                 params=task_data.get("params"),
-                id=actual_id  # Use actual_id (may be auto-generated if provided_id conflicts)
+                id=actual_id,  # Use actual_id (may be auto-generated if provided_id conflicts)
+                origin_type=TaskOriginType.own,
+                task_tree_id=None,  # Will be set after root task is determined
             )
             
             logger.debug(f"Task created: id={task.id}, name={task.name}, provided_id={provided_id}, actual_id={actual_id}")
@@ -391,6 +393,19 @@ class TaskCreator:
             )
         
         root_task = root_tasks[0]
+
+        # Set task_tree_id for all tasks in this newly created tree to the root task id
+        for t in created_tasks:
+            t.task_tree_id = root_task.id
+        if self.task_manager.is_async:
+            await self.db.commit()
+            # Refresh all tasks to ensure task_tree_id is persisted
+            for t in created_tasks:
+                await self.db.refresh(t)
+        else:
+            self.db.commit()
+            for t in created_tasks:
+                self.db.refresh(t)
         
         # Verify all tasks are reachable from the root task (in the same tree)
         # Build a set of all task IDs that are reachable from root
@@ -1007,7 +1022,7 @@ class TaskCreator:
         await self._save_copied_task_tree(new_tree, None)
         
         # Step 9: Mark all original tasks as having copies
-        await self._mark_original_tasks_has_copy(minimal_tree)
+        await self._mark_original_tasks_has_references(minimal_tree)
         if self.task_manager.is_async:
             await self.db.commit()
         else:
@@ -1360,7 +1375,7 @@ class TaskCreator:
         await self._save_copied_task_tree(new_tree, None)
         
         # Step 7: Mark all original tasks as having copies
-        await self._mark_original_tasks_has_copy(minimal_tree)
+        await self._mark_original_tasks_has_references(minimal_tree)
         
         # Step 8: Commit all changes
         if self.task_manager.is_async:
@@ -1394,7 +1409,7 @@ class TaskCreator:
         4. Mark tasks appropriately:
            - Tasks in re-execution set → pending, reset all execution fields
            - Unrelated successful tasks → completed, preserve token_usage and result
-        5. Mark all original tasks as having copies (has_copy=True)
+        5. Mark all original tasks as having copies (has_references=True)
         
         Args:
             original_task: Original task to copy (can be root or any task in tree)
@@ -1471,7 +1486,7 @@ class TaskCreator:
         await self._save_copied_task_tree(new_tree, None)
         
         # Step 8: Mark all original tasks as having copies
-        await self._mark_original_tasks_has_copy(root_tree)
+        await self._mark_original_tasks_has_references(root_tree)
         
         # Step 9: Commit all changes
         if self.task_manager.is_async:
@@ -1669,6 +1684,7 @@ class TaskCreator:
                     schemas=copy.deepcopy(schemas_value) if schemas_value else None,
                     params=copy.deepcopy(params_value) if params_value else None,
                     original_task_id=str(original_task.id),
+                    origin_type=TaskOriginType.copy,
                 )
             else:
                 # Create in-memory TaskModel instance without saving to database
@@ -1683,6 +1699,7 @@ class TaskCreator:
                     schemas=copy.deepcopy(schemas_value) if schemas_value else None,
                     params=copy.deepcopy(params_value) if params_value else None,
                     original_task_id=str(original_task.id),
+                    origin_type=TaskOriginType.copy,
                 )
             # Apply field reset logic
             self._reset_task_fields(task, reset_fields)
@@ -1718,6 +1735,7 @@ class TaskCreator:
                     schemas=copy.deepcopy(schemas_value) if schemas_value else None,
                     params=copy.deepcopy(params_value) if params_value else None,
                     original_task_id=str(original_task.id),
+                    origin_type=TaskOriginType.copy,
                 )
             else:
                 # Create in-memory TaskModel instance without saving to database
@@ -1732,6 +1750,7 @@ class TaskCreator:
                     schemas=copy.deepcopy(schemas_value) if schemas_value else None,
                     params=copy.deepcopy(params_value) if params_value else None,
                     original_task_id=str(original_task.id),
+                    origin_type=TaskOriginType.copy,
                 )
             
             # Set status and preserve result/token_usage (unless reset_fields specifies otherwise)
@@ -1774,7 +1793,7 @@ class TaskCreator:
             
             return task
     
-    async def _save_copied_task_tree(self, node: TaskTreeNode, parent_id: Optional[str] = None):
+    async def _save_copied_task_tree(self, node: TaskTreeNode, parent_id: Optional[str] = None, root_task_id: Optional[str] = None):
         """
         Update parent_id and dependencies references for copied task tree.
         Tasks are already saved by create_task, we need to update parent_id and dependencies
@@ -1812,6 +1831,10 @@ class TaskCreator:
                 await refresh_all_tasks(child)
         
         await refresh_all_tasks(node)
+
+        # Establish root_task_id for task_tree grouping (use new copied root id)
+        if root_task_id is None:
+            root_task_id = str(node.task.id)
         
         # Step 3: Build mapping: original_task_id -> new task id for all tasks in the tree
         # After flush and refresh, all task IDs should be available and up-to-date
@@ -1870,10 +1893,12 @@ class TaskCreator:
         # Update all dependencies in the tree
         update_dependencies(node, original_to_new_id)
         
-        # Step 5: Update parent_id
+        # Step 5: Update parent_id and task_tree_id
         task = node.task
         if parent_id is not None:
             task.parent_id = parent_id
+        # Always set task_tree_id to the copied root task id
+        task.task_tree_id = root_task_id
         
         # Step 6: Save task with updated dependencies and parent_id
         if self.task_manager.is_async:
@@ -1885,16 +1910,16 @@ class TaskCreator:
         
         # Recursively update children
         for child_node in node.children:
-            await self._save_copied_task_tree(child_node, task.id)
+            await self._save_copied_task_tree(child_node, task.id, root_task_id)
     
-    async def _mark_original_tasks_has_copy(self, node: TaskTreeNode):
+    async def _mark_original_tasks_has_references(self, node: TaskTreeNode):
         """
-        Recursively mark all original tasks as having copies.
+        Recursively mark all original tasks as having references/copies.
         
         Args:
             node: Task tree node to mark
         """
-        node.task.has_copy = True
+        node.task.has_references = True
         if self.task_manager.is_async:
             await self.db.commit()
             await self.db.refresh(node.task)
@@ -1904,7 +1929,7 @@ class TaskCreator:
         
         # Recursively mark children
         for child_node in node.children:
-            await self._mark_original_tasks_has_copy(child_node)
+            await self._mark_original_tasks_has_references(child_node)
     
     def _tree_to_task_array(self, node: TaskTreeNode) -> List[Dict[str, Any]]:
         """
@@ -2078,8 +2103,8 @@ class TaskCreator:
             
             # Get all TaskModel fields and their values
             for column_name in task_columns:
-                # Skip id (already set above), parent_id (handled separately above), created_at, updated_at, has_copy (these are auto-generated or not needed for create)
-                if column_name in ("id", "parent_id", "created_at", "updated_at", "has_copy"):
+                # Skip id (already set above), parent_id (handled separately above), created_at, updated_at, has_references (auto-generated or not needed for create)
+                if column_name in ("id", "parent_id", "created_at", "updated_at", "has_references"):
                     continue
                 
                 # Get value from task

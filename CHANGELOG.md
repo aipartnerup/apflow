@@ -1028,7 +1028,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Automatic inclusion of dependent tasks (including transitive dependencies) when copying
   - Special handling for failed leaf nodes (filters out pending dependents)
   - Minimal subtree construction to include only required tasks
-  - Task copy fields in `TaskModel`: `original_task_id` (links copy to original) and `has_copy` (indicates if task has copies)
+  - Task copy fields in `TaskModel`: `original_task_id` (links copy to original), `task_tree_id` (for tree grouping), `origin_type` (tracks origin type), and `has_references` (indicates if task has copies)
   - API endpoint `tasks.copy` via JSON-RPC `/tasks` endpoint
   - CLI command `tasks copy <task_id>` for copying task trees
   - Comprehensive test coverage for task copy functionality

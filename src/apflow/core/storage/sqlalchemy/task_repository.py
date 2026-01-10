@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING, Type, TypeVar
 from datetime import datetime
-from apflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.storage.sqlalchemy.models import TaskModel, TaskOriginType
 from apflow.logger import get_logger
 
 if TYPE_CHECKING:
@@ -103,6 +103,9 @@ class TaskRepository:
         schemas: Optional[Dict[str, Any]] = None,
         params: Optional[Dict[str, Any]] = None,
         id: Optional[str] = None,  # Optional task ID (if not provided, TaskModel will auto-generate)
+        original_task_id: Optional[str] = None,  # Original task ID (for copies/references)
+        origin_type: Optional[TaskOriginType] = None,  # Task origin type (self, copy, reference, link, snapshot)
+        task_tree_id: Optional[str] = None,  # Task tree identifier (for grouping/querying across trees)
         **kwargs  # User-defined custom fields (e.g., project_id, department, etc.)
     ) -> TaskModelType:
         """
@@ -118,7 +121,9 @@ class TaskRepository:
             schemas: Validation schemas (input_schema, output_schema)
             params: Executor initialization parameters (must include executor_id)
             id: Optional task ID. If not provided, TaskModel will auto-generate using default (UUID).
-                If provided, will use the specified ID.
+            original_task_id: Original task ID (for copies/references)
+            origin_type: Task origin type (TaskOriginType.own, TaskOriginType.copy, etc.). Default: TaskOriginType.own
+            task_tree_id: Task tree identifier for grouping/querying across trees (optional)
             **kwargs: User-defined custom fields (e.g., project_id="proj-123", department="engineering")
                 These fields will be set on the task if they exist as columns in the TaskModel
                 Example: create_task(..., project_id="proj-123", department="engineering")
@@ -231,9 +236,13 @@ class TaskRepository:
         if 'has_children' in available_columns:
             task_data["has_children"] = False
         if 'original_task_id' in available_columns:
-            task_data["original_task_id"] = None
-        if 'has_copy' in available_columns:
-            task_data["has_copy"] = False
+            task_data["original_task_id"] = original_task_id
+        if 'origin_type' in available_columns:
+            task_data["origin_type"] = origin_type if origin_type is not None else TaskOriginType.own
+        if 'task_tree_id' in available_columns:
+            task_data["task_tree_id"] = task_tree_id
+        if 'has_references' in available_columns:
+            task_data["has_references"] = False
         
         # Set id if provided (otherwise TaskModel will use its default)
         if id is not None and 'id' in available_columns:
@@ -411,7 +420,7 @@ class TaskRepository:
                     'id', 'parent_id', 'user_id', 'name', 'status', 'priority',
                     'dependencies', 'inputs', 'params', 'result', 'error', 'schemas',
                     'progress', 'created_at', 'started_at', 'updated_at', 'completed_at',
-                    'has_children', 'original_task_id', 'has_copy'
+                    'has_children', 'original_task_id', 'origin_type', 'task_tree_id', 'has_references'
                 ]
                 columns_str = ', '.join(standard_columns)
                 
@@ -455,7 +464,7 @@ class TaskRepository:
                             'id', 'parent_id', 'user_id', 'name', 'status', 'priority',
                             'dependencies', 'inputs', 'params', 'result', 'error', 'schemas',
                             'progress', 'created_at', 'started_at', 'updated_at', 'completed_at',
-                            'has_children', 'original_task_id', 'has_copy'
+                            'has_children', 'original_task_id', 'origin_type', 'task_tree_id', 'has_references'
                         ]
                         columns_str = ', '.join(standard_columns)
                         
@@ -1177,6 +1186,29 @@ class TaskRepository:
             else:
                 self.db.rollback()
             return False
+
+    def assign_task_tree_id_recursive(self, task_id: str, tree_id: str) -> None:
+        """
+        Recursively assign task_tree_id to a task and all its descendants
+        
+        Args:
+            task_id: ID of current task to update
+            tree_id: ID of root task (tree identifier)
+        """
+        # Update current task
+        task = self.db.query(TaskModel).filter(TaskModel.id == task_id).first()
+        if task and task.task_tree_id is None:
+            task.task_tree_id = tree_id
+            self.db.flush()  # Flush but don't commit yet
+        
+        # Recursively update all children
+        children = self.db.query(TaskModel).filter(
+            TaskModel.parent_id == task_id,
+            TaskModel.task_tree_id.is_(None)
+        ).all()
+        
+        for child in children:
+            self.assign_task_tree_id_recursive(child.id, tree_id)
 
 
 __all__ = [

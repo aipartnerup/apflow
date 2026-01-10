@@ -690,7 +690,7 @@ def test_jsonrpc_tasks_copy(json_rpc_client):
     assert copied_task["status"] == "pending"  # Reset to pending
     assert copied_task["progress"] == 0.0  # Reset progress
     
-    # Verify original task has_copy flag is set
+    # Verify original task has_references flag is set
     get_request = {
         "jsonrpc": "2.0",
         "id": 202,
@@ -700,7 +700,7 @@ def test_jsonrpc_tasks_copy(json_rpc_client):
     get_response = json_rpc_client.post("/tasks", json=get_request)
     assert get_response.status_code == 200
     original_task = get_response.json()["result"]
-    assert original_task.get("has_copy") is True
+    assert original_task.get("has_references") is True
 
 
 def test_jsonrpc_tasks_copy_with_children(json_rpc_client):
@@ -1356,7 +1356,7 @@ def test_jsonrpc_tasks_execute_with_copy_execution(json_rpc_client):
     assert execution_result["task_id"] != original_task_id
     assert execution_result["root_task_id"] != original_task_id
     
-    # Verify original task still exists and has_copy flag is set
+    # Verify original task still exists and has_references flag is set
     get_request = {
         "jsonrpc": "2.0",
         "id": 402,
@@ -1366,7 +1366,7 @@ def test_jsonrpc_tasks_execute_with_copy_execution(json_rpc_client):
     get_response = json_rpc_client.post("/tasks", json=get_request)
     assert get_response.status_code == 200
     original_task = get_response.json()["result"]
-    assert original_task.get("has_copy") is True
+    assert original_task.get("has_references") is True
 
 
 def test_jsonrpc_tasks_execute_with_copy_execution_and_children(json_rpc_client):

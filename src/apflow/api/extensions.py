@@ -162,7 +162,6 @@ def _get_extension_enablement_from_env() -> dict[str, bool]:
         # If list is provided, only those are enabled
         for ext_name in EXTENSION_CONFIG.keys():
             result[ext_name] = ext_name.lower() in enabled_extensions
-        return result
 
     # Format 2: Individual flags (APFLOW_ENABLE_<EXTENSION>)
     for ext_name in EXTENSION_CONFIG.keys():
@@ -170,7 +169,7 @@ def _get_extension_enablement_from_env() -> dict[str, bool]:
         env_value = os.getenv(env_var, "").strip().lower()
         if env_value:
             result[ext_name] = env_value in ("true", "1", "yes", "on")
-        # If not set, will be determined by auto-detection
+        # If not set, will be determined by auto-detection or APFLOW_EXTENSIONS above
 
     return result
 

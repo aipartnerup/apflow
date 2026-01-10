@@ -27,7 +27,6 @@ class TaskBuilder:
     params: Dict[str, Any] = field(default_factory=dict)
     dependencies: List[Dict[str, Any]] = field(default_factory=list)
     original_task_id: Optional[str] = None
-    has_copy: bool = False
     use_streaming: bool = False
     streaming_callbacks_context: Optional[Any] = None
     use_demo: bool = False
@@ -84,7 +83,6 @@ class TaskBuilder:
 
     def copy_of(self, original_task_id: str) -> "TaskBuilder":
         self.original_task_id = original_task_id
-        self.has_copy = True
         return self
 
     def enable_streaming(self, context: Optional[Any] = None) -> "TaskBuilder":
@@ -110,7 +108,6 @@ class TaskBuilder:
             schemas=self.schemas or None,
             params=self.params or None,
             original_task_id=self.original_task_id,
-            has_copy=self.has_copy,
         )
         return TaskTreeNode(task)
 

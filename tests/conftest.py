@@ -5,7 +5,7 @@ import pytest
 import pytest_asyncio
 import sys
 import os
-import tempfile
+import uuid
 from unittest.mock import Mock, AsyncMock, patch
 from typing import Optional
 
@@ -97,11 +97,11 @@ def pytest_configure(config):
 
 def _get_test_database_url() -> Optional[str]:
     """Get test database URL from environment variable"""
-    return os.getenv("TEST_DATABASE_URL")
+    return os.getenv("APFLOW_TEST_DATABASE_URL") or os.getenv("TEST_DATABASE_URL")
 
 
 @pytest.fixture(scope="function")
-def temp_db_path():
+def temp_db_path(tmp_path):
     """Create a temporary database file path (only used for DuckDB)"""
     test_db_url = _get_test_database_url()
     
@@ -111,19 +111,12 @@ def temp_db_path():
         yield None
         return
     
-    # Create temporary DuckDB file
-    logger.info("Creating temporary DuckDB file for testing")
-    fd, db_path = tempfile.mkstemp(suffix=".duckdb")
-    os.close(fd)  # Close file descriptor, we just need the path
-    
-    yield db_path
-    
-    # Cleanup - ensure file is removed even if test fails
-    try:
-        if db_path and os.path.exists(db_path):
-            os.unlink(db_path)
-    except Exception:
-        pass  # Ignore cleanup errors
+    # Use temporary file-based DuckDB instead of in-memory
+    # This ensures all code paths accessing the database see the same data
+    # In-memory databases are isolated per connection, causing table creation issues
+    db_file = tmp_path / f"test_{uuid.uuid4().hex[:8]}.duckdb"
+    logger.info(f"Using temporary DuckDB file for testing: {db_file}")
+    yield str(db_file)
 
 
 @pytest.fixture(scope="function")
@@ -560,12 +553,17 @@ def ensure_executors_registered():
 
 
 @pytest.fixture(scope="function")
-def use_test_db_session(sync_db_session):
+def use_test_db_session(sync_db_session, temp_db_path):
     """
-    Fixture to set and reset default session for tests - uses in-memory database
+    Fixture to set and reset default session for tests - uses test database
     
-    This fixture ensures that all tests use a temporary in-memory database
+    This fixture ensures that all tests use the test database
     instead of the persistent database file, preventing data pollution.
+    
+    For DuckDB: Uses a temporary file-based database (not in-memory) to ensure
+    all code paths see the same database with the same tables.
+    
+    For PostgreSQL: Uses the TEST_DATABASE_URL environment variable.
     
     Usage:
         - Add `use_test_db_session` parameter to your test function
@@ -580,19 +578,54 @@ def use_test_db_session(sync_db_session):
     """
     set_default_session(sync_db_session)
     
+    # Set database URL environment variable to ensure all code paths use the test database
+    # This is crucial for DuckDB file-based tests where multiple engine creations must point to the same file
+    old_test_db_url = os.environ.get('TEST_DATABASE_URL')
+    old_apflow_db_url = os.environ.get('APFLOW_DATABASE_URL')
+    old_db_url = os.environ.get('DATABASE_URL')
+    
+    test_db_url = _get_test_database_url()
+    if test_db_url and is_postgresql_url(test_db_url):
+        # PostgreSQL - use TEST_DATABASE_URL
+        os.environ['DATABASE_URL'] = test_db_url
+    elif temp_db_path:
+        # DuckDB file - set DATABASE_URL to point to the temp file
+        duckdb_url = f"duckdb:///{temp_db_path}"
+        os.environ['DATABASE_URL'] = duckdb_url
+        logger.debug(f"Set test DATABASE_URL to: {duckdb_url}")
+    
     # Patch create_pooled_session to return the test session
     # This ensures that code using create_pooled_session() gets the test session
     from contextlib import asynccontextmanager
     
     @asynccontextmanager
-    async def mock_create_pooled_session(*args, **kwargs):
+    async def mock_create_pooled_session_impl():
         yield sync_db_session
+    
+    def mock_create_pooled_session(*args, **kwargs):
+        return mock_create_pooled_session_impl()
         
     # Patch both the factory function and the import in routes and executor
     with patch('apflow.core.storage.factory.create_pooled_session', side_effect=mock_create_pooled_session), \
          patch('apflow.api.routes.tasks.create_pooled_session', side_effect=mock_create_pooled_session), \
          patch('apflow.core.execution.task_executor.create_pooled_session', side_effect=mock_create_pooled_session):
         yield sync_db_session
+    
+    # Restore environment variables
+    if old_db_url is not None:
+        os.environ['DATABASE_URL'] = old_db_url
+    elif 'DATABASE_URL' in os.environ:
+        del os.environ['DATABASE_URL']
+        
+    if old_apflow_db_url is not None:
+        os.environ['APFLOW_DATABASE_URL'] = old_apflow_db_url
+    elif 'APFLOW_DATABASE_URL' in os.environ:
+        del os.environ['APFLOW_DATABASE_URL']
+        
+    if old_test_db_url is not None:
+        os.environ['TEST_DATABASE_URL'] = old_test_db_url
+    elif 'TEST_DATABASE_URL' in os.environ:
+        del os.environ['TEST_DATABASE_URL']
         
     reset_default_session()
 
@@ -762,6 +795,10 @@ def disable_api_for_tests():
     """
     from unittest.mock import patch
     import asyncio
+    import logging
+    
+    # Disable all logging to prevent pollution of CLI output
+    logging.disable(logging.CRITICAL)
     
     def patched_run_async_safe(coro):
         """
@@ -788,7 +825,11 @@ def disable_api_for_tests():
     with patch('apflow.cli.api_gateway_helper.should_use_api', return_value=False), \
          patch('apflow.cli.api_gateway_helper.run_async_safe', side_effect=patched_run_async_safe), \
          patch('apflow.cli.commands.tasks.run_async_safe', side_effect=patched_run_async_safe):
-        yield
+        try:
+            yield
+        finally:
+            # Re-enable logging after test
+            logging.disable(logging.NOTSET)
 
 
 @pytest.fixture(scope="function")
