@@ -46,6 +46,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Enhanced TaskManager to load executors dynamically with permission checks
   - Improved on-demand extension loading for better performance and security
 
+- **Decorator Override Logic**
+  - All `decorators.py` `override` logic has been changed to `force` logic for consistency and clarity across the codebase.
+
 - **Task Execution Improvements**
   - Enhanced task execution logic with improved error handling
   - Implemented priority grouping for better task scheduling

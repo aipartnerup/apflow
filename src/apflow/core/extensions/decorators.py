@@ -36,7 +36,7 @@ def _register_extension(
         cls: Extension class to register
         category: Extension category
         factory: Optional factory function
-        override: If True, allow overriding existing registration
+        override: If True, always force override any previous registration. If False and exists, registration is skipped.
     
     Returns:
         Same class (for chaining)
@@ -137,6 +137,18 @@ def _register_extension(
                     return cls(inputs=executor_inputs)
         executor_factory = default_factory
     
+    # Check if already registered and override is False
+    ext_id = getattr(template, 'id', cls.__name__.lower())
+    if not override:
+        # Check if extension is already registered in registry (by id and category)
+        existing = registry.get_by_id(ext_id)
+        if existing is not None and getattr(existing, 'category', None) == category:
+            logger.debug(
+                f"Extension '{ext_id}' already registered in category '{category.value}'. "
+                f"Returning previously registered class."
+            )
+            return getattr(existing, 'executor_class', cls)
+
     # Register extension
     try:
         registry.register(
@@ -148,6 +160,7 @@ def _register_extension(
         logger.debug(
             f"Registered extension '{template.id}' "
             f"(category: {template.category.value}, type: {template.type})"
+            f" (force override: {override})"
         )
     except Exception as e:
         logger.error(
@@ -192,7 +205,7 @@ def executor_register(
     Args:
         factory: Optional factory function to create executor instances.
                 Signature: factory(inputs: Dict[str, Any]) -> ExecutableTask
-        override: If True, allow overriding existing registration. Default False.
+        override: If True, always force override any previous registration. If False and exists, registration is skipped.
         pre_hook: Optional hook function called before executor.execute().
                  Signature: async def pre_hook(executor, task, inputs) -> Optional[Dict[str, Any]]
                  If returns non-None, skips executor execution and uses returned value.
@@ -244,7 +257,7 @@ def storage_register(
             ...
     
     Args:
-        override: If True, allow overriding existing registration. Default False.
+        override: If True, always force override any previous registration. If False and exists, registration is skipped.
     
     Returns:
         Decorated class (same class, registered automatically)
@@ -280,7 +293,7 @@ def hook_register(
             ...
     
     Args:
-        override: If True, allow overriding existing registration. Default False.
+        override: If True, always force override any previous registration. If False and exists, registration is skipped.
     
     Returns:
         Decorated class (same class, registered automatically)

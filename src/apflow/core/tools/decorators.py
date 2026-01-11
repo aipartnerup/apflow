@@ -25,7 +25,7 @@ def tool_register(name: Optional[str] = None, override: bool = False):
     
     Args:
         name: Optional custom name for the tool. If not provided, uses class name.
-        override: If True, allow overriding existing registration
+        override: If True, always force override any previous registration.
     
     Returns:
         Decorated class or function
@@ -59,19 +59,8 @@ def tool_register(name: Optional[str] = None, override: bool = False):
             tool_name = cls_or_func.__name__
         
         # Register the tool
-        try:
-            register_tool(tool_name, cls_or_func, override=override)
-            logger.info(f"Auto-registered tool '{tool_name}' using @tool_register decorator")
-        except ValueError:
-            if not override:
-                logger.warning(f"Tool '{tool_name}' already registered. Use override=True to replace it.")
-                raise
-            else:
-                register_tool(tool_name, cls_or_func, override=True)
-                logger.info(f"Overridden tool '{tool_name}' using @tool_register decorator")
-        
-        # Return the original class/function unchanged
-        return cls_or_func
+        logger.info(f"Auto-registered tool '{tool_name}' using @tool_register decorator")
+        return register_tool(tool_name, cls_or_func, override=override)
     
     return decorator
 

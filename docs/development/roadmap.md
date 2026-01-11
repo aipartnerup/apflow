@@ -10,147 +10,28 @@
 
 ---
 
-## Completed Features ✅
 
-### Core Infrastructure (Completed)
+## Completed Features (Summary) ✅
 
-**Task Orchestration Engine** ✅
-- TaskManager: Core task orchestration with dependency management and tree execution
-- TaskRepository: Data access layer for task CRUD operations  
-- TaskModel: Task definition model with support for custom fields
-- Task tree structure with parent-child relationships
-- Priority-based task execution and dependency resolution
+- Pure Python orchestration core, embeddable and framework-free
+- Flexible task model with dependency trees, custom fields, and priority-based execution
+- Pluggable extension system for executors, storage, hooks, and tools
+- Built-in executors: system, network (REST, WebSocket, gRPC), infrastructure (SSH, Docker), and AI/LLM (CrewAI, LiteLLM, MCP)
+- Unified API: A2A, MCP, JSON-RPC, with real-time streaming and protocol adapters
+- CLI tools for full task and config management, supporting both local and remote API modes
+- Robust configuration management (ConfigManager), multi-location and type-safe
+- Advanced features: task copy, validation, idempotency, hooks, streaming, demo mode
+- Comprehensive test suite (800+ tests), strict type/linting, and CI/CD integration
 
-**Storage Layer** ✅
-- SQLAlchemy-based storage with DuckDB (default) and PostgreSQL support
-- Automatic table creation and session management
-- Configurable table names and database dialects
+### Recent Major Changes (from CHANGELOG) ✅
 
-**Extension System** ✅
-- Unified ExtensionRegistry for executor registration and discovery
-- @executor_register() decorator for automatic registration
-- Category and type-based executor discovery
-- Support for executors, storage, hooks, and tools
-
-**Base Task Infrastructure** ✅
-- BaseTask: Optional base class for executable tasks
-- Input validation utilities with JSON schema support
-- Cancellation support and streaming context
-- Pydantic BaseModel and JSON schema validation
-
-### Built-in Executors (Completed)
-
-**Core Executors** ✅
-- AggregateResultsExecutor: Aggregates dependency task results
-- SystemInfoExecutor: Safe system resource queries
-- CommandExecutor: Shell command execution
-
-**Network Executors** ✅
-- RestExecutor: HTTP/REST API calls with authentication and retry
-- WebSocketExecutor: Bidirectional WebSocket communication
-- ApFlowApiExecutor: Inter-instance API calls for distributed execution
-
-**Infrastructure Executors** ✅
-- SshExecutor: Remote command execution via SSH
-- DockerExecutor: Containerized command execution
-- GrpcExecutor: gRPC service calls
-
-**AI/ML Executors** ✅
-- CrewaiExecutor: LLM-based agent crews via CrewAI
-- BatchCrewaiExecutor: Atomic batch execution of multiple crews
-- LlmExecutor: Direct LLM interaction via LiteLLM (100+ providers)
-- McpExecutor: Model Context Protocol executor
-- GenerateExecutor: Task tree generation from natural language
-
-### API & Protocol Support (Completed)
-
-**A2A Protocol Server** ✅
-- Agent-to-Agent communication protocol implementation
-- HTTP, SSE, and WebSocket transport layers
-- JWT authentication and task management
-- Real-time streaming support
-
-**MCP (Model Context Protocol) Server** ✅
-- Expose apflow capabilities as MCP tools and resources
-- Support for stdio and HTTP/SSE transport modes
-- 8 MCP tools for complete task management
-
-**JSON-RPC API** ✅
-- RESTful task management endpoints
-- Webhook support for task execution callbacks
-- Server-Sent Events (SSE) streaming
-- Protocol identification in responses
-
-### CLI Tools (Completed)
-
-**Task Management Commands** ✅
-- tasks list/status/get/create/update/delete/copy/tree/children
-- tasks execute/cancel/watch/history/generate
-- Support for JSON file input and filtering options
-
-**Configuration Management** ✅
-- apflow config commands: set/get/unset/list/reset/init/verify-token
-- Multi-location configuration support (project-local, user-global)
-- JWT token generation and validation
-- API server connectivity testing
-
-**Server Commands** ✅
-- apflow serve: Start API server with protocol selection
-- apflow daemon: Background server management
-- Protocol selection (--protocol a2a/mcp)
-
-### Advanced Features (Completed)
-
-**Task Lifecycle Management** ✅
-- Task tree validation with circular dependency detection
-- Task copy functionality with dependency preservation
-- Task re-execution support for failed tasks
-- Enhanced task deletion with validation
-- Task update with critical field protection
-
-**Configuration Management** ✅
-- ConfigManager singleton for unified configuration
-- Multi-location config support (project/global)
-- Environment variable integration
-- Type-safe configuration access
-
-**LLM Key Management** ✅
-- Multi-provider LLM key support (OpenAI, Anthropic, etc.)
-- Request header and user configuration support
-- Thread-local context for secure key handling
-- Automatic provider detection
-
-**Demo Mode Support** ✅
-- Built-in demo execution for all executors
-- Realistic timing simulation
-- Fallback for missing dependencies
-- Global demo sleep scale configuration
-
-**Hook System** ✅
-- Pre/post execution hooks for executors
-- Task tree lifecycle hooks (created/started/completed/failed)
-- Hook context sharing with database access
-- Thread-safe context isolation
-
-**Streaming & Real-time Updates** ✅
-- Real-time progress updates via SSE and webhooks
-- A2A Protocol event-driven updates
-- Streaming context for progress tracking
-- Protocol-agnostic streaming support
-
-### Testing & Quality (Completed)
-
-**Test Infrastructure** ✅
-- Comprehensive test suite (800+ tests)
-- Isolated test databases and fixtures
-- Async test support with proper event loop handling
-- Test coverage for all major components
-
-**Code Quality** ✅
-- Type annotations and mypy compliance
-- Ruff linting and formatting
-- Pre-commit hooks and CI/CD integration
-- Comprehensive error handling and logging
+- Task model extended: `task_tree_id`, `origin_type`, and schema migration tracking
+- Executor access control: environment-based filtering, API/CLI enforcement, and permission checks
+- Extension management refactored for better modularity and security
+- Improved task execution logic: priority grouping, error handling, and tree retrieval
+- Database schema management: simplified migration, improved reliability
+- CLI documentation and usability enhancements
+- TaskCreator now supports multiple origin types (link, copy, snapshot, mixed)
 
 ---
 

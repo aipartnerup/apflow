@@ -64,7 +64,7 @@ class ExecutorRegistry:
             factory: Optional factory function to create executor instances.
                      If provided, this will be used instead of directly instantiating executor_class.
                      Signature: factory(inputs: Dict[str, Any]) -> ExecutableTask
-            override: If True, allow overriding existing registration. Default False (raises error on conflict).
+            override: If True, always override any previous registration. If False and exists, registration is skipped.
         
         Raises:
             ValueError: If task_type is already registered and override=False
@@ -89,10 +89,11 @@ class ExecutorRegistry:
         # Check if task_type is already registered
         if task_type in self._executors and not override:
             existing_class = self._executors[task_type]
-            raise ValueError(
+            logger.warning(
                 f"Task type '{task_type}' is already registered with executor '{existing_class.__name__}'. "
                 f"Use override=True to replace it, or use a different task_type."
             )
+            return existing_class
         
         # Check for ID conflicts (if executor has id attribute)
         executor_id = getattr(executor_class, 'id', None)
@@ -225,7 +226,7 @@ def register_executor(
         task_type: Task type identifier
         executor_class: ExecutableTask class to register
         factory: Optional factory function
-        override: Allow overriding existing registration
+        override: If True, always override any previous registration. If False and exists, registration is skipped.
     
     Example:
         from apflow.core.execution.executor_registry import register_executor

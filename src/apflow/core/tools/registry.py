@@ -31,26 +31,27 @@ class ToolRegistry:
             cls._instance._tools = {}
         return cls._instance
     
-    def register(self, name: str, tool: Any, override: bool = False) -> None:
+    def register(self, name: str, tool: Any, override: bool = False) -> Any:
         """
         Register a tool in the registry
         
         Args:
             name: Tool name (string identifier)
             tool: Tool object (class, function, or instance)
-            override: If True, allow overriding existing registration
+            override: If True, always force override any previous registration.
         
-        Raises:
-            ValueError: If name is already registered and override=False
+        
         """
         if name in self._tools and not override:
-            raise ValueError(
+            logger.warning(
                 f"Tool '{name}' is already registered. "
                 f"Use override=True to replace it, or use a different name."
             )
+            return self._tools[name]
         
         self._tools[name] = tool
         logger.debug(f"Registered tool '{name}' in ToolRegistry")
+        return tool
     
     def get(self, name: str) -> Optional[Any]:
         """
@@ -88,7 +89,7 @@ def get_tool_registry() -> ToolRegistry:
     return _registry
 
 
-def register_tool(name: str, tool: Any, override: bool = False) -> None:
+def register_tool(name: str, tool: Any, override: bool = False) -> Any:
     """
     Register a tool in the global registry (convenience function)
     
@@ -107,7 +108,7 @@ def register_tool(name: str, tool: Any, override: bool = False) -> None:
         register_tool("my_tool", MyTool)
         # Now can use "my_tool()" in agent tools config
     """
-    _registry.register(name, tool, override=override)
+    return _registry.register(name, tool, override=override)
 
 
 def resolve_tool(tool_ref: Any) -> Any:

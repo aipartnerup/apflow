@@ -75,7 +75,7 @@ class ExtensionRegistry:
             factory: Optional factory function to create executor instances.
                      Signature: factory(inputs: Dict[str, Any]) -> ExecutableTask (or Any)
                      If provided, this will be used instead of executor_class.
-            override: If True, allow overriding existing registration
+            override: If True, always override any previous registration. If False and exists, registration is skipped.
         
         Raises:
             ValueError: If extension.id is already registered and override=False
@@ -104,11 +104,12 @@ class ExtensionRegistry:
         # Check ID conflict
         if extension.id in self._by_id and not override:
             existing = self._by_id[extension.id]
-            raise ValueError(
+            logger.warning(
                 f"Extension ID '{extension.id}' is already registered by "
                 f"{existing.__class__.__name__} (category: {existing.category.value}). "
                 f"Use override=True to replace it, or use a different ID."
             )
+            return existing
         
         # Register to primary index
         self._by_id[extension.id] = extension
@@ -582,7 +583,7 @@ def register_extension(
     
     Args:
         extension: Extension instance to register
-        override: Allow overriding existing registration
+        override: If True, always override any previous registration. If False and exists, registration is skipped.
     
     Example:
         from apflow.core.extensions import register_extension, ExtensionCategory

@@ -111,34 +111,41 @@ class TestCrewToolDecorator:
             # Restore original tools
             registry._tools = original_tools
     
-    def test_crew_tool_without_override_raises_error(self):
-        """Test that @crew_tool decorator raises error when tool already exists"""
+    def test_crew_tool_without_override_logs_warning_and_does_not_override(self):
+        """Test that @crew_tool decorator logs a warning and does not override by default when tool already exists"""
         registry = get_tool_registry()
-        
+
         # Clear registry for clean test
         original_tools = registry._tools.copy()
         registry._tools.clear()
-        
+
         try:
             # Register a tool first
             @crew_tool()
             class ExistingTool(BaseTool):
                 name: str = "Existing Tool"
                 description: str = "Existing tool"
-                
+
                 def _run(self, arg: str) -> str:
                     return "existing"
-            
-            # Try to register another tool with same name (should raise error)
-            with pytest.raises(ValueError, match="already registered"):
+
+            # Try to register another tool with same name (should not override)
+            if True:
                 @crew_tool()  # override=False by default
                 class ExistingTool(BaseTool):  # Same name
                     name: str = "New Tool"
                     description: str = "New tool"
-                    
+
                     def _run(self, arg: str) -> str:
                         return "new"
-            
+
+            # Should still be the first tool
+            registered = registry.get("ExistingTool")
+            assert registered is not None
+            instance = registered()
+            assert instance.name == "Existing Tool"
+            assert "Existing tool" in instance.description
+            assert instance._run("") == "existing"
         finally:
             # Restore original tools
             registry._tools = original_tools

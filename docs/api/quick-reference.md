@@ -15,6 +15,44 @@ Quick reference cheat sheet for apflow APIs. Perfect for when you know what you 
 7. [Storage](#storage)
 8. [Common Patterns](#common-patterns)
 
+
+## Decorator Registration: `override` Parameter
+
+All extension and tool registration decorators accept an `override` parameter:
+
+- `override: bool = False`  
+    If `True`, always force override any previous registration for this name or ID.  
+    If `False` and the name/ID exists, registration is skipped.
+
+**Example:**
+
+```python
+from apflow.core.extensions.decorators import executor_register
+
+@executor_register(override=True)
+class MyExecutor(BaseTask):
+        ...
+```
+
+This will force override any previous registration for `MyExecutor`.
+
+**Tool Registration Example:**
+
+```python
+from apflow.core.tools.decorators import tool_register
+
+@tool_register(name="custom_tool", override=True)
+class CustomTool(BaseTool):
+        ...
+```
+
+If a tool with the same name is already registered, setting `override=True` will force the new registration.
+
+Wherever you see `override` in decorator signatures, it means:
+> If `override=True`, any existing registration for the same name or ID will be forcibly replaced.
+
+---
+
 ## Core APIs
 
 ### Import Core Components

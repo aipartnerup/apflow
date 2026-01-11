@@ -374,14 +374,18 @@ class CancellableExecutor(ExecutableTask):
 
 ## Creating CLI Extensions
 
-CLI extensions allow you to register new subcommand groups to the `apflow` CLI. There are two methods:
+
+CLI extensions allow you to register new subcommand groups or single commands to the `apflow` CLI. There are two methods:
 
 1. **Decorator-based registration** (recommended for internal extensions)
 2. **Entry points registration** (recommended for external packages)
 
 ### Method 1: Using `@cli_register` Decorator
 
-The `@cli_register()` decorator provides a clean, declarative way to register CLI extensions:
+
+The `@cli_register()` decorator provides a clean, declarative way to register CLI extensions. It supports both command groups (class-based) and single commands (function-based):
+
+#### Register a Command Group (Class)
 
 ```python
 from apflow.cli import CLIExtension, cli_register
@@ -392,7 +396,6 @@ class UsersCommand(CLIExtension):
 
 # Add commands to the registered extension
 from apflow.cli import get_cli_registry
-
 users_app = get_cli_registry()["users"]
 
 @users_app.command()
@@ -405,6 +408,21 @@ def list():
     """List all users"""
     print("User list...")
 ```
+
+#### Register a Single Command (Function)
+
+You can also register a single function as a root CLI command:
+
+```python
+from apflow.cli import cli_register
+
+@cli_register(name="hello", help="Say hello")
+def hello(name: str = "world"):
+    """A simple hello command."""
+    print(f"Hello, {name}!")
+```
+
+This will make `apflow hello` available as a top-level command.
 
 #### Decorator Parameters
 
@@ -485,7 +503,7 @@ apflow users list
 
 Both registration methods support two types of plugin objects:
 1. **`typer.Typer` (or `CLIExtension`)**: Registered as a **subcommand group** (e.g., `apflow users <cmd>`).
-2. **`Callable` (function)**: Registered as a **single command** (e.g., `apflow run-once`).
+2. **`Callable` (function)**: Registered as a **single command** (e.g., `apflow hello`).
 
 ### CLI Extension API Reference
 
