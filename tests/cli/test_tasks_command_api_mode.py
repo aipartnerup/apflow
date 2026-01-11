@@ -106,7 +106,7 @@ def test_tasks_copy_uses_api_preview(force_api_mode: AsyncMock, tmp_path: Path):
     assert result.exit_code == 0
     saved = json.loads(output_file.read_text())
     assert saved["saved"] is False
-    force_api_mode.copy_task.assert_awaited_once()
+    force_api_mode.clone_task.assert_awaited_once()
 
 
 def test_tasks_create_uses_api(force_api_mode: AsyncMock, tmp_path: Path):

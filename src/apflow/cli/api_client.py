@@ -316,9 +316,18 @@ class APIClient:
         """Update task fields."""
         return await self._tasks_rpc("tasks.update", {"task_id": task_id, **updates})
 
+    async def clone_task(self, **params: Any) -> Dict[str, Any]:
+        """Clone a task tree (tasks.clone), falling back to tasks.copy for older servers."""
+        try:
+            return await self._tasks_rpc("tasks.clone", params)
+        except APIResponseError as exc:
+            if "Method not found" in str(exc) or "Unknown task method" in str(exc):
+                return await self._tasks_rpc("tasks.copy", params)
+            raise
+
     async def copy_task(self, **params: Any) -> Dict[str, Any]:
-        """Copy a task tree."""
-        return await self._tasks_rpc("tasks.copy", params)
+        """Backward-compatible alias for clone_task."""
+        return await self.clone_task(**params)
 
     async def get_task_tree(self, task_id: str) -> Dict[str, Any]:
         """Get task tree structure."""

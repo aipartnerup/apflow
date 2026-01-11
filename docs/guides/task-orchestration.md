@@ -924,20 +924,38 @@ async with create_pooled_session() as db_session:
     task_repository = TaskRepository(db_session)
     original_task = await task_repository.get_task_by_id("existing-task-id")
 
-    # Create a copy (minimal mode by default)
+
+    # Create a deep copy of a task (with children)
     task_creator = TaskCreator(db_session)
-    copied_tree = await task_creator.create_task_copy(
+    copied_tree = await task_creator.from_copy(
         original_task,
-        children=True,  # Also copy children
-        copy_mode="minimal",  # or "full" for complete tree copy, or "custom" for selective copying
-        save=True  # Set to False to get task array without saving to database
+        user_id="user_123",
+        _recursive=True,  # Copy children and dependencies
+        _save=True
     )
-    
-    # Alternative: Get task array without saving (useful for preview or direct use with tasks.create)
-    task_array = await task_creator.create_task_copy(
+
+    # Create a linked task (reference to original)
+    linked_task = await task_creator.from_link(
         original_task,
-        copy_mode="minimal",
-        save=False  # Returns task array compatible with tasks.create
+        user_id="user_123",
+        parent_id=None,
+        _save=True
+    )
+
+    # Create a snapshot (frozen, read-only)
+    snapshot_tree = await task_creator.from_snapshot(
+        original_task,
+        user_id="user_123",
+        _recursive=True,
+        _save=True
+    )
+
+    # Mixed: copy some, link others (advanced)
+    mixed_tree = await task_creator.from_mixed(
+        original_task,
+        user_id="user_123",
+        _link_task_ids=[...],
+        _save=True
     )
 
 # Execute the copied task
@@ -1060,51 +1078,46 @@ await task_manager.distribute_task_tree_with_streaming(
 Dependency results are automatically merged into task inputs:
 
 ```python
-# Task 1 result
-task1_result = {"data": [1, 2, 3]}
+#### Copy, Link, and Snapshot Behavior
 
-# Task 2 automatically receives task1_result in its inputs
-task2 = create_task(
-    name="task2",
-    dependencies=[{"id": task1.id, "required": True}],
-    inputs={"additional": "value"}  # Merged with task1_result
-)
-```
+**from_copy:**
+- Deep copy of a task or tree (optionally with children and dependencies)
+- All copied tasks get new IDs and are independent from the original
+- Useful for retries, A/B testing, and templating
 
-## Troubleshooting
+**from_link:**
+- Creates a reference to an existing task (no data duplication)
+- Linked tasks share results with the original
+- Useful for deduplication and sharing computation
 
-### Task Not Executing
+**from_snapshot:**
+- Creates a frozen, read-only copy of a task or tree
+- Preserves the state at the time of snapshot
+- Useful for audit, compliance, and reproducibility
 
-**Problem**: Task remains in "pending" status
+**from_mixed:**
+- Advanced: mix links and copies in a new tree
+- Enables hybrid workflows (e.g., copy some tasks, link others)
 
-**Solutions**:
-1. Check if dependencies are completed
-2. Verify task name matches registered executor
-3. Check for errors in parent tasks
-4. Verify task is in the tree being executed
+**What Gets Copied or Linked:**
+- Task definition (name, schemas, inputs, params, etc.)
+- Task hierarchy (parent-child relationships)
+- Dependencies (when copying recursively)
+- Task metadata (user_id, priority, etc.)
 
-### Dependency Not Satisfied
+**What Gets Reset (for copies):**
+- `status`: Set to `"pending"`
+- `result`: Set to `None`
+- `progress`: Set to `0.0`
+- Execution timestamps
 
-**Problem**: Task waiting for dependency that never completes
+**What Gets Preserved:**
+- Original task remains unchanged
+- Execution history and results are preserved in the original
 
-**Solutions**:
-1. Verify dependency task ID is correct
-2. Check if dependency task failed
-3. Ensure dependency task is in the same tree
-4. Check dependency task status
-
-### Priority Not Working
-
-**Problem**: Tasks not executing in expected order
-
-**Solutions**:
-1. Verify priority values (lower = higher priority)
-2. Check if dependencies override priority
-3. Ensure tasks are at the same level in the tree
-4. Remember: dependencies take precedence over priorities!
-
-### Task Stuck in "in_progress"
-
+**Deduplication:**
+- When copying with children, dependencies are only copied once
+- The copied tree maintains the same structure as the original
 **Problem**: Task never completes
 
 **Solutions**:

@@ -82,7 +82,7 @@ CLI → Parse tasks (JSON array) → Group by root → TaskExecutor.execute_task
 - `tasks update <task_id> [options]` - Update task fields
 - `tasks delete <task_id> [--force]` - Delete task
 - `tasks cancel <task_id>...` - Cancel running tasks
-- `tasks copy <task_id> [--children]` - Copy task tree
+- `tasks clone <task_id> [--children]` - Clone/copy task tree (copy is an alias)
 - `tasks watch [--task-id <id>|--all]` - Watch task status in real-time
 
 **Data Sources**:

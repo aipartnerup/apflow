@@ -18,11 +18,10 @@ Base = declarative_base()
 TASK_TABLE_NAME = os.getenv("APFLOW_TASK_TABLE_NAME", "apflow_tasks")
 
 class TaskOriginType(StrEnum):
-    own = auto()
-    link = auto()
-    copy = auto()   
-    reference = auto()
-    snapshot = auto()   
+    create = auto()  # Task created freshly
+    link = auto() # Task linked from another
+    copy = auto()   # Task copied from another (can be modified)
+    snapshot = auto()  # Task snapshot from another (can not be modified)
 
 class TaskModel(Base):
     """

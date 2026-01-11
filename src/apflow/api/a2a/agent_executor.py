@@ -39,53 +39,15 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
 
     def __init__(self, task_routes: Optional[TaskRoutes] = None, verify_token_func: Optional["Callable[[str], Optional[dict]]"] = None):
         """
-        Initialize agent executor
-        
-        Configuration (task_model_class, hooks) is automatically retrieved from
+        Initialize agent executor. Configuration (task_model_class, hooks) is automatically retrieved from
         the global config registry. Use decorators to register hooks before initialization.
-        
-        Example:
-            from apflow import register_pre_hook, set_task_model_class
-            
-            @register_pre_hook
-            async def my_hook(task):
-                ...
-            
-            set_task_model_class(MyTaskModel)
-            executor = AIPartnerUpFlowAgentExecutor()  # Configuration from registry
-        
-        Args:
-            task_routes: Optional TaskRoutes instance. If None, will be created automatically.
-            verify_token_func: Optional JWT verification function for permission checking.
         """
-        # Initialize task executor which manages task execution and tracking
-        self.task_executor = TaskExecutor()
-        # Refresh config to ensure we pick up hooks registered via decorators
-        # (important for tests where hooks may be registered after TaskExecutor singleton initialization)
-        self.task_executor.refresh_config()
+        super().__init__()
         self.task_model_class = get_task_model_class()
-        
-        # Initialize TaskRoutes adapter for task management operations
-        # If task_routes is not provided, create it with default configuration
-        if task_routes is None:
-            # Create TaskRoutes with default configuration
-            # Note: verify_token_func and verify_permission_func will be None
-            # Permission checking will be handled at the middleware level
-            task_routes = TaskRoutes(
-                task_model_class=self.task_model_class,
-                verify_token_func=verify_token_func,
-                verify_permission_func=None
-            )
-        
-        self.task_routes_adapter = TaskRoutesAdapter(
-            task_routes=task_routes,
-            verify_token_func=verify_token_func
-        )
-        
-        logger.info(
-            f"Initialized AIPartnerUpFlowAgentExecutor "
-            f"(TaskModel: {self.task_model_class.__name__})"
-        )
+        self.task_routes = task_routes or TaskRoutes(task_model_class=self.task_model_class)
+        self.task_routes_adapter = TaskRoutesAdapter(self.task_routes)
+        self.task_executor = TaskExecutor()
+        self.verify_token_func = verify_token_func
     
     @property
     def pre_hooks(self):
@@ -191,37 +153,39 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             copy_execution = context.metadata.get("copy_execution", False) if context.metadata else False
             copy_children = context.metadata.get("copy_children", False) if context.metadata else False
             original_task_id = None
-            
+
             if copy_execution:
                 # If copy_execution is True, check if task_id is provided in metadata
                 task_id = context.metadata.get("task_id") if context.metadata else None
                 if not task_id:
                     raise ValueError("task_id is required in metadata when copy_execution=True")
-                
                 # Get the original task from database
                 task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
                 original_task = await task_repository.get_task_by_id(task_id)
                 if not original_task:
                     raise ValueError(f"Task {task_id} not found")
-                
                 original_task_id = task_id
-                
                 # Copy the task (and children if copy_children=True)
                 logger.info(f"Copying task {task_id} before execution (copy_children={copy_children})")
                 task_creator = TaskCreator(db_session)
-                copied_tree = await task_creator.create_task_copy(original_task, children=copy_children)
+                copied_tree = await task_creator.from_copy(
+                    _original_task=original_task,
+                    _save=True,
+                    _recursive=copy_children
+                )
+                # copied_tree is TaskTreeNode, so copied_tree.task.id is correct
                 logger.info(f"Task copied: original={original_task_id}, copy={copied_tree.task.id}")
-                
-                # Convert copied tree to tasks array format
                 tasks = self._tree_node_to_tasks_array(copied_tree)
             else:
                 # Extract tasks array from context
-                tasks = self._extract_tasks_from_context(context)
+                tasks = await self._extract_tasks_from_context(context)
                 if not tasks:
                     raise ValueError("No tasks provided in request")
-            
             # Log extracted tasks for debugging
-            logger.debug(f"Extracted tasks with IDs: {[t.get('id') for t in tasks]}")
+            if isinstance(tasks, list) and all(isinstance(t, dict) for t in tasks):
+                logger.debug(f"Extracted tasks with IDs: {[t.get('id') for t in tasks]}")
+            else:
+                logger.debug(f"Extracted tasks: {tasks}")
             
             # Generate context ID if not present
             context_id = context.context_id or str(uuid.uuid4())
@@ -388,37 +352,35 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
         try:
             # Get database session
             db_session = get_default_session()
-            
             # Check if copy_execution is enabled via metadata
             copy_execution = context.metadata.get("copy_execution", False) if context.metadata else False
             copy_children = context.metadata.get("copy_children", False) if context.metadata else False
             original_task_id = None
-            
             if copy_execution:
                 # If copy_execution is True, check if task_id is provided in metadata
                 task_id = context.metadata.get("task_id") if context.metadata else None
                 if not task_id:
                     raise ValueError("task_id is required in metadata when copy_execution=True")
-                
                 # Get the original task from database
                 task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
                 original_task = await task_repository.get_task_by_id(task_id)
                 if not original_task:
                     raise ValueError(f"Task {task_id} not found")
-                
                 original_task_id = task_id
-                
                 # Copy the task (and children if copy_children=True)
                 logger.info(f"Copying task {task_id} before execution (copy_children={copy_children})")
                 task_creator = TaskCreator(db_session)
-                copied_tree = await task_creator.create_task_copy(original_task, children=copy_children)
+                copied_tree = await task_creator.from_copy(
+                    _original_task=original_task,
+                    _save=True,
+                    _recursive=copy_children
+                )
                 logger.info(f"Task copied: original={original_task_id}, copy={copied_tree.task.id}")
-                
                 # Convert copied tree to tasks array format
                 tasks = self._tree_node_to_tasks_array(copied_tree)
             else:
                 # Extract tasks array from context
-                tasks = self._extract_tasks_from_context(context)
+                tasks = await self._extract_tasks_from_context(context)
                 if not tasks:
                     raise ValueError("No tasks provided in request")
             
@@ -440,7 +402,7 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             use_demo = False
             if context.metadata:
                 use_demo = context.metadata.get("use_demo", False)
-            # Also check message.metadata if available (A2A protocol supports metadata in message)
+            # Also check message_metadata if available (A2A protocol supports metadata in message)
             if not use_demo and context.message and hasattr(context.message, "metadata"):
                 message_metadata = context.message.metadata
                 if isinstance(message_metadata, dict):
@@ -481,50 +443,58 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             await self._send_error_update(event_queue, context, str(e))
             raise
 
-    def _extract_tasks_from_context(self, context: RequestContext) -> List[Dict[str, Any]]:
+    # Only keep the new unified _extract_tasks_from_context implementation
+    async def _extract_tasks_from_context(self, context: RequestContext) -> List[Dict[str, Any]]:
         """
-        Extract tasks array from request context
-        
-        Tasks should be in context.message.parts as an array of DataPart objects,
-        where each part contains a task object.
-        
-        Args:
-            context: Request context
-            
-        Returns:
-            List of task dictionaries
+        Extract tasks array from request context, supporting from_copy, from_mixed, from_link, from_snapshot scenarios.
+        If none of these are set, extract tasks from context.message.parts as before.
         """
+        meta = context.metadata or {}
+        db_session = get_default_session()
+        task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
+        task_creator = TaskCreator(db_session)
+        copy_modes = ["from_copy", "from_mixed", "from_link", "from_snapshot"]
+        # Defensive: Only treat as True if value is exactly True (not Mock, not truthy)
+        mode = None
+        for m in copy_modes:
+            v = meta.get(m, False)
+            if v is True:
+                mode = m
+                break
+        if mode:
+            task_id = meta.get("task_id")
+            if not task_id:
+                raise ValueError(f"{mode} requires task_id in metadata")
+            # Await the original task
+            original_task = await task_repository.get_task_by_id(task_id)
+            if not original_task:
+                raise ValueError(f"Original task not found for {mode} with id {task_id}")
+            # Await the correct TaskCreator method
+            if mode == "from_copy":
+                tree = await task_creator.from_copy(_original_task=original_task, _save=True, _recursive=meta.get("copy_children", False))
+            elif mode == "from_mixed":
+                tree = await task_creator.from_mixed(_original_task=original_task, _save=True)
+            elif mode == "from_link":
+                tree = await task_creator.from_link(_original_task=original_task, _save=True)
+            elif mode == "from_snapshot":
+                tree = await task_creator.from_snapshot(_original_task=original_task, _save=True)
+            else:
+                raise ValueError(f"Unsupported copy mode: {mode}")
+            logger.info(f"Extracted 1 task tree from {mode} scenario (task_id={task_id})")
+            return self._tree_node_to_tasks_array(tree)
+        # Default: extract tasks from message parts
         tasks = []
-        
-        # Extract tasks directly from message parts
-        # parts is an array, each part should contain a task
         if context.message and hasattr(context.message, "parts"):
-            parts = context.message.parts
-            
-            # Try to extract tasks array from parts
-            # Method 1: Check if parts[0] contains a "tasks" array
-            if parts and len(parts) > 0:
-                first_part_data = self._extract_single_part_data(parts[0])
-                
-                # Check if first part contains "tasks" key (wrapped format)
-                if isinstance(first_part_data, dict) and "tasks" in first_part_data:
-                    tasks = first_part_data["tasks"]
-                    if not isinstance(tasks, list):
-                        raise ValueError("Tasks must be a list")
-                else:
-                    # Method 2: Each part is a task (direct format)
-                    # Extract each part as a task
-                    for i, part in enumerate(parts):
-                        task_data = self._extract_single_part_data(part)
-                        if task_data:
-                            if isinstance(task_data, dict):
-                                tasks.append(task_data)
-                            else:
-                                logger.warning(f"Part {i} does not contain a valid task object")
-        
+            for part in context.message.parts:
+                data = self._extract_single_part_data(part)
+                if data:
+                    # Wrapped format: {"tasks": [...]} 
+                    if isinstance(data, dict) and "tasks" in data and isinstance(data["tasks"], list):
+                        tasks.extend(data["tasks"])
+                    else:
+                        tasks.append(data)
         if not tasks:
-            raise ValueError("No tasks found in context.message.parts")
-        
+            raise ValueError("No tasks found in context.message.parts or metadata")
         logger.info(f"Extracted {len(tasks)} tasks from context.message.parts")
         return tasks
 
@@ -606,6 +576,7 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             ),
             final=True
         )
+
         await event_queue.enqueue_event(status_update)
 
     async def cancel(
@@ -828,4 +799,11 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             logger.error(f"Error executing task management method {method}: {str(e)}", exc_info=True)
             await self._send_error_update(event_queue, context, f"Error in {method}: {str(e)}")
             raise
+
+
+
+
+
+
+
 

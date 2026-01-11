@@ -141,7 +141,7 @@ class TaskRepository:
         if 'original_task_id' in available_columns:
             task_data["original_task_id"] = original_task_id
         if 'origin_type' in available_columns:
-            task_data["origin_type"] = origin_type if origin_type is not None else TaskOriginType.own
+            task_data["origin_type"] = origin_type if origin_type is not None else TaskOriginType.create
         if 'task_tree_id' in available_columns:
             task_data["task_tree_id"] = task_tree_id
         if 'has_references' in available_columns:

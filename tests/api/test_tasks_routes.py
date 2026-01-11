@@ -334,6 +334,7 @@ class TestHandleTaskExecute:
             mock_copied_tree = Mock()
             mock_copied_tree.task = mock_copied_task
             mock_creator.create_task_copy = AsyncMock(return_value=mock_copied_tree)
+            mock_creator.from_copy = AsyncMock(return_value=mock_copied_tree)
             mock_creator_class.return_value = mock_creator
 
             # Mock _get_task_repository to return a mock repository
@@ -389,11 +390,11 @@ class TestHandleTaskExecute:
         assert result["original_task_id"] == sample_task
         assert result["status"] == "started"
 
-        # Verify create_task_copy was called with correct parameters
-        mock_creator.create_task_copy.assert_called_once()
-        call_args = mock_creator.create_task_copy.call_args
-        assert call_args[0][0].id == sample_task  # First positional arg is the task
-        assert call_args[1]["children"] is False  # children defaults to False
+        # Verify from_copy was called with correct parameters
+        mock_creator.from_copy.assert_called_once()
+        call_args = mock_creator.from_copy.call_args
+        assert call_args[1]["_original_task"].id == sample_task  # _original_task kwarg
+        assert call_args[1]["_recursive"] is False  # children defaults to False
 
     @pytest.mark.asyncio
     async def test_copy_execution_with_children(self, task_routes, mock_request, sample_task):
@@ -414,6 +415,7 @@ class TestHandleTaskExecute:
             mock_copied_tree = Mock()
             mock_copied_tree.task = mock_copied_task
             mock_creator.create_task_copy = AsyncMock(return_value=mock_copied_tree)
+            mock_creator.from_copy = AsyncMock(return_value=mock_copied_tree)
             mock_creator_class.return_value = mock_creator
 
             # Mock _get_task_repository to return a mock repository
@@ -459,10 +461,10 @@ class TestHandleTaskExecute:
         assert result["success"] is True
         assert result["original_task_id"] == sample_task
 
-        # Verify create_task_copy was called with children=True
-        mock_creator.create_task_copy.assert_called_once()
-        call_args = mock_creator.create_task_copy.call_args
-        assert call_args[1]["children"] is True
+        # Verify from_copy was called with children=True
+        mock_creator.from_copy.assert_called_once()
+        call_args = mock_creator.from_copy.call_args
+        assert call_args[1]["_recursive"] is True
 
     @pytest.mark.asyncio
     async def test_copy_execution_with_streaming(self, task_routes, mock_request, sample_task):
@@ -478,6 +480,7 @@ class TestHandleTaskExecute:
             mock_copied_tree = Mock()
             mock_copied_tree.task = mock_copied_task
             mock_creator.create_task_copy = AsyncMock(return_value=mock_copied_tree)
+            mock_creator.from_copy = AsyncMock(return_value=mock_copied_tree)
             mock_creator_class.return_value = mock_creator
 
             # Mock _get_task_repository to return a mock repository
@@ -1836,7 +1839,7 @@ class TestHandleTaskCopy:
         params = {"task_id": root.id, "copy_mode": "custom"}
         request_id = str(uuid.uuid4())
 
-        with pytest.raises(ValueError, match="custom_task_ids is required"):
+        with pytest.raises(ValueError, match="link_task_ids is required when origin_type='mixed'"):
             await task_routes.handle_task_copy(params, mock_request, request_id)
     
     @pytest.mark.asyncio

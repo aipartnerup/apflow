@@ -279,7 +279,14 @@ class ConfigRegistry:
         # Clear task tree hooks
         for hook_list in self._task_tree_hooks.values():
             hook_list.clear()
-        logger.debug("Cleared configuration registry")
+        # Reset TaskExecutor singleton to avoid test pollution
+        try:
+            from apflow.core.execution.task_executor import TaskExecutor
+            TaskExecutor._instance = None
+            TaskExecutor._initialized = False
+        except ImportError:
+            pass
+        logger.debug("Cleared configuration registry and reset TaskExecutor singleton")
 
 
 # Global registry instance (singleton pattern)

@@ -1,5 +1,7 @@
 # Changelog
 
+## [Unreleased]
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
@@ -7,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 
-## [Unreleased] 2026-01-10
+## [Unreleased] 2026-01-11
 
 ### Added
 - **Task Model Enhancements**
@@ -29,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Created practical usage examples (`cli/examples.md`)
   - Developed detailed CLI usage guide covering installation, modes, and best practices (`cli.md`)
   - Introduced CLI documentation index for improved navigation
+
+- **TaskCreator hanldeing different origin types**
+  - Added comprehensive tests for `TaskCreator` methods handling different origin types:
+   `from_link`, `from_copy`, `from_snapshot`, and `from_mixed` methods.
+  - Removed create_task_copy* moethods
+  - Includes test cases for single tasks, recursive trees, field overrides, dependency handling, and edge cases (error conditions, immutability).
+
 
 ### Changed
 - **Extension Management Refactoring**

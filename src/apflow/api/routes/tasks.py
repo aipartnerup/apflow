@@ -402,8 +402,8 @@ class TaskRoutes(BaseRouteHandler):
                 # Task cancellation
                 elif method == "tasks.cancel" or method == "tasks.running.cancel":
                     result = await self.handle_task_cancel(params, request, request_id)
-                # Task copy
-                elif method == "tasks.copy":
+                # Task clone/copy
+                elif method in ("tasks.clone", "tasks.copy"):
                     result = await self.handle_task_copy(params, request, request_id)
                 # Task generation
                 elif method == "tasks.generate":
@@ -1587,32 +1587,57 @@ class TaskRoutes(BaseRouteHandler):
 
     async def handle_task_copy(self, params: dict, request: Request, request_id: str) -> dict:
         """
-        Handle task copy (create_task_copy)
+        Handle task clone/copy (create_task_copy)
 
         Params:
             task_id: Task ID to copy (required)
-            children: If True, also copy each direct child task with its dependencies (default: False)
-            copy_mode: Copy mode - "minimal" (default), "full", or "custom"
-            custom_task_ids: List of task IDs to copy (required when copy_mode="custom")
-            custom_include_children: If True, also include all children recursively (used when copy_mode="custom", default: False)
-            reset_fields: Optional list of field names to reset (default: None)
+            origin_type: Origin type - "copy" (default), "link", "snapshot", or "mixed"
+            recursive: If True, copy/link entire subtree; if False, only single task (default: True)
+            link_task_ids: List of task IDs to link (for mixed mode)
+            reset_fields: Dict of field names to reset values (e.g., {"user_id": "new_user"})
             save: If True (default), save to database. If False, return task array without saving.
+            
+            Legacy params (backward compatibility):
+            children: If True, use recursive=True (deprecated, use recursive)
+            copy_mode: "minimal"/"full"/"custom" (deprecated, use origin_type)
+            custom_task_ids: For mixed mode (deprecated, use link_task_ids)
         """
         try:
             task_id = params.get("task_id")
             if not task_id:
                 raise ValueError("Task ID is required")
 
-            children = params.get("children", False)
-            copy_mode = params.get("copy_mode", "minimal")
-            custom_task_ids = params.get("custom_task_ids")
-            custom_include_children = params.get("custom_include_children", False)
-            reset_fields = params.get("reset_fields")
+            # New parameter structure
+            origin_type = params.get("origin_type", "copy")
+            recursive = params.get("recursive")
+            link_task_ids = params.get("link_task_ids")
+            reset_fields = params.get("reset_fields", {})
             save = params.get("save", True)
 
+            # Legacy parameter support
+            children = params.get("children")
+            copy_mode = params.get("copy_mode")
+            custom_task_ids = params.get("custom_task_ids")
+            
+            # Map legacy parameters to new structure
+            if recursive is None and children is not None:
+                recursive = children
+            if recursive is None:
+                recursive = True
+            
+            if copy_mode == "custom":
+                origin_type = "mixed"
+                if custom_task_ids:
+                    link_task_ids = custom_task_ids
+            elif copy_mode == "full":
+                # Keep full mode using legacy method
+                pass
+            
             # Validate parameters
-            if copy_mode == "custom" and not custom_task_ids:
-                raise ValueError("custom_task_ids is required when copy_mode='custom'")
+            if origin_type not in ("copy", "link", "snapshot", "mixed"):
+                raise ValueError(f"Invalid origin_type '{origin_type}'. Must be 'copy', 'link', 'snapshot', or 'mixed'")
+            if origin_type == "mixed" and not link_task_ids:
+                raise ValueError("link_task_ids is required when origin_type='mixed'")
 
             # Get database session and create repository with custom TaskModel
             async with create_pooled_session() as db_session:
@@ -1626,18 +1651,44 @@ class TaskRoutes(BaseRouteHandler):
                 # Check permission to copy this task
                 self._check_permission(request, original_task.user_id, "copy")
 
-                # Create TaskCreator and copy task
+                # Create TaskCreator
                 task_creator = TaskCreator(db_session)
 
-                result = await task_creator.create_task_copy(
-                    original_task,
-                    children=children,
-                    copy_mode=copy_mode,
-                    custom_task_ids=custom_task_ids,
-                    custom_include_children=custom_include_children,
-                    reset_fields=reset_fields,
-                    save=save
-                )
+                # Ensure reset_fields is a dict
+                if not isinstance(reset_fields, dict):
+                    reset_fields = {}
+
+                # Call appropriate method based on origin_type
+                if origin_type == "link":
+                    result = await task_creator.from_link(
+                        _original_task=original_task,
+                        _save=save,
+                        _recursive=recursive,
+                        **reset_fields
+                    )
+                elif origin_type == "snapshot":
+                    result = await task_creator.from_snapshot(
+                        _original_task=original_task,
+                        _save=save,
+                        _recursive=recursive,
+                        **reset_fields
+                    )
+                elif origin_type == "mixed":
+                    result = await task_creator.from_mixed(
+                        _original_task=original_task,
+                        _save=save,
+                        _recursive=recursive,
+                        _link_task_ids=link_task_ids,
+                        **reset_fields
+                    )
+                else:
+                    # Default: copy mode
+                    result = await task_creator.from_copy(
+                        _original_task=original_task,
+                        _save=save,
+                        _recursive=recursive,
+                        **reset_fields
+                    )
 
                 # Handle result based on save parameter
                 if save:
@@ -2013,12 +2064,21 @@ class TaskRoutes(BaseRouteHandler):
                             f"Copying task {task_id} before execution (copy_children={copy_children})"
                         )
                         task_creator = TaskCreator(db_session)
-                        copied_tree = await task_creator.create_task_copy(task, children=copy_children)
-                        execution_task_id = copied_tree.task.id
+                        copied_tree = await task_creator.from_copy(
+                            _original_task=task,
+                            _save=True,
+                            _recursive=copy_children
+                        )
+                        # Handle both TaskModel and TaskTreeNode return types
+                        if hasattr(copied_tree, "task") and hasattr(copied_tree.task, "id"):
+                            execution_task_id = copied_tree.task.id
+                            task = copied_tree.task
+                        elif hasattr(copied_tree, "id"):
+                            execution_task_id = copied_tree.id
+                            task = copied_tree
+                        else:
+                            raise TypeError(f"Unexpected type returned from from_copy: {type(copied_tree)}")
                         logger.info(f"Task copied: original={original_task_id}, copy={execution_task_id}")
-                        
-                        # Use the new task for subsequent steps
-                        task = copied_tree.task
                     else:
                         execution_task_id = task_id
 

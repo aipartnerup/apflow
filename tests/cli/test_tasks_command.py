@@ -461,14 +461,14 @@ class TestTasksCancelCommand:
         assert "not_found" in output.lower() or "error" in output.lower()
 
 
-class TestTasksCopyCommand:
-    """Test cases for tasks copy command"""
+class TestTasksCloneCommand:
+    """Test cases for tasks clone command (copy remains as alias)"""
     
 
     
     @pytest.mark.asyncio
-    async def test_tasks_copy_basic(self, use_test_db_session, disable_api_for_tests):
-        """Test copying a basic task"""
+    async def test_tasks_clone_basic(self, use_test_db_session, disable_api_for_tests):
+        """Test cloning a basic task"""
         
         task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
         
@@ -497,16 +497,16 @@ class TestTasksCopyCommand:
             progress=1.0
         )
         
-        # Copy task
+        # Clone task
         result = runner.invoke(cli, [
-            "tasks", "copy", root_task_id
+            "tasks", "clone", root_task_id
         ])
         
         assert result.exit_code == 0
         output = result.stdout
         
         # Verify output contains copied task info
-        assert "Successfully copied" in output or root_task_id in output
+        assert ("Successfully cloned" in output or "Successfully copied" in output or root_task_id in output)
         assert "new task" in output.lower() or "id" in output.lower()
         
         # Parse JSON output to verify structure

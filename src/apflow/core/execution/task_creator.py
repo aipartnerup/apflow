@@ -1,16 +1,22 @@
 """
-Task creation from tasks array
+Task creation and task tree management
 
-This module provides functionality to create task trees from tasks array (JSON format).
-It is a core function that accepts a tasks array and builds a task tree structure.
+This module provides comprehensive functionality for creating tasks and task trees:
+1. Create task trees from tasks array (JSON format)
+2. Create tasks by linking to existing tasks (reference)
+3. Create tasks by copying existing tasks (allows modifications)
+4. Create tasks by taking snapshots of existing tasks (frozen, read-only)
 
 External callers should provide tasks with resolved id and parent_id.
-This module only validates that dependencies exist in the array and hierarchy is correct.
+This module validates that dependencies exist in the array and hierarchy is correct.
 
-Usage:
+Usage examples:
+
     from apflow.core.execution import TaskCreator
     
     creator = TaskCreator(db_session)
+    
+    # 1. Create task tree from array
     tasks = [
         {
             "id": "task_1",  # Optional: if provided, used for references
@@ -29,12 +35,32 @@ Usage:
         }
     ]
     task_tree = await creator.create_task_tree_from_array(tasks)
+    
+    # 2. Create task by linking (reference to original)
+    linked_task = await creator.from_link(
+        original_task_id="original_task_uuid",
+        user_id="user_123",
+        parent_id="parent_task_uuid",
+    )
+    
+    # 3. Create task by copying (allows modifications)
+    copied_tree = await creator.from_copy(
+        original_task_id="original_task_uuid",
+        user_id="user_123",
+        inputs={"new_input": "value"},  # Override inputs
+        copy_children=True,  # Copy entire subtree
+    )
+    
+    # 4. Create task by snapshot (frozen, read-only)
+    snapshot_tree = await creator.from_snapshot(
+        original_task_id="original_task_uuid",
+        user_id="user_123",
+        copy_children=True,  # Snapshot entire subtree
+    )
 """
 
-from typing import List, Dict, Any, Optional, Union, Set
-import copy
+from typing import List, Dict, Any, Optional, Set
 import uuid
-from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from apflow.core.execution.task_manager import TaskManager
@@ -48,34 +74,67 @@ logger = get_logger(__name__)
 
 class TaskCreator:
     """
-    Task creation from tasks array
+    Task creation and task tree management
     
-    This class provides functionality to create task trees from tasks array (JSON format).
+    This class provides comprehensive functionality for creating tasks and task trees:
+    1. Create task trees from tasks array (JSON format)
+    2. Create tasks by linking to existing tasks (reference)
+    3. Create tasks by copying existing tasks (allows modifications)
+    4. Create tasks by taking snapshots of existing tasks (frozen, read-only)
+    
     External callers should provide tasks with resolved id and parent_id.
-    This module only validates that dependencies exist in the array and hierarchy is correct.
+    This module validates that dependencies exist in the array and hierarchy is correct.
     
-    Usage:
+    Public methods:
+        - create_task_tree_from_array(): Create task tree from tasks array
+        - from_link(): Create task by linking to existing task (reference)
+        - from_copy(): Create task by copying existing task (allows modifications)
+        - from_snapshot(): Create task by taking snapshot of existing task (frozen)
+    
+    Usage examples:
+    
         from apflow.core.execution import TaskCreator
         
         creator = TaskCreator(db_session)
+        
+        # 1. Create task tree from array
         tasks = [
             {
-                "id": "task_1",  # Optional: if provided, used for references
-                "name": "Task 1",  # Required: if no id, name must be unique and used for references
+                "id": "task_1",
+                "name": "Task 1",
                 "user_id": "user_123",
                 "priority": 1,
                 "inputs": {"url": "https://example.com"},
                 "schemas": {"type": "stdio", "method": "system_info"},
             },
             {
-                "id": "task_2",  # Optional: if provided, used for references
-                "name": "Task 2",  # Required: if no id, name must be unique and used for references
+                "id": "task_2",
+                "name": "Task 2",
                 "user_id": "user_123",
-                "parent_id": "task_1",  # If tasks have id: use id; if not: use name
-                "dependencies": [{"id": "task_1", "required": True}],  # Can use id or name
+                "parent_id": "task_1",
+                "dependencies": [{"id": "task_1", "required": True}],
             }
         ]
         task_tree = await creator.create_task_tree_from_array(tasks)
+        
+        # 2. Create task by linking (reference to original)
+        linked_task = await creator.from_link(
+            original_task_id="original_task_uuid",
+            user_id="user_123",
+        )
+        
+        # 3. Create task by copying (allows modifications)
+        copied_tree = await creator.from_copy(
+            original_task_id="original_task_uuid",
+            inputs={"new_input": "value"},
+            copy_children=True,
+        )
+        
+        # 4. Create task by snapshot (frozen, read-only)
+        snapshot_tree = await creator.from_snapshot(
+            original_task_id="original_task_uuid",
+            copy_children=True,
+        )
     """
     
     def __init__(self, db: Session | AsyncSession):
@@ -254,7 +313,7 @@ class TaskCreator:
                 schemas=task_data.get("schemas"),
                 params=task_data.get("params"),
                 id=actual_id,  # Use actual_id (may be auto-generated if provided_id conflicts)
-                origin_type=TaskOriginType.own,
+                origin_type=TaskOriginType.create,
                 task_tree_id=None,  # Will be set after root task is determined
             )
             
@@ -816,244 +875,9 @@ class TaskCreator:
         collect_children(root_node)
         return tasks
     
-    async def create_task_copy(
-        self,
-        original_task: TaskModel,
-        children: bool = False,
-        copy_mode: str = "minimal",
-        custom_task_ids: Optional[List[str]] = None,
-        custom_include_children: bool = False,
-        reset_fields: Optional[List[str]] = None,
-        save: bool = True
-    ) -> Union[TaskTreeNode, List[Dict[str, Any]]]:
-        """
-        Create a copy of a task tree for re-execution.
-        
-        Preserves original task results while creating new execution instance.
-        Automatically includes dependent tasks (tasks that depend on this task and its children,
-        including transitive dependencies).
-        
-        Args:
-            original_task: Original task to copy (can be root or any task in tree)
-            children: If True, also copy each direct child task with its dependencies.
-                     When copying children, tasks that depend on multiple copied tasks are
-                     only copied once (deduplication by task ID).
-            copy_mode: Copy mode - "minimal" (default), "full", or "custom"
-                - "minimal": Copies minimal subtree (original_task + children + dependents)
-                - "full": Copies complete tree from root, marks unrelated tasks as completed
-                - "custom": Copies only specified custom_task_ids with auto-include dependencies
-            custom_task_ids: List of task IDs to copy (required when copy_mode="custom")
-            custom_include_children: If True, also include all children recursively (used when copy_mode="custom")
-            reset_fields: Optional list of field names to reset.
-                         If None, use default reset behavior.
-                         Valid fields: "status", "progress", "result", "error",
-                                      "started_at", "completed_at", "updated_at"
-            save: If True, save to database and return TaskTreeNode.
-                  If False, return task array (List[Dict]) without saving.
-        
-        Returns:
-            TaskTreeNode with saved tasks if save=True,
-            List[Dict[str, Any]] task array compatible with tasks.create if save=False
-        """
-        if copy_mode == "full":
-            result = await self.create_task_copy_full(original_task, reset_fields, save)
-        elif copy_mode == "custom":
-            if not custom_task_ids:
-                raise ValueError("custom_task_ids is required when copy_mode='custom'")
-            result = await self.create_task_copy_custom(original_task, custom_task_ids, custom_include_children, reset_fields, save)
-        else:
-            result = await self.create_task_copy_minimal(original_task, children, reset_fields, save)
-        
-        # If not saving, convert TaskTreeNode to task array
-        if not save and isinstance(result, TaskTreeNode):
-            return self._tree_to_task_array(result)
-        
-        return result
-    
-    async def create_task_copy_minimal(
-        self,
-        original_task: TaskModel,
-        children: bool = False,
-        reset_fields: Optional[List[str]] = None,
-        save: bool = True
-    ) -> TaskTreeNode:
-        """
-        Create a copy of a task tree for re-execution (minimal mode).
-        
-        Preserves original task results while creating new execution instance.
-        Automatically includes dependent tasks (tasks that depend on this task and its children,
-        including transitive dependencies).
-        
-        Process:
-        1. Get root task and all tasks in the tree for dependency lookup
-        2. Build original_task's subtree (original_task + all its children)
-        3. If children=True, also collect identifiers from each direct child's subtree
-        4. Collect all task identifiers (id or name) from the subtree(s)
-        5. Find all tasks that depend on these identifiers (including transitive dependencies)
-           - Special handling for failed leaf nodes:
-             * Check if original_subtree contains any failed leaf nodes
-             * If failed leaf nodes exist: filter out pending dependent tasks
-             * If no failed leaf nodes: copy all dependent tasks
-        6. Collect all required task IDs (original_task subtree + filtered dependent tasks)
-        7. Build minimal subtree containing all required tasks
-        8. Copy entire tree structure
-        9. Save copied tree to database
-        10. Mark all original tasks as having copies
-        
-        Args:
-            original_task: Original task to copy (can be root or any task in tree)
-            children: If True, also copy each direct child task with its dependencies.
-                     When copying children, tasks that depend on multiple copied tasks are
-                     only copied once (deduplication by task ID).
-            
-        Returns:
-            TaskTreeNode with copied task tree, all tasks linked to original via original_task_id
-        """
-        logger.info(f"Creating task copy (minimal mode) for original task {original_task.id}, children={children}")
-        
-        # Step 1: Get root task and all tasks in the tree for dependency lookup
-        # Note: children=True only supports dependencies within the same root tree
-        root_task = await self.task_manager.task_repository.get_root_task(original_task)
-        all_tasks = await self.task_manager.task_repository.get_all_tasks_in_tree(root_task)
-        
-        # Step 2: Build original_task's subtree (original_task + all its children)
-        original_subtree = await self.task_manager.task_repository.build_task_tree(original_task)
-        
-        # Step 3: Collect all task identifiers (id or name) from the subtree
-        task_identifiers = self._collect_task_identifiers_from_tree(original_subtree)
-        
-        # If children=True, also collect identifiers from each direct child's subtree
-        if children:
-            for child_node in original_subtree.children:
-                child_identifiers = self._collect_task_identifiers_from_tree(child_node)
-                task_identifiers.update(child_identifiers)
-                logger.info(f"Collected {len(child_identifiers)} task identifiers from child {child_node.task.id} subtree")
-        
-        logger.info(f"Collected {len(task_identifiers)} total task identifiers (original_task + {'children' if children else 'no children'}): {task_identifiers}")
-        
-        # Step 4: Find all tasks that depend on these identifiers (including transitive dependencies)
-        dependent_tasks = []
-        if task_identifiers:
-            all_dependent_tasks = await self._find_dependent_tasks_for_identifiers(task_identifiers, all_tasks)
-            
-            # Check if original_subtree contains any failed leaf nodes
-            def has_failed_leaf_nodes(node: TaskTreeNode) -> bool:
-                """Check if tree contains any failed leaf nodes"""
-                task_status = getattr(node.task, 'status', None)
-                is_leaf = not node.children
-                is_failed_leaf = (task_status == "failed" and is_leaf)
-                
-                if is_failed_leaf:
-                    return True
-                
-                # Recursively check children
-                for child in node.children:
-                    if has_failed_leaf_nodes(child):
-                        return True
-                
-                return False
-            
-            has_failed_leaves = has_failed_leaf_nodes(original_subtree)
-            
-            if has_failed_leaves:
-                # For tasks containing failed leaf nodes, only copy dependents that are NOT pending
-                for dep_task in all_dependent_tasks:
-                    dep_status = getattr(dep_task, 'status', None)
-                    if dep_status != "pending":
-                        dependent_tasks.append(dep_task)
-                
-                if all_dependent_tasks:
-                    pending_count = len(all_dependent_tasks) - len(dependent_tasks)
-                    logger.info(f"Found {len(all_dependent_tasks)} dependent tasks for subtree with failed leaf nodes, "
-                              f"filtering out {pending_count} pending tasks, keeping {len(dependent_tasks)} non-pending tasks")
-            else:
-                # For other cases (no failed leaf nodes), copy all dependents
-                dependent_tasks = all_dependent_tasks
-                if dependent_tasks:
-                    logger.info(f"Found {len(dependent_tasks)} dependent tasks for original_task subtree")
-        
-        # Step 5: Collect all required task IDs
-        required_task_ids = set()
-        
-        # Add all tasks from original_task subtree
-        def collect_subtree_task_ids(node: TaskTreeNode):
-            required_task_ids.add(str(node.task.id))
-            for child in node.children:
-                collect_subtree_task_ids(child)
-        
-        collect_subtree_task_ids(original_subtree)
-        
-        # Add all dependent tasks
-        for dep_task in dependent_tasks:
-            required_task_ids.add(str(dep_task.id))
-        
-        logger.info(f"Total {len(required_task_ids)} tasks to copy: {len(self.tree_to_flat_list(original_subtree))} from original_task subtree + {len(dependent_tasks)} dependent tasks")
-        
-        # Step 6: Build minimal subtree containing all required tasks
-        # Note: children=True only supports dependencies within the same root tree
-        if not dependent_tasks:
-            # No dependents: use original_task subtree directly
-            minimal_tree = original_subtree
-            logger.info("No dependents found, using original_task subtree directly")
-        else:
-            # Has dependents: find minimal subtree that includes original_task + all dependents
-            # All dependents should be in the same root tree (children=True only supports same root tree)
-            root_tree = await self.task_manager.task_repository.build_task_tree(root_task)
-            minimal_tree = await self._find_minimal_subtree(root_tree, required_task_ids)
-            
-            if not minimal_tree:
-                # Fallback: use original_subtree
-                logger.warning("Could not build minimal subtree with dependents, falling back to original_task subtree")
-                minimal_tree = original_subtree
-        
-        root_original_task_id = minimal_tree.task.id
-        
-        # Step 7: Copy entire tree structure (all tasks pending for re-execution in minimal mode)
-        new_tree = await self._copy_task_tree_recursive(
-            minimal_tree, root_original_task_id, None, None, reset_fields, save=save
-        )
-        
-        # If not saving, return tree (will be converted to array by create_task_copy)
-        if not save:
-            logger.info(f"Created task copy preview (minimal mode): {len(self.tree_to_flat_list(new_tree))} tasks, not saved to database")
-            return new_tree
-        
-        # Step 8: Save copied tree to database
-        await self._save_copied_task_tree(new_tree, None)
-        
-        # Step 9: Mark all original tasks as having copies
-        await self._mark_original_tasks_has_references(minimal_tree)
-        if self.task_manager.is_async:
-            await self.db.commit()
-        else:
-            self.db.commit()
-        
-        logger.info(f"Created task copy (minimal mode): root task {new_tree.task.id} (original: {root_original_task_id}, includes {len(dependent_tasks)} dependent tasks)")
-        
-        return new_tree
-    
-    def _collect_task_identifiers_from_tree(self, node: TaskTreeNode) -> Set[str]:
-        """
-        Collect all task identifiers (id or name) from a task tree.
-        
-        Args:
-            node: Task tree node
-            
-        Returns:
-            Set of task identifiers in the tree
-        """
-        identifiers = set()
-        # Use id as identifier (primary)
-        identifiers.add(str(node.task.id))
-        # Also use name if available (for dependency matching)
-        if node.task.name:
-            identifiers.add(node.task.name)
-        
-        for child_node in node.children:
-            identifiers.update(self._collect_task_identifiers_from_tree(child_node))
-        
-        return identifiers
-    
+
+
+
     async def _find_dependent_tasks_for_identifiers(
         self,
         task_identifiers: Set[str],
@@ -1499,438 +1323,9 @@ class TaskCreator:
         
         return new_tree
     
-    async def _copy_task_tree_recursive(
-        self,
-        original_node: TaskTreeNode,
-        root_original_task_id: str,
-        parent_id: Optional[str] = None,
-        tasks_to_re_execute_ids: Optional[Set[str]] = None,
-        reset_fields: Optional[List[str]] = None,
-        save: bool = True
-    ) -> TaskTreeNode:
-        """
-        Recursively copy task tree structure.
-        
-        Args:
-            original_node: Original task tree node to copy
-            root_original_task_id: Root task ID for original_task_id linkage
-            parent_id: Parent task ID (will be set after saving)
-            tasks_to_re_execute_ids: Optional set of task IDs that need re-execution.
-                                   If provided, tasks in this set will be marked as pending,
-                                   others will be marked as completed with preserved token_usage.
-            reset_fields: Optional list of field names to reset.
-                         If None, use default reset behavior.
-            save: If True, save to database. If False, create in-memory instances only.
-            
-        Returns:
-            New TaskTreeNode with copied task tree
-        """
-        # Determine if this task should be re-executed
-        should_re_execute = True
-        if tasks_to_re_execute_ids is not None:
-            task_id = str(original_node.task.id)
-            should_re_execute = task_id in tasks_to_re_execute_ids
-        
-        # Create new task from original with appropriate status
-        if should_re_execute:
-            new_task = await self._create_task_copy_from_original(
-                original_node.task,
-                root_original_task_id,
-                parent_id,
-                reset_fields,
-                save=save
-            )
-        else:
-            new_task = await self._create_task_copy_with_status(
-                original_node.task,
-                root_original_task_id,
-                should_re_execute=False,
-                parent_id=parent_id,
-                reset_fields=reset_fields,
-                save=save
-            )
-        
-        # Create new task node
-        new_node = TaskTreeNode(task=new_task)
-        
-        # Recursively copy children
-        for child_node in original_node.children:
-            child_new_node = await self._copy_task_tree_recursive(
-                child_node,
-                root_original_task_id,
-                None,  # parent_id will be set after saving
-                tasks_to_re_execute_ids,
-                reset_fields,
-                save=save
-            )
-            new_node.add_child(child_new_node)
-        
-        return new_node
-    
-    def _reset_task_fields(self, task: TaskModel, reset_fields: Optional[List[str]]):
-        """
-        Resets specified fields of a task to their default "pending" state values.
-        If reset_fields is None, all default resettable fields are reset.
-        
-        Args:
-            task: TaskModel instance to reset
-            reset_fields: Optional list of field names to reset.
-                         If None, all default resettable fields are reset.
-                         Valid fields: "status", "progress", "result", "error",
-                                      "started_at", "completed_at", "updated_at"
-        """
-        default_reset_fields = ["status", "progress", "result", "error", "started_at", "completed_at", "updated_at"]
-        fields_to_reset = set(reset_fields) if reset_fields is not None else set(default_reset_fields)
-        
-        if "status" in fields_to_reset:
-            task.status = "pending"
-        if "progress" in fields_to_reset:
-            task.progress = 0.0
-        if "result" in fields_to_reset:
-            task.result = None
-        if "error" in fields_to_reset:
-            task.error = None
-        if "started_at" in fields_to_reset:
-            task.started_at = None
-        if "completed_at" in fields_to_reset:
-            task.completed_at = None
-        if "updated_at" in fields_to_reset:
-            task.updated_at = datetime.now(timezone.utc)
-    
-    async def _create_task_copy_from_original(
-        self,
-        original_task: TaskModel,
-        root_original_task_id: str,
-        parent_id: Optional[str] = None,
-        reset_fields: Optional[List[str]] = None,
-        save: bool = True
-    ) -> TaskModel:
-        """
-        Create a new task instance copied from original task (for re-execution).
-        
-        Args:
-            original_task: Original task to copy from
-            root_original_task_id: Root task ID for original_task_id linkage
-            parent_id: Parent task ID (will be set after saving)
-            reset_fields: Optional list of field names to reset.
-            save: If True, save to database. If False, create in-memory instance only.
-            
-        Returns:
-            New TaskModel instance ready for execution (status="pending")
-        """
-        return await self._create_task_copy_with_status(
-            original_task,
-            root_original_task_id,
-            should_re_execute=True,
-            parent_id=parent_id,
-            reset_fields=reset_fields,
-            save=save
-        )
-    
-    async def _create_task_copy_with_status(
-        self,
-        original_task: TaskModel,
-        root_original_task_id: str,
-        should_re_execute: bool,
-        parent_id: Optional[str] = None,
-        reset_fields: Optional[List[str]] = None,
-        save: bool = True
-    ) -> TaskModel:
-        """
-        Create a new task instance copied from original task with appropriate status.
-        
-        Args:
-            original_task: Original task to copy from
-            root_original_task_id: Root task ID for original_task_id linkage
-            should_re_execute: If True, task will be pending for re-execution.
-                             If False, preserve completed status and token_usage.
-            parent_id: Parent task ID (will be set after saving)
-            reset_fields: Optional list of field names to reset.
-                         If None, use default reset behavior.
-                         Valid fields: "status", "progress", "result", "error",
-                                      "started_at", "completed_at", "updated_at"
-            save: If True, save to database. If False, create in-memory instance only.
-            
-        Returns:
-            New TaskModel instance with appropriate status
-        """
-        # Safely get values from SQLAlchemy columns
-        schemas_value = getattr(original_task, 'schemas', None)
-        dependencies_value = getattr(original_task, 'dependencies', None)
-        inputs_value = getattr(original_task, 'inputs', None)
-        params_value = getattr(original_task, 'params', None)
-        result_value = getattr(original_task, 'result', None)
-        
-        # Get current time for new task timestamps
-        datetime.now(timezone.utc)
-        
-        # Get TaskModel class
-        task_model_class = get_task_model_class()
-        
-        if should_re_execute:
-            # Task needs re-execution: reset to pending, clear all execution results
-            # Use original_task.id as original_task_id (not root_original_task_id) so dependencies can be correctly mapped
-            # Explicitly generate UUID for task.id to ensure uniqueness and clear task tree relationships
-            task_id = str(uuid.uuid4())
-            if save:
-                task = await self.task_manager.task_repository.create_task(
-                    id=task_id,
-                    name=original_task.name,
-                    user_id=original_task.user_id,
-                    parent_id=parent_id,
-                    priority=original_task.priority,
-                    dependencies=copy.deepcopy(dependencies_value) if dependencies_value else None,
-                    inputs=copy.deepcopy(inputs_value) if inputs_value else None,
-                    schemas=copy.deepcopy(schemas_value) if schemas_value else None,
-                    params=copy.deepcopy(params_value) if params_value else None,
-                    original_task_id=str(original_task.id),
-                    origin_type=TaskOriginType.copy,
-                )
-            else:
-                # Create in-memory TaskModel instance without saving to database
-                task = task_model_class(
-                    id=task_id,
-                    name=original_task.name,
-                    user_id=original_task.user_id,
-                    parent_id=parent_id,
-                    priority=original_task.priority,
-                    dependencies=copy.deepcopy(dependencies_value) if dependencies_value else None,
-                    inputs=copy.deepcopy(inputs_value) if inputs_value else None,
-                    schemas=copy.deepcopy(schemas_value) if schemas_value else None,
-                    params=copy.deepcopy(params_value) if params_value else None,
-                    original_task_id=str(original_task.id),
-                    origin_type=TaskOriginType.copy,
-                )
-            # Apply field reset logic
-            self._reset_task_fields(task, reset_fields)
-            return task
-        else:
-            # Unrelated successful task: preserve completed status and token_usage
-            # Get token_usage from result.token_usage (direct access, no hooks)
-            token_usage = None
-            if isinstance(result_value, dict):
-                token_usage = result_value.get('token_usage')
-            
-            # Preserve result with token_usage if available
-            preserved_result = None
-            if result_value:
-                preserved_result = copy.deepcopy(result_value)
-                # Ensure token_usage is in result if we have it
-                if token_usage and isinstance(preserved_result, dict):
-                    preserved_result['token_usage'] = token_usage
-            
-            # Create task with completed status
-            # Use original_task.id as original_task_id (not root_original_task_id) so dependencies can be correctly mapped
-            # Explicitly generate UUID for task.id to ensure uniqueness and clear task tree relationships
-            task_id = str(uuid.uuid4())
-            if save:
-                task = await self.task_manager.task_repository.create_task(
-                    id=task_id,
-                    name=original_task.name,
-                    user_id=original_task.user_id,
-                    parent_id=parent_id,
-                    priority=original_task.priority,
-                    dependencies=copy.deepcopy(dependencies_value) if dependencies_value else None,
-                    inputs=copy.deepcopy(inputs_value) if inputs_value else None,
-                    schemas=copy.deepcopy(schemas_value) if schemas_value else None,
-                    params=copy.deepcopy(params_value) if params_value else None,
-                    original_task_id=str(original_task.id),
-                    origin_type=TaskOriginType.copy,
-                )
-            else:
-                # Create in-memory TaskModel instance without saving to database
-                task = task_model_class(
-                    id=task_id,
-                    name=original_task.name,
-                    user_id=original_task.user_id,
-                    parent_id=parent_id,
-                    priority=original_task.priority,
-                    dependencies=copy.deepcopy(dependencies_value) if dependencies_value else None,
-                    inputs=copy.deepcopy(inputs_value) if inputs_value else None,
-                    schemas=copy.deepcopy(schemas_value) if schemas_value else None,
-                    params=copy.deepcopy(params_value) if params_value else None,
-                    original_task_id=str(original_task.id),
-                    origin_type=TaskOriginType.copy,
-                )
-            
-            # Set status and preserve result/token_usage (unless reset_fields specifies otherwise)
-            if reset_fields is None:
-                # Default: preserve completed status
-                task.status = "completed"
-                task.progress = 1.0
-                task.result = preserved_result
-                
-                # Preserve timestamps if available
-                if hasattr(original_task, 'started_at') and original_task.started_at:
-                    task.started_at = original_task.started_at
-                if hasattr(original_task, 'completed_at') and original_task.completed_at:
-                    task.completed_at = original_task.completed_at
-            else:
-                # Only reset specified fields, preserve others
-                if "status" not in reset_fields:
-                    task.status = "completed"
-                if "progress" not in reset_fields:
-                    task.progress = 1.0
-                if "result" not in reset_fields:
-                    task.result = preserved_result
-                if "started_at" not in reset_fields:
-                    if hasattr(original_task, 'started_at') and original_task.started_at:
-                        task.started_at = original_task.started_at
-                if "completed_at" not in reset_fields:
-                    if hasattr(original_task, 'completed_at') and original_task.completed_at:
-                        task.completed_at = original_task.completed_at
-                # Apply reset_fields for fields that should be reset
-                self._reset_task_fields(task, reset_fields)
-            
-            # Update in database only if saving
-            if save:
-                if self.task_manager.is_async:
-                    await self.db.commit()
-                    await self.db.refresh(task)
-                else:
-                    self.db.commit()
-                    self.db.refresh(task)
-            
-            return task
-    
-    async def _save_copied_task_tree(self, node: TaskTreeNode, parent_id: Optional[str] = None, root_task_id: Optional[str] = None):
-        """
-        Update parent_id and dependencies references for copied task tree.
-        Tasks are already saved by create_task, we need to update parent_id and dependencies
-        to reference tasks within the new copied tree (not the original tree).
-        
-        IMPORTANT: To avoid db session cache issues, we:
-        1. First, ensure all tasks are flushed/committed so IDs are available
-        2. Build the ID mapping after all tasks are saved
-        3. Update dependencies and parent_id
-        4. Commit and refresh to ensure changes are persisted
-        
-        Args:
-            node: Task tree node to update
-            parent_id: Parent task ID
-        """
-        # Step 1: First, ensure all tasks in the tree are flushed to database
-        # This ensures all task IDs are available and avoids cache issues
-        # Tasks are already added to session by create_task, we just need to flush
-        # Flush to database (but don't commit yet) to ensure all IDs are generated
-        if self.task_manager.is_async:
-            await self.db.flush()
-        else:
-            self.db.flush()
-        
-        # Step 2: Refresh all tasks to ensure we have latest data from database after flush
-        # This avoids cache issues where we might read stale data
-        async def refresh_all_tasks(current_node: TaskTreeNode):
-            """Refresh all tasks to get latest data from database"""
-            task = current_node.task
-            if self.task_manager.is_async:
-                await self.db.refresh(task)
-            else:
-                self.db.refresh(task)
-            for child in current_node.children:
-                await refresh_all_tasks(child)
-        
-        await refresh_all_tasks(node)
 
-        # Establish root_task_id for task_tree grouping (use new copied root id)
-        if root_task_id is None:
-            root_task_id = str(node.task.id)
-        
-        # Step 3: Build mapping: original_task_id -> new task id for all tasks in the tree
-        # After flush and refresh, all task IDs should be available and up-to-date
-        def build_original_to_new_id_mapping(current_node: TaskTreeNode, mapping: Dict[str, str]):
-            """Build mapping from original_task_id to new task id"""
-            task = current_node.task
-            if task.original_task_id:
-                original_id = str(task.original_task_id)
-                new_id = str(task.id)
-                mapping[original_id] = new_id
-            for child in current_node.children:
-                build_original_to_new_id_mapping(child, mapping)
-        
-        original_to_new_id: Dict[str, str] = {}
-        build_original_to_new_id_mapping(node, original_to_new_id)
-        
-        # Step 4: Update dependencies to reference new task IDs
-        def update_dependencies(current_node: TaskTreeNode, id_mapping: Dict[str, str]):
-            """Update dependencies to reference new task IDs within the copied tree"""
-            task = current_node.task
-            
-            dependencies = getattr(task, 'dependencies', None)
-            if dependencies and isinstance(dependencies, list):
-                updated_deps = []
-                for dep in dependencies:
-                    if isinstance(dep, dict):
-                        dep_copy = dep.copy()
-                        # Convert dependency id from original task ID to new task ID
-                        if "id" in dep_copy:
-                            dep_id = str(dep_copy["id"])
-                            if dep_id in id_mapping:
-                                # Map to new task ID in the copied tree
-                                dep_copy["id"] = id_mapping[dep_id]
-                            else:
-                                # If not found in mapping, this dependency references a task outside the copied tree
-                                # This should not happen if the copy logic is correct, but we'll keep it as-is
-                                # and log a warning
-                                logger.warning(
-                                    f"Task {task.id} has dependency {dep_id} that is not in the copied tree. "
-                                    f"Keeping original reference."
-                                )
-                        updated_deps.append(dep_copy)
-                    else:
-                        # String or other format - try to convert
-                        dep_str = str(dep)
-                        if dep_str in id_mapping:
-                            updated_deps.append({"id": id_mapping[dep_str]})
-                        else:
-                            # Keep original if not found
-                            updated_deps.append(dep)
-                task.dependencies = updated_deps
-            # Recursively update children
-            for child in current_node.children:
-                update_dependencies(child, id_mapping)
-        
-        # Update all dependencies in the tree
-        update_dependencies(node, original_to_new_id)
-        
-        # Step 5: Update parent_id and task_tree_id
-        task = node.task
-        if parent_id is not None:
-            task.parent_id = parent_id
-        # Always set task_tree_id to the copied root task id
-        task.task_tree_id = root_task_id
-        
-        # Step 6: Save task with updated dependencies and parent_id
-        if self.task_manager.is_async:
-            await self.db.commit()
-            await self.db.refresh(task)
-        else:
-            self.db.commit()
-            self.db.refresh(task)
-        
-        # Recursively update children
-        for child_node in node.children:
-            await self._save_copied_task_tree(child_node, task.id, root_task_id)
-    
-    async def _mark_original_tasks_has_references(self, node: TaskTreeNode):
-        """
-        Recursively mark all original tasks as having references/copies.
-        
-        Args:
-            node: Task tree node to mark
-        """
-        node.task.has_references = True
-        if self.task_manager.is_async:
-            await self.db.commit()
-            await self.db.refresh(node.task)
-        else:
-            self.db.commit()
-            self.db.refresh(node.task)
-        
-        # Recursively mark children
-        for child_node in node.children:
-            await self._mark_original_tasks_has_references(child_node)
-    
+
+
     def _tree_to_task_array(self, node: TaskTreeNode) -> List[Dict[str, Any]]:
         """
         Convert TaskTreeNode to flat task array compatible with tasks.create API.
@@ -2187,6 +1582,1074 @@ class TaskCreator:
         
         collect_tasks(node, None, None)  # Root task has no parent
         return tasks
+    
+    async def from_link(
+        self,
+        _original_task: TaskModel,
+        _save: bool = True,
+        _recursive: bool = True,
+        _auto_include_deps: Optional[bool] = None,
+        _include_dependents: bool = False,
+        **reset_kwargs
+    ) -> TaskModel | TaskTreeNode:
+        """
+        Create task(s) by linking to existing task(s) (reference)
+        
+        Creates new task(s) that reference the original task. Each new task points to
+        the corresponding original task via original_task_id field and has origin_type='link'.
+        
+        Args:
+            _original_task: Original task to link to
+            _save: If True, save to database. If False, return in-memory instance(s)
+            _recursive: If True, link entire subtree; if False, link only original_task
+            _auto_include_deps: If True, automatically include upstream dependency tasks.
+                Upstream tasks will be linked to, and minimal subtree will be built to connect them.
+            _include_dependents: If True, also include downstream dependent tasks (non-root only).
+            **reset_kwargs: Optional fields to override (e.g., user_id="new_user")
+            
+        Returns:
+            TaskModel if _recursive=False,
+            TaskTreeNode if _recursive=True
+        """
+        if not _recursive:
+            # Single task link
+            linked_task = await self._create_link_task(
+                _original_task, _save, reset_kwargs
+            )
+            logger.info(
+                f"Created linked task '{linked_task.id}' referencing original task '{_original_task.id}'"
+            )
+            return linked_task
+        
+        # Recursive link with optional dependency handling
+        # is_root = _original_task.parent_id is None
+        
+        # Build original subtree and augment with dependencies as needed
+        original_subtree = await self.task_manager.task_repository.build_task_tree(_original_task)
+        link_source = await self._augment_subtree_with_dependencies(
+            _original_task,
+            original_subtree,
+            _auto_include_deps,
+            _include_dependents,
+            None,
+        )
+        
+        # Step 7: Link the tree
+        linked_root = await self._create_link_tree(
+            link_source.task if link_source != original_subtree else _original_task,
+            _save,
+            reset_kwargs
+        )
+        
+        # If original task was not root, promote to independent tree
+        if _original_task.parent_id is not None:
+            await self._promote_to_independent_tree(linked_root)
+        
+        # Build task tree node structure
+        if _save:
+            all_linked_tasks = await self._collect_subtree_tasks(linked_root.id)
+            root_node = await self._build_task_tree(linked_root, all_linked_tasks)
+            logger.info(
+                f"Created linked task tree from '{_original_task.id}' to '{linked_root.id}' "
+                f"with {len(all_linked_tasks)} total tasks "
+                f"(_auto_include_deps={_auto_include_deps}, _include_dependents={_include_dependents})"
+            )
+            return root_node
+        else:
+            return linked_root
+    
+    async def from_copy(
+        self,
+        _original_task: TaskModel,
+        _save: bool = True,
+        _recursive: bool = True,
+        _auto_include_deps: Optional[bool] = None,
+        _include_dependents: bool = False,
+        **reset_kwargs
+    ) -> TaskModel | TaskTreeNode | List[Dict[str, Any]]:
+        """
+        Create task(s) by copying from existing task(s) (allows modifications)
+        
+        Copies the original task and optionally its entire subtree. The copied tasks
+        can be modified. If the original task is not a root task and _recursive=True,
+        validates that it and its children don't depend on tasks outside the subtree,
+        and automatically promotes the copied subtree to an independent tree.
+        
+        Args:
+            _original_task: Original task to copy from
+            _save: If True, return saved instances. If False, return task array
+            _recursive: If True, copy entire subtree; if False, copy only original_task
+            _auto_include_deps: If True, automatically include upstream dependency tasks.
+                               Only used when _recursive=True. Default: True
+            _include_dependents: If True, also include downstream dependent tasks
+                                (tasks that depend on the copied task). Only used when
+                                _recursive=True and original task is not root. Default: False
+            **reset_kwargs: Fields to override/reset (e.g., user_id="new_user", status="pending")
+            
+        Returns:
+            TaskModel if _recursive=False,
+            TaskTreeNode if _recursive=True and _save=True,
+            List[Dict[str, Any]] if _save=False
+        """
+        if not _recursive:
+            # Single task copy - no dependency handling
+            copied_task = await self._create_copy_task(
+                _original_task, _save, reset_kwargs
+            )
+            logger.info(
+                f"Created copied task '{copied_task.id}' from original task '{_original_task.id}'"
+            )
+            return copied_task
+        else:
+            # Recursive copy - copy entire subtree with optional dependency handling
+            # Default behavior: validate external dependencies when _auto_include_deps is not specified
+            if _auto_include_deps is None:
+                await self._validate_no_external_dependencies(_original_task)
+            
+            # Optimization: if original_task is root, dependents parameter is not applicable
+            is_root = _original_task.parent_id is None
+            if is_root and _include_dependents:
+                logger.debug(
+                    f"Task '{_original_task.name}' (id: {_original_task.id}) is root task. "
+                    f"Ignoring _include_dependents parameter (not applicable for root tasks)."
+                )
+                _include_dependents = False
+            
+            # Collect tasks to copy: original subtree + dependencies
+            tasks_to_copy_ids = set()
+            
+            # Step 1: Get root task and all tasks for dependency lookup
+            root_task = await self.task_manager.task_repository.get_root_task(_original_task)
+            all_tasks = await self.task_manager.task_repository.get_all_tasks_in_tree(root_task)
+            
+            # Step 2: Build original subtree and collect its identifiers
+            original_subtree = await self.task_manager.task_repository.build_task_tree(_original_task)
+            
+            # Add all original subtree task IDs
+            def collect_subtree_ids(node: TaskTreeNode) -> Set[str]:
+                ids = {str(node.task.id)}
+                for child in node.children:
+                    ids.update(collect_subtree_ids(child))
+                return ids
+            
+            subtree_ids = collect_subtree_ids(original_subtree)
+            tasks_to_copy_ids.update(subtree_ids)
+            
+            # Step 3: Collect task identifiers (id and name) for dependency lookup
+            task_identifiers = set()
+            for task in all_tasks:
+                if str(task.id) in subtree_ids:
+                    task_identifiers.add(str(task.id))
+                    if task.name:
+                        task_identifiers.add(task.name)
+            
+            # Step 4: Handle upstream dependencies (auto-include by default)
+            if _auto_include_deps and task_identifiers:
+                try:
+                    dependency_tasks = await self._find_dependency_tasks_for_identifiers(
+                        task_identifiers, all_tasks
+                    )
+                    for dep_task in dependency_tasks:
+                        tasks_to_copy_ids.add(str(dep_task.id))
+                    if dependency_tasks:
+                        logger.info(
+                            f"Auto-including {len(dependency_tasks)} upstream dependency tasks "
+                            f"for copy operation"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to auto-include upstream dependencies: {e}. "
+                        f"Proceeding with original subtree only."
+                    )
+            
+            # Step 5: Handle downstream dependents (optional, only for non-root tasks)
+            if _include_dependents and not is_root and task_identifiers:
+                try:
+                    dependent_tasks = await self._find_dependent_tasks_for_identifiers(
+                        task_identifiers, all_tasks
+                    )
+                    for dep_task in dependent_tasks:
+                        tasks_to_copy_ids.add(str(dep_task.id))
+                    if dependent_tasks:
+                        logger.info(
+                            f"Including {len(dependent_tasks)} downstream dependent tasks "
+                            f"for copy operation"
+                        )
+                except Exception as e:
+                    logger.warning(
+                        f"Failed to include downstream dependents: {e}. "
+                        f"Proceeding without dependents."
+                    )
+            
+            # Step 6: If additional tasks are needed, build minimal subtree
+            if len(tasks_to_copy_ids) > len(subtree_ids):
+                logger.debug(
+                    f"Building minimal subtree to include {len(tasks_to_copy_ids)} tasks "
+                    f"(original: {len(subtree_ids)}, dependencies: {len(tasks_to_copy_ids) - len(subtree_ids)})"
+                )
+                root_tree = await self.task_manager.task_repository.build_task_tree(root_task)
+                minimal_tree = await self._find_minimal_subtree(root_tree, tasks_to_copy_ids)
+                
+                if minimal_tree:
+                    copy_source = minimal_tree
+                else:
+                    logger.warning(
+                        "Failed to build minimal subtree with all required tasks. "
+                        "Using original subtree only."
+                    )
+                    copy_source = original_subtree
+            else:
+                copy_source = original_subtree
+            
+            # Step 7: Copy the tree
+            copied_root = await self._create_copy_tree(
+                copy_source.task if copy_source != original_subtree else _original_task,
+                _save,
+                reset_kwargs
+            )
+            
+            # If original task was not root, promote to independent tree
+            if _original_task.parent_id is not None:
+                await self._promote_to_independent_tree(copied_root)
+            
+            # Build task tree node structure
+            all_copied_tasks = await self._collect_subtree_tasks(copied_root.id)
+            root_node = await self._build_task_tree(copied_root, all_copied_tasks)
+            logger.info(
+                f"Copied task tree from '{_original_task.id}' to '{copied_root.id}' "
+                f"with {len(all_copied_tasks)} total tasks "
+                f"(_auto_include_deps={_auto_include_deps}, _include_dependents={_include_dependents})"
+            )
+            if _save:
+                return root_node
+            # Return task array for create API when save=False
+            return self._tree_to_task_array(root_node)
+    
+    async def from_snapshot(
+        self,
+        _original_task: TaskModel,
+        _save: bool = True,
+        _recursive: bool = True,
+        _auto_include_deps: Optional[bool] = None,
+        _include_dependents: bool = False,
+        **reset_kwargs
+    ) -> TaskModel | TaskTreeNode | List[Dict[str, Any]]:
+        """
+        Create frozen snapshot(s) from existing task(s) (read-only, immutable)
+        
+        Creates frozen snapshots of the original task and optionally its entire subtree.
+        Snapshot tasks cannot be modified after creation. If the original task is not
+        a root task and _recursive=True, validates no external dependencies and
+        automatically promotes the snapshot subtree to an independent tree.
+        
+        Args:
+            _original_task: Original task to snapshot
+            _save: If True, return saved instances. If False, return task array
+            _recursive: If True, snapshot entire subtree; if False, snapshot only original_task
+            _auto_include_deps: If True, automatically include upstream dependency tasks.
+                Upstream tasks will be snapshotted, and minimal subtree will be built to connect them.
+            _include_dependents: If True, also include downstream dependent tasks (non-root only).
+            **reset_kwargs: Optional fields (generally empty for snapshots)
+            
+        Returns:
+            TaskModel if _recursive=False,
+            TaskTreeNode if _recursive=True and _save=True,
+            List[Dict[str, Any]] if _save=False
+        """
+        if not _recursive:
+            # Single task snapshot
+            snapshot_task = await self._create_snapshot_task(
+                _original_task, _save, reset_kwargs
+            )
+            logger.info(
+                f"Created snapshot task '{snapshot_task.id}' from original task '{_original_task.id}'"
+            )
+            return snapshot_task
+        
+        # Recursive snapshot with optional dependency handling
+        # is_root = _original_task.parent_id is None
+
+        # Step 1: Validate external dependencies only when not specified
+        if _auto_include_deps is None:
+            await self._validate_no_external_dependencies(_original_task)
+        
+        # Build original subtree and augment with dependencies as needed
+        original_subtree = await self.task_manager.task_repository.build_task_tree(_original_task)
+        snapshot_source = await self._augment_subtree_with_dependencies(
+            _original_task,
+            original_subtree,
+            _auto_include_deps,
+            _include_dependents,
+            None,
+        )
+        
+        # Step 8: Snapshot the tree
+        snapshot_root = await self._create_snapshot_tree(
+            snapshot_source.task if snapshot_source != original_subtree else _original_task,
+            _save,
+            reset_kwargs
+        )
+        
+        # If original task was not root, promote to independent tree
+        if _original_task.parent_id is not None:
+            await self._promote_to_independent_tree(snapshot_root)
+        
+        # Build task tree node structure
+        all_snapshot_tasks = await self._collect_subtree_tasks(snapshot_root.id)
+        root_node = await self._build_task_tree(snapshot_root, all_snapshot_tasks)
+        logger.info(
+            f"Created snapshot task tree from '{_original_task.id}' to '{snapshot_root.id}' "
+            f"with {len(all_snapshot_tasks)} total tasks "
+            f"(_auto_include_deps={_auto_include_deps}, _include_dependents={_include_dependents})"
+        )
+        if _save:
+            return root_node
+        # Return task array for create API when save=False
+        return self._tree_to_task_array(root_node)
+    
+    async def from_mixed(
+        self,
+        _original_task: TaskModel,
+        _save: bool = True,
+        _recursive: bool = True,
+        _link_task_ids: Optional[List[str]] = None,
+        _auto_include_deps: Optional[bool] = None,
+        _include_dependents: bool = False,
+        **reset_kwargs
+    ) -> TaskModel | TaskTreeNode | List[Dict[str, Any]]:
+        """
+        Create task tree with mixed origin types (copy + link)
+        
+        some tasks link (reference original), others copy (allow modification).
+        
+        Args:
+            _original_task: Original task
+            _save: If True, return saved instances. If False, return task array
+            _recursive: If True, apply mixed mode to entire subtree; if False, only original_task
+            _link_task_ids: List of task IDs to link (reference). Tasks NOT in this list will be copied.
+                           If None, all tasks will be copied (equivalent to from_copy)
+            _auto_include_deps: If True, automatically include upstream dependency tasks for copied portions.
+                Only applies to tasks being copied, not linked.
+            _include_dependents: If True, also include downstream dependent tasks for copied portions (non-root only).
+            **reset_kwargs: Fields to override for copied tasks
+            
+        Returns:
+            TaskModel if _recursive=False,
+            TaskTreeNode if _recursive=True and _save=True,
+            List[Dict[str, Any]] if _save=False
+        """
+        if not _recursive:
+            # Single task - determine if should link or copy
+            if _link_task_ids and str(_original_task.id) in [str(id) for id in _link_task_ids]:
+                return await self._create_link_task(_original_task, _save, reset_kwargs)
+            else:
+                return await self._create_copy_task(_original_task, _save, reset_kwargs)
+        
+        # Recursive mixed - validate and handle with dependency consideration
+        # is_root = _original_task.parent_id is None
+        # Default behavior: validate external dependencies when _auto_include_deps is not specified
+        if _auto_include_deps is None:
+            await self._validate_no_external_dependencies(_original_task)
+        
+        # Build original subtree
+        original_subtree = await self.task_manager.task_repository.build_task_tree(_original_task)
+        
+        # Separate tasks into copy and link sets
+        link_set = set(str(id) for id in (_link_task_ids if _link_task_ids else []))
+        
+        # Augment subtree with dependencies for copied portions only
+        # To do so, temporarily mark linked tasks in the subtree so they are not considered
+        # The augmentation helper considers the entire subtree; we emulate copied-only behavior
+        # by building a subtree that excludes linked nodes when evaluating identifiers.
+        mixed_source = await self._augment_subtree_with_dependencies(
+            _original_task,
+            original_subtree,
+            _auto_include_deps,
+            _include_dependents,
+            link_set,
+        )
+        
+        # Step 9: Create mixed tree with selective linking
+        mixed_root = await self._create_mixed_tree(
+            mixed_source.task if mixed_source != original_subtree else _original_task,
+            _save,
+            link_set,
+            reset_kwargs
+        )
+        
+        # If original task was not root, promote to independent tree
+        if _original_task.parent_id is not None:
+            await self._promote_to_independent_tree(mixed_root)
+        
+        # Build task tree node structure
+        all_mixed_tasks = await self._collect_subtree_tasks(mixed_root.id)
+        root_node = await self._build_task_tree(mixed_root, all_mixed_tasks)
+        logger.info(
+            f"Created mixed task tree from '{_original_task.id}' to '{mixed_root.id}' "
+            f"with {len(all_mixed_tasks)} total tasks "
+            f"({len(link_set)} linked, {len(all_mixed_tasks) - len(link_set)} copied) "
+            f"(_auto_include_deps={_auto_include_deps}, _include_dependents={_include_dependents})"
+        )
+        if _save:
+            return root_node
+        # Return task array for create API when save=False
+        return self._tree_to_task_array(root_node)
+    
+    # ==================== Helper Methods ====================
+
+    async def _augment_subtree_with_dependencies(
+        self,
+        original_task: TaskModel,
+        original_subtree: TaskTreeNode,
+        auto_include_deps: Optional[bool],
+        include_dependents: bool,
+        excluded_identifiers: Optional[Set[str]] = None,
+    ) -> TaskTreeNode:
+        """Build a minimal subtree including upstream dependencies and optional dependents.
+        Returns the augmented subtree if dependencies expand the set; otherwise returns the original subtree.
+        """
+        is_root = original_task.parent_id is None
+        
+        # Collect all tasks for context
+        root_task = await self.task_manager.task_repository.get_root_task(original_task)
+        all_tasks = await self.task_manager.task_repository.get_all_tasks_in_tree(root_task)
+        
+        # Collect IDs in the original subtree
+        def collect_subtree_ids(tree_node: TaskTreeNode) -> Set[str]:
+            ids = {str(tree_node.task.id)}
+            if tree_node.children:
+                for child in tree_node.children:
+                    ids.update(collect_subtree_ids(child))
+            return ids
+        
+        subtree_ids = collect_subtree_ids(original_subtree)
+        required_ids = set(subtree_ids)
+        
+        # Collect identifiers for dependency lookup
+        task_identifiers = set()
+        excluded_identifiers = excluded_identifiers or set()
+        for task in all_tasks:
+            if str(task.id) in subtree_ids and str(task.id) not in excluded_identifiers:
+                task_identifiers.add(str(task.id))
+                if task.name:
+                    task_identifiers.add(task.name)
+        
+        # Determine effective auto-include behavior (default True when unspecified)
+        effective_auto_include = True if auto_include_deps is None else auto_include_deps
+
+        # Upstream dependencies
+        if effective_auto_include and task_identifiers:
+            try:
+                dependency_tasks = await self._find_dependency_tasks_for_identifiers(
+                    task_identifiers, all_tasks
+                )
+                for dep_task in dependency_tasks:
+                    required_ids.add(str(dep_task.id))
+            except Exception as e:
+                logger.warning(
+                    f"Failed to auto-include upstream dependencies: {e}. Proceeding with original subtree only."
+                )
+        
+        # Downstream dependents (non-root only)
+        if include_dependents and not is_root and task_identifiers:
+            try:
+                dependent_tasks = await self._find_dependent_tasks_for_identifiers(
+                    task_identifiers, all_tasks
+                )
+                for dep_task in dependent_tasks:
+                    required_ids.add(str(dep_task.id))
+            except Exception as e:
+                logger.warning(
+                    f"Failed to include downstream dependents: {e}. Proceeding without dependents."
+                )
+        
+        # If expanded set, build minimal subtree
+        if len(required_ids) > len(subtree_ids):
+            root_tree = await self.task_manager.task_repository.build_task_tree(root_task)
+            minimal_tree = await self._find_minimal_subtree(root_tree, required_ids)
+            if minimal_tree:
+                return minimal_tree
+            logger.warning(
+                "Failed to build minimal subtree with all required tasks. Using original subtree only."
+            )
+        
+        return original_subtree
+    
+    async def _create_link_task(
+        self,
+        original_task: TaskModel,
+        save: bool,
+        reset_kwargs: Dict[str, Any]
+    ) -> TaskModel:
+        """Create a single link task"""
+        # Mark original task as referenced
+        if not original_task.has_references:
+            original_task.has_references = True
+            if self.task_manager.is_async:
+                await self.db.commit()
+            else:
+                self.db.commit()
+        
+        # Extract field overrides from reset_kwargs
+        link_task_data = self._extract_field_overrides(
+            original_task, reset_kwargs, is_root=True
+        )
+        
+        # Create linked task
+        linked_task = await self.task_manager.task_repository.create_task(
+            name=link_task_data.get("name", original_task.name),
+            user_id=link_task_data.get("user_id", original_task.user_id),
+            parent_id=link_task_data.get("parent_id"),
+            priority=link_task_data.get("priority", original_task.priority),
+            dependencies=original_task.dependencies,
+            inputs=original_task.inputs,
+            schemas=original_task.schemas,
+            params=original_task.params,
+            origin_type=TaskOriginType.link,
+            original_task_id=original_task.id,
+            task_tree_id=None,
+            save=save,
+        )
+        
+        return linked_task
+    
+    async def _create_link_tree(
+        self,
+        original_task: TaskModel,
+        save: bool,
+        reset_kwargs: Dict[str, Any]
+    ) -> TaskModel:
+        """Recursively create link tasks for entire subtree"""
+        id_mapping: Dict[str, str] = {}
+        
+        async def link_task_recursive(
+            orig_task: TaskModel,
+            parent_id: Optional[str] = None,
+            is_root: bool = True,
+        ) -> TaskModel:
+            """Recursively link a task and its children"""
+            # Mark original task as referenced
+            if not orig_task.has_references:
+                orig_task.has_references = True
+                if self.task_manager.is_async:
+                    await self.db.commit()
+                else:
+                    self.db.commit()
+            
+            # Extract field overrides from reset_kwargs
+            link_task_data = self._extract_field_overrides(
+                orig_task, reset_kwargs, is_root=is_root
+            )
+            
+            # Create linked task
+            linked_task = await self.task_manager.task_repository.create_task(
+                name=link_task_data.get("name", orig_task.name),
+                user_id=link_task_data.get("user_id", orig_task.user_id),
+                parent_id=parent_id if not is_root else link_task_data.get("parent_id"),
+                priority=link_task_data.get("priority", orig_task.priority),
+                dependencies=orig_task.dependencies,
+                inputs=orig_task.inputs,
+                schemas=orig_task.schemas,
+                params=orig_task.params,
+                origin_type=TaskOriginType.link,
+                original_task_id=orig_task.id,
+                task_tree_id=None,
+                save=save,
+            )
+            
+            id_mapping[orig_task.id] = linked_task.id
+            
+            # Link children
+            children = await self.task_manager.task_repository.get_child_tasks_by_parent_id(
+                orig_task.id
+            )
+            
+            if children:
+                linked_task.has_children = True
+                if self.task_manager.is_async:
+                    await self.db.commit()
+                else:
+                    self.db.commit()
+                
+                for child in children:
+                    await link_task_recursive(
+                        child, parent_id=linked_task.id, is_root=False
+                    )
+            
+            return linked_task
+        
+        return await link_task_recursive(original_task, is_root=True)
+    
+    async def _create_copy_task(
+        self,
+        original_task: TaskModel,
+        save: bool,
+        reset_kwargs: Dict[str, Any]
+    ) -> TaskModel:
+        """Create a single copy task"""
+        # Mark original task as referenced
+        if not original_task.has_references:
+            original_task.has_references = True
+            if self.task_manager.is_async:
+                await self.db.commit()
+            else:
+                self.db.commit()
+        
+        # Extract field overrides from reset_kwargs
+        copy_task_data = self._extract_field_overrides(
+            original_task, reset_kwargs, is_root=True
+        )
+        
+        # Create copied task
+        copied_task = await self.task_manager.task_repository.create_task(
+            name=copy_task_data.get("name", original_task.name),
+            user_id=copy_task_data.get("user_id", original_task.user_id),
+            parent_id=copy_task_data.get("parent_id"),
+            priority=copy_task_data.get("priority", original_task.priority),
+            dependencies=original_task.dependencies,
+            inputs=copy_task_data.get("inputs", original_task.inputs),
+            schemas=original_task.schemas,
+            params=copy_task_data.get("params", original_task.params),
+            origin_type=TaskOriginType.copy,
+            original_task_id=original_task.id,
+            task_tree_id=None,
+            save=save,
+        )
+        
+        # Apply field reset if specified
+        if reset_kwargs:
+            self._reset_task_fields(copied_task, list(reset_kwargs.keys()))
+        
+        return copied_task
+    
+    async def _create_copy_tree(
+        self,
+        original_task: TaskModel,
+        save: bool,
+        reset_kwargs: Dict[str, Any]
+    ) -> TaskModel:
+        """Recursively create copy tasks for entire subtree"""
+        id_mapping: Dict[str, str] = {}
+        
+        async def copy_task_recursive(
+            orig_task: TaskModel,
+            parent_id: Optional[str] = None,
+            is_root: bool = True,
+        ) -> TaskModel:
+            """Recursively copy a task and its children"""
+            # Mark original task as referenced
+            if not orig_task.has_references:
+                orig_task.has_references = True
+                if self.task_manager.is_async:
+                    await self.db.commit()
+                else:
+                    self.db.commit()
+            
+            # Extract field overrides from reset_kwargs
+            copy_task_data = self._extract_field_overrides(
+                orig_task, reset_kwargs, is_root=is_root
+            )
+            
+            # Copy dependencies with updated IDs
+            new_dependencies = None
+            if orig_task.dependencies:
+                new_dependencies = []
+                for dep in orig_task.dependencies:
+                    new_dep = dep.copy()
+                    dep_id = dep.get("id")
+                    if dep_id in id_mapping:
+                        new_dep["id"] = id_mapping[dep_id]
+                    new_dependencies.append(new_dep)
+            
+            # Create copied task
+            copied_task = await self.task_manager.task_repository.create_task(
+                name=copy_task_data.get("name", orig_task.name),
+                user_id=copy_task_data.get("user_id", orig_task.user_id),
+                parent_id=parent_id if not is_root else copy_task_data.get("parent_id"),
+                priority=copy_task_data.get("priority", orig_task.priority),
+                dependencies=new_dependencies,
+                inputs=copy_task_data.get("inputs", orig_task.inputs),
+                schemas=orig_task.schemas,
+                params=copy_task_data.get("params", orig_task.params),
+                origin_type=TaskOriginType.copy,
+                original_task_id=orig_task.id,
+                task_tree_id=None,
+                save=save,
+            )
+            
+            # Apply field reset if specified
+            if reset_kwargs:
+                self._reset_task_fields(copied_task, list(reset_kwargs.keys()))
+            
+            id_mapping[orig_task.id] = copied_task.id
+            
+            # Copy children
+            children = await self.task_manager.task_repository.get_child_tasks_by_parent_id(
+                orig_task.id
+            )
+            
+            if children:
+                copied_task.has_children = True
+                if self.task_manager.is_async:
+                    await self.db.commit()
+                else:
+                    self.db.commit()
+                
+                for child in children:
+                    await copy_task_recursive(
+                        child, parent_id=copied_task.id, is_root=False
+                    )
+            
+            return copied_task
+        
+        return await copy_task_recursive(original_task, is_root=True)
+    
+    async def _create_snapshot_task(
+        self,
+        original_task: TaskModel,
+        save: bool,
+        reset_kwargs: Dict[str, Any]
+    ) -> TaskModel:
+        """Create a single snapshot task"""
+        # Mark original task as referenced
+        if not original_task.has_references:
+            original_task.has_references = True
+            if self.task_manager.is_async:
+                await self.db.commit()
+            else:
+                self.db.commit()
+        
+        # Create snapshot task (no overrides for snapshot)
+        snapshot_task = await self.task_manager.task_repository.create_task(
+            name=original_task.name,
+            user_id=original_task.user_id,
+            parent_id=reset_kwargs.get("parent_id") if reset_kwargs else None,
+            priority=original_task.priority,
+            dependencies=original_task.dependencies,
+            inputs=original_task.inputs,
+            schemas=original_task.schemas,
+            params=original_task.params,
+            origin_type=TaskOriginType.snapshot,
+            original_task_id=original_task.id,
+            task_tree_id=None,
+            save=save,
+        )
+
+        # Preserve execution state for snapshot
+        snapshot_task.status = original_task.status
+        snapshot_task.progress = original_task.progress
+        snapshot_task.result = original_task.result
+        snapshot_task.started_at = original_task.started_at
+        snapshot_task.completed_at = original_task.completed_at
+        if self.task_manager.is_async:
+            await self.db.commit()
+            await self.db.refresh(snapshot_task)
+        else:
+            self.db.commit()
+            self.db.refresh(snapshot_task)
+        
+        return snapshot_task
+    
+    async def _create_snapshot_tree(
+        self,
+        original_task: TaskModel,
+        save: bool,
+        reset_kwargs: Dict[str, Any]
+    ) -> TaskModel:
+        """Recursively create snapshot tasks for entire subtree"""
+        id_mapping: Dict[str, str] = {}
+        
+        async def snapshot_task_recursive(
+            orig_task: TaskModel,
+            parent_id: Optional[str] = None,
+            is_root: bool = True,
+        ) -> TaskModel:
+            """Recursively snapshot a task and its children"""
+            # Mark original task as referenced
+            if not orig_task.has_references:
+                orig_task.has_references = True
+                if self.task_manager.is_async:
+                    await self.db.commit()
+                else:
+                    self.db.commit()
+            
+            # Copy dependencies with updated IDs
+            new_dependencies = None
+            if orig_task.dependencies:
+                new_dependencies = []
+                for dep in orig_task.dependencies:
+                    new_dep = dep.copy()
+                    dep_id = dep.get("id")
+                    if dep_id in id_mapping:
+                        new_dep["id"] = id_mapping[dep_id]
+                    new_dependencies.append(new_dep)
+            
+            # Create snapshot task
+            snapshot_task = await self.task_manager.task_repository.create_task(
+                name=orig_task.name,
+                user_id=orig_task.user_id,
+                parent_id=parent_id if not is_root else (reset_kwargs.get("parent_id") if reset_kwargs else None),
+                priority=orig_task.priority,
+                dependencies=new_dependencies,
+                inputs=orig_task.inputs,
+                schemas=orig_task.schemas,
+                params=orig_task.params,
+                origin_type=TaskOriginType.snapshot,
+                original_task_id=orig_task.id,
+                task_tree_id=None,
+                save=save,
+            )
+            
+            id_mapping[orig_task.id] = snapshot_task.id
+            
+            # Snapshot children
+            children = await self.task_manager.task_repository.get_child_tasks_by_parent_id(
+                orig_task.id
+            )
+            
+            if children:
+                snapshot_task.has_children = True
+                if self.task_manager.is_async:
+                    await self.db.commit()
+                else:
+                    self.db.commit()
+                
+                for child in children:
+                    await snapshot_task_recursive(
+                        child, parent_id=snapshot_task.id, is_root=False
+                    )
+            
+            return snapshot_task
+        
+        return await snapshot_task_recursive(original_task, is_root=True)
+    
+    async def _create_mixed_tree(
+        self,
+        original_task: TaskModel,
+        save: bool,
+        link_task_ids: Set[str],
+        reset_kwargs: Dict[str, Any]
+    ) -> TaskModel:
+        """Recursively create mixed tree (copy + link)"""
+        id_mapping: Dict[str, str] = {}
+        
+        async def mixed_task_recursive(
+            orig_task: TaskModel,
+            parent_id: Optional[str] = None,
+            is_root: bool = True,
+        ) -> TaskModel:
+            """Recursively create mixed tasks"""
+            should_link = orig_task.id in link_task_ids
+            
+            # Mark original task as referenced
+            if not orig_task.has_references:
+                orig_task.has_references = True
+                if self.task_manager.is_async:
+                    await self.db.commit()
+                else:
+                    self.db.commit()
+            
+            # Determine origin type
+            origin_type = TaskOriginType.link if should_link else TaskOriginType.copy
+            
+            # Extract field overrides (only for copy, not link)
+            task_data = self._extract_field_overrides(
+                orig_task, reset_kwargs if not should_link else {}, is_root=is_root
+            )
+            
+            # Copy dependencies with updated IDs
+            new_dependencies = None
+            if orig_task.dependencies:
+                new_dependencies = []
+                for dep in orig_task.dependencies:
+                    new_dep = dep.copy()
+                    dep_id = dep.get("id")
+                    if dep_id in id_mapping:
+                        new_dep["id"] = id_mapping[dep_id]
+                    new_dependencies.append(new_dep)
+            
+            # Create mixed task
+            mixed_task = await self.task_manager.task_repository.create_task(
+                name=task_data.get("name", orig_task.name),
+                user_id=task_data.get("user_id", orig_task.user_id),
+                parent_id=parent_id if not is_root else task_data.get("parent_id"),
+                priority=task_data.get("priority", orig_task.priority),
+                dependencies=new_dependencies,
+                inputs=task_data.get("inputs", orig_task.inputs) if not should_link else orig_task.inputs,
+                schemas=orig_task.schemas,
+                params=task_data.get("params", orig_task.params) if not should_link else orig_task.params,
+                origin_type=origin_type,
+                original_task_id=orig_task.id,
+                task_tree_id=None,
+                save=save,
+            )
+            
+            # Apply field reset if specified and not linking
+            if reset_kwargs and not should_link:
+                self._reset_task_fields(mixed_task, list(reset_kwargs.keys()))
+            
+            id_mapping[orig_task.id] = mixed_task.id
+            
+            # Mixed children
+            children = await self.task_manager.task_repository.get_child_tasks_by_parent_id(
+                orig_task.id
+            )
+            
+            if children:
+                mixed_task.has_children = True
+                if self.task_manager.is_async:
+                    await self.db.commit()
+                else:
+                    self.db.commit()
+                
+                for child in children:
+                    await mixed_task_recursive(
+                        child, parent_id=mixed_task.id, is_root=False
+                    )
+            
+            return mixed_task
+        
+        return await mixed_task_recursive(original_task, is_root=True)
+    
+    def _reset_task_fields(
+        self,
+        task: TaskModel,
+        field_names: List[str]
+    ) -> None:
+        """
+        Reset specified fields on a task to their reset_kwargs values
+        
+        Args:
+            task: Task to reset fields on
+            field_names: List of field names to reset
+        """
+        # This method is called after the task is created with reset_kwargs
+        # The reset_kwargs are already applied during task creation via _extract_field_overrides
+        # This is a placeholder for any post-creation field resets if needed
+        pass
+    
+    def _extract_field_overrides(
+        self,
+        original_task: TaskModel,
+        reset_kwargs: Dict[str, Any],
+        is_root: bool
+    ) -> Dict[str, Any]:
+        """
+        Extract field overrides from reset_kwargs
+        
+        Args:
+            original_task: Original task
+            reset_kwargs: Field overrides
+            is_root: Whether this is a root task
+            
+        Returns:
+            Dictionary of field overrides
+        """
+        overrides = {}
+        
+        # Apply overrides to root and children (parent_id only for root)
+        allowed_keys = {"name", "user_id", "priority", "inputs", "params"}
+        if is_root:
+            allowed_keys.add("parent_id")
+        for key, value in reset_kwargs.items():
+            if key in allowed_keys:
+                overrides[key] = value
+        
+        return overrides
+    
+    async def _validate_no_external_dependencies(self, task: TaskModel) -> None:
+        """
+        Validate that task and its subtree have no dependencies outside the subtree
+        
+        Args:
+            task: Root task of the subtree to validate
+            
+        Raises:
+            ValueError: If any task in the subtree depends on tasks outside the subtree
+        """
+        # Collect all tasks in the subtree
+        subtree_tasks = await self._collect_subtree_tasks(task.id)
+        subtree_task_ids = {t.id for t in subtree_tasks}
+        
+        # Check each task's dependencies
+        for subtree_task in subtree_tasks:
+            if not subtree_task.dependencies:
+                continue
+            
+            for dep in subtree_task.dependencies:
+                dep_id = dep.get("id")
+                if not dep_id:
+                    continue
+                
+                # Check if dependency is outside the subtree
+                if dep_id not in subtree_task_ids:
+                    raise ValueError(
+                        f"Task '{subtree_task.name}' (id: {subtree_task.id}) has dependency "
+                        f"on task '{dep_id}' which is outside the subtree rooted at '{task.name}' "
+                        f"(id: {task.id}). Cannot copy/snapshot a subtree with external dependencies."
+                    )
+        
+        logger.debug(
+            f"Validated task '{task.name}' (id: {task.id}) subtree has no external dependencies"
+        )
+    
+    async def _promote_to_independent_tree(self, root_task: TaskModel) -> None:
+        """
+        Promote a task subtree to an independent tree
+        
+        Args:
+            root_task: Root task of the subtree to promote
+        """
+        # Set root's parent_id to None (making it a true root)
+        root_task.parent_id = None
+        
+        # Set task_tree_id for root and all descendants
+        all_tasks = await self._collect_subtree_tasks(root_task.id)
+        new_tree_id = root_task.id
+        
+        for task in all_tasks:
+            task.task_tree_id = new_tree_id
+        
+        # Commit changes
+        if self.task_manager.is_async:
+            await self.db.commit()
+            for task in all_tasks:
+                await self.db.refresh(task)
+        else:
+            self.db.commit()
+            for task in all_tasks:
+                self.db.refresh(task)
+        
+        logger.info(
+            f"Promoted task '{root_task.name}' (id: {root_task.id}) to independent tree "
+            f"with {len(all_tasks)} total tasks"
+        )
+    
+    async def _collect_subtree_tasks(self, root_task_id: str) -> List[TaskModel]:
+        """
+        Collect all tasks in a subtree rooted at the given task
+        
+        Args:
+            root_task_id: ID of the root task
+            
+        Returns:
+            List[TaskModel]: All tasks in the subtree (including root)
+        """
+        root_task = await self.task_manager.task_repository.get_task_by_id(root_task_id)
+        if not root_task:
+            return []
+        
+        all_tasks = [root_task]
+        
+        async def collect_children(task_id: str):
+            """Recursively collect all child tasks"""
+            children = await self.task_manager.task_repository.get_child_tasks_by_parent_id(task_id)
+            for child in children:
+                all_tasks.append(child)
+                await collect_children(child.id)
+        
+        await collect_children(root_task_id)
+        return all_tasks
 
 
 __all__ = [

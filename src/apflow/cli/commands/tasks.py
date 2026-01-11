@@ -432,85 +432,87 @@ def cancel(
         raise typer.Exit(1)
 
 
-@app.command()
-def copy(
-    task_id: str = typer.Argument(..., help="Task ID to copy"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path for copied task tree"),
-    children: bool = typer.Option(False, "--children", help="Also copy each direct child task with its dependencies"),
-    copy_mode: str = typer.Option("minimal", "--copy-mode", help="Copy mode: 'minimal' (default), 'full', or 'custom'"),
-    custom_task_ids: Optional[str] = typer.Option(None, "--custom-task-ids", help="Comma-separated list of task IDs (required when copy-mode='custom')"),
-    custom_include_children: bool = typer.Option(False, "--custom-include-children", help="Include all children recursively (used when copy-mode='custom')"),
-    reset_fields: Optional[str] = typer.Option(None, "--reset-fields", help="Comma-separated list of field names to reset (e.g., 'status,progress,result')"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Preview task copy without saving to database"),
-):
-    """
-    Create a copy of a task tree for re-execution
-    
-    This command creates a new copy of an existing task tree.
-    
-    Copy modes:
-    - minimal (default): Copies minimal subtree (original_task + children + dependents).
-      All copied tasks are marked as pending for re-execution.
-    - full: Copies complete tree from root. Tasks that need re-execution are marked as pending,
-      unrelated successful tasks are marked as completed with preserved token_usage.
-    - custom: Copies only specified task_ids with auto-include dependencies.
-      Requires --task-ids parameter. Optionally include children with --include-children.
-    
-    When --children is used, each direct child task is also copied with its dependencies.
-    Tasks that depend on multiple copied tasks are only copied once (deduplication).
-    
-    The copied tasks are linked to the original task via original_task_id field.
-    
-    Args:
-        task_id: ID of the task to copy (can be root or any task in tree)
-        output: Optional output file path to save the copied task tree JSON
-        children: If True, also copy each direct child task with its dependencies
-        copy_mode: Copy mode - "minimal" (default), "full", or "custom"
-        custom_task_ids: Comma-separated list of task IDs (required when copy-mode='custom')
-        custom_include_children: Include all children recursively (used when copy-mode='custom')
-        reset_fields: Comma-separated list of field names to reset
-        dry_run: Preview task copy without saving to database
-    """
-    try:
-        if copy_mode not in ("minimal", "full", "custom"):
-            typer.echo(f"Error: Invalid copy_mode '{copy_mode}'. Must be 'minimal', 'full', or 'custom'", err=True)
-            raise typer.Exit(1)
-        
-        if copy_mode == "custom" and not custom_task_ids:
-            typer.echo("Error: --custom-task-ids is required when copy-mode='custom'", err=True)
-            raise typer.Exit(1)
-        
-        # Parse custom_task_ids if provided
-        parsed_custom_task_ids = None
-        if custom_task_ids:
-            parsed_custom_task_ids = [tid.strip() for tid in custom_task_ids.split(",") if tid.strip()]
-        
-        # Parse reset_fields if provided
-        parsed_reset_fields = None
-        if reset_fields:
-            parsed_reset_fields = [field.strip() for field in reset_fields.split(",") if field.strip()]
-        
-        # Convert dry_run to save parameter
-        save = not dry_run
-        using_api = should_use_api()
-        log_api_usage("copy", using_api)
+def _clone_command(
+    task_id: str,
+    output: Optional[Path],
+    children: bool,
+    origin_type: str,
+    recursive: bool,
+    link_task_ids: Optional[str],
+    reset_fields: Optional[str],
+    dry_run: bool,
+    copy_mode: Optional[str],
+    custom_task_ids: Optional[str],
+    invoked_via_alias: bool,
+) -> None:
+    """Shared implementation for tasks.clone and alias tasks.copy."""
+    command_name = "copy" if invoked_via_alias else "clone"
+    command_label = "Task copy (alias for clone)" if invoked_via_alias else "Task clone"
 
-        async def try_api_copy():
+    try:
+        # Handle legacy parameter mapping
+        if copy_mode:
+            typer.echo("⚠️  Warning: --copy-mode is deprecated, use --origin-type instead", err=True)
+            if copy_mode == "custom":
+                origin_type = "mixed"
+            elif copy_mode in ("minimal", "full"):
+                origin_type = "copy"
+
+        if custom_task_ids:
+            typer.echo("⚠️  Warning: --custom-task-ids is deprecated, use --link-task-ids instead", err=True)
+            link_task_ids = custom_task_ids
+
+        # Validate origin_type
+        if origin_type not in ("copy", "link", "snapshot", "mixed"):
+            typer.echo(
+                f"Error: Invalid origin_type '{origin_type}'. Must be 'copy', 'link', 'snapshot', or 'mixed'",
+                err=True,
+            )
+            raise typer.Exit(1)
+
+        if origin_type == "mixed" and not link_task_ids:
+            typer.echo("Error: --link-task-ids is required when origin-type='mixed'", err=True)
+            raise typer.Exit(1)
+
+        # Parse link_task_ids if provided
+        parsed_link_task_ids = None
+        if link_task_ids:
+            parsed_link_task_ids = [tid.strip() for tid in link_task_ids.split(",") if tid.strip()]
+
+        # Parse reset_fields as key=value pairs
+        reset_kwargs = {}
+        if reset_fields:
+            for field_pair in reset_fields.split(","):
+                if "=" in field_pair:
+                    key, value = field_pair.split("=", 1)
+                    reset_kwargs[key.strip()] = value.strip()
+                else:
+                    typer.echo(
+                        f"⚠️  Warning: Invalid reset field format '{field_pair}', expected 'key=value'",
+                        err=True,
+                    )
+
+        save = not dry_run
+        verb_map = {"copy": "copied", "link": "linked", "snapshot": "snapshotted", "mixed": "cloned"}
+        verb = verb_map.get(origin_type, f"{origin_type}ed")
+        using_api = should_use_api()
+        log_api_usage(command_name, using_api)
+
+        async def try_api_clone():
             async with get_api_client_if_configured() as client:
                 if not client:
                     return None
 
-                return await client.copy_task(
+                return await client.clone_task(
                     task_id=task_id,
-                    children=children,
-                    copy_mode=copy_mode,
-                    custom_task_ids=parsed_custom_task_ids,
-                    custom_include_children=custom_include_children,
-                    reset_fields=parsed_reset_fields,
+                    origin_type=origin_type,
+                    recursive=recursive,
+                    link_task_ids=parsed_link_task_ids,
+                    reset_fields=reset_kwargs,
                     save=save,
                 )
 
-        api_response = run_async_safe(try_api_copy())
+        api_response = run_async_safe(try_api_clone())
 
         if api_response is not None:
             def _count_dict_tasks(node: dict) -> int:
@@ -528,87 +530,168 @@ def copy(
                 root_task_id = None
 
             if output:
-                with open(output, 'w') as f:
+                with open(output, "w") as f:
                     json.dump(result_dict, f, indent=2)
-                typer.echo(f"Task copy {'preview' if dry_run else 'result'} saved to {output}")
+                typer.echo(f"{command_label} {'preview' if dry_run else 'result'} saved to {output}")
             else:
                 typer.echo(json.dumps(result_dict, indent=2))
 
             if save:
                 typer.echo(
-                    f"\n✅ Successfully copied task {task_id} to new task {root_task_id} "
-                    f"(mode: {copy_mode})"
+                    f"\n✅ Successfully {verb} task {task_id} to new task {root_task_id} "
+                    f"(origin_type: {origin_type}, recursive: {recursive})"
                 )
             else:
                 typer.echo(
-                    f"\n✅ Preview generated: {task_count} tasks (mode: {copy_mode}, not saved)"
+                    f"\n✅ Preview generated: {task_count} tasks (origin_type: {origin_type}, not saved)"
                 )
             return
-        
+
         from apflow.core.storage import get_default_session
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         from apflow.core.config import get_task_model_class
         from apflow.core.execution.task_creator import TaskCreator
-        
+
         db_session = get_default_session()
         task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
-        
-        # Get original task
+
         async def get_original_task():
             task = await task_repository.get_task_by_id(task_id)
             if not task:
                 raise ValueError(f"Task {task_id} not found")
             return task
-        
+
         original_task = run_async_safe(get_original_task())
-        
-        # Create TaskCreator and copy task
+
         task_creator = TaskCreator(db_session)
-        
-        async def copy_task():
-            return await task_creator.create_task_copy(
-                original_task,
-                children=children,
-                copy_mode=copy_mode,
-                custom_task_ids=parsed_custom_task_ids,
-                custom_include_children=custom_include_children,
-                reset_fields=parsed_reset_fields,
-                save=save
+
+        async def clone_task():
+            if origin_type == "link":
+                return await task_creator.from_link(
+                    _original_task=original_task,
+                    _save=save,
+                    _recursive=recursive,
+                    **reset_kwargs,
+                )
+            if origin_type == "snapshot":
+                return await task_creator.from_snapshot(
+                    _original_task=original_task,
+                    _save=save,
+                    _recursive=recursive,
+                    **reset_kwargs,
+                )
+            if origin_type == "mixed":
+                return await task_creator.from_mixed(
+                    _original_task=original_task,
+                    _save=save,
+                    _recursive=recursive,
+                    _link_task_ids=parsed_link_task_ids,
+                    **reset_kwargs,
+                )
+            return await task_creator.from_copy(
+                _original_task=original_task,
+                _save=save,
+                _recursive=recursive,
+                **reset_kwargs,
             )
-        
-        result = run_async_safe(copy_task())
-        
-        # Handle result based on save parameter
+
+        result = run_async_safe(clone_task())
+
         if save:
-            # Convert TaskTreeNode to dict
             result_dict = tree_node_to_dict(result)
-            task_count = 1  # Root task
-            if hasattr(result, 'children'):
+            task_count = 1
+            if hasattr(result, "children"):
                 def count_children(node):
                     return 1 + sum(count_children(child) for child in node.children)
+
                 task_count = count_children(result)
         else:
-            # Task array (already in dict format)
             result_dict = {"tasks": result, "saved": False}
             task_count = len(result)
-        
-        # Output result
+
         if output:
-            with open(output, 'w') as f:
+            with open(output, "w") as f:
                 json.dump(result_dict, f, indent=2)
-            typer.echo(f"Task copy {'preview' if dry_run else 'result'} saved to {output}")
+            typer.echo(f"{command_label} {'preview' if dry_run else 'result'} saved to {output}")
         else:
             typer.echo(json.dumps(result_dict, indent=2))
-        
+
         if save:
-            typer.echo(f"\n✅ Successfully copied task {task_id} to new task {result.task.id} (mode: {copy_mode})")
+            typer.echo(
+                f"\n✅ Successfully {verb} task {task_id} to new task {result.task.id} "
+                f"(origin_type: {origin_type}, recursive: {recursive})"
+            )
         else:
-            typer.echo(f"\n✅ Preview generated: {task_count} tasks (mode: {copy_mode}, not saved)")
-        
+            typer.echo(
+                f"\n✅ Preview generated: {task_count} tasks (origin_type: {origin_type}, not saved)"
+            )
+
     except Exception as e:
         typer.echo(f"Error: {str(e)}", err=True)
-        logger.exception("Error copying task")
+        logger.exception("Error cloning task")
         raise typer.Exit(1)
+
+
+@app.command(name="clone")
+def clone(
+    task_id: str = typer.Argument(..., help="Task ID to clone"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path for cloned task tree"),
+    children: bool = typer.Option(False, "--children", help="Also clone each direct child task with its dependencies"),
+    origin_type: str = typer.Option("copy", "--origin-type", help="Origin type: 'copy' (default), 'link', 'snapshot', or 'mixed'"),
+    recursive: bool = typer.Option(True, "--recursive/--no-recursive", help="Clone/link entire subtree (default: True)"),
+    link_task_ids: Optional[str] = typer.Option(None, "--link-task-ids", help="Comma-separated task IDs to link (for mixed mode)"),
+    reset_fields: Optional[str] = typer.Option(None, "--reset-fields", help="Field overrides as key=value pairs (e.g., 'user_id=new_user,priority=1')"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview task clone without saving to database"),
+    copy_mode: Optional[str] = typer.Option(None, "--copy-mode", help="[DEPRECATED] Use --origin-type instead"),
+    custom_task_ids: Optional[str] = typer.Option(None, "--custom-task-ids", help="[DEPRECATED] Use --link-task-ids instead"),
+):
+    """
+    Create a clone/link/snapshot of a task tree (primary command).
+
+    Origin types: copy (default), link, snapshot, mixed.
+    """
+    return _clone_command(
+        task_id,
+        output,
+        children,
+        origin_type,
+        recursive,
+        link_task_ids,
+        reset_fields,
+        dry_run,
+        copy_mode,
+        custom_task_ids,
+        invoked_via_alias=False,
+    )
+
+
+@app.command(name="copy", help="Alias for tasks.clone")
+def copy(
+    task_id: str = typer.Argument(..., help="Task ID to copy"),
+    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path for copied task tree"),
+    children: bool = typer.Option(False, "--children", help="Also copy each direct child task with its dependencies"),
+    origin_type: str = typer.Option("copy", "--origin-type", help="Origin type: 'copy' (default), 'link', 'snapshot', or 'mixed'"),
+    recursive: bool = typer.Option(True, "--recursive/--no-recursive", help="Copy/link entire subtree (default: True)"),
+    link_task_ids: Optional[str] = typer.Option(None, "--link-task-ids", help="Comma-separated task IDs to link (for mixed mode)"),
+    reset_fields: Optional[str] = typer.Option(None, "--reset-fields", help="Field overrides as key=value pairs (e.g., 'user_id=new_user,priority=1')"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Preview task copy without saving to database"),
+    copy_mode: Optional[str] = typer.Option(None, "--copy-mode", help="[DEPRECATED] Use --origin-type instead"),
+    custom_task_ids: Optional[str] = typer.Option(None, "--custom-task-ids", help="[DEPRECATED] Use --link-task-ids instead"),
+):
+    """Backward-compatible alias for tasks.clone."""
+    return _clone_command(
+        task_id,
+        output,
+        children,
+        origin_type,
+        recursive,
+        link_task_ids,
+        reset_fields,
+        dry_run,
+        copy_mode,
+        custom_task_ids,
+        invoked_via_alias=True,
+    )
 
 
 @app.command()

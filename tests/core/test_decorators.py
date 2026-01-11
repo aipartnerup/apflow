@@ -317,6 +317,8 @@ class TestDecoratorIntegration:
     @pytest.mark.asyncio
     async def test_full_decorator_workflow(self):
         """Test complete workflow using all decorators"""
+        from apflow.core.config import clear_config
+        clear_config()
         try:
             from apflow.api.a2a.agent_executor import AIPartnerUpFlowAgentExecutor
         except ImportError:

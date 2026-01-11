@@ -295,27 +295,48 @@ Database operations for tasks.
 - For API-level deletion with validation, use the `tasks.delete` JSON-RPC endpoint via `TaskRoutes.handle_task_delete()`
 - The API endpoint validates that all tasks (task + children) are pending and checks for dependencies before deletion
 
+
 ## TaskCreator
 
-Create task trees from task arrays.
+Create and manage task trees, links, copies, and snapshots.
 
 ### Main Methods
 
-- `create_task_tree_from_array(tasks)`: Create task tree from array of task dictionaries
-- `create_task_copy(original_task, children=False, copy_mode="minimal", custom_task_ids=None, custom_include_children=False, reset_fields=None, save=True)`: Create a copy of an existing task tree for re-execution.
-  - `children` (bool): If `True`, also copy each direct child task with its dependencies (deduplication ensures tasks depending on multiple copied tasks are only copied once). Default: `False`.
-  - `copy_mode` (str): Copy mode - `"minimal"` (default), `"full"`, or `"custom"`.
-    - `"minimal"`: Copies minimal subtree (original_task + children + dependents). All copied tasks are marked as pending for re-execution.
-    - `"full"`: Copies complete tree from root. Tasks that need re-execution are marked as pending, unrelated successful tasks are marked as completed with preserved token_usage.
-    - `"custom"`: Copies only specified tasks. Requires `custom_task_ids` parameter.
-  - `custom_task_ids` (list[str], optional): List of task IDs to copy. Required when `copy_mode="custom"`. Only tasks with IDs in this list (and their dependencies) will be copied.
-  - `custom_include_children` (bool): If `True`, also include all children recursively when using `copy_mode="custom"`. Default: `False`.
-  - `reset_fields` (list[str], optional): List of field names to reset during copy. Common fields: `["status", "progress", "result", "error"]`. Default: `None` (uses mode-specific defaults).
-  - `save` (bool): If `True` (default), saves copied tasks to database and returns `TaskTreeNode`. If `False`, returns task array without saving to database (suitable for preview or direct use with `tasks.create`).
-  - **Returns**: `TaskTreeNode` when `save=True`, or `List[Dict[str, Any]]` (task array) when `save=False`.
-  - **Note**: All copied tasks receive new UUIDs for clear task tree relationships. Dependencies correctly reference new task IDs within the copied tree.
+- `create_task_tree_from_array(tasks)`: Create a task tree from an array of task dictionaries.
+- `from_link(original_task, ...)`: Create a new task as a reference (link) to an existing task. Returns a linked task or tree. Useful for deduplication and sharing results.
+- `from_copy(original_task, ...)`: Create a deep copy of an existing task or task tree. Supports copying children, dependencies, and selective subtree copying. Returns a new task or tree with new IDs.
+- `from_snapshot(original_task, ...)`: Create a read-only snapshot of an existing task or tree. Snapshots are immutable and preserve the state at the time of creation.
+- `from_mixed(original_task, ...)`: Create a new tree mixing links and copies, e.g., copy some tasks and link others for advanced workflows.
 
-**See**: `src/apflow/core/execution/task_creator.py` for implementation and `tests/core/execution/test_task_creator.py` for examples.
+#### Example Usage
+
+```python
+from apflow.core.execution import TaskCreator
+
+# Assume db is a SQLAlchemy session
+creator = TaskCreator(db)
+
+# 1. Create a task tree from an array
+tasks = [
+        {"id": "task_1", "name": "Task 1", "user_id": "user_123"},
+        {"id": "task_2", "name": "Task 2", "user_id": "user_123", "parent_id": "task_1"}
+]
+tree = await creator.create_task_tree_from_array(tasks)
+
+# 2. Create a linked task (reference)
+linked = await creator.from_link(original_task, user_id="user_123", parent_id=None)
+
+# 3. Create a deep copy (optionally with children)
+copied = await creator.from_copy(original_task, user_id="user_123", copy_children=True)
+
+# 4. Create a snapshot (frozen, read-only)
+snapshot = await creator.from_snapshot(original_task, user_id="user_123", copy_children=True)
+
+# 5. Mixed: copy some, link others
+mixed = await creator.from_mixed(original_task, user_id="user_123", link_task_ids=[...])
+```
+
+**See**: `src/apflow/core/execution/task_creator.py` for implementation and `tests/core/execution/test_task_creator_origin_types.py` for examples.
 
 ## TaskModel
 

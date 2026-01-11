@@ -252,13 +252,13 @@ def generate_openapi_schema(
                                             "id": "delete-request-1",
                                         },
                                     },
-                                    "copyTask": {
-                                        "summary": "Copy Task Tree",
+                                    "cloneTask": {
+                                        "summary": "Clone Task Tree (alias: tasks.copy)",
                                         "value": {
                                             "jsonrpc": "2.0",
-                                            "method": "tasks.copy",
+                                            "method": "tasks.clone",
                                             "params": {"task_id": "task-abc-123"},
-                                            "id": "copy-request-1",
+                                            "id": "clone-request-1",
                                         },
                                     },
                                     "getTaskTree": {

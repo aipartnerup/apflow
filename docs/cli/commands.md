@@ -325,41 +325,45 @@ Delete and keep logs:
 apflow tasks delete task-001 --force --keep-logs
 ```
 
-### apflow tasks copy
 
-Copy a task:
+### apflow tasks clone
+
+Clone (copy/link/snapshot) a task tree. `tasks copy` is a backward-compatible alias.
 
 ```bash
-apflow tasks copy <task_id> [OPTIONS]
+apflow tasks clone <task_id> [OPTIONS]
 ```
 
 **Options**:
-- `--task-id <id>` - New task ID (auto-generated if not provided)
-- `--batch-id <id>` - Target batch
-- `--increment-name` - Append " (copy)" to name
-- `--clear-status` - Start with pending status
+- `--origin-type <type>` - Origin type: `copy` (default), `link`, `snapshot`, or `mixed`
+- `--recursive/--no-recursive` - Clone/link entire subtree (default: True)
+- `--link-task-ids <ids>` - Comma-separated task IDs to link (for mixed mode)
+- `--reset-fields <fields>` - Field overrides as key=value pairs (e.g., 'user_id=new_user,priority=1')
+- `--dry-run` - Preview clone without saving to database
 
 **Examples**:
 
-Copy task:
+Clone task (default copy mode):
 ```bash
-apflow tasks copy task-001
+apflow tasks clone task-001
 ```
 
-Copy to new batch:
+Clone to new batch (with field override):
 ```bash
-apflow tasks copy task-001 --batch-id batch-002
+apflow tasks clone task-001 --reset-fields batch_id=batch-002
 ```
 
-Copy with incremented name:
+Clone with incremented name:
 ```bash
-apflow tasks copy task-001 --increment-name
+apflow tasks clone task-001 --reset-fields name="Task (copy)"
 ```
 
-Copy and reset status:
+Clone and reset status:
 ```bash
-apflow tasks copy task-001 --clear-status
+apflow tasks clone task-001 --reset-fields status=pending
 ```
+
+> **Note:** `apflow tasks copy` is a supported alias for backward compatibility and accepts the same options.
 
 ## Flow Management
 
