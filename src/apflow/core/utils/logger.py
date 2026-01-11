@@ -11,9 +11,9 @@ Rationale:
 """
 
 # Re-export from top-level logger to maintain backward compatibility
-from apflow.logger import get_logger, ColoredFormatter
+from apflow.logger import get_logger, setup_logging
 
-__all__ = ["get_logger", "ColoredFormatter"]
+__all__ = ["get_logger", "setup_logging"]
 
 
 
