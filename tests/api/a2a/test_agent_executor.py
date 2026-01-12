@@ -1060,7 +1060,7 @@ class TestAgentExecutor:
         }
         
         with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+             patch.object(executor.task_executor, 'cancel_task', new_callable=AsyncMock) as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
             
@@ -1096,7 +1096,7 @@ class TestAgentExecutor:
         }
         
         with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+             patch.object(executor.task_executor, 'cancel_task', new_callable=AsyncMock) as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
             
@@ -1121,7 +1121,7 @@ class TestAgentExecutor:
         }
         
         with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+             patch.object(executor.task_executor, 'cancel_task', new_callable=AsyncMock) as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
             
@@ -1145,7 +1145,7 @@ class TestAgentExecutor:
         }
         
         with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+             patch.object(executor.task_executor, 'cancel_task', new_callable=AsyncMock) as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
             
@@ -1173,7 +1173,7 @@ class TestAgentExecutor:
         }
         
         with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+             patch.object(executor.task_executor, 'cancel_task', new_callable=AsyncMock) as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
             
@@ -1202,7 +1202,7 @@ class TestAgentExecutor:
         }
         
         with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+             patch.object(executor.task_executor, 'cancel_task', new_callable=AsyncMock) as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
             
@@ -1230,7 +1230,7 @@ class TestAgentExecutor:
         }
         
         with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+             patch.object(executor.task_executor, 'cancel_task', new_callable=AsyncMock) as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
             
@@ -1255,7 +1255,7 @@ class TestAgentExecutor:
         }
         
         with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+             patch.object(executor.task_executor, 'cancel_task', new_callable=AsyncMock) as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
             
@@ -1283,7 +1283,7 @@ class TestAgentExecutor:
         }
         
         with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+             patch.object(executor.task_executor, 'cancel_task', new_callable=AsyncMock) as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
             
@@ -1350,7 +1350,7 @@ class TestAgentExecutor:
         }
         
         with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+             patch.object(executor.task_executor, 'cancel_task', new_callable=AsyncMock) as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
             
@@ -1384,7 +1384,7 @@ class TestAgentExecutor:
         }
         
         with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
-             patch.object(executor.task_executor, 'cancel_task') as mock_cancel_task:
+             patch.object(executor.task_executor, 'cancel_task', new_callable=AsyncMock) as mock_cancel_task:
             mock_get_session.return_value = Mock()
             mock_cancel_task.return_value = cancel_result
             

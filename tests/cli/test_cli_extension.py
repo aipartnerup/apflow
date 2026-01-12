@@ -9,9 +9,6 @@ from apflow.cli.decorators import cli_register, get_cli_registry, _cli_registry
 from apflow.cli.extension import CLIExtension
 
 
-runner = CliRunner()
-
-
 class TestCLIExtension:
     """Test CLIExtension base class."""
 
@@ -38,6 +35,7 @@ class TestCLIExtension:
 
     def test_cli_extension_can_add_commands(self):
         """Test that CLIExtension can add commands."""
+        runner = CliRunner()
         ext = CLIExtension(no_args_is_help=False)
 
         @ext.command()
@@ -139,6 +137,7 @@ class TestCliRegisterDecorator:
 
     def test_cli_register_functional_command(self):
         """Test that registered CLI extension works with commands."""
+        runner = CliRunner()
         @cli_register(name="func-test")
         class FuncTestCommand(CLIExtension):
             pass
@@ -211,6 +210,7 @@ class TestCLIExtensionIntegration:
 
     def test_cli_extension_with_multiple_commands(self):
         """Test CLI extension with multiple commands."""
+        runner = CliRunner()
         @cli_register(name="multi-cmd")
         class MultiCommand(CLIExtension):
             pass
@@ -236,6 +236,7 @@ class TestCLIExtensionIntegration:
 
     def test_cli_extension_help_output(self):
         """Test CLI extension help output."""
+        runner = CliRunner()
         @cli_register(name="help-test", help="Test help description")
         class HelpTestCommand(CLIExtension):
             pass

@@ -26,6 +26,7 @@ from apflow.core.extensions.manager import initialize_extensions, _load_custom_t
 from apflow.api.protocols import get_protocol_from_env
 from apflow.core.config_manager import get_config_manager
 from apflow.core.storage.factory import get_default_session
+from apflow.core.extensions.manager import load_extension_by_name
 from apflow.logger import get_logger
 
 # Initialize logger early
@@ -368,5 +369,7 @@ def main(**kwargs):
     )
 
 
+    # Auto-initialize core extension on module import
+    load_extension_by_name("core")
 if __name__ == "__main__":
     main()

@@ -216,10 +216,10 @@ def flow(
         
         typer.echo(f"Executing {len(tasks_list)} task(s)...")
         
-        # Initialize extensions before executing tasks
-        # This ensures all executors (including stdio extensions) are registered
-        from apflow.core.extensions.manager import initialize_extensions
-        initialize_extensions()
+        from apflow.core.extensions.manager import load_extension_by_name
+        load_extension_by_name("core")
+        # Extensions are loaded on-demand by TaskManager._load_executor()
+        # No need to pre-load all extensions - this improves CLI startup performance
         
         # Group tasks by root (handle multiple unrelated tasks)
         task_groups = _group_tasks_by_root(tasks_list)

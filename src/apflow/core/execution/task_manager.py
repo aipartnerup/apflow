@@ -723,6 +723,10 @@ class TaskManager:
         Returns:
             Refreshed task if not cancelled, None if task was cancelled
         """
+        # Refresh session state before query to ensure we see latest database state
+        # This prevents blocking in sync sessions when there are uncommitted transactions
+        if not self.is_async:
+            self.db.expire_all()
         task = await self.task_repository.get_task_by_id(task_id)
         if not task:
             raise ValueError(f"Task {task_id} not found")
@@ -829,6 +833,10 @@ class TaskManager:
             task_result: Result from executor
         """
         # Check if task was cancelled during execution
+        # Refresh session state before query to ensure we see latest database state
+        # This prevents blocking in sync sessions when there are uncommitted transactions
+        if not self.is_async:
+            self.db.expire_all()
         task = await self.task_repository.get_task_by_id(task_id)
         if task and task.status == "cancelled":
             logger.info(f"Task {task_id} was cancelled during execution, stopping")
@@ -862,6 +870,10 @@ class TaskManager:
         )
         
         # Refresh and notify
+        # Refresh session state before query to ensure we see latest database state
+        # This prevents blocking in sync sessions when there are uncommitted transactions
+        if not self.is_async:
+            self.db.expire_all()
         task = await self.task_repository.get_task_by_id(task_id)
         if not task:
             raise ValueError(f"Task {task_id} not found after completion update")
@@ -1183,6 +1195,10 @@ class TaskManager:
             
             # Execute post-hooks FIRST (before triggering dependent tasks)
             # This ensures immediate response and doesn't wait for dependent tasks
+            # Refresh session state before query to ensure we see latest database state
+            # This prevents blocking in sync sessions when there are uncommitted transactions
+            if not self.is_async:
+                self.db.expire_all()
             refreshed_task = await self.task_repository.get_task_by_id(completed_task.id)
             if refreshed_task and refreshed_task.status == "completed":
                 # Get the inputs that were used for execution
@@ -1297,6 +1313,14 @@ class TaskManager:
         if not executor_id:
             raise ExecutorError(f"Executor ID not specified for task {task.id}")
 
+        # Check permission BEFORE loading executor to avoid unnecessary work
+        # and provide clearer error messages
+        if not self._check_executor_permission(executor_id):
+            from apflow.core.extensions.manager import get_allowed_executor_ids
+            allowed = get_allowed_executor_ids()
+            error_msg = f"Executor '{executor_id}' is not allowed by APFLOW_EXTENSIONS configuration for task {task.id}"
+            raise ExecutorError(error_msg)
+
         # Get executor from unified extension registry
         registry = get_registry()
         extension = registry.get_by_id(executor_id)
@@ -1312,10 +1336,6 @@ class TaskManager:
         
         if extension.category != ExtensionCategory.EXECUTOR:
             raise ExecutorError(f"Executor '{executor_id}' ({extension.category}) is not an executor for task {task.id}")
-        
-        # Check permission before proceeding
-        if not self._check_executor_permission(executor_id):
-            raise ExecutorError(f"Executor '{executor_id}' is not allowed by APFLOW_EXTENSIONS configuration for task {task.id}")
     
         return extension
     

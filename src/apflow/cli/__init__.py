@@ -1,9 +1,9 @@
 """CLI tools for apflow"""
 
-from apflow.cli.decorators import cli_register, get_cli_registry
+from apflow.cli.decorators import cli_register, get_cli_registry, get_cli_group
 from apflow.cli.extension import CLIExtension
 
-__all__ = ["CLIExtension", "cli_register", "get_cli_registry", "app"]
+__all__ = ["CLIExtension", "cli_register", "get_cli_registry", "get_cli_group", "app"]
 
 
 def __getattr__(name):

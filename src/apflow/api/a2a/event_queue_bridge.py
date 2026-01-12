@@ -37,6 +37,8 @@ class EventQueueBridge:
     
     def _start_bridge_task(self):
         """Start background task to bridge updates"""
+        self._closed = False
+        
         async def bridge_worker():
             while True:
                 try:
@@ -50,8 +52,17 @@ class EventQueueBridge:
                     await self.event_queue.enqueue_event(event)
                     
                     self._update_queue.task_done()
+                except asyncio.CancelledError:
+                    # Task was cancelled, exit gracefully
+                    break
                 except Exception as e:
-                    logger.error(f"Error in bridge worker: {str(e)}")
+                    # Only log if not closed to prevent deadlocks during gc.collect()
+                    if not self._closed:
+                        try:
+                            logger.error(f"Error in bridge worker: {str(e)}")
+                        except Exception:
+                            # If logging fails (e.g., during cleanup), just ignore
+                            pass
         
         self._bridge_task = asyncio.create_task(bridge_worker())
     
@@ -134,7 +145,36 @@ class EventQueueBridge:
     
     async def close(self):
         """Close bridge and stop background task"""
-        await self._update_queue.put(None)  # Sentinel to stop worker
-        if self._bridge_task:
-            await self._bridge_task
+        if self._closed:
+            return
+        
+        self._closed = True
+        
+        # Cancel the task first to stop it immediately
+        if self._bridge_task and not self._bridge_task.done():
+            self._bridge_task.cancel()
+            try:
+                await self._bridge_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
+        
+        # Put sentinel to ensure queue is drained (in case task wasn't cancelled)
+        try:
+            await self._update_queue.put(None)
+        except Exception:
+            pass
+    
+    def __del__(self):
+        """Cleanup when object is garbage collected"""
+        # Mark as closed to prevent logging during cleanup
+        self._closed = True
+        
+        # Cancel task if it exists and is not done
+        if self._bridge_task and not self._bridge_task.done():
+            try:
+                self._bridge_task.cancel()
+            except Exception:
+                pass
 

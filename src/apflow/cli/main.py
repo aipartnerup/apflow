@@ -124,7 +124,23 @@ class LazyGroup(click.Group):
                         continue
                     
                     # Load the plugin
-                    typer_app = entry_point.load()
+                    plugin_obj = entry_point.load()
+                    
+                    # Handle different plugin types
+                    import typer
+                    if isinstance(plugin_obj, typer.Typer):
+                        # Already a Typer app - register directly
+                        typer_app = plugin_obj
+                    elif callable(plugin_obj):
+                        # Function - wrap as root command (same logic as cli_register)
+                        typer_app = typer.Typer()
+                        typer_app.command()(plugin_obj)
+                    else:
+                        logger.warning(
+                            f"CLI plugin '{plugin_name}' is neither a Typer app nor a callable. "
+                            f"Skipping entry point."
+                        )
+                        continue
                     
                     # Register the plugin
                     registry[plugin_name] = typer_app
@@ -194,11 +210,23 @@ class LazyGroup(click.Group):
                 # Check if Typer app has subcommands (registered_commands)
                 # If it has subcommands, use get_group() to return a Click Group
                 # Otherwise, use get_command() to return a single Click command
-                if hasattr(typer_app, 'registered_commands') and len(typer_app.registered_commands) > 0:
-                    # Has subcommands - return as a group
+                # get_command() can handle both root commands (with callback) and single commands
+                has_commands = hasattr(typer_app, 'registered_commands') and len(typer_app.registered_commands) > 0
+                
+                # Distinguish between:
+                # 1. True group: multiple named commands (e.g., tasks list, tasks get)
+                # 2. Root command: single command with None name (created via app.command() without name)
+                is_root_command = (
+                    has_commands and 
+                    len(typer_app.registered_commands) == 1 and
+                    typer_app.registered_commands[0].name is None
+                )
+                
+                if has_commands and not is_root_command:
+                    # Has multiple subcommands or named subcommands - return as a group
                     click_cmd = typer.main.get_group(typer_app)
                 else:
-                    # No subcommands - return as a single command
+                    # Single root command (with None name) or no commands - return as a single command
                     click_cmd = typer.main.get_command(typer_app)
                 
                 # Cache the loaded command

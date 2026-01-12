@@ -6,8 +6,19 @@ import pytest_asyncio
 import sys
 import os
 import uuid
+import signal
 from unittest.mock import Mock, AsyncMock, patch
 from typing import Optional
+
+# IMPORTANT: Set environment variables BEFORE any imports that might use them
+# This prevents CrewAI, LiteLLM, and OpenTelemetry from starting background threads
+os.environ.setdefault("CREWAI_TRACING_ENABLED", "false")
+os.environ.setdefault("CREWAI_DISABLE_EVENT_BUS", "true")
+os.environ.setdefault("OTEL_SDK_DISABLED", "true")
+os.environ.setdefault("OTEL_PYTHON_DISABLED_INSTRUMENTATIONS", "all")
+os.environ.setdefault("LITELLM_LOG", "ERROR")
+os.environ.setdefault("LITELLM_TURN_OFF_MESSAGE_LOGGING", "true")
+os.environ.setdefault("LITELLM_TURN_OFF_LOGGING", "true")
 
 # Add project root to Python path for development
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -29,6 +40,8 @@ except ImportError:
 # Auto-discover built-in extensions for tests
 # This ensures extensions are registered before tests run
 # Must be imported before other modules that use the registry
+# NOTE: CrewAI and LLM extensions are NOT imported here to prevent background threads
+# They will be imported lazily when needed by specific tests
 try:
     from apflow.extensions.stdio import SystemInfoExecutor, CommandExecutor  # noqa: F401
 except ImportError:
@@ -39,10 +52,12 @@ try:
 except ImportError:
     pass  # Extension not available, tests will handle this
 
-try:
-    from apflow.extensions.crewai import CrewaiExecutor, BatchCrewaiExecutor  # noqa: F401
-except ImportError:
-    pass  # Extension not available, tests will handle this
+# DO NOT import CrewAI here - it starts EventBus background thread immediately
+# CrewAI extensions will be imported lazily when needed by tests
+# try:
+#     from apflow.extensions.crewai import CrewaiExecutor, BatchCrewaiExecutor  # noqa: F401
+# except ImportError:
+#     pass  # Extension not available, tests will handle this
 
 try:
     from apflow.extensions.core import AggregateResultsExecutor  # noqa: F401
@@ -54,10 +69,12 @@ try:
 except ImportError:
     pass  # Extension not available, tests will handle this
 
-try:
-    from apflow.extensions.llm import LLMExecutor  # noqa: F401
-except ImportError:
-    pass  # Extension not available, tests will handle this
+# DO NOT import LLM here - it starts OpenTelemetry background threads immediately
+# LLM extensions will be imported lazily when needed by tests
+# try:
+#     from apflow.extensions.llm import LLMExecutor  # noqa: F401
+# except ImportError:
+#     pass  # Extension not available, tests will handle this
 
 from sqlalchemy import create_engine, text  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
@@ -94,10 +111,8 @@ def pytest_configure(config):
     )
     config.addinivalue_line("markers", "manual: mark test file as manual only (skip by default)")
 
-    # Disable CrewAI execution traces prompt in tests
-    # This prevents the interactive "Would you like to view your execution traces?" prompt
-    # that appears when CrewAI executes crews, which would cause tests to hang
-    os.environ.setdefault("CREWAI_TRACING_ENABLED", "false")
+    # Note: Environment variables are set at module level (before imports)
+    # to prevent CrewAI, LiteLLM, and OpenTelemetry from starting background threads
 
 
 def _get_test_database_url() -> Optional[str]:
@@ -162,8 +177,16 @@ def sync_db_session(temp_db_path):
         session = SessionLocal()
         
         try:
+            # Ensure session is clean at the start of each test
+            session.expire_all()
             yield session
         finally:
+            # Cleanup: Expire all objects to clear session cache
+            try:
+                session.expire_all()
+            except Exception:
+                pass
+            
             # Cleanup: Rollback any pending transactions first
             try:
                 session.rollback()
@@ -184,6 +207,12 @@ def sync_db_session(temp_db_path):
                 except Exception:
                     pass
                 logger.debug(f"Cleanup failed (non-critical): {e}")
+            
+            # Cleanup: Expire all objects again after cleanup
+            try:
+                session.expire_all()
+            except Exception:
+                pass
             
             # Close session and dispose engine
             try:
@@ -219,8 +248,16 @@ def sync_db_session(temp_db_path):
         session = SessionLocal()
         
         try:
+            # Ensure session is clean at the start of each test
+            session.expire_all()
             yield session
         finally:
+            # Cleanup: Expire all objects to clear session cache
+            try:
+                session.expire_all()
+            except Exception:
+                pass
+            
             # Cleanup: Rollback any pending transactions
             try:
                 session.rollback()
@@ -234,13 +271,29 @@ def sync_db_session(temp_db_path):
                 session.execute(text(f"DELETE FROM {TASK_TABLE_NAME}"))
                 session.commit()
             except Exception:
-                session.rollback()
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
+            
+            # Cleanup: Expire all objects again after cleanup
+            try:
+                session.expire_all()
+            except Exception:
+                pass
             
             # Close session and dispose engine
-            session.close()
-            engine.dispose()
+            try:
+                session.close()
+            except Exception:
+                pass
             
-            # Remove database file
+            try:
+                engine.dispose()
+            except Exception:
+                pass
+            
+            # Remove database file (only after session is closed)
             try:
                 if temp_db_path and os.path.exists(temp_db_path):
                     os.unlink(temp_db_path)
@@ -496,6 +549,41 @@ def reset_storage_singleton():
 
 
 @pytest.fixture(autouse=True)
+def ensure_clean_db_session(request):
+    """
+    Ensure database session is clean at the start of each test.
+    
+    This fixture runs automatically and checks if the test uses sync_db_session.
+    If it does, it ensures that the session cache is cleared and any pending
+    transactions are rolled back before the test starts.
+    """
+    # Check if test uses sync_db_session fixture
+    if 'sync_db_session' in request.fixturenames:
+        sync_db_session = request.getfixturevalue('sync_db_session')
+        # Expire all objects in the session to clear cache
+        try:
+            sync_db_session.expire_all()
+        except Exception:
+            pass
+        
+        # Rollback any pending transactions
+        try:
+            sync_db_session.rollback()
+        except Exception:
+            pass
+    
+    yield
+    
+    # Cleanup after test
+    if 'sync_db_session' in request.fixturenames:
+        sync_db_session = request.getfixturevalue('sync_db_session')
+        try:
+            sync_db_session.expire_all()
+        except Exception:
+            pass
+
+
+@pytest.fixture(autouse=True)
 def ensure_executors_registered():
     """
     Ensure all required executors are registered before each test
@@ -550,12 +638,15 @@ def ensure_executors_registered():
     except ImportError:
         pass
     
-    try:
-        from apflow.extensions.crewai import CrewaiExecutor, BatchCrewaiExecutor
-        ensure_registered(CrewaiExecutor, "crewai_executor")
-        ensure_registered(BatchCrewaiExecutor, "batch_crewai_executor")
-    except ImportError:
-        pass
+    # DO NOT import CrewAI here - it starts EventBus background thread immediately
+    # CrewAI will be imported lazily when needed by specific tests
+    # This prevents background threads from running in all tests
+    # try:
+    #     from apflow.extensions.crewai import CrewaiExecutor, BatchCrewaiExecutor
+    #     ensure_registered(CrewaiExecutor, "crewai_executor")
+    #     ensure_registered(BatchCrewaiExecutor, "batch_crewai_executor")
+    # except ImportError:
+    #     pass
     
     try:
         from apflow.extensions.core import AggregateResultsExecutor
@@ -569,11 +660,14 @@ def ensure_executors_registered():
     except ImportError:
         pass
     
-    try:
-        from apflow.extensions.llm import LLMExecutor
-        ensure_registered(LLMExecutor, "llm_executor")
-    except ImportError:
-        pass
+    # DO NOT import LLM here - it starts OpenTelemetry background threads immediately
+    # LLM will be imported lazily when needed by specific tests
+    # This prevents background threads from running in all tests
+    # try:
+    #     from apflow.extensions.llm import LLMExecutor
+    #     ensure_registered(LLMExecutor, "llm_executor")
+    # except ImportError:
+    #     pass
     
     yield
     
@@ -805,6 +899,338 @@ def integration_test(func):
     """Decorator to mark integration tests that require external services"""
     return pytest.mark.integration(pytest.mark.requires_api_keys(pytest.mark.asyncio(func)))
 
+
+
+@pytest.fixture(autouse=True)
+def enable_faulthandler():
+    """
+    Enable faulthandler to print stack traces on hang.
+    
+    This helps identify where tests hang by printing stack traces
+    when the process receives SIGUSR1 (kill -USR1 <pid>).
+    """
+    import faulthandler
+    import sys
+    
+    # Enable faulthandler to dump stack traces on hang
+    # You can trigger it manually with: kill -USR1 <pid>
+    faulthandler.enable()
+    
+    # Also dump on SIGUSR2 for Python 3.8+
+    if hasattr(faulthandler, 'register'):
+        try:
+            faulthandler.register(signal.SIGUSR2, file=sys.stderr, all_threads=True)
+        except (AttributeError, OSError):
+            pass
+    
+    yield
+    
+    # Keep faulthandler enabled for debugging
+
+
+@pytest.fixture(autouse=True)
+def cleanup_test_environment():
+    """
+    Comprehensive cleanup fixture to ensure each test starts with a clean environment.
+    
+    This fixture resets all global state, singletons, and registries between tests
+    to prevent state pollution and ensure test isolation.
+    
+    Cleans up:
+    - Event loops and async resources
+    - CLI registry
+    - Config registry
+    - Extension registry
+    - Executor registry
+    - Tool registry
+    - TaskExecutor singleton
+    - Session registry state
+    - Thread-local state
+    - Asyncio tasks and EventQueueBridge instances
+    """
+    import asyncio
+    import gc
+    import logging
+    
+    # Cleanup before test (in case previous test left state)
+    _cleanup_all_global_state()
+    
+    yield
+    
+    # Cleanup after test
+    # First, stop any background threads from CrewAI, LiteLLM, or OpenTelemetry
+    _stop_background_threads()
+    
+    # Then, cancel all pending asyncio tasks to prevent them from interfering with cleanup
+    # This is critical to prevent EventQueueBridge worker tasks from causing deadlocks
+    try:
+        loop = asyncio.get_event_loop()
+        if not loop.is_closed():
+            try:
+                # Get all pending tasks
+                tasks = [t for t in asyncio.all_tasks(loop) if not t.done()]
+                
+                # Cancel all tasks
+                for task in tasks:
+                    try:
+                        task.cancel()
+                    except Exception:
+                        pass
+                
+                # Wait for tasks to finish cancelling (with timeout)
+                if tasks and not loop.is_running():
+                    try:
+                        # Use asyncio.wait_for with a short timeout
+                        loop.run_until_complete(
+                            asyncio.wait_for(
+                                asyncio.gather(*tasks, return_exceptions=True),
+                                timeout=0.5
+                            )
+                        )
+                    except (asyncio.TimeoutError, Exception):
+                        # If timeout or error, just continue - tasks are cancelled
+                        pass
+            except Exception:
+                # If anything fails, just continue
+                pass
+    except RuntimeError:
+        # No event loop, that's fine
+        pass
+    
+    # Temporarily disable logging to prevent deadlock during cleanup
+    # This prevents background threads from trying to log during gc.collect()
+    logging.disable(logging.CRITICAL)
+    
+    try:
+        # Cleanup global state
+        _cleanup_all_global_state()
+        
+        # Force garbage collection to clean up any lingering resources
+        # This is done with logging disabled to prevent deadlocks
+        gc.collect()
+    finally:
+        # Re-enable logging after cleanup
+        logging.disable(logging.NOTSET)
+    
+    # Reset event loop in current thread to prevent state pollution
+    # This is safe because pytest-asyncio manages event loops per test
+    try:
+        asyncio.set_event_loop(None)
+    except Exception:
+        pass
+
+
+def _stop_background_threads():
+    """
+    Stop background threads from CrewAI, LiteLLM, and OpenTelemetry.
+    
+    These libraries start background threads on import, which can cause
+    tests to hang during cleanup. This function attempts to stop them.
+    """
+    import threading
+    import time
+    
+    # Try to stop CrewAI EventBus if it exists
+    try:
+        from crewai.events.event_bus import EventBus
+        # EventBus is a singleton, try to stop it
+        if hasattr(EventBus, '_instance') and EventBus._instance:
+            try:
+                event_bus = EventBus._instance
+                
+                # Try to stop using the stop method if available
+                if hasattr(event_bus, 'stop'):
+                    try:
+                        event_bus.stop()
+                    except Exception:
+                        pass
+                
+                # Try to stop the event loop directly
+                if hasattr(event_bus, '_loop') and event_bus._loop:
+                    try:
+                        loop = event_bus._loop
+                        if not loop.is_closed():
+                            loop.call_soon_threadsafe(loop.stop)
+                    except Exception:
+                        pass
+                
+                # Forcefully stop the background thread if it exists
+                # Find the CrewAIEventsLoop thread and stop it
+                for thread in threading.enumerate():
+                    if 'CrewAIEventsLoop' in thread.name or (
+                        hasattr(thread, '_target') and 
+                        hasattr(thread._target, '__self__') and
+                        hasattr(thread._target.__self__, '_loop')
+                    ):
+                        # Try to stop the loop from the thread
+                        try:
+                            if hasattr(event_bus, '_loop') and event_bus._loop:
+                                event_bus._loop.call_soon_threadsafe(event_bus._loop.stop)
+                        except Exception:
+                            pass
+                        
+                        # Give it a moment to stop
+                        time.sleep(0.1)
+                        
+                        # If still alive, it's a daemon thread so it will die with the process
+                        # But we can't forcefully kill it without risking corruption
+                        break
+                        
+            except Exception:
+                pass
+    except (ImportError, AttributeError):
+        pass
+    
+    # Try to stop OpenTelemetry processors
+    try:
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+        # Force flush and shutdown any processors
+        import opentelemetry.sdk.trace as trace_sdk
+        if hasattr(trace_sdk, '_global_tracer_provider'):
+            provider = trace_sdk._global_tracer_provider
+            if provider and hasattr(provider, 'shutdown'):
+                try:
+                    provider.shutdown()
+                except Exception:
+                    pass
+    except (ImportError, AttributeError):
+        pass
+    
+    # Try to stop LiteLLM callbacks/threads
+    try:
+        import litellm
+        # LiteLLM doesn't have explicit shutdown, but we can clear callbacks
+        if hasattr(litellm, 'callback_list'):
+            try:
+                litellm.callback_list = []
+            except Exception:
+                pass
+        if hasattr(litellm, 'success_callback'):
+            try:
+                litellm.success_callback = []
+            except Exception:
+                pass
+        if hasattr(litellm, 'failure_callback'):
+            try:
+                litellm.failure_callback = []
+            except Exception:
+                pass
+    except (ImportError, AttributeError):
+        pass
+
+
+def _cleanup_all_global_state():
+    """
+    Clean up all global state, singletons, and registries.
+    
+    This function is called before and after each test to ensure
+    complete isolation between tests.
+    """
+    # 1. Clean up CLI registry
+    try:
+        from apflow.cli.decorators import _cli_registry
+        _cli_registry.clear()
+    except (ImportError, AttributeError):
+        pass
+    
+    # 2. Clean up Config registry
+    try:
+        from apflow.core.config.registry import get_config_manager
+        cm = get_config_manager()
+        cm.clear()
+    except (ImportError, AttributeError):
+        pass
+    
+    # 3. Clean up Extension registry (both singleton and global instance)
+    try:
+        from apflow.core.extensions.registry import ExtensionRegistry, _registry, _extensions_loaded
+        # Reset singleton
+        ExtensionRegistry._instance = None
+        # Clear global instance state
+        if hasattr(_registry, '_by_id'):
+            _registry._by_id.clear()
+        if hasattr(_registry, '_by_category'):
+            _registry._by_category.clear()
+        if hasattr(_registry, '_factory_functions'):
+            _registry._factory_functions.clear()
+        if hasattr(_registry, '_executor_classes'):
+            _registry._executor_classes.clear()
+        # Reset extensions loaded flag (imported as module-level, need to handle carefully)
+        import apflow.core.extensions.registry as registry_module
+        registry_module._extensions_loaded = False
+    except (ImportError, AttributeError):
+        pass
+    
+    # 3a. Clean up extension manager's loaded extensions tracking
+    try:
+        from apflow.core.extensions.manager import _loaded_extensions
+        _loaded_extensions.clear()
+    except (ImportError, AttributeError):
+        pass
+    
+    # 4. Clean up Executor registry (both singleton and global instance)
+    try:
+        from apflow.core.execution.executor_registry import ExecutorRegistry, _registry
+        # Reset singleton
+        ExecutorRegistry._instance = None
+        # Clear global instance state
+        if hasattr(_registry, '_executors'):
+            _registry._executors.clear()
+        if hasattr(_registry, '_factory_functions'):
+            _registry._factory_functions.clear()
+    except (ImportError, AttributeError):
+        pass
+    
+    # 5. Clean up Tool registry (both singleton and global instance)
+    try:
+        from apflow.core.tools.registry import ToolRegistry, _registry
+        # Reset singleton
+        ToolRegistry._instance = None
+        # Clear global instance state
+        if hasattr(_registry, '_tools'):
+            _registry._tools.clear()
+    except (ImportError, AttributeError):
+        pass
+    
+    # 6. Clean up TaskExecutor singleton
+    try:
+        from apflow.core.execution.task_executor import TaskExecutor
+        TaskExecutor._instance = None
+        TaskExecutor._initialized = False
+    except (ImportError, AttributeError):
+        pass
+    
+    # 7. Clean up Session registry state
+    try:
+        from apflow.core.storage.factory import SessionRegistry
+        SessionRegistry.reset_session_pool_manager()
+        SessionRegistry.reset_default_session()
+    except (ImportError, AttributeError):
+        pass
+    
+    # 8. Clean up any thread-local state
+    try:
+        from apflow.core.config.registry import _thread_local
+        # Clear thread-local storage
+        for key in list(_thread_local.__dict__.keys()):
+            try:
+                delattr(_thread_local, key)
+            except Exception:
+                pass
+    except (ImportError, AttributeError):
+        pass
+    
+    # 9. Clean up TaskTracker state (if exists)
+    try:
+        from apflow.core.execution.task_tracker import TaskTracker
+        # Reset singleton
+        TaskTracker._instance = None
+        TaskTracker._initialized = False
+        # Clear running tasks if instance exists
+        if TaskTracker._instance is not None and hasattr(TaskTracker._instance, '_running_tasks'):
+            TaskTracker._instance._running_tasks.clear()
+    except (ImportError, AttributeError):
+        pass
 
 
 @pytest.fixture(autouse=True)

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
-from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING, Type, TypeVar
+from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING, Type, TypeVar, Set
 from datetime import datetime
 from apflow.core.storage.sqlalchemy.models import TaskModel, TaskOriginType
 from apflow.core.execution.errors import ValidationError
@@ -257,9 +257,21 @@ class TaskRepository:
             Root TaskModel instance (or custom TaskModel subclass)
         """
         current_task = task
+        visited_ids: Set[str] = {str(task.id)}
         
-        # Traverse up to find root
+        # Traverse up to find root with cycle detection
         while current_task.parent_id:
+            parent_id = str(current_task.parent_id)
+            
+            # Cycle detection: if we've seen this parent_id before, break to avoid infinite loop
+            if parent_id in visited_ids:
+                logger.warning(
+                    f"Cycle detected in task tree: task {current_task.id} has parent {parent_id} "
+                    f"which was already visited. Breaking to prevent infinite loop."
+                )
+                break
+            
+            visited_ids.add(parent_id)
             parent = await self.get_task_by_id(current_task.parent_id)
             if not parent:
                 break

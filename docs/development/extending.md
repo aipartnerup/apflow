@@ -411,26 +411,90 @@ def list():
 
 #### Register a Single Command (Function)
 
-You can also register a single function as a root CLI command:
+All functions registered via `@cli_register` are automatically treated as root commands (can be invoked directly):
 
 ```python
 from apflow.cli import cli_register
 
+# Simple root command
 @cli_register(name="hello", help="Say hello")
 def hello(name: str = "world"):
     """A simple hello command."""
     print(f"Hello, {name}!")
+# Usage: apflow hello --name test
+
+# Root command with options
+@cli_register(name="server", help="Start server")
+def server(port: int = typer.Option(8000, "--port", "-p")):
+    """Start the API server."""
+    print(f"Starting server on port {port}")
+# Usage: apflow server --port 8000
 ```
 
-This will make `apflow hello` available as a top-level command.
+**Design Principle**: 
+- **Single functions** → Root commands (e.g., `apflow version`, `apflow server --port 8000`)
+- **Classes** → Groups with subcommands (e.g., `apflow task list`)
+
+#### Extend Existing Groups
+
+You can extend existing groups (both custom and built-in) by adding subcommands:
+
+```python
+from apflow.cli import cli_register
+
+# Extend a custom group
+@cli_register(group="my-group", name="new-command", help="New subcommand")
+def new_command():
+    """A new command in my-group."""
+    print("New command!")
+# Usage: apflow my-group new-command
+
+# Extend apflow built-in group (e.g., tasks)
+@cli_register(group="tasks", name="custom-action", help="Custom action")
+def custom_action():
+    """Custom action in tasks group."""
+    print("Custom action!")
+# Usage: apflow tasks custom-action
+
+# Override an existing subcommand
+@cli_register(group="my-group", name="existing", override=True)
+def overridden_command():
+    """Overridden command."""
+    print("Overridden!")
+```
+
+#### Alternative: Using `get_cli_group()`
+
+You can also use `get_cli_group()` to extend groups programmatically:
+
+```python
+from apflow.cli import get_cli_group
+
+# Get a registered group
+my_group = get_cli_group("my-group")
+
+# Add subcommands directly
+@my_group.command()
+def another_command():
+    """Another command."""
+    print("Another command!")
+
+# Extend built-in groups
+tasks_group = get_cli_group("tasks")
+@tasks_group.command()
+def custom_action():
+    """Custom action in tasks group."""
+    print("Custom action!")
+```
 
 #### Decorator Parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `name` | `str` | Command name. If not provided, uses class name in lowercase with `_` converted to `-` |
-| `help` | `str` | Help text for the command |
-| `override` | `bool` | If `True`, allows overriding existing registration (default: `False`) |
+| `name` | `str` | Command/subcommand name. If not provided, uses class/function name in lowercase with `_` converted to `-` |
+| `help` | `str` | Help text for the command/subcommand |
+| `override` | `bool` | Override behavior depends on context:<br>- If `group` is None: Override entire group/command registration<br>- If `group` is set: Override existing subcommand in the group (default: `False`) |
+| `group` | `str` | If provided, extend this group with a new subcommand instead of registering a new command |
 
 #### Auto-naming Examples
 
@@ -512,7 +576,35 @@ from apflow.cli import (
     CLIExtension,      # Base class for CLI extensions (inherits from typer.Typer)
     cli_register,      # Decorator for registering CLI extensions
     get_cli_registry,  # Get all registered CLI extensions
+    get_cli_group,     # Get a CLI group by name (supports both registered and built-in groups)
 )
+```
+
+#### Function Reference
+
+**`get_cli_group(name: str) -> typer.Typer`**
+
+Get a CLI group by name, supporting both registered extensions and built-in groups.
+
+- **Parameters**:
+  - `name` (str): Group name (e.g., "tasks", "config", or a custom group name)
+- **Returns**: `typer.Typer` app instance for the group
+- **Raises**: `KeyError` if the group doesn't exist
+
+**Example**:
+```python
+from apflow.cli import get_cli_group
+
+# Get a custom group
+my_group = get_cli_group("my-group")
+
+# Get a built-in group
+tasks_group = get_cli_group("tasks")
+
+# Add commands to the group
+@my_group.command()
+def new_command():
+    pass
 ```
 
 ## Advanced: Streaming Support

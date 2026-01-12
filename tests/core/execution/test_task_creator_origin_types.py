@@ -840,6 +840,9 @@ class TestTaskCreatorFromMixed:
             user_id="user_123",
         )
         
+        # Ensure task is refreshed before use
+        sync_db_session.refresh(task)
+        
         mixed_task = await creator.from_mixed(
             _original_task=task,
             _save=True,

@@ -61,6 +61,7 @@ Usage examples:
 
 from typing import List, Dict, Any, Optional, Set
 import uuid
+import os
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from apflow.core.execution.task_manager import TaskManager
@@ -71,6 +72,9 @@ from apflow.core.config import get_task_model_class
 
 logger = get_logger(__name__)
 
+
+DEFAULT_MAX_DEPTH = os.getenv("APFLOW_MAX_DEPTH", 100)
+DEFAULT_MAX_DEPTH = int(DEFAULT_MAX_DEPTH) if DEFAULT_MAX_DEPTH else 100
 
 class TaskCreator:
     """
@@ -146,14 +150,11 @@ class TaskCreator:
         """
         self.db = db
         self.task_manager = TaskManager(db)
+        
     
-    async def create_task_tree_from_array(
-        self,
-        tasks: List[Dict[str, Any]],
-    ) -> TaskTreeNode:
+    async def create_task_tree_from_array(self, tasks: List[Dict[str, Any]]) -> TaskTreeNode:
         """
         Create task tree from tasks array
-        
         Args:
             tasks: Array of task objects in JSON format. Each task must have:
                 - id: Task ID (optional) - if provided, ALL tasks must have id and use id for references
@@ -287,6 +288,10 @@ class TaskCreator:
             # If it exists, generate a new UUID to avoid primary key conflict
             actual_id = provided_id
             if provided_id:
+                # Refresh session state before query to ensure we see latest database state
+                # This prevents blocking in sync sessions when there are uncommitted transactions
+                if not self.task_manager.is_async:
+                    self.db.expire_all()
                 existing_task = await self.task_manager.task_repository.get_task_by_id(provided_id)
                 if existing_task:
                     # ID already exists, generate new UUID
@@ -963,7 +968,8 @@ class TaskCreator:
     async def _find_dependency_tasks_for_identifiers(
         self,
         task_identifiers: Set[str],
-        all_tasks: List[TaskModel]
+        all_tasks: List[TaskModel],
+        max_depth: int = DEFAULT_MAX_DEPTH
     ) -> List[TaskModel]:
         """
         Find all tasks that the specified task identifiers depend on (upstream dependencies, including transitive).
@@ -971,6 +977,7 @@ class TaskCreator:
         Args:
             task_identifiers: Set of task identifiers (id or name) to find dependencies for
             all_tasks: All tasks in the same context
+            max_depth: Maximum recursion depth to prevent infinite loops (default: 100)
             
         Returns:
             List of tasks that the specified identifiers depend on (directly or transitively)
@@ -991,8 +998,16 @@ class TaskCreator:
         processed_identifiers = set(task_identifiers)
         identifiers_to_process = set(task_identifiers)
         
-        async def find_transitive_dependencies(current_identifiers: Set[str]):
+        async def find_transitive_dependencies(current_identifiers: Set[str], depth: int = 0):
             """Recursively find tasks that current identifiers depend on"""
+            # Prevent infinite recursion
+            if depth >= max_depth:
+                logger.warning(
+                    f"Maximum recursion depth ({max_depth}) reached in dependency resolution. "
+                    f"Stopping to prevent infinite loop."
+                )
+                return
+            
             new_dependency_identifiers = set()
             
             # For each task with an identifier in current_identifiers, find its dependencies
@@ -1020,17 +1035,33 @@ class TaskCreator:
                             processed_identifiers.add(dep_identifier)
                             new_dependency_identifiers.add(dep_identifier)
                             
-                            # If this dependency identifier corresponds to a task, add it to dependency_tasks
+                            # If this dependency identifier corresponds to a task in all_tasks, add it
                             if dep_identifier in tasks_by_identifier:
                                 dep_task = tasks_by_identifier[dep_identifier]
                                 if dep_task not in dependency_tasks:
                                     dependency_tasks.append(dep_task)
+                            else:
+                                # Dependency not in all_tasks - try to find it in database
+                                # This handles cases where dependencies are in different task trees
+                                try:
+                                    dep_task = await self.task_manager.task_repository.get_task_by_id(dep_identifier)
+                                    if dep_task and dep_task not in dependency_tasks:
+                                        dependency_tasks.append(dep_task)
+                                        # Add to tasks_by_identifier for future lookups
+                                        tasks_by_identifier[dep_identifier] = dep_task
+                                        if dep_task.name:
+                                            tasks_by_identifier[dep_task.name] = dep_task
+                                except Exception as e:
+                                    logger.debug(
+                                        f"Could not find dependency task {dep_identifier} in database: {e}. "
+                                        f"It may be in a different task tree or not exist."
+                                    )
             
             # Recursively process new dependency identifiers
             if new_dependency_identifiers:
-                await find_transitive_dependencies(new_dependency_identifiers)
+                await find_transitive_dependencies(new_dependency_identifiers, depth + 1)
         
-        await find_transitive_dependencies(identifiers_to_process)
+        await find_transitive_dependencies(identifiers_to_process, 0)
         
         return dependency_tasks
     
@@ -2082,13 +2113,27 @@ class TaskCreator:
         reset_kwargs: Dict[str, Any]
     ) -> TaskModel:
         """Create a single link task"""
+        # Refresh original task to ensure we have latest state
+        try:
+            if self.task_manager.is_async:
+                await self.db.refresh(original_task)
+            else:
+                self.db.refresh(original_task)
+        except Exception:
+            # If refresh fails, task may not be in session - that's okay
+            pass
+        
         # Mark original task as referenced
         if not original_task.has_references:
             original_task.has_references = True
-            if self.task_manager.is_async:
-                await self.db.commit()
-            else:
-                self.db.commit()
+            try:
+                if self.task_manager.is_async:
+                    await self.db.commit()
+                else:
+                    self.db.commit()
+            except Exception as e:
+                logger.warning(f"Failed to commit has_references update: {e}")
+                # Continue anyway - the link operation can proceed
         
         # Extract field overrides from reset_kwargs
         link_task_data = self._extract_field_overrides(
@@ -2187,13 +2232,27 @@ class TaskCreator:
         reset_kwargs: Dict[str, Any]
     ) -> TaskModel:
         """Create a single copy task"""
+        # Refresh original task to ensure we have latest state
+        try:
+            if self.task_manager.is_async:
+                await self.db.refresh(original_task)
+            else:
+                self.db.refresh(original_task)
+        except Exception:
+            # If refresh fails, task may not be in session - that's okay
+            pass
+        
         # Mark original task as referenced
         if not original_task.has_references:
             original_task.has_references = True
-            if self.task_manager.is_async:
-                await self.db.commit()
-            else:
-                self.db.commit()
+            try:
+                if self.task_manager.is_async:
+                    await self.db.commit()
+                else:
+                    self.db.commit()
+            except Exception as e:
+                logger.warning(f"Failed to commit has_references update: {e}")
+                # Continue anyway - the copy operation can proceed
         
         # Extract field overrides from reset_kwargs
         copy_task_data = self._extract_field_overrides(
@@ -2635,6 +2694,10 @@ class TaskCreator:
         Returns:
             List[TaskModel]: All tasks in the subtree (including root)
         """
+        # Refresh session state before query to ensure we see latest database state
+        # This prevents blocking in sync sessions when there are uncommitted transactions
+        if not self.task_manager.is_async:
+            self.db.expire_all()
         root_task = await self.task_manager.task_repository.get_task_by_id(root_task_id)
         if not root_task:
             return []

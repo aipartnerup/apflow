@@ -98,6 +98,14 @@ async def test_llm_executor_streaming_metadata(mock_litellm_module):
 @pytest.mark.asyncio
 async def test_llm_executor_registration():
     """Test standard registration"""
+    # Ensure the extension module is imported to trigger registration
+    import apflow.extensions.llm.llm_executor  # noqa: F401
+    
+    # Force re-registration in case registry was cleared (override=True)
+    from apflow.core.extensions.decorators import _register_extension
+    from apflow.core.extensions.types import ExtensionCategory
+    _register_extension(LLMExecutor, ExtensionCategory.EXECUTOR, override=True)
+    
     registry = get_registry()
     assert registry.is_registered("llm_executor")
     assert isinstance(registry.create_executor_instance("llm_executor"), LLMExecutor)

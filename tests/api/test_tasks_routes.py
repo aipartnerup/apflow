@@ -266,10 +266,12 @@ class TestHandleTaskExecute:
         params = {"task_id": sample_task, "use_streaming": False}
         request_id = str(uuid.uuid4())
 
-        # Mock TaskTracker to return True for is_task_running
+        # Mock TaskTracker instance method instead of the class to avoid super() issues
+        # TaskTracker is imported inside the function, so patch it at the source
         with patch("apflow.core.execution.task_tracker.TaskTracker") as mock_tracker_class:
             mock_tracker = Mock()
             mock_tracker.is_task_running = Mock(return_value=True)
+            # Make the class return our mock instance
             mock_tracker_class.return_value = mock_tracker
 
             result = await task_routes.handle_task_execute(params, mock_request, request_id)

@@ -137,10 +137,8 @@ def task_tree(
                 schemas={"method": "generate_executor"}  # Required for TaskManager to find executor
             )
             
-            # Initialize extensions before executing tasks
-            # This ensures all executors (including generate_executor) are registered
-            from apflow.core.extensions.manager import initialize_extensions
-            initialize_extensions()
+            # Extensions are loaded on-demand by TaskManager._load_executor()
+            # No need to pre-load all extensions - this improves CLI startup performance
             
             # Execute generate_executor
             task_tree = TaskTreeNode(generate_task)

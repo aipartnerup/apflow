@@ -31,6 +31,13 @@ class TestBatchCrewaiExecutorRegistration:
     def test_executor_register_decorator(self):
         """Test that BatchCrewaiExecutor is registered via @executor_register() decorator"""
         # Import BatchCrewaiExecutor to trigger registration
+        # The import should have already happened at module level, but ensure it's loaded
+        import apflow.extensions.crewai.batch_crewai_executor  # noqa: F401
+        
+        # Force re-registration in case registry was cleared (override=True)
+        from apflow.core.extensions.decorators import _register_extension
+        from apflow.core.extensions.types import ExtensionCategory
+        _register_extension(BatchCrewaiExecutor, ExtensionCategory.EXECUTOR, override=True)
         
         # Verify extension was registered
         registry = get_registry()

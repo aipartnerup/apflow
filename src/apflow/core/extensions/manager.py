@@ -217,10 +217,6 @@ def load_extension_by_name(extension_name: str) -> None:
         extension_name: Name of the extension to load
     """
     global _loaded_extensions
-    if _loaded_extensions.get(extension_name):
-        # Already loaded
-        return
-    
     ext_config = EXTENSION_CONFIG.get(extension_name)
     if not ext_config:
         raise ValueError(f"Unknown extension: {extension_name}")
@@ -235,9 +231,38 @@ def load_extension_by_name(extension_name: str) -> None:
     
     module_path = ext_config["module"]
     classes = ext_config["classes"]
+    
+    # Check if executors are already registered (in case registry was cleared)
+    from apflow.core.extensions import get_registry
+    registry = get_registry()
+    all_registered = True
+    for _, executor_id in classes:
+        if not registry.is_registered(executor_id):
+            all_registered = False
+            break
+    
+    # If already loaded and all executors registered, nothing to do
+    if _loaded_extensions.get(extension_name) and all_registered:
+        return
+    
+    # Load the module (this will trigger decorator registration if not already imported)
     try:
         module = __import__(module_path, fromlist=[cls[0] for cls in classes])
         logger.debug(f"Loaded extension '{extension_name}', module: {module.__name__}")
+        
+        # If module was already imported but executors not registered, manually register them
+        if _loaded_extensions.get(extension_name) and not all_registered:
+            from apflow.core.extensions.decorators import _register_extension
+            from apflow.core.extensions.types import ExtensionCategory
+            for class_name, executor_id in classes:
+                if not registry.is_registered(executor_id):
+                    try:
+                        executor_class = getattr(module, class_name)
+                        _register_extension(executor_class, ExtensionCategory.EXECUTOR, override=True)
+                        logger.debug(f"Manually re-registered executor '{executor_id}' from extension '{extension_name}'")
+                    except (AttributeError, Exception) as e:
+                        logger.warning(f"Failed to re-register executor '{executor_id}': {e}")
+        
         _loaded_extensions[extension_name] = True
     except Exception as e:
         logger.warning(f"Failed to load extension {extension_name}: {e}")
@@ -272,16 +297,10 @@ def _load_all_extensions() -> None:
     Respects APFLOW_EXTENSIONS environment variable - if set, only loads
     specified extensions for security and performance reasons.
     
-    This function uses a module-level flag to avoid reloading extensions
-    on subsequent calls - Python's import system caches modules, so
-    re-importing them is cheap and safe.
+    This function checks the current APFLOW_EXTENSIONS setting each time
+    and only loads extensions that haven't been loaded yet. This ensures
+    that changes to APFLOW_EXTENSIONS are respected.
     """
-    global _all_extensions_loaded
-    
-    # Skip if already loaded
-    if _all_extensions_loaded:
-        return
-    
     # Check if APFLOW_EXTENSIONS is set - if so, only load specified extensions
     extensions_env = get_extension_env()
     if extensions_env:
@@ -295,10 +314,11 @@ def _load_all_extensions() -> None:
         extensions_to_load = list(EXTENSION_CONFIG.keys())
         logger.debug("No APFLOW_EXTENSIONS restriction, loading all extensions")
     
+    # Load extensions that haven't been loaded yet or need re-registration
+    # load_extension_by_name() will check if executors are registered and
+    # re-register them if needed (e.g., after registry was cleared)
     for ext_name in extensions_to_load:
         load_extension_by_name(ext_name)
-
-    _all_extensions_loaded = True
 
 
 def get_available_executors() -> dict[str, Any]:
@@ -429,6 +449,3 @@ def initialize_extensions() -> None:
 
     logger.info("Extension initialization completed")
 
-
-# Auto-initialize core extension on module import
-load_extension_by_name("core")

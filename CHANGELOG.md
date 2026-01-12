@@ -26,6 +26,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added permission checks in TaskManager to enforce executor access control during task execution
   - Comprehensive test coverage for executor permissions and API functionality
 
+- **CLI Extension System Enhancements**
+  - **Automatic Root Command Detection**: All single functions registered via `@cli_register` are now automatically treated as root commands (e.g., `apflow version`, `apflow server --port 8000`)
+    - Removed `root_command` parameter - no longer needed
+    - Functions are always root commands, classes are always groups
+    - Simplified API: `@cli_register(name="hello")` creates a root command automatically
+  - **Group Extension Support**: Added `group` parameter to `@cli_register` decorator for extending existing CLI groups
+    - Extend custom groups: `@cli_register(group="my-group", name="new-command")`
+    - Extend built-in groups: `@cli_register(group="tasks", name="custom-action")`
+    - Override subcommands: `@cli_register(group="my-group", name="existing", override=True)`
+  - **New `get_cli_group()` Function**: Convenient API for accessing and extending CLI groups
+    - Supports both registered extensions and built-in groups (tasks, config, etc.)
+    - Usage: `group = get_cli_group("my-group"); @group.command() def new_cmd(): ...`
+    - Clear error messages when group doesn't exist
+  - **Improved Override Behavior**: Clear distinction between different override scenarios
+    - `name="my-group", override=True` - Override entire group
+    - `group="my-group", name="cmd", override=True` - Override subcommand in group
+    - `name="my-cmd", override=True` - Override root command
+  - Comprehensive test coverage (8 tests) for all extension scenarios
+
 - **CLI Documentation**
   - Added comprehensive CLI documentation with configuration management guide (`cli/configuration.md`)
   - Created practical usage examples (`cli/examples.md`)

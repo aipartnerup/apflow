@@ -44,13 +44,54 @@ class TestGetAvailableExecutors:
     def test_get_available_executors_multiple_extensions(self):
         """Test getting executors with multiple extensions"""
 
-        with patch.dict(os.environ, {"APFLOW_EXTENSIONS": "stdio,http"}):
-            result = get_available_executors()
+        import sys
+        import importlib
+        from unittest.mock import MagicMock
+        from apflow.core.extensions.manager import _is_package_installed, _loaded_extensions
 
-            assert result["restricted"] is True
-            executor_ids = [e["id"] for e in result["executors"]]
-            assert "system_info_executor" in executor_ids
-            assert "rest_executor" in executor_ids
+        # Mock httpx as installed so http extension can load
+        def mock_is_package_installed(package_name: str) -> bool:
+            if package_name == "httpx":
+                return True
+            return _is_package_installed(package_name)
+
+        # Create a mock httpx module so the import succeeds
+        mock_httpx = MagicMock()
+        mock_httpx.AsyncClient = MagicMock()
+        
+        # Store original httpx if it exists
+        original_httpx = sys.modules.get("httpx")
+        sys.modules["httpx"] = mock_httpx
+
+        try:
+            # Remove http extension module from cache if it was already imported (and failed)
+            http_modules = [
+                "apflow.extensions.http",
+                "apflow.extensions.http.rest_executor",
+            ]
+            for module_name in http_modules:
+                if module_name in sys.modules:
+                    del sys.modules[module_name]
+
+            with patch.dict(os.environ, {"APFLOW_EXTENSIONS": "stdio,http"}):
+                with patch("apflow.core.extensions.manager._is_package_installed", side_effect=mock_is_package_installed):
+                    # Reset loaded extensions state to ensure http extension is loaded
+                    # Remove http from loaded extensions if it was previously skipped
+                    if "http" in _loaded_extensions:
+                        del _loaded_extensions["http"]
+
+                    result = get_available_executors()
+
+                    assert result["restricted"] is True
+                    executor_ids = [e["id"] for e in result["executors"]]
+                    assert "system_info_executor" in executor_ids
+                    assert "rest_executor" in executor_ids
+        finally:
+            # Restore original httpx module
+            if original_httpx is not None:
+                sys.modules["httpx"] = original_httpx
+            elif "httpx" in sys.modules and sys.modules["httpx"] is mock_httpx:
+                del sys.modules["httpx"]
 
     def test_executor_metadata_structure(self):
         """Test that returned executor metadata has expected structure"""
