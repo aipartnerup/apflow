@@ -1083,7 +1083,6 @@ def _stop_background_threads():
     
     # Try to stop OpenTelemetry processors
     try:
-        from opentelemetry.sdk.trace.export import BatchSpanProcessor
         # Force flush and shutdown any processors
         import opentelemetry.sdk.trace as trace_sdk
         if hasattr(trace_sdk, '_global_tracer_provider'):
@@ -1143,7 +1142,7 @@ def _cleanup_all_global_state():
     
     # 3. Clean up Extension registry (both singleton and global instance)
     try:
-        from apflow.core.extensions.registry import ExtensionRegistry, _registry, _extensions_loaded
+        from apflow.core.extensions.registry import ExtensionRegistry, _registry
         # Reset singleton
         ExtensionRegistry._instance = None
         # Clear global instance state

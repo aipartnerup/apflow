@@ -7,7 +7,6 @@ Usage:
 """
 
 import pytest
-import asyncio
 import signal
 import sys
 import traceback
@@ -19,7 +18,6 @@ def timeout_handler(signum, frame):
     print("\n" + "="*80)
     print("TEST TIMEOUT - Printing stack traces of all threads:")
     print("="*80)
-    import threading
     for thread_id, frame in sys._current_frames().items():
         print(f"\nThread {thread_id}:")
         traceback.print_stack(frame)

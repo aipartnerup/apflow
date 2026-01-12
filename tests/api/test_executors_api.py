@@ -45,7 +45,6 @@ class TestGetAvailableExecutors:
         """Test getting executors with multiple extensions"""
 
         import sys
-        import importlib
         from unittest.mock import MagicMock
         from apflow.core.extensions.manager import _is_package_installed, _loaded_extensions
 

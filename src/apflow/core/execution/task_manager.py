@@ -1316,8 +1316,6 @@ class TaskManager:
         # Check permission BEFORE loading executor to avoid unnecessary work
         # and provide clearer error messages
         if not self._check_executor_permission(executor_id):
-            from apflow.core.extensions.manager import get_allowed_executor_ids
-            allowed = get_allowed_executor_ids()
             error_msg = f"Executor '{executor_id}' is not allowed by APFLOW_EXTENSIONS configuration for task {task.id}"
             raise ExecutorError(error_msg)
 
