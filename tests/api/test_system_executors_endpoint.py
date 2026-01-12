@@ -72,14 +72,14 @@ async def test_system_executors_api_no_restrictions():
 
 @pytest.mark.asyncio
 async def test_system_executors_api_with_restrictions():
-    """Test system.executors API endpoint with APFLOW_EXTENSIONS=stdio,http"""
+    """Test system.executors API endpoint with APFLOW_EXTENSIONS=stdio (no http)"""
     from apflow.api.routes.system import SystemRoutes
     from apflow.core.storage.sqlalchemy.models import TaskModel
     from starlette.datastructures import Headers
     import json
 
-    # Initialize extensions with restrictions
-    with patch.dict(os.environ, {"APFLOW_EXTENSIONS": "stdio,http"}):
+    # Initialize extensions with restrictions (no http)
+    with patch.dict(os.environ, {"APFLOW_EXTENSIONS": "stdio"}):
         initialize_extensions()
 
         system_routes = SystemRoutes(task_model_class=TaskModel)
