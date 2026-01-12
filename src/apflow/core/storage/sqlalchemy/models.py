@@ -5,7 +5,7 @@ SQLAlchemy models for task storage
 from sqlalchemy import Column, String, Integer, DateTime, JSON, Text, Boolean, Numeric
 from sqlalchemy.sql import func
 from sqlalchemy.orm import declarative_base
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from enum import auto, StrEnum
 import uuid
 import os
@@ -156,6 +156,15 @@ class TaskModel(Base):
             "origin_type": self.origin_type,
             "has_references": self.has_references,
         }
+    
+    def copy(self, override: Optional[Dict[str, Any]] = None) -> "TaskModel":
+        """
+        Return a new instance of this TaskModel (or subclass), optionally overriding fields.
+        """
+        data = self.to_dict()
+        if override:
+            data.update(override)
+        return self.__class__(**data)
 
     def __repr__(self):
         return f"<TaskModel(id='{self.id}', name='{self.name}', status='{self.status}')>"

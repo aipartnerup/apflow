@@ -524,11 +524,11 @@ class TaskRoutes(BaseRouteHandler):
                 # Check permission to access this task
                 self._check_permission(request, task.user_id, "access")
 
-                # If task has parent, find root first
-                root_task = await task_repository.get_root_task(task)
+                # # If task has parent, find root first
+                # root_task = await task_repository.get_root_task(task)
 
                 # Build task tree
-                task_tree_node = await task_repository.build_task_tree(root_task)
+                task_tree_node = await task_repository.get_task_tree_for_api(task)
 
                 # Convert TaskTreeNode to dictionary format
                 return tree_node_to_dict(task_tree_node)

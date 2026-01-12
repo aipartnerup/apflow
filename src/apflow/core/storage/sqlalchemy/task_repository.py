@@ -1092,6 +1092,63 @@ class TaskRepository:
         for child in children:
             self.assign_task_tree_id_recursive(child.id, tree_id)
 
+    async def get_task_tree_for_api(self, root_task: TaskModelType) -> "TaskTreeNode":
+        """
+        Get the task tree for API/CLI queries, recursively resolving link origin_type for all nodes.
+        If any task (root or child) is a link, use its original task's data to build the tree, but keep allowlisted fields from the link node itself.
+        The allowlist is configurable via APFLOW_TASK_LINK_KEEP_FIELDS environment variable (comma-separated).
+        Args:
+            root_task: The root task node to start from.
+        Returns:
+            TaskTreeNode for the appropriate root task, with all children resolved.
+        """
+        import os
+        from apflow.core.types import TaskTreeNode
+
+        # Allowlist of fields to keep from the link node itself
+        default_keep_fields = [
+            "id", "parent_id", "user_id", "task_tree_id", "origin_type", "created_at", "updated_at"
+        ]
+        keep_fields = os.getenv("APFLOW_TASK_LINK_KEEP_FIELDS")
+        if keep_fields:
+            keep_fields = [f.strip() for f in keep_fields.split(",") if f.strip()]
+            task_fields = set(field.name for field in root_task.__table__.columns)
+            # Validate keep_fields against actual task model fields
+            for field in keep_fields:
+                if field not in task_fields:
+                    raise ValueError(f"Invalid field '{field}' in APFLOW_TASK_LINK_KEEP_FIELDS; not a valid TaskModel field.")
+        else:
+            keep_fields = default_keep_fields
+
+        async def resolve_task(task: TaskModelType) -> Optional[TaskModelType]:
+            # Recursively resolve link
+            while getattr(task, "origin_type", None) == TaskOriginType.link and getattr(task, "original_task_id", None):
+                original_task = await self.get_task_by_id(task.original_task_id)
+                if not original_task:
+                    logger.error(f"Original task not found for id {task.original_task_id}")
+                    raise ValidationError(f"Original task not found for id {task.original_task_id}")
+                task = original_task
+            return task
+
+        def merge_task(link_task: TaskModelType, original_task: TaskModelType) -> TaskModelType:
+            # Use TaskModel.copy for safe copying and merging
+            override = {field: getattr(link_task, field) for field in keep_fields if hasattr(link_task, field)}
+            return original_task.copy(override=override)
+
+        async def build_tree(task: TaskModelType) -> TaskTreeNode:
+            if getattr(task, "origin_type", None) == TaskOriginType.link and getattr(task, "original_task_id", None):
+                original_task = await resolve_task(task)
+                merged_task = merge_task(task, original_task)
+            else:
+                merged_task = task
+            node = TaskTreeNode(task=merged_task)
+            child_tasks = await self.get_child_tasks_by_parent_id(merged_task.id)
+            for child in child_tasks:
+                child_node = await build_tree(child)
+                node.add_child(child_node)
+            return node
+
+        return await build_tree(root_task)
 
 __all__ = [
     "TaskRepository",

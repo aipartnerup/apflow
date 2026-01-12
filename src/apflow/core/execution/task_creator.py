@@ -1371,7 +1371,22 @@ class TaskCreator:
         
         collect_tasks(node, None, None)  # Root task has no parent
         return tasks
-    
+
+
+    async def _get_original_task_for_link(self, task: TaskModel) -> TaskModel:
+        """
+        Recursively find the most original (non-link) task for linking.
+        """
+        current = task
+        while getattr(current, "origin_type", None) == TaskOriginType.link and getattr(current, "original_task_id", None):
+            orig_id = current.original_task_id
+            # get original task object (sync or async)
+            if self.task_manager.is_async:
+                current = await self.task_manager.task_repository.get_task_by_id(orig_id)
+            else:
+                current = self.task_manager.task_repository.get_task_by_id(orig_id)
+        return current
+
     async def from_link(
         self,
         _original_task: TaskModel,
@@ -1401,12 +1416,11 @@ class TaskCreator:
             TaskTreeNode if _recursive=True
         """
         if not _recursive:
-            # Single task link
             linked_task = await self._create_link_task(
                 _original_task, _save, reset_kwargs
             )
             logger.info(
-                f"Created linked task '{linked_task.id}' referencing original task '{_original_task.id}'"
+                f"Created linked task '{linked_task.id}' referencing most original task '{_original_task.id}'"
             )
             return linked_task
         
@@ -1866,12 +1880,14 @@ class TaskCreator:
     
     async def _create_link_task(
         self,
-        original_task: TaskModel,
+        _original_task: TaskModel,
         save: bool,
         reset_kwargs: Dict[str, Any]
     ) -> TaskModel:
         """Create a single link task"""
         # Refresh original task to ensure we have latest state
+        # Always link to the most original task
+        original_task = await self._get_original_task_for_link(_original_task)
         try:
             if self.task_manager.is_async:
                 await self.db.refresh(original_task)
@@ -1931,6 +1947,7 @@ class TaskCreator:
             is_root: bool = True,
         ) -> TaskModel:
             """Recursively link a task and its children"""
+            
             # Mark original task as referenced
             if not orig_task.has_references:
                 orig_task.has_references = True
@@ -2251,12 +2268,17 @@ class TaskCreator:
         id_mapping: Dict[str, str] = {}
         
         async def mixed_task_recursive(
-            orig_task: TaskModel,
+            _orig_task: TaskModel,
             parent_id: Optional[str] = None,
             is_root: bool = True,
         ) -> TaskModel:
             """Recursively create mixed tasks"""
-            should_link = orig_task.id in link_task_ids
+            should_link = _orig_task.id in link_task_ids
+            if should_link:
+                # Always link to the most original (non-link) task to prevent link chains
+                orig_task = await self._get_original_task_for_link(_orig_task)
+            else:
+                orig_task = _orig_task   
             
             # Mark original task as referenced
             if not orig_task.has_references:

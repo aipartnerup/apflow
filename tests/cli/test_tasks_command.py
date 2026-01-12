@@ -1611,8 +1611,8 @@ class TestTasksTreeCommand:
 
     
     @pytest.mark.asyncio
-    async def test_tasks_tree_from_child(self, use_test_db_session, disable_api_for_tests):
-        """Test getting task tree starting from a child task"""
+    async def test_child_tasks_tree_from_child(self, use_test_db_session, disable_api_for_tests):
+        """Test getting child task tree starting from a child task"""
         task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
         
         root_id = f"tree-root2-{uuid.uuid4()}"
@@ -1637,6 +1637,18 @@ class TestTasksTreeCommand:
             has_children=False,
             progress=1.0
         )
+
+        child2_id = f"tree-child2-2-{uuid.uuid4()}"
+        await task_repository.create_task(
+            id=child2_id,
+            name="Child Task 2-2",
+            user_id="test_user",
+            parent_id=child_id,
+            status="completed",
+            priority=1,
+            has_children=False,
+            progress=1.0
+        )
         
         # Get tree starting from child - should return root tree
         result = runner.invoke(cli, [
@@ -1646,7 +1658,7 @@ class TestTasksTreeCommand:
         assert result.exit_code == 0
         output = result.stdout
         tree_data = json.loads(output)
-        assert tree_data["id"] == root_id  # Should return root tree
+        assert tree_data["id"] == child_id  # Should return root tree
         assert "children" in tree_data
     
 
