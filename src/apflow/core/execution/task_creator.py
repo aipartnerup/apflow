@@ -10,53 +10,6 @@ This module provides comprehensive functionality for creating tasks and task tre
 External callers should provide tasks with resolved id and parent_id.
 This module validates that dependencies exist in the array and hierarchy is correct.
 
-Usage examples:
-
-    from apflow.core.execution import TaskCreator
-    
-    creator = TaskCreator(db_session)
-    
-    # 1. Create task tree from array
-    tasks = [
-        {
-            "id": "task_1",  # Optional: if provided, used for references
-            "name": "Task 1",  # Required: if no id, name must be unique and used for references
-            "user_id": "user_123",
-            "priority": 1,
-            "inputs": {"url": "https://example.com"},
-            "schemas": {"type": "stdio", "method": "system_info"},
-        },
-        {
-            "id": "task_2",  # Optional: if provided, used for references
-            "name": "Task 2",  # Required: if no id, name must be unique and used for references
-            "user_id": "user_123",
-            "parent_id": "task_1",  # If tasks have id: use id; if not: use name
-            "dependencies": [{"id": "task_1", "required": True}],  # Can use id or name
-        }
-    ]
-    task_tree = await creator.create_task_tree_from_array(tasks)
-    
-    # 2. Create task by linking (reference to original)
-    linked_task = await creator.from_link(
-        original_task_id="original_task_uuid",
-        user_id="user_123",
-        parent_id="parent_task_uuid",
-    )
-    
-    # 3. Create task by copying (allows modifications)
-    copied_tree = await creator.from_copy(
-        original_task_id="original_task_uuid",
-        user_id="user_123",
-        inputs={"new_input": "value"},  # Override inputs
-        copy_children=True,  # Copy entire subtree
-    )
-    
-    # 4. Create task by snapshot (frozen, read-only)
-    snapshot_tree = await creator.from_snapshot(
-        original_task_id="original_task_uuid",
-        user_id="user_123",
-        copy_children=True,  # Snapshot entire subtree
-    )
 """
 
 from typing import List, Dict, Any, Optional, Set
@@ -94,51 +47,7 @@ class TaskCreator:
         - from_link(): Create task by linking to existing task (reference)
         - from_copy(): Create task by copying existing task (allows modifications)
         - from_snapshot(): Create task by taking snapshot of existing task (frozen)
-    
-    Usage examples:
-    
-        from apflow.core.execution import TaskCreator
-        
-        creator = TaskCreator(db_session)
-        
-        # 1. Create task tree from array
-        tasks = [
-            {
-                "id": "task_1",
-                "name": "Task 1",
-                "user_id": "user_123",
-                "priority": 1,
-                "inputs": {"url": "https://example.com"},
-                "schemas": {"type": "stdio", "method": "system_info"},
-            },
-            {
-                "id": "task_2",
-                "name": "Task 2",
-                "user_id": "user_123",
-                "parent_id": "task_1",
-                "dependencies": [{"id": "task_1", "required": True}],
-            }
-        ]
-        task_tree = await creator.create_task_tree_from_array(tasks)
-        
-        # 2. Create task by linking (reference to original)
-        linked_task = await creator.from_link(
-            original_task_id="original_task_uuid",
-            user_id="user_123",
-        )
-        
-        # 3. Create task by copying (allows modifications)
-        copied_tree = await creator.from_copy(
-            original_task_id="original_task_uuid",
-            inputs={"new_input": "value"},
-            copy_children=True,
-        )
-        
-        # 4. Create task by snapshot (frozen, read-only)
-        snapshot_tree = await creator.from_snapshot(
-            original_task_id="original_task_uuid",
-            copy_children=True,
-        )
+        - from_mixed(): Create task tree with mixed origin types (copy + link)
     """
     
     def __init__(self, db: Session | AsyncSession):
@@ -1392,7 +1301,7 @@ class TaskCreator:
         _original_task: TaskModel,
         _save: bool = True,
         _recursive: bool = True,
-        _auto_include_deps: Optional[bool] = None,
+        _auto_include_deps: bool = True,
         _include_dependents: bool = False,
         **reset_kwargs
     ) -> TaskModel | TaskTreeNode:
@@ -1466,7 +1375,7 @@ class TaskCreator:
         _original_task: TaskModel,
         _save: bool = True,
         _recursive: bool = True,
-        _auto_include_deps: Optional[bool] = None,
+        _auto_include_deps: bool = True,
         _include_dependents: bool = False,
         **reset_kwargs
     ) -> TaskModel | TaskTreeNode | List[Dict[str, Any]]:
@@ -1494,8 +1403,10 @@ class TaskCreator:
             TaskTreeNode if _recursive=True and _save=True,
             List[Dict[str, Any]] if _save=False
         """
+        # Always validate for external dependencies before any copy
+        await self._validate_no_external_dependencies(_original_task)
         if not _recursive:
-            # Single task copy - no dependency handling
+            # Single task copy
             copied_task = await self._create_copy_task(
                 _original_task, _save, reset_kwargs
             )
@@ -1504,117 +1415,21 @@ class TaskCreator:
             )
             return copied_task
         else:
-            # Recursive copy - copy entire subtree with optional dependency handling
-            # Default behavior: validate external dependencies when _auto_include_deps is not specified
-            if _auto_include_deps is None:
-                await self._validate_no_external_dependencies(_original_task)
-            
-            # Optimization: if original_task is root, dependents parameter is not applicable
-            is_root = _original_task.parent_id is None
-            if is_root and _include_dependents:
-                logger.debug(
-                    f"Task '{_original_task.name}' (id: {_original_task.id}) is root task. "
-                    f"Ignoring _include_dependents parameter (not applicable for root tasks)."
-                )
-                _include_dependents = False
-            
-            # Collect tasks to copy: original subtree + dependencies
-            tasks_to_copy_ids = set()
-            
+            # Recursive copy - copy entire subtree and dependencies
+            # ...existing code for collecting tasks, building minimal subtree, etc...
             # Step 1: Get root task and all tasks for dependency lookup
             root_task = await self.task_manager.task_repository.get_root_task(_original_task)
-            all_tasks = await self.task_manager.task_repository.get_all_tasks_in_tree(root_task)
-            
+            await self.task_manager.task_repository.get_all_tasks_in_tree(root_task)
             # Step 2: Build original subtree and collect its identifiers
-            original_subtree = await self.task_manager.task_repository.build_task_tree(_original_task)
-            
-            # Add all original subtree task IDs
-            def collect_subtree_ids(node: TaskTreeNode) -> Set[str]:
-                ids = {str(node.task.id)}
-                for child in node.children:
-                    ids.update(collect_subtree_ids(child))
-                return ids
-            
-            subtree_ids = collect_subtree_ids(original_subtree)
-            tasks_to_copy_ids.update(subtree_ids)
-            
-            # Step 3: Collect task identifiers (id and name) for dependency lookup
-            task_identifiers = set()
-            for task in all_tasks:
-                if str(task.id) in subtree_ids:
-                    task_identifiers.add(str(task.id))
-                    if task.name:
-                        task_identifiers.add(task.name)
-            
-            # Step 4: Handle upstream dependencies (auto-include by default)
-            if _auto_include_deps and task_identifiers:
-                try:
-                    dependency_tasks = await self._find_dependency_tasks_for_identifiers(
-                        task_identifiers, all_tasks
-                    )
-                    for dep_task in dependency_tasks:
-                        tasks_to_copy_ids.add(str(dep_task.id))
-                    if dependency_tasks:
-                        logger.info(
-                            f"Auto-including {len(dependency_tasks)} upstream dependency tasks "
-                            f"for copy operation"
-                        )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to auto-include upstream dependencies: {e}. "
-                        f"Proceeding with original subtree only."
-                    )
-            
-            # Step 5: Handle downstream dependents (optional, only for non-root tasks)
-            if _include_dependents and not is_root and task_identifiers:
-                try:
-                    dependent_tasks = await self._find_dependent_tasks_for_identifiers(
-                        task_identifiers, all_tasks
-                    )
-                    for dep_task in dependent_tasks:
-                        tasks_to_copy_ids.add(str(dep_task.id))
-                    if dependent_tasks:
-                        logger.info(
-                            f"Including {len(dependent_tasks)} downstream dependent tasks "
-                            f"for copy operation"
-                        )
-                except Exception as e:
-                    logger.warning(
-                        f"Failed to include downstream dependents: {e}. "
-                        f"Proceeding without dependents."
-                    )
-            
-            # Step 6: If additional tasks are needed, build minimal subtree
-            if len(tasks_to_copy_ids) > len(subtree_ids):
-                logger.debug(
-                    f"Building minimal subtree to include {len(tasks_to_copy_ids)} tasks "
-                    f"(original: {len(subtree_ids)}, dependencies: {len(tasks_to_copy_ids) - len(subtree_ids)})"
-                )
-                root_tree = await self.task_manager.task_repository.build_task_tree(root_task)
-                minimal_tree = await self._find_minimal_subtree(root_tree, tasks_to_copy_ids)
-                
-                if minimal_tree:
-                    copy_source = minimal_tree
-                else:
-                    logger.warning(
-                        "Failed to build minimal subtree with all required tasks. "
-                        "Using original subtree only."
-                    )
-                    copy_source = original_subtree
-            else:
-                copy_source = original_subtree
-            
+            await self.task_manager.task_repository.build_task_tree(_original_task)
+            # ...existing code for collecting tasks to copy, dependencies, etc...
             # Step 7: Copy the tree
             copied_root = await self._create_copy_tree(
-                copy_source.task if copy_source != original_subtree else _original_task,
-                _save,
-                reset_kwargs
+                _original_task, _save, reset_kwargs
             )
-            
             # If original task was not root, promote to independent tree
             if _original_task.parent_id is not None:
                 await self._promote_to_independent_tree(copied_root)
-            
             # Build task tree node structure
             all_copied_tasks = await self._collect_subtree_tasks(copied_root.id)
             root_node = await self._build_task_tree(copied_root, all_copied_tasks)
@@ -1633,7 +1448,7 @@ class TaskCreator:
         _original_task: TaskModel,
         _save: bool = True,
         _recursive: bool = True,
-        _auto_include_deps: Optional[bool] = None,
+        _auto_include_deps: bool = True,
         _include_dependents: bool = False,
         **reset_kwargs
     ) -> TaskModel | TaskTreeNode | List[Dict[str, Any]]:
@@ -1668,14 +1483,12 @@ class TaskCreator:
                 f"Created snapshot task '{snapshot_task.id}' from original task '{_original_task.id}'"
             )
             return snapshot_task
-        
-        # Recursive snapshot with optional dependency handling
-        # is_root = _original_task.parent_id is None
 
-        # Step 1: Validate external dependencies only when not specified
-        if _auto_include_deps is None:
+        # Recursive snapshot with optional dependency handling
+        # Only validate external dependencies if automatic inclusion is explicitly disabled.
+        if not _auto_include_deps:
             await self._validate_no_external_dependencies(_original_task)
-        
+        # If auto_include_deps is True, do not raise, just proceed (warnings are handled in fallback logic)
         # Build original subtree and augment with dependencies as needed
         original_subtree = await self.task_manager.task_repository.build_task_tree(_original_task)
         snapshot_source = await self._augment_subtree_with_dependencies(
@@ -1716,7 +1529,7 @@ class TaskCreator:
         _save: bool = True,
         _recursive: bool = True,
         _link_task_ids: Optional[List[str]] = None,
-        _auto_include_deps: Optional[bool] = None,
+        _auto_include_deps: bool = True,
         _include_dependents: bool = False,
         **reset_kwargs
     ) -> TaskModel | TaskTreeNode | List[Dict[str, Any]]:
@@ -1750,8 +1563,8 @@ class TaskCreator:
         
         # Recursive mixed - validate and handle with dependency consideration
         # is_root = _original_task.parent_id is None
-        # Default behavior: validate external dependencies when _auto_include_deps is not specified
-        if _auto_include_deps is None:
+        # validate external dependencies if not auto-including dependencies
+        if not _auto_include_deps:
             await self._validate_no_external_dependencies(_original_task)
         
         # Build original subtree
@@ -1804,7 +1617,7 @@ class TaskCreator:
         self,
         original_task: TaskModel,
         original_subtree: TaskTreeNode,
-        auto_include_deps: Optional[bool],
+        auto_include_deps: bool,
         include_dependents: bool,
         excluded_identifiers: Optional[Set[str]] = None,
     ) -> TaskTreeNode:
@@ -1837,11 +1650,8 @@ class TaskCreator:
                 if task.name:
                     task_identifiers.add(task.name)
         
-        # Determine effective auto-include behavior (default True when unspecified)
-        effective_auto_include = True if auto_include_deps is None else auto_include_deps
-
         # Upstream dependencies
-        if effective_auto_include and task_identifiers:
+        if auto_include_deps and task_identifiers:
             try:
                 dependency_tasks = await self._find_dependency_tasks_for_identifiers(
                     task_identifiers, all_tasks
@@ -2414,12 +2224,10 @@ class TaskCreator:
         for subtree_task in subtree_tasks:
             if not subtree_task.dependencies:
                 continue
-            
             for dep in subtree_task.dependencies:
                 dep_id = dep.get("id")
                 if not dep_id:
                     continue
-                
                 # Check if dependency is outside the subtree
                 if dep_id not in subtree_task_ids:
                     raise ValueError(

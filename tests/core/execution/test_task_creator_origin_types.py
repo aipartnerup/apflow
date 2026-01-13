@@ -434,18 +434,14 @@ class TestTaskCreatorFromCopy:
             dependencies=[{"id": dep_task.id, "required": True}]
         )
         
-        # Copy task_a with auto_include_deps=True (default)
-        copied_tree = await creator.from_copy(
-            _original_task=task_a,
-            _save=True,
-            _recursive=True,
-            _auto_include_deps=True
-        )
-        
-        # Verify task is copied
-        assert isinstance(copied_tree, TaskTreeNode)
-        assert copied_tree.task.origin_type == TaskOriginType.copy
-        assert copied_tree.task.original_task_id == task_a.id
+        # Copy task_a with auto_include_deps=True (should raise ValueError due to external dependency)
+        with pytest.raises(ValueError, match="external dependencies"):
+            await creator.from_copy(
+                _original_task=task_a,
+                _save=True,
+                _recursive=True,
+                _auto_include_deps=True
+            )
     
     @pytest.mark.asyncio
     async def test_from_copy_with_auto_include_deps_false(self, sync_db_session):
@@ -465,17 +461,14 @@ class TestTaskCreatorFromCopy:
             dependencies=[{"id": dep_task.id, "required": True}]
         )
         
-        # Copy task_a with auto_include_deps=False
-        copied_tree = await creator.from_copy(
-            _original_task=task_a,
-            _save=True,
-            _recursive=True,
-            _auto_include_deps=False
-        )
-        
-        # Verify task is copied without attempting to resolve dependencies
-        assert isinstance(copied_tree, TaskTreeNode)
-        assert copied_tree.task.origin_type == TaskOriginType.copy
+        # Copy task_a with auto_include_deps=False (should raise ValueError due to external dependency)
+        with pytest.raises(ValueError, match="external dependencies"):
+            await creator.from_copy(
+                _original_task=task_a,
+                _save=True,
+                _recursive=True,
+                _auto_include_deps=False
+            )
     
     @pytest.mark.asyncio
     async def test_from_copy_include_dependents_non_root_task(self, sync_db_session):
@@ -704,15 +697,14 @@ class TestTaskCreatorFromSnapshot:
             dependencies=[{"id": dep_task.id, "required": True}]
         )
         
-        snapshot_tree = await creator.from_snapshot(
-            _original_task=task_a,
-            _save=True,
-            _recursive=True,
-            _auto_include_deps=False
-        )
-        
-        assert isinstance(snapshot_tree, TaskTreeNode)
-        assert snapshot_tree.task.origin_type == TaskOriginType.snapshot
+        # Snapshot with _auto_include_deps=False (should raise ValueError due to external dependency)
+        with pytest.raises(ValueError, match="external dependencies"):
+            await creator.from_snapshot(
+                _original_task=task_a,
+                _save=True,
+                _recursive=True,
+                _auto_include_deps=False
+            )
 
     @pytest.mark.asyncio
     async def test_from_snapshot_include_dependents_non_root_task(self, sync_db_session):

@@ -62,10 +62,6 @@ class McpToolsRegistry:
                         "type": "boolean",
                         "description": "Enable streaming mode for real-time updates (default: false)"
                     },
-                    "copy_execution": {
-                        "type": "boolean",
-                        "description": "Copy task before execution to preserve original (default: false)"
-                    },
                     "webhook_config": {
                         "type": "object",
                         "description": "Webhook configuration for push notifications",

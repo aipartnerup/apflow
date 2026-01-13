@@ -148,7 +148,7 @@ class TestAgentExecutor:
         context.message = message
         
         # Patch TaskRepository.get_task_by_id to avoid DB call and avoid from_copy logic
-        context.metadata = {}  # Ensure no from_copy/copy_execution in metadata
+        context.metadata = {} 
         with patch('apflow.api.a2a.agent_executor.TaskRepository') as mock_repo_class:
             mock_repo = mock_repo_class.return_value
             mock_repo.get_task_by_id = AsyncMock(return_value=None)
@@ -165,7 +165,7 @@ class TestAgentExecutor:
         context.message = message
         
         # Patch TaskRepository.get_task_by_id to avoid DB call and avoid from_copy logic
-        context.metadata = {}  # Ensure no from_copy/copy_execution in metadata
+        context.metadata = {}
         with patch('apflow.api.a2a.agent_executor.TaskRepository') as mock_repo_class:
             mock_repo = mock_repo_class.return_value
             mock_repo.get_task_by_id = AsyncMock(return_value=None)
@@ -280,7 +280,7 @@ class TestAgentExecutor:
         metadata = {
             "from_copy": True,
             "task_id": original_task_id,
-            "copy_children": False
+            "_recursive": False
         }
         context = self._create_request_context([], metadata=metadata)
         with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
@@ -319,7 +319,7 @@ class TestAgentExecutor:
         metadata = {
             "from_mixed": True,
             "task_id": original_task_id,
-            "copy_children": True
+            "_recursive": True
         }
         context = self._create_request_context([], metadata=metadata)
         with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session, \
@@ -421,22 +421,7 @@ class TestAgentExecutor:
                 assert result is not None
                 assert result.metadata["root_task_id"] == copied_task_id
     
-    @pytest.mark.asyncio
-    async def test_execute_simple_mode_copy_execution_missing_task_id(self, executor, mock_event_queue):
-        """Test copy_execution=True without task_id in metadata raises error"""
-        metadata = {
-            "copy_execution": True,
-            # Missing task_id
-        }
-        
-        context = self._create_request_context([], metadata=metadata)
-        
-        with patch('apflow.api.a2a.agent_executor.get_default_session') as mock_get_session:
-            mock_get_session.return_value = Mock()
-            
-            with pytest.raises(ValueError, match="task_id is required"):
-                await executor._execute_simple_mode(context, mock_event_queue)
-    
+
     @pytest.mark.asyncio
     async def test_execute_streaming_mode_from_copy(self, executor, mock_event_queue):
         """Test streaming mode execution with from_copy scenario"""
@@ -445,7 +430,7 @@ class TestAgentExecutor:
         metadata = {
             "from_copy": True,
             "task_id": original_task_id,
-            "copy_children": False
+            "_recursive": False
         }
         context = self._create_request_context([], metadata=metadata)
         context.task_id = "context-task-id"

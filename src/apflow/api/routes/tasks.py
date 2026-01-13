@@ -1596,11 +1596,6 @@ class TaskRoutes(BaseRouteHandler):
             link_task_ids: List of task IDs to link (for mixed mode)
             reset_fields: Dict of field names to reset values (e.g., {"user_id": "new_user"})
             save: If True (default), save to database. If False, return task array without saving.
-            
-            Legacy params (backward compatibility):
-            children: If True, use recursive=True (deprecated, use recursive)
-            copy_mode: "minimal"/"full"/"custom" (deprecated, use origin_type)
-            custom_task_ids: For mixed mode (deprecated, use link_task_ids)
         """
         try:
             task_id = params.get("task_id")
@@ -1613,25 +1608,9 @@ class TaskRoutes(BaseRouteHandler):
             link_task_ids = params.get("link_task_ids")
             reset_fields = params.get("reset_fields", {})
             save = params.get("save", True)
-
-            # Legacy parameter support
-            children = params.get("children")
-            copy_mode = params.get("copy_mode")
-            custom_task_ids = params.get("custom_task_ids")
             
-            # Map legacy parameters to new structure
-            if recursive is None and children is not None:
-                recursive = children
             if recursive is None:
                 recursive = True
-            
-            if copy_mode == "custom":
-                origin_type = "mixed"
-                if custom_task_ids:
-                    link_task_ids = custom_task_ids
-            elif copy_mode == "full":
-                # Keep full mode using legacy method
-                pass
             
             # Validate parameters
             if origin_type not in ("copy", "link", "snapshot", "mixed"):
@@ -1694,6 +1673,8 @@ class TaskRoutes(BaseRouteHandler):
                 if save:
                     # Return TaskTreeNode as dict
                     response = tree_node_to_dict(result)
+                    # Count children if possible
+                    children = len(result.children) if hasattr(result, "children") and result.children is not None else 0
                     logger.info(
                         f"Copied task {task_id} to new task {result.task.id} (children={children})"
                     )
@@ -1884,11 +1865,7 @@ class TaskRoutes(BaseRouteHandler):
         session_factory: Any,
         task_id: Optional[str] = None,
         tasks: Optional[List[Dict[str, Any]]] = None,
-        copy_execution: bool = False,
-        copy_children: bool = False,
-        use_streaming: bool = False,
         use_demo: bool = False,
-        original_task_id: Optional[str] = None,
     ):
         """
         Run task execution in background with its own session
@@ -1896,16 +1873,6 @@ class TaskRoutes(BaseRouteHandler):
         try:
             async with session_factory() as db_session:
                 if execution_mode == "task_id":
-                    # Mode 1: Execute by task_id
-                    if copy_execution and original_task_id:
-                        # We need to copy the task first using the new session
-                        # Note: The task_id passed here is the original one
-                        # But wait, the logic in handle_task_execute did the copy BEFORE execution
-                        # If we move it here, we need to handle it here.
-                        # However, handle_task_execute already did the copy if it was synchronous.
-                        # Let's assume the task_id passed here is the one to execute (already copied if needed)
-                        pass
-
                     await task_executor.execute_task_by_id(
                         task_id=task_id,
                         use_streaming=bool(streaming_context),
@@ -1970,10 +1937,6 @@ class TaskRoutes(BaseRouteHandler):
             tasks: Optional, Array of task dictionaries to execute (if provided, uses execute_tasks)
             use_streaming: Optional, if True, use SSE mode (default: False, regular POST mode)
             use_demo: Optional, if True, use demo mode (returns demo data instead of executing) (default: False)
-            copy_execution: Optional, if True, copy the task before execution to preserve original task history (default: False)
-                          Only applies to task_id mode. When True, creates a copy of the task tree and executes the copy.
-            copy_children: Optional, if True and copy_execution=True, also copy each direct child task with its dependencies (default: False)
-                          This parameter is only used when copy_execution=True.
             webhook_config: Optional webhook configuration for push notifications (independent of use_streaming):
                 {
                     "url": str,  # Required: Webhook callback URL
@@ -2031,8 +1994,6 @@ class TaskRoutes(BaseRouteHandler):
             # Common options
             use_streaming = params.get("use_streaming", False)
             webhook_config = params.get("webhook_config", None)
-            copy_execution = params.get("copy_execution", False)
-            copy_children = params.get("copy_children", False)
             use_demo = params.get("use_demo", False)
 
             # Get TaskExecutor
@@ -2057,42 +2018,16 @@ class TaskRoutes(BaseRouteHandler):
                     # Check permission
                     self._check_permission(request, task.user_id, "execute")
 
-                    # If copy_execution is True, create a copy first
-                    original_task_id = task_id
-                    if copy_execution:
-                        logger.info(
-                            f"Copying task {task_id} before execution (copy_children={copy_children})"
-                        )
-                        task_creator = TaskCreator(db_session)
-                        copied_tree = await task_creator.from_copy(
-                            _original_task=task,
-                            _save=True,
-                            _recursive=copy_children
-                        )
-                        # Handle both TaskModel and TaskTreeNode return types
-                        if hasattr(copied_tree, "task") and hasattr(copied_tree.task, "id"):
-                            execution_task_id = copied_tree.task.id
-                            task = copied_tree.task
-                        elif hasattr(copied_tree, "id"):
-                            execution_task_id = copied_tree.id
-                            task = copied_tree
-                        else:
-                            raise TypeError(f"Unexpected type returned from from_copy: {type(copied_tree)}")
-                        logger.info(f"Task copied: original={original_task_id}, copy={execution_task_id}")
-                    else:
-                        execution_task_id = task_id
-
                     # Check if task is already running
                     from apflow.core.execution.task_tracker import TaskTracker
                     task_tracker = TaskTracker()
-                    if task_tracker.is_task_running(execution_task_id):
+                    if task_tracker.is_task_running(task_id):
                         return {
                             "success": False,
                             "protocol": "jsonrpc",
-                            "root_task_id": execution_task_id,
+                            "root_task_id": task_id,
                             "status": "already_running",
-                            "message": f"Task {execution_task_id} is already running",
-                            **({"original_task_id": original_task_id} if copy_execution else {}),
+                            "message": f"Task {task_id} is already running",
                         }
 
                     # Get root task ID for streaming context
@@ -2174,9 +2109,6 @@ class TaskRoutes(BaseRouteHandler):
                                 {"webhook_url": webhook_config.get("url")} if webhook_config else {}
                             ),
                         }
-                        # Add original_task_id if copy_execution was used
-                        if execution_mode == "task_id" and copy_execution:
-                            response_data["original_task_id"] = original_task_id
 
                         initial_response = {
                             "jsonrpc": "2.0",
@@ -2269,8 +2201,7 @@ class TaskRoutes(BaseRouteHandler):
                     ),
                     "webhook_url": webhook_config.get("url"),
                 }
-                if execution_mode == "task_id" and copy_execution:
-                    response["original_task_id"] = original_task_id
+                
                 return response
 
             else:
@@ -2290,8 +2221,7 @@ class TaskRoutes(BaseRouteHandler):
                     "status": status,
                     "message": "Task execution started",
                 }
-                if execution_mode == "task_id" and copy_execution:
-                    response["original_task_id"] = original_task_id
+                
                 return response
 
         except Exception as e:

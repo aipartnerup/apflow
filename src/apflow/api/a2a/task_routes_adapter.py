@@ -123,7 +123,7 @@ class TaskRoutesAdapter:
         if context.metadata:
             # Copy all metadata except internal fields
             for key, value in context.metadata.items():
-                if key not in ["method", "skill_id", "stream", "copy_execution", "copy_children"]:
+                if key not in ["method", "skill_id", "stream"]:
                     params[key] = value
         
         # Extract from message.parts (DataPart format)

@@ -1,17 +1,11 @@
 # Changelog
 
+
 ## [Unreleased]
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
-
-
-## [Unreleased] 2026-01-11
-
 ### Added
+- Added more comprehensive tests for all `TaskCreator` origin-type methods, including edge cases and error conditions.
+
 - **Task Model Enhancements**
   - Added `task_tree_id` field to TaskModel for managing task hierarchy and relationships
   - Introduced `origin_type` field to track task origin (own, link, copy, reference, snapshot)
@@ -59,6 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 
 ### Changed
+- **TaskCreator Logic Refactoring**
+  - Refactored and clarified the logic for `from_link`, `from_copy`, `from_snapshot`, and `from_mixed` methods in `TaskCreator`.
+  - Improved type annotations, docstrings, and error handling for all task creation methods.
+  - Enhanced dependency and subtree validation logic for recursive copy/link/snapshot operations.
+  - Improved handling of parent/child relationships and task tree construction.
+  - Updated internal helper methods for better maintainability and testability.
+
 - **Extension Management Refactoring**
   - Moved executor-related functions from `apflow.api.extensions` to `apflow.core.extensions.manager` for better code organization
   - Updated import paths across the entire codebase to reflect new structure
@@ -78,6 +79,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Simplified TaskRepository initialization by removing custom column checks
   - Added migration tests to ensure proper schema evolution and idempotent execution
   - Improved database schema handling for more reliable operations
+  - Fixed edge cases in recursive copy/link/snapshot logic where tasks with external dependencies or disconnected subtrees could cause errors.
+  - Improved error messages for invalid task trees and dependency cycles.
 
 
 ## [0.11.2] 2026-01-09

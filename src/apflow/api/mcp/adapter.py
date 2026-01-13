@@ -57,7 +57,6 @@ class TaskRoutesAdapter:
                 - task_id: Optional, task ID to execute
                 - tasks: Optional, array of task dictionaries
                 - use_streaming: Optional, enable streaming (default: False)
-                - copy_execution: Optional, copy before execution (default: False)
                 - webhook_config: Optional webhook configuration
             request: Optional Starlette Request object
         

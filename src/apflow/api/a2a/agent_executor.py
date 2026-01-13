@@ -149,38 +149,10 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             # Get database session
             db_session = get_default_session()
             
-            # Check if copy_execution is enabled via metadata
-            copy_execution = context.metadata.get("copy_execution", False) if context.metadata else False
-            copy_children = context.metadata.get("copy_children", False) if context.metadata else False
-            original_task_id = None
-
-            if copy_execution:
-                # If copy_execution is True, check if task_id is provided in metadata
-                task_id = context.metadata.get("task_id") if context.metadata else None
-                if not task_id:
-                    raise ValueError("task_id is required in metadata when copy_execution=True")
-                # Get the original task from database
-                task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
-                original_task = await task_repository.get_task_by_id(task_id)
-                if not original_task:
-                    raise ValueError(f"Task {task_id} not found")
-                original_task_id = task_id
-                # Copy the task (and children if copy_children=True)
-                logger.info(f"Copying task {task_id} before execution (copy_children={copy_children})")
-                task_creator = TaskCreator(db_session)
-                copied_tree = await task_creator.from_copy(
-                    _original_task=original_task,
-                    _save=True,
-                    _recursive=copy_children
-                )
-                # copied_tree is TaskTreeNode, so copied_tree.task.id is correct
-                logger.info(f"Task copied: original={original_task_id}, copy={copied_tree.task.id}")
-                tasks = self._tree_node_to_tasks_array(copied_tree)
-            else:
-                # Extract tasks array from context
-                tasks = await self._extract_tasks_from_context(context)
-                if not tasks:
-                    raise ValueError("No tasks provided in request")
+            # Extract tasks array from context
+            tasks = await self._extract_tasks_from_context(context)
+            if not tasks:
+                raise ValueError("No tasks provided in request")
             # Log extracted tasks for debugging
             if isinstance(tasks, list) and all(isinstance(t, dict) for t in tasks):
                 logger.debug(f"Extracted tasks with IDs: {[t.get('id') for t in tasks]}")
@@ -277,8 +249,6 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             }
             if root_task_model.user_id:
                 metadata["user_id"] = root_task_model.user_id
-            if original_task_id:
-                metadata["original_task_id"] = original_task_id
             
             a2a_task = Task(
                 id=task_id,  # Must match context.task_id
@@ -352,47 +322,17 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
         try:
             # Get database session
             db_session = get_default_session()
-            # Check if copy_execution is enabled via metadata
-            copy_execution = context.metadata.get("copy_execution", False) if context.metadata else False
-            copy_children = context.metadata.get("copy_children", False) if context.metadata else False
-            original_task_id = None
-            if copy_execution:
-                # If copy_execution is True, check if task_id is provided in metadata
-                task_id = context.metadata.get("task_id") if context.metadata else None
-                if not task_id:
-                    raise ValueError("task_id is required in metadata when copy_execution=True")
-                # Get the original task from database
-                task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
-                original_task = await task_repository.get_task_by_id(task_id)
-                if not original_task:
-                    raise ValueError(f"Task {task_id} not found")
-                original_task_id = task_id
-                # Copy the task (and children if copy_children=True)
-                logger.info(f"Copying task {task_id} before execution (copy_children={copy_children})")
-                task_creator = TaskCreator(db_session)
-                copied_tree = await task_creator.from_copy(
-                    _original_task=original_task,
-                    _save=True,
-                    _recursive=copy_children
-                )
-                logger.info(f"Task copied: original={original_task_id}, copy={copied_tree.task.id}")
-                # Convert copied tree to tasks array format
-                tasks = self._tree_node_to_tasks_array(copied_tree)
-            else:
-                # Extract tasks array from context
-                tasks = await self._extract_tasks_from_context(context)
-                if not tasks:
-                    raise ValueError("No tasks provided in request")
+            
+            # Extract tasks array from context
+            tasks = await self._extract_tasks_from_context(context)
+            if not tasks:
+                raise ValueError("No tasks provided in request")
             
             logger.info(f"Received {len(tasks)} tasks to execute")
             
             # Connect streaming callbacks to event queue
             # Bridge TaskManager's StreamingCallbacks to A2A EventQueue
-            # Pass original_task_id to bridge if copy_execution was used
             event_queue_bridge = EventQueueBridge(event_queue, context)
-            if original_task_id:
-                # Store original_task_id in bridge for inclusion in events
-                event_queue_bridge.original_task_id = original_task_id
             
             # Execute tasks using TaskExecutor with streaming (handles building tree, saving, and execution)
             # Behavior controlled by global configuration (get_require_existing_tasks())
@@ -434,8 +374,7 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
                 "task_count": len(tasks),
                 "root_task_id": execution_result["root_task_id"]
             }
-            if original_task_id:
-                result["original_task_id"] = original_task_id
+            
             return result
             
         except Exception as e:
@@ -469,15 +408,17 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             original_task = await task_repository.get_task_by_id(task_id)
             if not original_task:
                 raise ValueError(f"Original task not found for {mode} with id {task_id}")
+            _save = meta.get("_save", True)
+            _recursive = meta.get("_recursive", False)
             # Await the correct TaskCreator method
             if mode == "from_copy":
-                tree = await task_creator.from_copy(_original_task=original_task, _save=True, _recursive=meta.get("copy_children", False))
+                tree = await task_creator.from_copy(_original_task=original_task, _save=_save, _recursive=_recursive)
             elif mode == "from_mixed":
-                tree = await task_creator.from_mixed(_original_task=original_task, _save=True)
+                tree = await task_creator.from_mixed(_original_task=original_task, _save=_save, _recursive=_recursive)
             elif mode == "from_link":
-                tree = await task_creator.from_link(_original_task=original_task, _save=True)
+                tree = await task_creator.from_link(_original_task=original_task, _save=_save, _recursive=_recursive)
             elif mode == "from_snapshot":
-                tree = await task_creator.from_snapshot(_original_task=original_task, _save=True)
+                tree = await task_creator.from_snapshot(_original_task=original_task, _save=_save, _recursive=_recursive)
             else:
                 raise ValueError(f"Unsupported copy mode: {mode}")
             logger.info(f"Extracted 1 task tree from {mode} scenario (task_id={task_id})")

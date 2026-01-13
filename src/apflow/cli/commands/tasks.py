@@ -435,14 +435,11 @@ def cancel(
 def _clone_command(
     task_id: str,
     output: Optional[Path],
-    children: bool,
     origin_type: str,
     recursive: bool,
     link_task_ids: Optional[str],
     reset_fields: Optional[str],
     dry_run: bool,
-    copy_mode: Optional[str],
-    custom_task_ids: Optional[str],
     invoked_via_alias: bool,
 ) -> None:
     """Shared implementation for tasks.clone and alias tasks.copy."""
@@ -450,18 +447,7 @@ def _clone_command(
     command_label = "Task copy (alias for clone)" if invoked_via_alias else "Task clone"
 
     try:
-        # Handle legacy parameter mapping
-        if copy_mode:
-            typer.echo("⚠️  Warning: --copy-mode is deprecated, use --origin-type instead", err=True)
-            if copy_mode == "custom":
-                origin_type = "mixed"
-            elif copy_mode in ("minimal", "full"):
-                origin_type = "copy"
-
-        if custom_task_ids:
-            typer.echo("⚠️  Warning: --custom-task-ids is deprecated, use --link-task-ids instead", err=True)
-            link_task_ids = custom_task_ids
-
+       
         # Validate origin_type
         if origin_type not in ("copy", "link", "snapshot", "mixed"):
             typer.echo(
@@ -642,8 +628,6 @@ def clone(
     link_task_ids: Optional[str] = typer.Option(None, "--link-task-ids", help="Comma-separated task IDs to link (for mixed mode)"),
     reset_fields: Optional[str] = typer.Option(None, "--reset-fields", help="Field overrides as key=value pairs (e.g., 'user_id=new_user,priority=1')"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview task clone without saving to database"),
-    copy_mode: Optional[str] = typer.Option(None, "--copy-mode", help="[DEPRECATED] Use --origin-type instead"),
-    custom_task_ids: Optional[str] = typer.Option(None, "--custom-task-ids", help="[DEPRECATED] Use --link-task-ids instead"),
 ):
     """
     Create a clone/link/snapshot of a task tree (primary command).
@@ -651,16 +635,13 @@ def clone(
     Origin types: copy (default), link, snapshot, mixed.
     """
     return _clone_command(
-        task_id,
-        output,
-        children,
-        origin_type,
-        recursive,
-        link_task_ids,
-        reset_fields,
-        dry_run,
-        copy_mode,
-        custom_task_ids,
+        task_id=task_id,
+        output=output,
+        origin_type=origin_type,
+        recursive=recursive,
+        link_task_ids=link_task_ids,
+        reset_fields=reset_fields,
+        dry_run=dry_run,
         invoked_via_alias=False,
     )
 
@@ -675,21 +656,16 @@ def copy(
     link_task_ids: Optional[str] = typer.Option(None, "--link-task-ids", help="Comma-separated task IDs to link (for mixed mode)"),
     reset_fields: Optional[str] = typer.Option(None, "--reset-fields", help="Field overrides as key=value pairs (e.g., 'user_id=new_user,priority=1')"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview task copy without saving to database"),
-    copy_mode: Optional[str] = typer.Option(None, "--copy-mode", help="[DEPRECATED] Use --origin-type instead"),
-    custom_task_ids: Optional[str] = typer.Option(None, "--custom-task-ids", help="[DEPRECATED] Use --link-task-ids instead"),
 ):
     """Backward-compatible alias for tasks.clone."""
     return _clone_command(
-        task_id,
-        output,
-        children,
-        origin_type,
-        recursive,
-        link_task_ids,
-        reset_fields,
-        dry_run,
-        copy_mode,
-        custom_task_ids,
+        task_id=task_id,
+        output=output,
+        origin_type=origin_type,
+        recursive=recursive,
+        link_task_ids=link_task_ids,
+        reset_fields=reset_fields,
+        dry_run=dry_run,
         invoked_via_alias=True,
     )
 
@@ -807,10 +783,19 @@ def create(
         typer.echo(json.dumps(result, indent=2))
         typer.echo(f"\n✅ Successfully created task tree: root task {task_tree.task.id}")
         
+    except ValueError as e:
+        if "external dependencies" in str(e):
+            typer.echo(f"Error: Cannot copy/snapshot a subtree with external dependencies.\n{str(e)}", err=True)
+            logger.error(f"External dependency error: {str(e)}")
+            sys.exit(1)
+        else:
+            typer.echo(f"Error: {str(e)}", err=True)
+            logger.exception("ValueError during task creation")
+            sys.exit(1)
     except Exception as e:
         typer.echo(f"Error: {str(e)}", err=True)
         logger.exception("Error creating task")
-        raise typer.Exit(1)
+        sys.exit(1)
 
 
 @app.command()
