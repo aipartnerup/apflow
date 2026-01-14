@@ -189,6 +189,29 @@ class TaskTreeNode:
             return "in_progress"
         else:
             return "pending"
+        
+    def iter_nodes(self):
+        """
+        Generator to iterate over all nodes in the tree
+        
+        Yields:
+            Each TaskTreeNode in the tree (pre-order traversal)
+        """
+        yield self
+        for child in self.children:
+            yield from child.iter_nodes()
+
+    def to_list(self) -> List["TaskModel"]:
+        """
+        Convert the task tree to a flat list of TaskModel instances
+        
+        Returns:
+            List of TaskModel instances in the tree
+        """
+        tasks = [self.task]
+        for child in self.children:
+            tasks.extend(child.to_list())
+        return tasks    
 
 
 __all__ = [

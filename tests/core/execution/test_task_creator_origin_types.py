@@ -10,6 +10,114 @@ from apflow.core.storage.sqlalchemy.models import TaskModel, TaskOriginType
 
 class TestTaskCreatorFromLink:
     """Test TaskCreator.from_link method"""
+
+    @pytest.mark.asyncio
+    async def test_from_link_fails_if_not_completed(self, sync_db_session):
+        """Test that linking a task tree with any non-completed node raises ValueError"""
+        task_manager = TaskManager(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+
+        # Create a root task (not completed)
+        root = await task_manager.task_repository.create_task(
+            name="Root Task",
+            user_id="user_123",
+            status="completed",
+        )
+        # Add a completed child
+        child = await task_manager.task_repository.create_task(
+            name="Child Task",
+            user_id="user_123",
+            parent_id=root.id,
+            status="completed",
+        )
+        root.has_children = True
+        sync_db_session.commit()
+
+        # Should raise ValueError because root is not completed
+        with pytest.raises(ValueError, match="fully completed task tree"):
+            await creator.from_link(
+                _original_task=root,
+                _save=True,
+                _recursive=True
+            )
+
+        # Now complete the root, but make child not completed
+        root.status = "completed"
+        child.status = "pending"
+        sync_db_session.commit()
+        # Debug: print and assert child status
+        sync_db_session.refresh(child)
+        print(f"[DEBUG] child.status after set: {child.status}")
+        assert child.status == "pending", f"Expected child.status to be 'pending', got {child.status}"
+        sync_db_session.refresh(root)
+        print(f"[DEBUG] root.status after set: {root.status}")
+
+        with pytest.raises(ValueError, match="Only a fully completed task tree can be linked"):
+            # Debug: print status before call
+            sync_db_session.refresh(child)
+            print(f"[DEBUG] child.status before from_link: {child.status}")
+            await creator.from_link(
+                _original_task=root,
+                _save=True,
+                _recursive=True
+            )
+
+        # Complete both, should succeed
+        child.status = "completed"
+        sync_db_session.commit()
+        result = await creator.from_link(
+            _original_task=root,
+            _save=True,
+            _recursive=True
+        )
+        assert isinstance(result, TaskTreeNode)
+        assert result.task.status == "completed"
+        for c in result.children:
+            assert c.task.status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_from_link_status_matches_source(self, sync_db_session):
+        """Test that the linked task status matches the source task status"""
+        task_manager = TaskManager(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+
+        # Create a completed original task
+        original_task = await task_manager.task_repository.create_task(
+            name="Original Task",
+            user_id="user_123",
+            status="completed",
+        )
+        sync_db_session.commit()
+        sync_db_session.refresh(original_task)
+        original_task.status = "completed"
+        original_task.status = "completed"
+        sync_db_session.commit()
+        sync_db_session.refresh(original_task)
+        linked_task = await creator.from_link(
+            _original_task=original_task,
+            _save=True,
+            _recursive=False
+        )
+        assert linked_task.status == "completed"
+
+        # Create a custom status original task
+        for status in ["failed", "skipped", "cancelled"]:
+            t = await task_manager.task_repository.create_task(
+                name=f"Task {status}",
+                user_id="user_123",
+                status=status,
+            )
+            # Complete all tasks in tree for link to succeed
+            t.status = "completed"
+            sync_db_session.commit()
+            sync_db_session.refresh(t)
+            linked = await creator.from_link(
+                _original_task=t,
+                _save=True,
+                _recursive=False
+            )
+            assert linked.status == "completed"
+    
     
     @pytest.mark.asyncio
     async def test_from_link_single_task(self, sync_db_session):
@@ -25,8 +133,18 @@ class TestTaskCreatorFromLink:
             inputs={"key": "value"},
             params={"param1": "param_value"},
             schemas={"type": "stdio"},
+            status="completed",
         )
-        
+
+        sync_db_session.commit()
+
+        # Ensure all tasks in the tree are marked as completed
+        task_tree = await task_manager.task_repository.build_task_tree(original_task)
+        for node in task_tree.iter_nodes():
+            node.task.status = "completed"
+            sync_db_session.commit()
+            sync_db_session.refresh(node.task)
+
         linked_task = await creator.from_link(
             _original_task=original_task,
             _save=True,
@@ -55,28 +173,35 @@ class TestTaskCreatorFromLink:
     
     @pytest.mark.asyncio
     async def test_from_link_single_task_with_reset_kwargs(self, sync_db_session):
-        """Test linking a single task with field overrides"""
+        """Test linking a single completed task with field overrides"""
         task_manager = TaskManager(sync_db_session)
         creator = TaskCreator(sync_db_session)
-        
+
         original_task = await task_manager.task_repository.create_task(
             name="Original Task",
             user_id="user_123",
             priority=2,
+            status="completed",
         )
-        
+
+        sync_db_session.commit()
+        sync_db_session.refresh(original_task)
+        original_task.status = "completed"
+        sync_db_session.commit()
+        sync_db_session.refresh(original_task)
+
         linked_task = await creator.from_link(
             _original_task=original_task,
             _save=True,
             _recursive=False,
             user_id="new_user_456",
-            priority=1
+            priority=1,
         )
-        
+
         # Verify field overrides are applied
         assert linked_task.user_id == "new_user_456"
         assert linked_task.priority == 1
-        
+
         # Verify other fields are from original
         assert linked_task.name == original_task.name
     
@@ -89,8 +214,13 @@ class TestTaskCreatorFromLink:
         original_task = await task_manager.task_repository.create_task(
             name="Original Task",
             user_id="user_123",
+            status="completed",
         )
-        
+
+        original_task.status = "completed"
+        sync_db_session.commit()
+        sync_db_session.refresh(original_task)
+
         linked_task = await creator.from_link(
             _original_task=original_task,
             _save=False,
@@ -114,25 +244,36 @@ class TestTaskCreatorFromLink:
             name="Root Task",
             user_id="user_123",
             priority=1,
+            status="completed",
         )
-        
+
         child1 = await task_manager.task_repository.create_task(
             name="Child 1",
             user_id="user_123",
             parent_id=root.id,
             priority=2,
+            status="completed",
         )
-        
-        await task_manager.task_repository.create_task(
+
+        child2 = await task_manager.task_repository.create_task(
             name="Child 2",
             user_id="user_123",
             parent_id=root.id,
+            status="completed",
             dependencies=[{"id": child1.id, "required": True}],
         )
-        
+
+        root.status = "completed"
+        child1.status = "completed"
+        child2.status = "completed"
         root.has_children = True
         sync_db_session.commit()
-        
+
+        # Explicitly refresh all tasks to ensure status is up-to-date
+        sync_db_session.refresh(root)
+        sync_db_session.refresh(child1)
+        sync_db_session.refresh(child2)
+
         linked_tree = await creator.from_link(
             _original_task=root,
             _save=True,
@@ -161,13 +302,22 @@ class TestTaskCreatorFromLink:
         dep_task = await task_manager.task_repository.create_task(
             name="Dependency Task",
             user_id="user_123",
+            status="completed",
         )
         task_a = await task_manager.task_repository.create_task(
             name="Task A",
             user_id="user_123",
+            status="completed",
             dependencies=[{"id": dep_task.id, "required": True}]
         )
-        
+
+        sync_db_session.commit()
+        dep_task.status = "completed"
+        task_a.status = "completed"
+        sync_db_session.commit()
+        sync_db_session.refresh(dep_task)
+        sync_db_session.refresh(task_a)
+
         linked_tree = await creator.from_link(
             _original_task=task_a,
             _save=True,
@@ -181,60 +331,73 @@ class TestTaskCreatorFromLink:
 
     @pytest.mark.asyncio
     async def test_from_link_with_auto_include_deps_false(self, sync_db_session):
-        """Linking with _auto_include_deps=False does not attempt to resolve dependencies"""
+        """Linking with _auto_include_deps=False does not attempt to resolve dependencies (all must be completed)"""
         task_manager = TaskManager(sync_db_session)
         creator = TaskCreator(sync_db_session)
-        
+
         dep_task = await task_manager.task_repository.create_task(
             name="Dependency Task",
             user_id="user_123",
+            status="completed",
         )
         task_a = await task_manager.task_repository.create_task(
             name="Task A",
             user_id="user_123",
+            status="completed",
             dependencies=[{"id": dep_task.id, "required": True}]
         )
-        
+
+        # Ensure all dependencies are completed (simulate a tree)
+        dep_task.status = "completed"
+        task_a.status = "completed"
+        sync_db_session.commit()
+
         linked_tree = await creator.from_link(
             _original_task=task_a,
             _save=True,
             _recursive=True,
             _auto_include_deps=False
         )
-        
+
         assert isinstance(linked_tree, TaskTreeNode)
         assert linked_tree.task.origin_type == TaskOriginType.link
 
     @pytest.mark.asyncio
     async def test_from_link_include_dependents_non_root_task(self, sync_db_session):
-        """_include_dependents=True includes downstream dependents for non-root link operations"""
+        """_include_dependents=True includes downstream dependents for non-root link operations (all must be completed)"""
         task_manager = TaskManager(sync_db_session)
         creator = TaskCreator(sync_db_session)
-        
+
         task_a = await task_manager.task_repository.create_task(
             name="Task A",
             user_id="user_123",
+            status="completed",
         )
         task_b = await task_manager.task_repository.create_task(
             name="Task B",
             user_id="user_123",
             parent_id=task_a.id,
+            status="completed",
         )
-        await task_manager.task_repository.create_task(
+        dependent = await task_manager.task_repository.create_task(
             name="Dependent Task",
             user_id="user_123",
+            status="completed",
             dependencies=[{"id": task_b.id, "required": True}]
         )
-        task_a.has_children = True
+        # Ensure all are completed
+        task_a.status = "completed"
+        task_b.status = "completed"
+        dependent.status = "completed"
         sync_db_session.commit()
-        
+
         linked_tree = await creator.from_link(
             _original_task=task_b,
             _save=True,
             _recursive=True,
             _include_dependents=True
         )
-        
+
         assert isinstance(linked_tree, TaskTreeNode)
         assert linked_tree.task.origin_type == TaskOriginType.link
 
@@ -1056,21 +1219,25 @@ class TestTaskCreatorEdgeCases:
     
     @pytest.mark.asyncio
     async def test_origin_type_immutability(self, sync_db_session):
-        """Test that origin_type is set correctly for each operation"""
+        """Test that origin_type is set correctly for each operation (all must be completed for link)"""
         task_manager = TaskManager(sync_db_session)
         creator = TaskCreator(sync_db_session)
-        
+
         original = await task_manager.task_repository.create_task(
             name="Original",
             user_id="user_123",
+            status="completed",
         )
-        
+        # Ensure completed
+        original.status = "completed"
+        sync_db_session.commit()
+
         # Test each origin type
         linked = await creator.from_link(_original_task=original, _recursive=False)
         assert linked.origin_type == TaskOriginType.link
-        
+
         copied = await creator.from_copy(_original_task=original, _recursive=False)
         assert copied.origin_type == TaskOriginType.copy
-        
+
         snapshot = await creator.from_snapshot(_original_task=original, _recursive=False)
         assert snapshot.origin_type == TaskOriginType.snapshot

@@ -164,8 +164,11 @@ class TaskRepository:
                 )
                 continue
             elif key == "status":
-                logger.debug(f"Ignoring status '{value}' from kwargs - new tasks always start as 'pending'")
-                continue
+                if original_task_id:
+                    task_data["status"] = value
+                else:
+                    logger.debug(f"Ignoring status '{value}' from kwargs - new tasks always start as 'pending'")
+                    continue
             elif key in available_columns:
                 task_data[key] = value
             else:

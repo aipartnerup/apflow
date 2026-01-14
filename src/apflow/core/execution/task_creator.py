@@ -18,7 +18,7 @@ import os
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from apflow.core.execution.task_manager import TaskManager
-from apflow.core.types import TaskTreeNode
+from apflow.core.types import TaskTreeNode, TaskStatus
 from apflow.core.storage.sqlalchemy.models import TaskModel, TaskOriginType
 from apflow.logger import get_logger
 from apflow.core.config import get_task_model_class
@@ -1307,6 +1307,8 @@ class TaskCreator:
     ) -> TaskModel | TaskTreeNode:
         """
         Create task(s) by linking to existing task(s) (reference)
+        Only allow linking if the entire source task tree is completed.
+        The status of the link will be set to the source task's status.
         
         Creates new task(s) that reference the original task. Each new task points to
         the corresponding original task via original_task_id field and has origin_type='link'.
@@ -1324,6 +1326,15 @@ class TaskCreator:
             TaskModel if _recursive=False,
             TaskTreeNode if _recursive=True
         """
+        # 1. check entire task tree is completed
+        task_tree = await self.task_manager.task_repository.build_task_tree(_original_task)
+        if task_tree.calculate_status() != TaskStatus.COMPLETED:
+            raise ValueError("Only a fully completed task tree can be linked. There are unfinished tasks in the tree.")
+
+        # 2. set task status to original task status
+        reset_kwargs = dict(reset_kwargs)
+        reset_kwargs["status"] = getattr(_original_task, "status", None)
+
         if not _recursive:
             linked_task = await self._create_link_task(
                 _original_task, _save, reset_kwargs
@@ -1737,6 +1748,7 @@ class TaskCreator:
             origin_type=TaskOriginType.link,
             original_task_id=original_task.id,
             task_tree_id=None,
+            status=link_task_data.get("status", getattr(original_task, "status", None)),
             save=save,
         )
         
@@ -1756,8 +1768,7 @@ class TaskCreator:
             parent_id: Optional[str] = None,
             is_root: bool = True,
         ) -> TaskModel:
-            """Recursively link a task and its children"""
-            
+            """Recursively link a task and its children, propagating status override"""
             # Mark original task as referenced
             if not orig_task.has_references:
                 orig_task.has_references = True
@@ -1765,13 +1776,13 @@ class TaskCreator:
                     await self.db.commit()
                 else:
                     self.db.commit()
-            
-            # Extract field overrides from reset_kwargs
+
+            # For each linked task, set status to its original task's status
             link_task_data = self._extract_field_overrides(
                 orig_task, reset_kwargs, is_root=is_root
             )
-            
-            # Create linked task
+            link_task_data["status"] = getattr(orig_task, "status", None)
+
             linked_task = await self.task_manager.task_repository.create_task(
                 name=link_task_data.get("name", orig_task.name),
                 user_id=link_task_data.get("user_id", orig_task.user_id),
@@ -1784,30 +1795,31 @@ class TaskCreator:
                 origin_type=TaskOriginType.link,
                 original_task_id=orig_task.id,
                 task_tree_id=None,
+                status=link_task_data["status"],
                 save=save,
             )
-            
+
             id_mapping[orig_task.id] = linked_task.id
-            
+
             # Link children
             children = await self.task_manager.task_repository.get_child_tasks_by_parent_id(
                 orig_task.id
             )
-            
+
             if children:
                 linked_task.has_children = True
                 if self.task_manager.is_async:
                     await self.db.commit()
                 else:
                     self.db.commit()
-                
+
                 for child in children:
                     await link_task_recursive(
                         child, parent_id=linked_task.id, is_root=False
                     )
-            
+
             return linked_task
-        
+
         return await link_task_recursive(original_task, is_root=True)
     
     async def _create_copy_task(
