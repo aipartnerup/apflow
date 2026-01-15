@@ -1444,7 +1444,7 @@ class TestHandleTaskExecuteUseDemo:
 
 
 class TestHandleTaskCopy:
-    """Test cases for handle_task_copy method"""
+    """Test cases for handle_task_clone method"""
 
     @pytest_asyncio.fixture
     async def task_tree_for_copy(self, use_test_db_session):
@@ -1489,7 +1489,7 @@ class TestHandleTaskCopy:
         params = {"task_id": root.id, "copy_mode": "minimal", "save": True}
         request_id = str(uuid.uuid4())
 
-        result = await task_routes.handle_task_copy(params, mock_request, request_id)
+        result = await task_routes.handle_task_clone(params, mock_request, request_id)
 
         # Verify response
         assert isinstance(result, dict)
@@ -1512,7 +1512,7 @@ class TestHandleTaskCopy:
         params = {"task_id": root.id, "copy_mode": "minimal", "save": False}
         request_id = str(uuid.uuid4())
 
-        result = await task_routes.handle_task_copy(params, mock_request, request_id)
+        result = await task_routes.handle_task_clone(params, mock_request, request_id)
 
         # Verify response is task array
         assert isinstance(result, dict)
@@ -1539,7 +1539,7 @@ class TestHandleTaskCopy:
         }
         request_id = str(uuid.uuid4())
 
-        result = await task_routes.handle_task_copy(params, mock_request, request_id)
+        result = await task_routes.handle_task_clone(params, mock_request, request_id)
 
         # Verify response
         assert isinstance(result, dict)
@@ -1558,7 +1558,7 @@ class TestHandleTaskCopy:
         params = {"task_id": root.id, "save": True}
         request_id = str(uuid.uuid4())
 
-        result = await task_routes.handle_task_copy(params, mock_request, request_id)
+        result = await task_routes.handle_task_clone(params, mock_request, request_id)
 
         # Verify response
         assert isinstance(result, dict)

@@ -1873,10 +1873,10 @@ class TestAgentExecutor:
     
     @pytest.mark.asyncio
     async def test_execute_with_tasks_copy_method(self, executor, mock_event_queue):
-        """Test execute with tasks.copy method routes to adapter"""
+        """Test execute with tasks.clone method routes to adapter"""
         context = self._create_request_context_with_method(
-            method="tasks.copy",
-            params={"task_id": "task-123", "children": True}
+            method="tasks.clone",
+            params={"task_id": "task-123", "recursive": True}
         )
         
         with patch.object(executor.task_routes_adapter, 'call_handler') as mock_call_handler, \
@@ -1898,7 +1898,7 @@ class TestAgentExecutor:
             mock_call_handler.assert_called_once()
             call_args = mock_call_handler.call_args
             method_arg = call_args.kwargs.get("method") if call_args.kwargs else (call_args.args[0] if call_args.args else None)
-            assert method_arg == "tasks.copy"
+            assert method_arg == "tasks.clone"
             assert result == mock_a2a_task
     
     @pytest.mark.asyncio

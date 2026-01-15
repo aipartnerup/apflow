@@ -403,8 +403,8 @@ class TaskRoutes(BaseRouteHandler):
                 elif method == "tasks.cancel" or method == "tasks.running.cancel":
                     result = await self.handle_task_cancel(params, request, request_id)
                 # Task clone/copy
-                elif method in ("tasks.clone", "tasks.copy"):
-                    result = await self.handle_task_copy(params, request, request_id)
+                elif method == "tasks.clone":
+                    result = await self.handle_task_clone(params, request, request_id)
                 # Task generation
                 elif method == "tasks.generate":
                     result = await self.handle_task_generate(params, request, request_id)
@@ -1585,12 +1585,12 @@ class TaskRoutes(BaseRouteHandler):
             logger.error(f"Error deleting task: {str(e)}", exc_info=True)
             raise
 
-    async def handle_task_copy(self, params: dict, request: Request, request_id: str) -> dict:
+    async def handle_task_clone(self, params: dict, request: Request, request_id: str) -> dict:
         """
-        Handle task clone/copy (create_task_copy)
+        Handle task clone
 
         Params:
-            task_id: Task ID to copy (required)
+            task_id: Task ID to clone (required)
             origin_type: Origin type - "copy" (default), "link", "snapshot", or "mixed"
             recursive: If True, copy/link entire subtree; if False, only single task (default: True)
             link_task_ids: List of task IDs to link (for mixed mode)

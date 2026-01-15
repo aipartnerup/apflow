@@ -87,7 +87,6 @@ class TaskRoutesAdapter:
                     "tasks.running.count": "tasks.running.count",
                     "tasks.cancel": "tasks.cancel",
                     "tasks.clone": "tasks.clone",
-                    "tasks.copy": "tasks.copy",
                     "tasks.generate": "tasks.generate",
                     "tasks.execute": "tasks.execute",
                 }
@@ -267,8 +266,8 @@ class TaskRoutesAdapter:
             return await self.task_routes.handle_running_tasks_count(params, request, request_id)
         elif method == "tasks.cancel" or method == "tasks.running.cancel":
             return await self.task_routes.handle_task_cancel(params, request, request_id)
-        elif method in ("tasks.clone", "tasks.copy"):
-            return await self.task_routes.handle_task_copy(params, request, request_id)
+        elif method == "tasks.clone":
+            return await self.task_routes.handle_task_clone(params, request, request_id)
         elif method == "tasks.generate":
             return await self.task_routes.handle_task_generate(params, request, request_id)
         elif method == "tasks.execute":
@@ -409,7 +408,7 @@ class TaskRoutesAdapter:
                 # It's a task dictionary
                 return self.convert_to_a2a_task(result, task_id=task_id, context_id=context_id)
             else:
-                # It's a result dictionary (e.g., from tasks.delete, tasks.copy)
+                # It's a result dictionary (e.g., from tasks.delete, tasks.clone)
                 # Wrap in A2A format
                 return {
                     "protocol": "a2a",

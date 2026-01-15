@@ -159,7 +159,7 @@ JSON-RPC 2.0 format:
   - `tasks.running.status`: Get running task status
   - `tasks.running.count`: Count running tasks
   - `tasks.cancel`: Cancel running task(s)
-  - `tasks.copy`: Copy task tree
+  - `tasks.clone`: Clone task tree
 - `params` (object, required): Method parameters (varies by method)
   - For `tasks.execute` or `execute_task_tree`: `tasks` (array, required): Array of task objects to execute
 - `id` (string/number, required): Request identifier for matching responses
@@ -510,7 +510,7 @@ JSON-RPC 2.0 format with method-specific parameters:
 - `tasks.running.status` - Get status of running tasks
 - `tasks.running.count` - Get count of running tasks
 - `tasks.cancel` / `tasks.running.cancel` - Cancel running tasks
-- `tasks.copy` - Copy a task tree for re-execution
+- `tasks.clone` - Clone task tree for re-execution
 - `tasks.generate` - Generate task tree from natural language requirement
 - `tasks.execute` - Execute a task by ID
 
@@ -990,16 +990,38 @@ If all conditions are met, the task and all its children are physically deleted.
 - To delete a task with non-pending children, first cancel or complete those children
 - To delete a task with dependencies, first remove or update the dependent tasks
 
-### `tasks.copy`
+
+### `tasks.clone`
 
 **Description:**  
-Creates a new executable copy of an existing task tree for re-execution. Supports two copy modes:
-- **Minimal mode (default)**: Copies minimal subtree (original_task + children + dependents). All copied tasks are marked as pending for re-execution.
-- **Full mode**: Copies complete tree from root. Tasks that need re-execution are marked as pending, unrelated successful tasks are marked as completed with preserved token_usage.
+Creates a new task or task tree by copying, linking, snapshotting, or mixing origin types from an existing task. This endpoint supports advanced cloning options:
 
-**Method:** `tasks.copy`
+- **Copy (default):** Deeply copies the original task and its subtree. All fields are duplicated, and new IDs are generated. You can choose to copy only the selected task or the entire subtree.
+- **Link:** Creates a new task that references the original, preserving its status and result. Only allowed if the source task tree is fully completed.
+- **Snapshot:** Creates a read-only, immutable snapshot of the original task or subtree.
+- **Mixed:** Allows selective linking and copying within the same operation, using `link_task_ids` to specify which tasks to link.
 
-**What Gets Copied:**
+**Parameters:**
+- `task_id` (string, required): ID of the task to clone.
+- `origin_type` (string, optional): One of `"copy"` (default), `"link"`, `"snapshot"`, or `"mixed"`.
+- `recursive` (boolean, optional): If `true` (default), clone the entire subtree; if `false`, only the specified task.
+- `link_task_ids` (array, optional): For `"mixed"` mode, list of task IDs to link instead of copy.
+- `reset_fields` (object, optional): Dictionary of fields to override/reset in the cloned tasks.
+- `save` (boolean, optional): If `true` (default), save the cloned tasks to the database and return the new tree; if `false`, return a preview array of the cloned tasks without saving.
+
+**Behavior:**
+- Validates permissions and task existence.
+- Supports advanced use cases: subtree promotion, dependency inclusion, and selective field resets.
+- Returns the new task tree (if `save=true`) or a preview array (if `save=false`).
+
+**Error Cases:**
+- Task not found
+- Invalid parameters (e.g., missing `link_task_ids` for `"mixed"`)
+- Permission denied
+
+**Method:** `tasks.clone`
+
+**What Gets Cloned:**
 - The original task and all its children (recursive)
 - All tasks that depend on the original task (direct and transitive dependencies)
 - Task structure (parent-child relationships)
@@ -1030,27 +1052,27 @@ Creates a new executable copy of an existing task tree for re-execution. Support
 - Dependencies structure
 
 **Metadata:**
-- `original_task_id`: Links copied task to original task's root ID
-- `origin_type`: Task origin type (own, copy, reference, link, snapshot)
+- `original_task_id`: Links cloned task to original task's root ID
+- `origin_type`: Task origin type (own, clone, reference, link, snapshot)
 - `task_tree_id`: Task tree identifier for grouping and querying across trees
-- `has_references`: Set to `true` on all original tasks that were copied
+- `has_references`: Set to `true` on all original tasks that were cloned
 
 **Parameters:**
-- `task_id` (string, required): ID of the task to copy. Can be root task or any task in the tree. The method will copy the minimal subtree containing the task and all its dependencies.
-- `_recursive` (boolean, optional): If `true`, also copy each direct child task of the original task with its dependencies. When copying children, tasks that depend on multiple copied tasks are only copied once (deduplication by task ID). Default: `false`.
-- `reset_fields` (array of strings, optional): List of field names to reset during copy. Common fields: `["status", "progress", "result", "error"]`. Default: `null` (uses mode-specific defaults).
-- `save` (boolean, optional): If `true` (default), saves copied tasks to database and returns TaskTreeNode. If `false`, returns task array without saving to database (suitable for preview or direct use with `tasks.create`).
+- `task_id` (string, required): ID of the task to clone. Can be root task or any task in the tree. The method will clone the minimal subtree containing the task and all its dependencies.
+- `_recursive` (boolean, optional): If `true`, also clone each direct child task of the original task with its dependencies. When cloning children, tasks that depend on multiple cloned tasks are only cloned once (deduplication by task ID). Default: `false`.
+- `reset_fields` (array of strings, optional): List of field names to reset during clone. Common fields: `["status", "progress", "result", "error"]`. Default: `null` (uses mode-specific defaults).
+- `save` (boolean, optional): If `true` (default), saves cloned tasks to database and returns TaskTreeNode. If `false`, returns task array without saving to database (suitable for preview or direct use with `tasks.create`).
 
 **Example Request:**
 ```json
 {
   "jsonrpc": "2.0",
-  "method": "tasks.copy",
+  "method": "tasks.clone",
   "params": {
     "task_id": "task-abc-123",
     "children": false
   },
-  "id": "copy-request-1"
+  "id": "clone-request-1"
 }
 ```
 
@@ -1058,12 +1080,12 @@ Creates a new executable copy of an existing task tree for re-execution. Support
 ```json
 {
   "jsonrpc": "2.0",
-  "method": "tasks.copy",
+  "method": "tasks.clone",
   "params": {
     "task_id": "task-abc-123",
     "save": false
   },
-  "id": "copy-request-5"
+  "id": "clone-request-5"
 }
 ```
 
@@ -1071,7 +1093,7 @@ Creates a new executable copy of an existing task tree for re-execution. Support
 ```json
 {
   "jsonrpc": "2.0",
-  "id": "copy-request-5",
+  "id": "clone-request-5",
   "result": {
     "tasks": [
       {
@@ -1100,16 +1122,16 @@ Creates a new executable copy of an existing task tree for re-execution. Support
 ```json
 {
   "jsonrpc": "2.0",
-  "id": "copy-request-1",
+  "id": "clone-request-1",
   "result": {
-    "id": "task-copy-xyz-789",
+    "id": "task-clone-xyz-789",
     "name": "Original Task Name",
     "original_task_id": "task-abc-123",
     "status": "pending",
     "progress": 0.0,
     "children": [
       {
-        "id": "child-copy-456",
+        "id": "child-clone-456",
         "name": "Child Task",
         "original_task_id": "task-abc-123",
         "status": "pending",
@@ -1125,14 +1147,14 @@ Creates a new executable copy of an existing task tree for re-execution. Support
 - Permission denied: Returns error with code -32001
 
 **Notes:**
-- The copied task tree has new task IDs (UUIDs) but preserves the original structure
+- The cloned task tree has new task IDs (UUIDs) but preserves the original structure
 - All execution fields are reset (status="pending", progress=0.0, result=null) unless `reset_fields` is specified
 - The original task's `has_references` flag is set to `true` when `save=true`
-- Dependencies correctly reference new task IDs within the copied tree
+- Dependencies correctly reference new task IDs within the cloned tree
 - When `save=false`, the returned task array is compatible with `tasks.create` API
-- Each copied task's `original_task_id` points to its direct original counterpart (not root)
+- Each cloned task's `original_task_id` points to its direct original counterpart (not root)
 - Failed leaf nodes are automatically handled (pending dependents are filtered out)
-- The copied tree is ready for immediate execution
+- The cloned tree is ready for immediate execution
 
 ### `tasks.generate`
 

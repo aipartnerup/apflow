@@ -253,7 +253,7 @@ def generate_openapi_schema(
                                         },
                                     },
                                     "cloneTask": {
-                                        "summary": "Clone Task Tree (alias: tasks.copy)",
+                                        "summary": "Clone Task Tree",
                                         "value": {
                                             "jsonrpc": "2.0",
                                             "method": "tasks.clone",

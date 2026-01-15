@@ -676,7 +676,7 @@ def test_jsonrpc_tasks_copy(json_rpc_client):
     copy_request = {
         "jsonrpc": "2.0",
         "id": 201,
-        "method": "tasks.copy",
+        "method": "tasks.clone",
         "params": {
             "task_id": root_task_id
         }
@@ -781,14 +781,14 @@ def test_jsonrpc_tasks_copy_with_children(json_rpc_client):
     created_result = create_response.json()
     root_task_id = created_result["result"]["id"]
     
-    # Copy task with children=True
+    # Copy task with recursive=True
     copy_request = {
         "jsonrpc": "2.0",
         "id": 301,
-        "method": "tasks.copy",
+        "method": "tasks.clone",
         "params": {
             "task_id": root_task_id,
-            "children": True
+            "recursive": True
         }
     }
     

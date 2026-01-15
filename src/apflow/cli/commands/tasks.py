@@ -440,11 +440,10 @@ def _clone_command(
     link_task_ids: Optional[str],
     reset_fields: Optional[str],
     dry_run: bool,
-    invoked_via_alias: bool,
 ) -> None:
-    """Shared implementation for tasks.clone and alias tasks.copy."""
-    command_name = "copy" if invoked_via_alias else "clone"
-    command_label = "Task copy (alias for clone)" if invoked_via_alias else "Task clone"
+    """Shared implementation for tasks.clone."""
+    command_name = "clone"
+    command_label = "Task clone"
 
     try:
        
@@ -622,7 +621,6 @@ def _clone_command(
 def clone(
     task_id: str = typer.Argument(..., help="Task ID to clone"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path for cloned task tree"),
-    children: bool = typer.Option(False, "--children", help="Also clone each direct child task with its dependencies"),
     origin_type: str = typer.Option("copy", "--origin-type", help="Origin type: 'copy' (default), 'link', 'snapshot', or 'mixed'"),
     recursive: bool = typer.Option(True, "--recursive/--no-recursive", help="Clone/link entire subtree (default: True)"),
     link_task_ids: Optional[str] = typer.Option(None, "--link-task-ids", help="Comma-separated task IDs to link (for mixed mode)"),
@@ -642,31 +640,6 @@ def clone(
         link_task_ids=link_task_ids,
         reset_fields=reset_fields,
         dry_run=dry_run,
-        invoked_via_alias=False,
-    )
-
-
-@app.command(name="copy", help="Alias for tasks.clone")
-def copy(
-    task_id: str = typer.Argument(..., help="Task ID to copy"),
-    output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path for copied task tree"),
-    children: bool = typer.Option(False, "--children", help="Also copy each direct child task with its dependencies"),
-    origin_type: str = typer.Option("copy", "--origin-type", help="Origin type: 'copy' (default), 'link', 'snapshot', or 'mixed'"),
-    recursive: bool = typer.Option(True, "--recursive/--no-recursive", help="Copy/link entire subtree (default: True)"),
-    link_task_ids: Optional[str] = typer.Option(None, "--link-task-ids", help="Comma-separated task IDs to link (for mixed mode)"),
-    reset_fields: Optional[str] = typer.Option(None, "--reset-fields", help="Field overrides as key=value pairs (e.g., 'user_id=new_user,priority=1')"),
-    dry_run: bool = typer.Option(False, "--dry-run", help="Preview task copy without saving to database"),
-):
-    """Backward-compatible alias for tasks.clone."""
-    return _clone_command(
-        task_id=task_id,
-        output=output,
-        origin_type=origin_type,
-        recursive=recursive,
-        link_task_ids=link_task_ids,
-        reset_fields=reset_fields,
-        dry_run=dry_run,
-        invoked_via_alias=True,
     )
 
 

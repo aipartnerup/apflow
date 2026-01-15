@@ -181,16 +181,6 @@ def load_skills() -> list[AgentSkill]:
         )
     )
 
-    skills.append(
-        AgentSkill(
-            id="tasks.copy",
-            name="Copy Task (alias)",
-            description="Alias for tasks.clone (retained for backward compatibility)",
-            tags=["task", "copy", "clone", "duplicate"],
-            examples=["copy task", "duplicate task", "clone task"],
-        )
-    )
-    
     # Task generation
     skills.append(
         AgentSkill(

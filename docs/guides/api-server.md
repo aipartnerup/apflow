@@ -113,7 +113,7 @@ All task management operations are now fully supported through the A2A Protocol 
 - **Task CRUD**: `tasks.create`, `tasks.get`, `tasks.update`, `tasks.delete`
 - **Task Query**: `tasks.detail`, `tasks.tree`, `tasks.list`, `tasks.children`
 - **Running Tasks**: `tasks.running.list`, `tasks.running.status`, `tasks.running.count`
-- **Task Control**: `tasks.cancel`, `tasks.copy`
+- **Task Control**: `tasks.cancel`, `tasks.clone`
 - **Task Generation**: `tasks.generate` (generate task tree from natural language using LLM)
 
 All methods follow the same A2A Protocol JSON-RPC format and return A2A Protocol Task objects with real-time status updates.
