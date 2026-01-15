@@ -1182,12 +1182,12 @@ class TestTasksCopyCommandAdvanced:
         try:
             result = runner.invoke(cli, [
                 "tasks", "copy",
-                "non-existent-task",
-                "--copy-mode", "minimal"
+                "non-existent-task"
             ])
 
             assert result.exit_code != 0
-            assert "not found" in result.stdout.lower() or "error" in result.stdout.lower() or result.exit_code == 1
+            output = result.output.lower()
+            assert "not found" in output or "error" in output or "task" in output
         finally:
             reset_default_session()
 

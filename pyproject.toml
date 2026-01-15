@@ -39,7 +39,7 @@ dependencies = [
 # A2A Protocol Server (Agent-to-Agent communication protocol)
 a2a = [
     "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.34.2",
+    "uvicorn[standard]>=0.29.0",
     "a2a-sdk[http-server]>=0.3.0",
     "httpx[socks]>=0.27.0",  # Include socks support for proxy environments
     "aiohttp[speedups]>=3.9.0",
@@ -68,7 +68,7 @@ postgres = [
 
 # CrewAI LLM task support (includes BatchCrewaiExecutor)
 crewai = [
-    "crewai[tools]>=1.4.1",
+    "crewai[tools]>=1.7.2",
     "litellm>=1.0.0",
     "anthropic>=0.34.0",
     # Fix compatibility issue: aiodns 3.6.0 is incompatible with pycares 5.0.0

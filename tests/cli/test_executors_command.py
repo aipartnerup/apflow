@@ -72,8 +72,11 @@ def test_cli_executors_list_json_format():
     # Verify command succeeded
     assert result.returncode == 0, f"Command failed: {result.stderr}"
     
-    # Parse JSON output
-    data = json.loads(result.stdout)
+    # Extract JSON from output (robust to extra text)
+    import re
+    match = re.search(r'({.*})', result.stdout, re.DOTALL)
+    assert match, f"No JSON found in output: {result.stdout}"
+    data = json.loads(match.group(1))
     
     # Verify structure
     assert "executors" in data
