@@ -14,6 +14,7 @@ from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING, Type, TypeVa
 from datetime import datetime
 from apflow.core.storage.sqlalchemy.models import TaskModel, TaskOriginType
 from apflow.core.execution.errors import ValidationError
+from apflow.core.storage.sqlalchemy.session_proxy import SqlalchemySessionProxy
 from apflow.logger import get_logger
 
 if TYPE_CHECKING:
@@ -25,7 +26,7 @@ logger = get_logger(__name__)
 TaskModelType = TypeVar("TaskModelType", bound=TaskModel)
 
 
-class TaskRepository:
+class TaskRepository():
     """
     Task repository for database operations
     
@@ -64,8 +65,7 @@ class TaskRepository:
                 to add custom fields (e.g., project_id, department, etc.)
                 Example: TaskRepository(db, task_model_class=MyTaskModel)
         """
-        self.db = db
-        self.is_async = isinstance(db, AsyncSession)
+        self.db = SqlalchemySessionProxy(db)
         self.task_model_class = task_model_class
     
     async def create_task(
@@ -183,17 +183,10 @@ class TaskRepository:
         self.db.add(task)
         
         try:
-            if self.is_async:
-                await self.db.commit()
-                await self.db.refresh(task)
-            else:
-                self.db.commit()
-                self.db.refresh(task)
+            await self.db.commit()
+            await self.db.refresh(task)
         except Exception as e:
-            if self.is_async:
-                await self.db.rollback()
-            else:
-                self.db.rollback()
+            await self.db.rollback()
             logger.error(f"Error creating task: {str(e)}")
             raise
         
@@ -210,15 +203,9 @@ class TaskRepository:
             TaskModel instance (or custom TaskModel subclass) or None if not found
         """
         try:
-            if self.is_async:
-                result = await self.db.execute(
-                    select(self.task_model_class).where(self.task_model_class.id == task_id)
-                )
-                return result.scalar_one_or_none()
-            else:
-                return self.db.query(self.task_model_class).filter(
-                    self.task_model_class.id == task_id
-                ).first()
+            stmt = select(self.task_model_class).where(self.task_model_class.id == task_id)
+            result = await self.db.execute(stmt)
+            return result.scalar_one_or_none()
         except Exception as e:
             logger.error(f"Error getting task by id {task_id}: {str(e)}")
             raise
@@ -234,17 +221,11 @@ class TaskRepository:
             List of child TaskModel instances (or custom TaskModel subclass), ordered by priority
         """
         try:
-            if self.is_async:
-                stmt = select(self.task_model_class).filter(
-                    self.task_model_class.parent_id == parent_id
-                ).order_by(self.task_model_class.priority.asc())
-                result = await self.db.execute(stmt)
-                children = result.scalars().all()
-            else:
-                children = self.db.query(self.task_model_class).filter(
-                    self.task_model_class.parent_id == parent_id
-                ).order_by(self.task_model_class.priority.asc()).all()
-            return children
+            stmt = select(self.task_model_class).filter(
+                self.task_model_class.parent_id == parent_id
+            ).order_by(self.task_model_class.priority.asc())
+            result = await self.db.execute(stmt)
+            return result.scalars().all()
         except Exception as e:
             logger.error(f"Error getting child tasks for parent {parent_id}: {str(e)}")
             return []
@@ -348,17 +329,11 @@ class TaskRepository:
         # This prevents stale data when other servers update task status in load-balanced environments
         # Avoid using refresh() as it can hang if there are database locks
         self.db.expire_all()
-        if self.is_async:
-            stmt = select(self.task_model_class).filter(
-                self.task_model_class.task_tree_id == tree_id
-            ).order_by(self.task_model_class.priority.asc())
-            result = await self.db.execute(stmt)
-            tasks = result.scalars().all()
-        else:
-            tasks = self.db.query(self.task_model_class).filter(
-                self.task_model_class.task_tree_id == tree_id
-            ).order_by(self.task_model_class.priority.asc()).all()
-        return tasks
+        stmt = select(self.task_model_class).filter(
+            self.task_model_class.task_tree_id == tree_id
+        ).order_by(self.task_model_class.priority.asc())
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
 
 
     async def build_task_tree_by_tree_id(self, tree_id: str) -> "TaskTreeNode":
@@ -395,7 +370,7 @@ class TaskRepository:
         # between query and tree building
         for task in tasks:
             try:
-                self.db.refresh(task)
+                await self.db.refresh(task)
             except Exception as refresh_error:
                 # If refresh fails (e.g., task was deleted), log and continue
                 logger.warning(f"Failed to refresh task {task.id} in build_task_tree_by_tree_id: {refresh_error}")
@@ -535,21 +510,14 @@ class TaskRepository:
             if completed_at is not None:
                 task.completed_at = completed_at
             
-            if self.is_async:
-                await self.db.commit()
-                await self.db.refresh(task)
-            else:
-                self.db.commit()
-                self.db.refresh(task)
-            
+            await self.db.commit()
+            await self.db.refresh(task)
+
             return True
             
         except Exception as e:
             logger.error(f"Error updating task status for {task_id}: {str(e)}")
-            if self.is_async:
-                await self.db.rollback()
-            else:
-                self.db.rollback()
+            await self.db.rollback()
             return False
     
     async def update_task_inputs(self, task_id: str, inputs: Dict[str, Any]) -> bool:
@@ -572,12 +540,8 @@ class TaskRepository:
             # Mark JSON field as modified for SQLAlchemy change detection
             flag_modified(task, "inputs")
             
-            if self.is_async:
-                await self.db.commit()
-                await self.db.refresh(task)
-            else:
-                self.db.commit()
-                self.db.refresh(task)
+            await self.db.commit()
+            await self.db.refresh(task)
             
             # Verify the update was successful
             logger.debug(
@@ -615,22 +579,15 @@ class TaskRepository:
             # Mark JSON field as modified for SQLAlchemy change detection
             flag_modified(task, "dependencies")
             
-            if self.is_async:
-                await self.db.commit()
-                await self.db.refresh(task)
-            else:
-                self.db.commit()
-                self.db.refresh(task)
+            await self.db.commit()
+            await self.db.refresh(task)
             
             logger.debug(f"Updated dependencies for task {task_id}")
             return True
             
         except Exception as e:
             logger.error(f"Error updating task dependencies for {task_id}: {str(e)}")
-            if self.is_async:
-                await self.db.rollback()
-            else:
-                self.db.rollback()
+            await self.db.rollback()
             return False
     
     async def update_task_name(self, task_id: str, name: str) -> bool:
@@ -651,22 +608,15 @@ class TaskRepository:
             
             task.name = name
             
-            if self.is_async:
-                await self.db.commit()
-                await self.db.refresh(task)
-            else:
-                self.db.commit()
-                self.db.refresh(task)
+            await self.db.commit()
+            await self.db.refresh(task)
             
             logger.debug(f"Updated name for task {task_id}")
             return True
             
         except Exception as e:
             logger.error(f"Error updating task name for {task_id}: {str(e)}")
-            if self.is_async:
-                await self.db.rollback()
-            else:
-                self.db.rollback()
+            await self.db.rollback()
             return False
     
     async def update_task_priority(self, task_id: str, priority: int) -> bool:
@@ -687,22 +637,15 @@ class TaskRepository:
             
             task.priority = priority
             
-            if self.is_async:
-                await self.db.commit()
-                await self.db.refresh(task)
-            else:
-                self.db.commit()
-                self.db.refresh(task)
+            await self.db.commit()
+            await self.db.refresh(task)
             
             logger.debug(f"Updated priority for task {task_id}")
             return True
             
         except Exception as e:
             logger.error(f"Error updating task priority for {task_id}: {str(e)}")
-            if self.is_async:
-                await self.db.rollback()
-            else:
-                self.db.rollback()
+            await self.db.rollback()
             return False
     
     async def update_task_params(self, task_id: str, params: Dict[str, Any]) -> bool:
@@ -725,12 +668,8 @@ class TaskRepository:
             # Mark JSON field as modified for SQLAlchemy change detection
             flag_modified(task, "params")
             
-            if self.is_async:
-                await self.db.commit()
-                await self.db.refresh(task)
-            else:
-                self.db.commit()
-                self.db.refresh(task)
+            await self.db.commit()
+            await self.db.refresh(task)
             
             logger.debug(f"Updated params for task {task_id}")
             return True
@@ -763,22 +702,15 @@ class TaskRepository:
             # Mark JSON field as modified for SQLAlchemy change detection
             flag_modified(task, "schemas")
             
-            if self.is_async:
-                await self.db.commit()
-                await self.db.refresh(task)
-            else:
-                self.db.commit()
-                self.db.refresh(task)
+            await self.db.commit()
+            await self.db.refresh(task)
             
             logger.debug(f"Updated schemas for task {task_id}")
             return True
             
         except Exception as e:
             logger.error(f"Error updating task schemas for {task_id}: {str(e)}")
-            if self.is_async:
-                await self.db.rollback()
-            else:
-                self.db.rollback()
+            await self.db.rollback()
             return False
     
     async def get_completed_tasks_by_ids(self, task_ids: List[str]) -> Dict[str, TaskModelType]:
@@ -795,19 +727,12 @@ class TaskRepository:
             return {}
         
         try:
-            if self.is_async:
-                stmt = select(self.task_model_class).filter(
-                    self.task_model_class.id.in_(task_ids),
-                    self.task_model_class.status == "completed"
-                )
-                result = await self.db.execute(stmt)
-                tasks = result.scalars().all()
-            else:
-                tasks = self.db.query(self.task_model_class).filter(
-                    self.task_model_class.id.in_(task_ids),
-                    self.task_model_class.status == "completed"
-                ).all()
-            
+            stmt = select(self.task_model_class).filter(
+                self.task_model_class.id.in_(task_ids),
+                self.task_model_class.status == "completed"
+            )
+            result = await self.db.execute(stmt)
+            tasks = result.scalars().all()
             return {task.id: task for task in tasks}
             
         except Exception as e:
@@ -841,66 +766,36 @@ class TaskRepository:
         """
         try:
             # Build query
-            if self.is_async:
-                stmt = select(self.task_model_class)
-                
-                # Apply filters
-                if user_id is not None:
-                    stmt = stmt.filter(self.task_model_class.user_id == user_id)
-                
-                if status is not None:
-                    stmt = stmt.filter(self.task_model_class.status == status)
-                
-                # Apply parent_id filter
-                if parent_id is not None:
-                    if parent_id == "":
-                        # Empty string means filter for root tasks (parent_id is None)
-                        stmt = stmt.filter(self.task_model_class.parent_id.is_(None))
-                    else:
-                        # Specific parent_id
-                        stmt = stmt.filter(self.task_model_class.parent_id == parent_id)
-                
-                # Apply ordering
-                order_column = getattr(self.task_model_class, order_by, None)
-                if order_column is not None:
-                    if order_desc:
-                        stmt = stmt.order_by(order_column.desc())
-                    else:
-                        stmt = stmt.order_by(order_column.asc())
-                
-                # Apply pagination
-                stmt = stmt.offset(offset).limit(limit)
-                result = await self.db.execute(stmt)
-                tasks = result.scalars().all()
-            else:
-                stmt = self.db.query(self.task_model_class)
-                
-                # Apply filters
-                if user_id is not None:
-                    stmt = stmt.filter(self.task_model_class.user_id == user_id)
-                
-                if status is not None:
-                    stmt = stmt.filter(self.task_model_class.status == status)
-                
-                # Apply parent_id filter
-                if parent_id is not None:
-                    if parent_id == "":
-                        # Empty string means filter for root tasks (parent_id is None)
-                        stmt = stmt.filter(self.task_model_class.parent_id.is_(None))
-                    else:
-                        # Specific parent_id
-                        stmt = stmt.filter(self.task_model_class.parent_id == parent_id)
-                
-                # Apply ordering
-                order_column = getattr(self.task_model_class, order_by, None)
-                if order_column is not None:
-                    if order_desc:
-                        stmt = stmt.order_by(order_column.desc())
-                    else:
-                        stmt = stmt.order_by(order_column.asc())
-                
-                # Apply pagination
-                tasks = stmt.offset(offset).limit(limit).all()
+            stmt = select(self.task_model_class)
+            
+            # Apply filters
+            if user_id is not None:
+                stmt = stmt.filter(self.task_model_class.user_id == user_id)
+            
+            if status is not None:
+                stmt = stmt.filter(self.task_model_class.status == status)
+            
+            # Apply parent_id filter
+            if parent_id is not None:
+                if parent_id == "":
+                    # Empty string means filter for root tasks (parent_id is None)
+                    stmt = stmt.filter(self.task_model_class.parent_id.is_(None))
+                else:
+                    # Specific parent_id
+                    stmt = stmt.filter(self.task_model_class.parent_id == parent_id)
+            
+            # Apply ordering
+            order_column = getattr(self.task_model_class, order_by, None)
+            if order_column is not None:
+                if order_desc:
+                    stmt = stmt.order_by(order_column.desc())
+                else:
+                    stmt = stmt.order_by(order_column.asc())
+            
+            # Apply pagination
+            stmt = stmt.offset(offset).limit(limit)
+            result = await self.db.execute(stmt)
+            tasks = result.scalars().all()
             
             return list(tasks)
             
@@ -927,13 +822,9 @@ class TaskRepository:
             # Save root task first
             root_task = task_tree.task
             self.db.add(root_task)
-            
-            if self.is_async:
-                await self.db.commit()
-                await self.db.refresh(root_task)
-            else:
-                self.db.commit()
-                self.db.refresh(root_task)
+
+            await self.db.commit()
+            await self.db.refresh(root_task)
             
             # Recursively save children with proper parent_id
             await self._save_children_recursive(task_tree)
@@ -943,10 +834,7 @@ class TaskRepository:
             
         except Exception as e:
             logger.error(f"Error saving task hierarchy to database: {str(e)}")
-            if self.is_async:
-                await self.db.rollback()
-            else:
-                self.db.rollback()
+            await self.db.rollback()
             return False
     
     async def _save_children_recursive(self, parent_node: "TaskTreeNode"):
@@ -957,12 +845,8 @@ class TaskRepository:
             child_task.parent_id = parent_node.task.id
             self.db.add(child_task)
             
-            if self.is_async:
-                await self.db.commit()
-                await self.db.refresh(child_task)
-            else:
-                self.db.commit()
-                self.db.refresh(child_task)
+            await self.db.commit()
+            await self.db.refresh(child_task)
             
             # Recursively save grandchildren
             if child_node.children:
@@ -1005,13 +889,10 @@ class TaskRepository:
         try:
             # Get all tasks from the database
             # We need to check all tasks' dependencies field to find reverse dependencies
-            if self.is_async:
-                stmt = select(self.task_model_class)
-                result = await self.db.execute(stmt)
-                all_tasks = result.scalars().all()
-            else:
-                all_tasks = self.db.query(self.task_model_class).all()
-            
+            stmt = select(self.task_model_class)
+            result = await self.db.execute(stmt)
+            all_tasks = result.scalars().all()
+   
             dependent_tasks = []
             for task in all_tasks:
                 dependencies = task.dependencies or []
@@ -1051,25 +932,17 @@ class TaskRepository:
             if not task:
                 return False
             
-            if self.is_async:
                 # For async session, use delete statement
-                stmt = delete(self.task_model_class).where(self.task_model_class.id == task_id)
-                await self.db.execute(stmt)
-                await self.db.commit()
-            else:
-                # For sync session, mark for deletion
-                self.db.delete(task)
-                self.db.commit()
+            stmt = delete(self.task_model_class).where(self.task_model_class.id == task_id)
+            await self.db.execute(stmt)
+            await self.db.commit()
             
             logger.debug(f"Physically deleted task {task_id}")
             return True
             
         except Exception as e:
             logger.error(f"Error deleting task {task_id}: {str(e)}")
-            if self.is_async:
-                await self.db.rollback()
-            else:
-                self.db.rollback()
+            await self.db.rollback()
             return False
 
     def assign_task_tree_id_recursive(self, task_id: str, tree_id: str) -> None:
@@ -1084,7 +957,6 @@ class TaskRepository:
         task = self.db.query(TaskModel).filter(TaskModel.id == task_id).first()
         if task and task.task_tree_id is None:
             task.task_tree_id = tree_id
-            self.db.flush()  # Flush but don't commit yet
         
         # Recursively update all children
         children = self.db.query(TaskModel).filter(
