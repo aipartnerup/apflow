@@ -8,7 +8,7 @@ These types represent the domain model of task orchestration and are not
 tied to any specific implementation layer.
 """
 
-from typing import TYPE_CHECKING, List, Dict, Any, Union, Callable, Awaitable
+from typing import TYPE_CHECKING, List, Dict, Any, Union, Callable, Awaitable, Optional
 
 if TYPE_CHECKING:
     from apflow.core.storage.sqlalchemy.models import TaskModel
@@ -147,6 +147,15 @@ class TaskTreeNode:
             child: The TaskTreeNode to add as a child
         """
         self.children.append(child)
+
+    def has_children(self) -> bool:
+        """
+        Check if the node has any children
+        
+        Returns:
+            True if the node has one or more children, False otherwise
+        """
+        return len(self.children) > 0
     
     def calculate_progress(self) -> float:
         """
@@ -190,7 +199,7 @@ class TaskTreeNode:
         else:
             return "pending"
         
-    def iter_nodes(self):
+    def __iter__(self):
         """
         Generator to iterate over all nodes in the tree
         
@@ -199,7 +208,7 @@ class TaskTreeNode:
         """
         yield self
         for child in self.children:
-            yield from child.iter_nodes()
+            yield from child
 
     def to_list(self) -> List["TaskModel"]:
         """
@@ -212,6 +221,43 @@ class TaskTreeNode:
         for child in self.children:
             tasks.extend(child.to_list())
         return tasks    
+    
+    def to_mapping(self) -> Dict[str, "TaskModel"]:
+        """
+        Convert the task tree to a mapping of task IDs to TaskModel instances
+        
+        Returns:
+            Dictionary mapping task IDs to TaskModel instances
+        """
+        mapping = {self.task.id: self.task}
+        for child in self.children:
+            mapping.update(child.to_mapping())
+        return mapping
+
+    def copy(self, data: Optional[Dict[str, Any]] = None) -> "TaskTreeNode":
+        """
+        Create a deep copy of the task tree node and its children
+
+        Returns:
+            A new TaskTreeNode instance that is a deep copy of this node
+        """
+        new_task = self.task.copy(data)
+        new_node = TaskTreeNode(new_task)
+        for child in self.children:
+            new_node.children.append(child.copy(data))
+        return new_node
+            
+
+    def update(self, data: Dict[str, Any]) -> None:
+        """
+        Update the task model associated with this node
+        
+        Args:
+            kwargs: Key-value pairs to update on the TaskModel
+        """
+        self.task.update_from_dict(data)
+        for child in self.children:
+            child.update(data)
 
 
 __all__ = [

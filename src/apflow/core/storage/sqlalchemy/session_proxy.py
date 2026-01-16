@@ -644,7 +644,7 @@ class SqlalchemySessionProxy:
 
         """  # noqa: E501
 
-        return self._proxied.expire_all()
+        return self._session.expire_all()
 
     def expunge(self, instance: object) -> None:
         r"""Remove the `instance` from this ``Session``.

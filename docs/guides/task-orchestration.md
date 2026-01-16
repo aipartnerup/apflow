@@ -865,9 +865,9 @@ Dependency results are automatically merged into task inputs:
 - Linked tasks share results with the original
 - Useful for deduplication and sharing computation
 
-**from_snapshot:**
+**from_archive:**
 - Creates a frozen, read-only copy of a task or tree
-- Preserves the state at the time of snapshot
+- Preserves the state at the time of archive
 - Useful for audit, compliance, and reproducibility
 
 **from_mixed:**

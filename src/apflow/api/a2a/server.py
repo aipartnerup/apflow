@@ -175,7 +175,7 @@ def load_skills() -> list[AgentSkill]:
         AgentSkill(
             id="tasks.clone",
             name="Clone Task",
-            description="Clone/link/snapshot a task (origin types: copy, link, snapshot, mixed)",
+            description="Clone/link/archive a task (origin types: copy, link, archive, mixed)",
             tags=["task", "clone", "copy", "duplicate"],
             examples=["clone task", "copy task", "duplicate task"],
         )

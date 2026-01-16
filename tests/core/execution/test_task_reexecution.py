@@ -43,7 +43,7 @@ class TestTaskReexecution:
         # Manually set task to failed status to simulate failure
         task_after_first.status = "failed"
         task_after_first.error = "Simulated failure for testing"
-        if task_repository.is_async:
+        if task_repository.db.is_async:
             await use_test_db_session.commit()
             await use_test_db_session.refresh(task_after_first)
         else:

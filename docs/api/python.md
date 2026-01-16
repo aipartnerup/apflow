@@ -335,14 +335,14 @@ Database operations for tasks.
 
 ## TaskCreator
 
-Create and manage task trees, links, copies, and snapshots.
+Create and manage task trees, links, copies, and archives.
 
 ### Main Methods
 
 - `create_task_tree_from_array(tasks)`: Create a task tree from an array of task dictionaries.
 - `from_link(original_task, ...)`: Create a new task as a reference (link) to an existing task. Returns a linked task or tree. Useful for deduplication and sharing results.
 - `from_copy(original_task, ...)`: Create a deep copy of an existing task or task tree. Supports copying children, dependencies, and selective subtree copying. Returns a new task or tree with new IDs.
-- `from_snapshot(original_task, ...)`: Create a read-only snapshot of an existing task or tree. Snapshots are immutable and preserve the state at the time of creation.
+- `from_archive(original_task, ...)`: Create a read-only archive of an existing task or tree. Snapshots are immutable and preserve the state at the time of creation.
 - `from_mixed(original_task, ...)`: Create a new tree mixing links and copies, e.g., copy some tasks and link others for advanced workflows.
 
 #### Example Usage
@@ -366,8 +366,8 @@ linked = await creator.from_link(original_task, user_id="user_123", parent_id=No
 # 3. Create a deep copy (optionally with children)
 copied = await creator.from_copy(original_task, user_id="user_123", _recursive=True)
 
-# 4. Create a snapshot (frozen, read-only)
-snapshot = await creator.from_snapshot(original_task, user_id="user_123", _recursive=True)
+# 4. Create a archive (frozen, read-only)
+archive = await creator.from_archive(original_task, user_id="user_123", _recursive=True)
 
 # 5. Mixed: copy some, link others
 mixed = await creator.from_mixed(original_task, user_id="user_123", link_task_ids=[...])

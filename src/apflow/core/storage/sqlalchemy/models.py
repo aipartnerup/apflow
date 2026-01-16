@@ -21,7 +21,7 @@ class TaskOriginType(StrEnum):
     create = auto()  # Task created freshly
     link = auto() # Task linked from another
     copy = auto()   # Task copied from another (can be modified)
-    snapshot = auto()  # Task snapshot from another (can not be modified)
+    archive = auto()  # Task archived from another (can not be modified)
 
 class TaskModel(Base):
     """
@@ -120,6 +120,7 @@ class TaskModel(Base):
         Boolean, default=False, index=True
     )  # Whether this task is referenced/copied by others
 
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert model to dictionary"""
         return {
@@ -145,10 +146,10 @@ class TaskModel(Base):
             # Task progress
             "progress": float(self.progress) if self.progress is not None else 0.0,
             # Timestamps
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "started_at": self.started_at.isoformat() if self.started_at else None,
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "created_at": self.created_at,
+            "started_at": self.started_at,
+            "updated_at": self.updated_at,
+            "completed_at": self.completed_at,
             # Auxiliary fields
             "has_children": self.has_children,
             # Task origin/reference fields
@@ -156,6 +157,16 @@ class TaskModel(Base):
             "origin_type": self.origin_type,
             "has_references": self.has_references,
         }
+    
+
+    def output(self) -> Dict[str, Any]:
+        """Convert model to dictionary"""
+        data = self.to_dict()
+        data["created_at"] = self.created_at.isoformat() if self.created_at else None
+        data["started_at"] = self.started_at.isoformat() if self.started_at else None
+        data["updated_at"] = self.updated_at.isoformat() if self.updated_at else None
+        data["completed_at"] = self.completed_at.isoformat() if self.completed_at else None
+        return data
     
     def copy(self, override: Optional[Dict[str, Any]] = None) -> "TaskModel":
         """
@@ -165,6 +176,16 @@ class TaskModel(Base):
         if override:
             data.update(override)
         return self.__class__(**data)
+    
+    def update_from_dict(self, data: Dict[str, Any]) -> None:
+        """
+        Update model fields from a dictionary
+        """
+        for key, value in data.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+        return self
 
     def __repr__(self):
         return f"<TaskModel(id='{self.id}', name='{self.name}', status='{self.status}')>"

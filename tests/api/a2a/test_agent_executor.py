@@ -385,12 +385,12 @@ class TestAgentExecutor:
                 assert result is not None
                 assert result.metadata["root_task_id"] == copied_task_id
         @pytest.mark.asyncio
-        async def test_execute_simple_mode_from_snapshot(self, executor, mock_event_queue):
-            """Test simple mode execution with from_snapshot scenario"""
+        async def test_execute_simple_mode_from_archive(self, executor, mock_event_queue):
+            """Test simple mode execution with from_archive scenario"""
             original_task_id = "original-task-id"
             copied_task_id = "copied-task-id"
             metadata = {
-                "from_snapshot": True,
+                "from_archive": True,
                 "task_id": original_task_id
             }
             context = self._create_request_context([], metadata=metadata)
@@ -403,11 +403,11 @@ class TestAgentExecutor:
                 mock_repository.get_task_by_id = AsyncMock(return_value=Mock(id=original_task_id))
                 mock_repo_class.return_value = mock_repository
                 mock_creator = AsyncMock()
-                mock_creator.from_snapshot = AsyncMock()
+                mock_creator.from_archive = AsyncMock()
                 mock_tree = Mock()
                 mock_tree.task.to_dict.return_value = {"id": copied_task_id, "user_id": "test-user", "name": "Snapshot Task", "status": "pending"}
                 mock_tree.children = []
-                mock_creator.from_snapshot.return_value = mock_tree
+                mock_creator.from_archive.return_value = mock_tree
                 mock_creator_class.return_value = mock_creator
                 mock_execution_result = {
                     "status": "completed",

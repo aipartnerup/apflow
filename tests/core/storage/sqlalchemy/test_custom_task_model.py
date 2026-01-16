@@ -300,7 +300,7 @@ class TestCustomTaskModelWithAgentExecutor:
             
             def to_dict(self):
                 """Convert to dictionary including custom field"""
-                base_dict = super().to_dict()
+                base_dict = super().output()
                 base_dict["project_id"] = self.project_id
                 return base_dict
         

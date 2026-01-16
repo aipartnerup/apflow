@@ -31,7 +31,7 @@
 - Improved task execution logic: priority grouping, error handling, and tree retrieval
 - Database schema management: simplified migration, improved reliability
 - CLI documentation and usability enhancements
-- TaskCreator now supports multiple origin types (link, copy, snapshot, mixed)
+- TaskCreator now supports multiple origin types (link, copy, archive, mixed)
 
 ---
 

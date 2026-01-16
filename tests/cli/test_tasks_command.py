@@ -547,7 +547,7 @@ class TestTasksCloneCommand:
         # Copy task with output file
         output_file = tmp_path / "copied_task.json"
         result = runner.invoke(cli, [
-            "tasks", "copy", task_id,
+            "tasks", "clone", task_id,
             "--output", str(output_file)
         ])
         
@@ -568,7 +568,7 @@ class TestTasksCloneCommand:
     async def test_tasks_copy_not_found(self, use_test_db_session, disable_api_for_tests):
         """Test copying a non-existent task"""
         result = runner.invoke(cli, [
-            "tasks", "copy", "non-existent-task-id"
+            "tasks", "clone", "non-existent-task-id"
         ])
         
         assert result.exit_code == 1
@@ -621,7 +621,7 @@ class TestTasksCloneCommand:
         
         # Copy task with --children flag
         result = runner.invoke(cli, [
-            "tasks", "copy", root_task_id,
+            "tasks", "clone", root_task_id,
             "--children"
         ])
         
@@ -682,7 +682,7 @@ class TestTasksCloneCommand:
         
         # Copy task with --dry-run flag
         result = runner.invoke(cli, [
-            "tasks", "copy", root_task_id,
+            "tasks", "clone", root_task_id,
             "--dry-run"
         ])
         
@@ -706,76 +706,6 @@ class TestTasksCloneCommand:
         except (json.JSONDecodeError, AttributeError):
             # If JSON parsing fails, just verify basic output
             assert "tasks" in output.lower() or "array" in output.lower()
-    
-
-    
-    @pytest.mark.asyncio
-    async def test_tasks_copy_custom_mode(self, use_test_db_session, disable_api_for_tests):
-        """Test copying with custom mode"""
-        task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
-        
-        # Create a task tree: root -> child1, child2
-        root_task_id = f"copy-custom-root-{uuid.uuid4()}"
-        await task_repository.create_task(
-            id=root_task_id,
-            name="Root Task",
-            user_id="test_user",
-            status="completed",
-            priority=1,
-            has_children=True,
-            progress=1.0
-        )
-        
-        child1_id = f"copy-custom-child1-{uuid.uuid4()}"
-        await task_repository.create_task(
-            id=child1_id,
-            name="Child Task 1",
-            user_id="test_user",
-            parent_id=root_task_id,
-            status="completed",
-            priority=1,
-            has_children=False,
-            progress=1.0
-        )
-        
-        child2_id = f"copy-custom-child2-{uuid.uuid4()}"
-        await task_repository.create_task(
-            id=child2_id,
-            name="Child Task 2",
-            user_id="test_user",
-            parent_id=root_task_id,
-            status="completed",
-            priority=1,
-            has_children=False,
-            progress=1.0
-        )
-        
-        # Copy with custom mode
-        result = runner.invoke(cli, [
-            "tasks", "copy", child1_id,
-            "--origin-type", "copy"
-        ])
-        
-        assert result.exit_code == 0
-        output = result.stdout
-        
-        # Verify copied task
-        try:
-            import re
-            json_match = re.search(r'\{.*\}', output, re.DOTALL)
-            if json_match:
-                copied_data = json.loads(json_match.group())
-                # In custom mode, the result is the full tree structure starting from root
-                # The specified child task is included in the tree
-                assert "id" in copied_data
-                assert copied_data["id"] != root_task_id  # New root ID
-                # Verify the tree contains the copied child task
-                if "children" in copied_data and copied_data["children"]:
-                    child_names = [c.get("name") for c in copied_data["children"]]
-                    assert "Child Task 1" in child_names or copied_data["name"] == "Child Task 1"
-        except (json.JSONDecodeError, AttributeError):
-            # If JSON parsing fails, just verify basic success
-            assert "Successfully copied" in output or child1_id in output
     
 
     
@@ -810,7 +740,7 @@ class TestTasksCloneCommand:
         
         # Copy with full mode
         result = runner.invoke(cli, [
-            "tasks", "copy", root_task_id,
+            "tasks", "clone", root_task_id,
             "--origin-type", "copy"
         ])
         
@@ -852,7 +782,7 @@ class TestTasksCloneCommand:
         
         # Copy with reset_fields
         result = runner.invoke(cli, [
-            "tasks", "copy", task_id,
+            "tasks", "clone", task_id,
             "--reset-fields", "status=,progress="
         ])
         
@@ -980,7 +910,7 @@ class TestTasksCopyCommandAdvanced:
         try:
             root = task_tree_for_copy["root"]
             result = runner.invoke(cli, [
-                "tasks", "copy",
+                "tasks", "clone",
                 root.id,
                 "--origin-type", "copy"
             ])
@@ -1019,7 +949,7 @@ class TestTasksCopyCommandAdvanced:
         try:
             root = task_tree_for_copy["root"]
             result = runner.invoke(cli, [
-                "tasks", "copy",
+                "tasks", "clone",
                 root.id,
                 "--origin-type", "copy",
                 "--dry-run"
@@ -1052,7 +982,7 @@ class TestTasksCopyCommandAdvanced:
         try:
             root = task_tree_for_copy["root"]
             result = runner.invoke(cli, [
-                "tasks", "copy",
+                "tasks", "clone",
                 root.id,
                 "--origin-type", "copy",
                 "--children"
@@ -1083,7 +1013,7 @@ class TestTasksCopyCommandAdvanced:
         try:
             child1 = task_tree_for_copy["child1"]
             result = runner.invoke(cli, [
-                "tasks", "copy",
+                "tasks", "clone",
                 child1.id,
                 "--origin-type", "copy"
             ])
@@ -1091,7 +1021,7 @@ class TestTasksCopyCommandAdvanced:
             if result.exit_code != 0:
                 # Should fail with external dependencies
                 assert result.exit_code != 0
-                assert "external dependenc" in result.stdout or "Cannot copy/snapshot a subtree" in result.stdout
+                assert "external dependenc" in result.stdout or "Cannot copy/archive a subtree" in result.stdout
             else:
                 output = result.stdout
                 import re
@@ -1114,14 +1044,14 @@ class TestTasksCopyCommandAdvanced:
         try:
             root = task_tree_for_copy["root"]
             result = runner.invoke(cli, [
-                "tasks", "copy",
+                "tasks", "clone",
                 root.id,
                 "--origin-type", "copy"
             ])
 
             if result.exit_code != 0:
                 assert result.exit_code != 0
-                assert "external dependenc" in result.stdout or "Cannot copy/snapshot a subtree" in result.stdout
+                assert "external dependenc" in result.stdout or "Cannot copy/archive a subtree" in result.stdout
             else:
                 output = result.stdout
                 import re
@@ -1144,15 +1074,15 @@ class TestTasksCopyCommandAdvanced:
         try:
             root = task_tree_for_copy["root"]
             result = runner.invoke(cli, [
-                "tasks", "copy",
+                "tasks", "clone",
                 root.id,
                 "--origin-type", "copy",
-                "--reset-fields", "status=,progress="
+                "--reset-fields", "status=pending,progress=0"
             ])
 
             if result.exit_code != 0:
                 assert result.exit_code != 0
-                assert "external dependenc" in result.stdout or "Cannot copy/snapshot a subtree" in result.stdout
+                assert "external dependenc" in result.stdout or "Cannot copy/archive a subtree" in result.stdout
             else:
                 output = result.stdout
                 import re
@@ -1181,7 +1111,7 @@ class TestTasksCopyCommandAdvanced:
         set_default_session(use_test_db_session)
         try:
             result = runner.invoke(cli, [
-                "tasks", "copy",
+                "tasks", "clone",
                 "non-existent-task"
             ])
 

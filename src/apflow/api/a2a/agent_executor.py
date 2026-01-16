@@ -385,14 +385,14 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
     # Only keep the new unified _extract_tasks_from_context implementation
     async def _extract_tasks_from_context(self, context: RequestContext) -> List[Dict[str, Any]]:
         """
-        Extract tasks array from request context, supporting from_copy, from_mixed, from_link, from_snapshot scenarios.
+        Extract tasks array from request context, supporting from_copy, from_mixed, from_link, from_archive scenarios.
         If none of these are set, extract tasks from context.message.parts as before.
         """
         meta = context.metadata or {}
         db_session = get_default_session()
         task_repository = TaskRepository(db_session, task_model_class=self.task_model_class)
         task_creator = TaskCreator(db_session)
-        copy_modes = ["from_copy", "from_mixed", "from_link", "from_snapshot"]
+        copy_modes = ["from_copy", "from_mixed", "from_link", "from_archive"]
         # Defensive: Only treat as True if value is exactly True (not Mock, not truthy)
         mode = None
         for m in copy_modes:
@@ -417,8 +417,8 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
                 tree = await task_creator.from_mixed(_original_task=original_task, _save=_save, _recursive=_recursive)
             elif mode == "from_link":
                 tree = await task_creator.from_link(_original_task=original_task, _save=_save, _recursive=_recursive)
-            elif mode == "from_snapshot":
-                tree = await task_creator.from_snapshot(_original_task=original_task, _save=_save, _recursive=_recursive)
+            elif mode == "from_archive":
+                tree = await task_creator.from_archive(_original_task=original_task, _save=_save, _recursive=_recursive)
             else:
                 raise ValueError(f"Unsupported copy mode: {mode}")
             logger.info(f"Extracted 1 task tree from {mode} scenario (task_id={task_id})")
@@ -456,7 +456,7 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
         def collect_tasks(node: TaskTreeNode):
             """Recursively collect tasks from tree"""
             # Convert TaskModel to dict
-            task_dict = node.task.to_dict()
+            task_dict = node.task.output()
             
             # Set parent_id if node has parent
             # Note: In TaskTreeNode, parent is not directly stored, but we can infer from tree structure

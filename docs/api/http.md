@@ -994,16 +994,16 @@ If all conditions are met, the task and all its children are physically deleted.
 ### `tasks.clone`
 
 **Description:**  
-Creates a new task or task tree by copying, linking, snapshotting, or mixing origin types from an existing task. This endpoint supports advanced cloning options:
+Creates a new task or task tree by copying, linking, archiveting, or mixing origin types from an existing task. This endpoint supports advanced cloning options:
 
 - **Copy (default):** Deeply copies the original task and its subtree. All fields are duplicated, and new IDs are generated. You can choose to copy only the selected task or the entire subtree.
 - **Link:** Creates a new task that references the original, preserving its status and result. Only allowed if the source task tree is fully completed.
-- **Snapshot:** Creates a read-only, immutable snapshot of the original task or subtree.
+- **Snapshot:** Creates a read-only, immutable archive of the original task or subtree.
 - **Mixed:** Allows selective linking and copying within the same operation, using `link_task_ids` to specify which tasks to link.
 
 **Parameters:**
 - `task_id` (string, required): ID of the task to clone.
-- `origin_type` (string, optional): One of `"copy"` (default), `"link"`, `"snapshot"`, or `"mixed"`.
+- `origin_type` (string, optional): One of `"copy"` (default), `"link"`, `"archive"`, or `"mixed"`.
 - `recursive` (boolean, optional): If `true` (default), clone the entire subtree; if `false`, only the specified task.
 - `link_task_ids` (array, optional): For `"mixed"` mode, list of task IDs to link instead of copy.
 - `reset_fields` (object, optional): Dictionary of fields to override/reset in the cloned tasks.
@@ -1053,7 +1053,7 @@ Creates a new task or task tree by copying, linking, snapshotting, or mixing ori
 
 **Metadata:**
 - `original_task_id`: Links cloned task to original task's root ID
-- `origin_type`: Task origin type (own, clone, reference, link, snapshot)
+- `origin_type`: Task origin type (own, clone, reference, link, archive)
 - `task_tree_id`: Task tree identifier for grouping and querying across trees
 - `has_references`: Set to `true` on all original tasks that were cloned
 

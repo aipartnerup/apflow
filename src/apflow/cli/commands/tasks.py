@@ -448,9 +448,9 @@ def _clone_command(
     try:
        
         # Validate origin_type
-        if origin_type not in ("copy", "link", "snapshot", "mixed"):
+        if origin_type not in ("copy", "link", "archive", "mixed"):
             typer.echo(
-                f"Error: Invalid origin_type '{origin_type}'. Must be 'copy', 'link', 'snapshot', or 'mixed'",
+                f"Error: Invalid origin_type '{origin_type}'. Must be 'copy', 'link', 'archive', or 'mixed'",
                 err=True,
             )
             raise typer.Exit(1)
@@ -470,7 +470,10 @@ def _clone_command(
             for field_pair in reset_fields.split(","):
                 if "=" in field_pair:
                     key, value = field_pair.split("=", 1)
-                    reset_kwargs[key.strip()] = value.strip()
+                    key = key.strip()
+                    value = value.strip()
+                    # Interpret empty value as None
+                    reset_kwargs[key] = None if value == "" else value
                 else:
                     typer.echo(
                         f"⚠️  Warning: Invalid reset field format '{field_pair}', expected 'key=value'",
@@ -478,7 +481,7 @@ def _clone_command(
                     )
 
         save = not dry_run
-        verb_map = {"copy": "copied", "link": "linked", "snapshot": "snapshotted", "mixed": "cloned"}
+        verb_map = {"copy": "copied", "link": "linked", "archive": "archiveted", "mixed": "cloned"}
         verb = verb_map.get(origin_type, f"{origin_type}ed")
         using_api = should_use_api()
         log_api_usage(command_name, using_api)
@@ -558,8 +561,8 @@ def _clone_command(
                     _recursive=recursive,
                     **reset_kwargs,
                 )
-            if origin_type == "snapshot":
-                return await task_creator.from_snapshot(
+            if origin_type == "archive":
+                return await task_creator.from_archive(
                     _original_task=original_task,
                     _save=save,
                     _recursive=recursive,
@@ -591,8 +594,28 @@ def _clone_command(
 
                 task_count = count_children(result)
         else:
-            result_dict = {"tasks": result, "saved": False}
-            task_count = len(result)
+            # result is a TaskTreeNode; get flat list of all tasks as dicts for JSON
+            tasks_list = result.to_list() if hasattr(result, "to_list") else [result]
+            tasks_dicts = []
+            import datetime
+            for t in tasks_list:
+                d = t.to_dict()
+                for dt_field in ("created_at", "updated_at", "started_at", "completed_at"):
+                    val = d.get(dt_field)
+                    if val is None or isinstance(val, datetime.datetime):
+                        continue
+                    if isinstance(val, str):
+                        try:
+                            # Remove trailing Z for fromisoformat if present
+                            dt_val = val[:-1] if val.endswith("Z") else val
+                            d[dt_field] = datetime.datetime.fromisoformat(dt_val)
+                        except Exception:
+                            d[dt_field] = None
+                    else:
+                        d[dt_field] = None
+                tasks_dicts.append(d)
+            result_dict = {"tasks": tasks_dicts, "saved": False}
+            task_count = len(tasks_dicts)
 
         if output:
             with open(output, "w") as f:
@@ -621,16 +644,16 @@ def _clone_command(
 def clone(
     task_id: str = typer.Argument(..., help="Task ID to clone"),
     output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output file path for cloned task tree"),
-    origin_type: str = typer.Option("copy", "--origin-type", help="Origin type: 'copy' (default), 'link', 'snapshot', or 'mixed'"),
+    origin_type: str = typer.Option("copy", "--origin-type", help="Origin type: 'copy' (default), 'link', 'archive', or 'mixed'"),
     recursive: bool = typer.Option(True, "--recursive/--no-recursive", help="Clone/link entire subtree (default: True)"),
     link_task_ids: Optional[str] = typer.Option(None, "--link-task-ids", help="Comma-separated task IDs to link (for mixed mode)"),
     reset_fields: Optional[str] = typer.Option(None, "--reset-fields", help="Field overrides as key=value pairs (e.g., 'user_id=new_user,priority=1')"),
     dry_run: bool = typer.Option(False, "--dry-run", help="Preview task clone without saving to database"),
 ):
     """
-    Create a clone/link/snapshot of a task tree (primary command).
+    Create a clone/link/archive of a task tree (primary command).
 
-    Origin types: copy (default), link, snapshot, mixed.
+    Origin types: copy (default), link, archive, mixed.
     """
     return _clone_command(
         task_id=task_id,
@@ -758,7 +781,7 @@ def create(
         
     except ValueError as e:
         if "external dependencies" in str(e):
-            typer.echo(f"Error: Cannot copy/snapshot a subtree with external dependencies.\n{str(e)}", err=True)
+            typer.echo(f"Error: Cannot copy/archive a subtree with external dependencies.\n{str(e)}", err=True)
             logger.error(f"External dependency error: {str(e)}")
             sys.exit(1)
         else:

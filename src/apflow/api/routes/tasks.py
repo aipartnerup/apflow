@@ -1591,7 +1591,7 @@ class TaskRoutes(BaseRouteHandler):
 
         Params:
             task_id: Task ID to clone (required)
-            origin_type: Origin type - "copy" (default), "link", "snapshot", or "mixed"
+            origin_type: Origin type - "copy" (default), "link", "archive", or "mixed"
             recursive: If True, copy/link entire subtree; if False, only single task (default: True)
             link_task_ids: List of task IDs to link (for mixed mode)
             reset_fields: Dict of field names to reset values (e.g., {"user_id": "new_user"})
@@ -1613,8 +1613,8 @@ class TaskRoutes(BaseRouteHandler):
                 recursive = True
             
             # Validate parameters
-            if origin_type not in ("copy", "link", "snapshot", "mixed"):
-                raise ValueError(f"Invalid origin_type '{origin_type}'. Must be 'copy', 'link', 'snapshot', or 'mixed'")
+            if origin_type not in ("copy", "link", "archive", "mixed"):
+                raise ValueError(f"Invalid origin_type '{origin_type}'. Must be 'copy', 'link', 'archive', or 'mixed'")
             if origin_type == "mixed" and not link_task_ids:
                 raise ValueError("link_task_ids is required when origin_type='mixed'")
 
@@ -1645,8 +1645,8 @@ class TaskRoutes(BaseRouteHandler):
                         _recursive=recursive,
                         **reset_fields
                     )
-                elif origin_type == "snapshot":
-                    result = await task_creator.from_snapshot(
+                elif origin_type == "archive":
+                    result = await task_creator.from_archive(
                         _original_task=original_task,
                         _save=save,
                         _recursive=recursive,

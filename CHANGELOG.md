@@ -8,7 +8,7 @@
 
 - **Task Model Enhancements**
   - Added `task_tree_id` field to TaskModel for managing task hierarchy and relationships
-  - Introduced `origin_type` field to track task origin (own, link, copy, reference, snapshot)
+  - Introduced `origin_type` field to track task origin (own, link, copy, reference, archive)
   - Implemented `SchemaMigration` model to track migration history for schema evolution
   - Added `has_references` flag validation in task creation tests
   
@@ -47,16 +47,16 @@
 
 - **TaskCreator hanldeing different origin types**
   - Added comprehensive tests for `TaskCreator` methods handling different origin types:
-   `from_link`, `from_copy`, `from_snapshot`, and `from_mixed` methods.
+   `from_link`, `from_copy`, `from_archive`, and `from_mixed` methods.
   - Removed create_task_copy* moethods
   - Includes test cases for single tasks, recursive trees, field overrides, dependency handling, and edge cases (error conditions, immutability).
 
 
 ### Changed
 - **TaskCreator Logic Refactoring**
-  - Refactored and clarified the logic for `from_link`, `from_copy`, `from_snapshot`, and `from_mixed` methods in `TaskCreator`.
+  - Refactored and clarified the logic for `from_link`, `from_copy`, `from_archive`, and `from_mixed` methods in `TaskCreator`.
   - Improved type annotations, docstrings, and error handling for all task creation methods.
-  - Enhanced dependency and subtree validation logic for recursive copy/link/snapshot operations.
+  - Enhanced dependency and subtree validation logic for recursive copy/link/archive operations.
   - Improved handling of parent/child relationships and task tree construction.
   - Updated internal helper methods for better maintainability and testability.
 
@@ -79,7 +79,7 @@
   - Simplified TaskRepository initialization by removing custom column checks
   - Added migration tests to ensure proper schema evolution and idempotent execution
   - Improved database schema handling for more reliable operations
-  - Fixed edge cases in recursive copy/link/snapshot logic where tasks with external dependencies or disconnected subtrees could cause errors.
+  - Fixed edge cases in recursive copy/link/archive logic where tasks with external dependencies or disconnected subtrees could cause errors.
   - Improved error messages for invalid task trees and dependency cycles.
 
 

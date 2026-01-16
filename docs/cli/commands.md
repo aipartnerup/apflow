@@ -328,14 +328,14 @@ apflow tasks delete task-001 --force --keep-logs
 
 ### apflow tasks clone
 
-Clone (copy/link/snapshot) a task tree. `tasks copy` is a backward-compatible alias.
+Clone (copy/link/archive) a task tree. `tasks copy` is a backward-compatible alias.
 
 ```bash
 apflow tasks clone <task_id> [OPTIONS]
 ```
 
 **Options**:
-- `--origin-type <type>` - Origin type: `copy` (default), `link`, `snapshot`, or `mixed`
+- `--origin-type <type>` - Origin type: `copy` (default), `link`, `archive`, or `mixed`
 - `--recursive/--no-recursive` - Clone/link entire subtree (default: True)
 - `--link-task-ids <ids>` - Comma-separated task IDs to link (for mixed mode)
 - `--reset-fields <fields>` - Field overrides as key=value pairs (e.g., 'user_id=new_user,priority=1')

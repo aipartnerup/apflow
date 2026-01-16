@@ -80,7 +80,7 @@ class TaskRepository():
         params: Optional[Dict[str, Any]] = None,
         id: Optional[str] = None,  # Optional task ID (if not provided, TaskModel will auto-generate)
         original_task_id: Optional[str] = None,  # Original task ID (for copies/references)
-        origin_type: Optional[TaskOriginType] = None,  # Task origin type (self, copy, reference, link, snapshot)
+        origin_type: Optional[TaskOriginType] = None,  # Task origin type (self, copy, reference, link, archive)
         task_tree_id: Optional[str] = None,  # Task tree identifier (for grouping/querying across trees)
         **kwargs  # User-defined custom fields (e.g., project_id, department, etc.)
     ) -> TaskModelType:
@@ -803,54 +803,66 @@ class TaskRepository():
             logger.error(f"Error querying tasks: {str(e)}")
             return []
     
-    async def save_task_hierarchy_to_database(self, task_tree: "TaskTreeNode") -> bool:
-        """
-        Save complete task hierarchy to database from TaskTreeNode
-        
-        Args:
-            task_tree: Root task node of the task tree
-            
-        Returns:
-            True if successful, False otherwise
-            
-        Note: Tasks should already be created via create_task(),
-        so this method mainly ensures the hierarchy is properly saved.
-        """
-        # Import here to avoid circular dependency
-        
-        try:
-            # Save root task first
-            root_task = task_tree.task
-            self.db.add(root_task)
 
-            await self.db.commit()
-            await self.db.refresh(root_task)
-            
+    async def _set_original_task_has_reference_to_true(self, original_task_id: str) -> Optional[TaskModelType]:
+        """Update original task's has_references flag to True"""
+        if not original_task_id:
+            return None
+        
+        original_task = await self.get_task_by_id(original_task_id)
+        if original_task and hasattr(original_task, "has_references") and not getattr(original_task, "has_references", False):
+            setattr(original_task, "has_references", True)
+            return original_task
+        
+        return None
+
+    async def save_task_tree(self, root_node: "TaskTreeNode") -> bool:
+        """Save task tree structure to database recursively"""
+        try:
+            changed_tasks: List[TaskModel] = []
+
             # Recursively save children with proper parent_id
-            await self._save_children_recursive(task_tree)
+            child_changed_tasks = await self._save_task_tree_recursive(root_node)
+            changed_tasks.extend(child_changed_tasks)
             
-            logger.info(f"Saved task tree: root task {root_task.id} with {len(task_tree.children)} direct children")
+            self.add_tasks_in_db(changed_tasks)
+            await self.db.commit()
+            await self.refresh_tasks_in_db(changed_tasks)
+
+            logger.info(f"Saved task tree: root task {root_node.task.id}")
             return True
             
         except Exception as e:
-            logger.error(f"Error saving task hierarchy to database: {str(e)}")
-            await self.db.rollback()
+            logger.error(f"Error saving task tree to database: {e}")
+            self.db.rollback()
             return False
     
-    async def _save_children_recursive(self, parent_node: "TaskTreeNode"):
+    async def _save_task_tree_recursive(self, parent_node: "TaskTreeNode") -> List[TaskModelType]:
         """Recursively save children tasks with proper parent_id"""
+        changed_tasks: List[TaskModelType] = []
+
+        parent_task = parent_node.task
+        changed_tasks.append(parent_task)
+
+        original_task = await self._set_original_task_has_reference_to_true(parent_task.original_task_id)
+        if original_task:
+            changed_tasks.append(original_task)
+
         for child_node in parent_node.children:
             child_task = child_node.task
             # Set parent_id to the parent task's actual ID
             child_task.parent_id = parent_node.task.id
-            self.db.add(child_task)
-            
-            await self.db.commit()
-            await self.db.refresh(child_task)
+            changed_tasks.append(child_task)
+
+            original_task = await self._set_original_task_has_reference_to_true(child_task.original_task_id)
+            if original_task:
+                changed_tasks.append(original_task)
             
             # Recursively save grandchildren
             if child_node.children:
-                await self._save_children_recursive(child_node)
+                await self._save_children_recursive(child_node)  # type: ignore
+
+        return changed_tasks
     
     async def get_all_children_recursive(self, task_id: str) -> List[TaskModelType]:
         """
@@ -1024,6 +1036,16 @@ class TaskRepository():
             return node
 
         return await build_tree(root_task)
+    
+    def add_tasks_in_db(self, tasks: List[TaskModelType]) -> None:
+        """add tasks from database to get latest state"""
+        for task in tasks:
+            self.db.add(task)
+
+    async def refresh_tasks_in_db(self, tasks: List[TaskModelType]) -> None:
+        """Refresh tasks from database to get latest state"""
+        for task in tasks:
+            await self.db.refresh(task)
 
 __all__ = [
     "TaskRepository",

@@ -1,5 +1,5 @@
 """
-Test TaskCreator methods for origin types: from_link, from_copy, from_snapshot, from_mixed
+Test TaskCreator methods for origin types: from_link, from_copy, from_archive, from_mixed
 """
 import pytest
 from apflow.core.execution.task_creator import TaskCreator
@@ -140,7 +140,7 @@ class TestTaskCreatorFromLink:
 
         # Ensure all tasks in the tree are marked as completed
         task_tree = await task_manager.task_repository.build_task_tree(original_task)
-        for node in task_tree.iter_nodes():
+        for node in task_tree:
             node.task.status = "completed"
             sync_db_session.commit()
             sync_db_session.refresh(node.task)
@@ -718,11 +718,11 @@ class TestTaskCreatorFromCopy:
 
 
 class TestTaskCreatorFromSnapshot:
-    """Test TaskCreator.from_snapshot method"""
+    """Test TaskCreator.from_archive method"""
     
     @pytest.mark.asyncio
-    async def test_from_snapshot_single_task(self, sync_db_session):
-        """Test snapshotting a single task"""
+    async def test_from_archive_single_task(self, sync_db_session):
+        """Test archiveting a single task"""
         task_manager = TaskManager(sync_db_session)
         creator = TaskCreator(sync_db_session)
         
@@ -736,27 +736,27 @@ class TestTaskCreatorFromSnapshot:
             progress=1.0,
         )
         
-        snapshot_task = await creator.from_snapshot(
+        archive_task = await creator.from_archive(
             _original_task=completed_task,
             _save=True,
             _recursive=False
         )
         
-        # Verify origin type is snapshot
-        assert snapshot_task.origin_type == TaskOriginType.snapshot
+        # Verify origin type is archive
+        assert archive_task.origin_type == TaskOriginType.archive
         
-        # Verify snapshot preserves fields
-        assert snapshot_task.name == completed_task.name
-        assert snapshot_task.result == completed_task.result
-        assert snapshot_task.status == completed_task.status
-        assert snapshot_task.progress == completed_task.progress
+        # Verify archive preserves fields
+        assert archive_task.name == completed_task.name
+        assert archive_task.result == completed_task.result
+        assert archive_task.status == completed_task.status
+        assert archive_task.progress == completed_task.progress
         
         # Verify it's a different task
-        assert snapshot_task.id != completed_task.id
+        assert archive_task.id != completed_task.id
     
     @pytest.mark.asyncio
-    async def test_from_snapshot_recursive_tree(self, sync_db_session):
-        """Test snapshotting entire task tree"""
+    async def test_from_archive_recursive_tree(self, sync_db_session):
+        """Test archiveting entire task tree"""
         task_manager = TaskManager(sync_db_session)
         creator = TaskCreator(sync_db_session)
         
@@ -779,26 +779,26 @@ class TestTaskCreatorFromSnapshot:
         root.has_children = True
         sync_db_session.commit()
         
-        snapshot_tree = await creator.from_snapshot(
+        archive_tree = await creator.from_archive(
             _original_task=root,
             _save=True,
             _recursive=True
         )
         
         # Verify return type is TaskTreeNode
-        assert isinstance(snapshot_tree, TaskTreeNode)
+        assert isinstance(archive_tree, TaskTreeNode)
         
         # Verify root task
-        assert snapshot_tree.task.origin_type == TaskOriginType.snapshot
-        assert snapshot_tree.task.original_task_id == root.id
+        assert archive_tree.task.origin_type == TaskOriginType.archive
+        assert archive_tree.task.original_task_id == root.id
         
-        # Verify children are snapshotted
-        assert len(snapshot_tree.children) == 1
-        assert snapshot_tree.children[0].task.origin_type == TaskOriginType.snapshot
+        # Verify children are archiveted
+        assert len(archive_tree.children) == 1
+        assert archive_tree.children[0].task.origin_type == TaskOriginType.archive
     
     @pytest.mark.asyncio
-    async def test_from_snapshot_no_save(self, sync_db_session):
-        """Test snapshotting without saving returns task"""
+    async def test_from_archive_no_save(self, sync_db_session):
+        """Test archiveting without saving returns task"""
         task_manager = TaskManager(sync_db_session)
         creator = TaskCreator(sync_db_session)
         
@@ -808,7 +808,7 @@ class TestTaskCreatorFromSnapshot:
             status="completed",
         )
         
-        result = await creator.from_snapshot(
+        result = await creator.from_archive(
             _original_task=completed_task,
             _save=False,
             _recursive=False
@@ -818,7 +818,7 @@ class TestTaskCreatorFromSnapshot:
         assert isinstance(result, TaskModel)
 
     @pytest.mark.asyncio
-    async def test_from_snapshot_with_auto_include_deps_true(self, sync_db_session):
+    async def test_from_archive_with_auto_include_deps_true(self, sync_db_session):
         """Snapshot with _auto_include_deps=True includes upstream dependencies in minimal subtree"""
         task_manager = TaskManager(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -833,19 +833,19 @@ class TestTaskCreatorFromSnapshot:
             dependencies=[{"id": dep_task.id, "required": True}]
         )
         
-        snapshot_tree = await creator.from_snapshot(
+        archive_tree = await creator.from_archive(
             _original_task=task_a,
             _save=True,
             _recursive=True,
             _auto_include_deps=True
         )
         
-        assert isinstance(snapshot_tree, TaskTreeNode)
-        assert snapshot_tree.task.origin_type == TaskOriginType.snapshot
-        assert snapshot_tree.task.original_task_id == task_a.id
+        assert isinstance(archive_tree, TaskTreeNode)
+        assert archive_tree.task.origin_type == TaskOriginType.archive
+        assert archive_tree.task.original_task_id == task_a.id
 
     @pytest.mark.asyncio
-    async def test_from_snapshot_with_auto_include_deps_false(self, sync_db_session):
+    async def test_from_archive_with_auto_include_deps_false(self, sync_db_session):
         """Snapshot with _auto_include_deps=False does not attempt to resolve dependencies"""
         task_manager = TaskManager(sync_db_session)
         creator = TaskCreator(sync_db_session)
@@ -862,7 +862,7 @@ class TestTaskCreatorFromSnapshot:
         
         # Snapshot with _auto_include_deps=False (should raise ValueError due to external dependency)
         with pytest.raises(ValueError, match="external dependencies"):
-            await creator.from_snapshot(
+            await creator.from_archive(
                 _original_task=task_a,
                 _save=True,
                 _recursive=True,
@@ -870,8 +870,8 @@ class TestTaskCreatorFromSnapshot:
             )
 
     @pytest.mark.asyncio
-    async def test_from_snapshot_include_dependents_non_root_task(self, sync_db_session):
-        """_include_dependents=True includes downstream dependents for non-root snapshot operations"""
+    async def test_from_archive_include_dependents_non_root_task(self, sync_db_session):
+        """_include_dependents=True includes downstream dependents for non-root archive operations"""
         task_manager = TaskManager(sync_db_session)
         creator = TaskCreator(sync_db_session)
         
@@ -892,15 +892,15 @@ class TestTaskCreatorFromSnapshot:
         task_a.has_children = True
         sync_db_session.commit()
         
-        snapshot_tree = await creator.from_snapshot(
+        archive_tree = await creator.from_archive(
             _original_task=task_b,
             _save=True,
             _recursive=True,
             _include_dependents=True
         )
         
-        assert isinstance(snapshot_tree, TaskTreeNode)
-        assert snapshot_tree.task.origin_type == TaskOriginType.snapshot
+        assert isinstance(archive_tree, TaskTreeNode)
+        assert archive_tree.task.origin_type == TaskOriginType.archive
 
 
 class TestTaskCreatorFromMixed:
@@ -1239,5 +1239,5 @@ class TestTaskCreatorEdgeCases:
         copied = await creator.from_copy(_original_task=original, _recursive=False)
         assert copied.origin_type == TaskOriginType.copy
 
-        snapshot = await creator.from_snapshot(_original_task=original, _recursive=False)
-        assert snapshot.origin_type == TaskOriginType.snapshot
+        archive = await creator.from_archive(_original_task=original, _recursive=False)
+        assert archive.origin_type == TaskOriginType.archive
