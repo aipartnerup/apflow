@@ -1457,15 +1457,15 @@ class TaskCreator:
         }
 
         if not _recursive:
-            original_task = _original_task.copy(reset_kwargs)
+            _original_task.update_from_dict(reset_kwargs)
             logger.info(
-                f"Archive task '{original_task.id}'"
+                f"Archive task '{_original_task.id}'"
             )
-            task_tree = TaskTreeNode(task=original_task)
+            task_tree = TaskTreeNode(task=_original_task)
             if _save:
-                self.db.add(original_task)
+                self.db.add(_original_task)
                 await self.db.commit()
-                await self.db.refresh(original_task)
+                await self.db.refresh(_original_task)
             return task_tree
         
 
@@ -1482,7 +1482,7 @@ class TaskCreator:
                 None,
             )
  
-        task_tree = original_tree.copy(reset_kwargs)
+        task_tree = original_tree.update(reset_kwargs)
         if _save:
             task_list = task_tree.to_list()
             self.task_repository.add_tasks_in_db(task_list)
@@ -1571,6 +1571,8 @@ class TaskCreator:
         
         if _save:
             await self.task_repository.save_task_tree(task_tree)
+
+        return task_tree
 
     # ==================== Helper Methods ====================
 

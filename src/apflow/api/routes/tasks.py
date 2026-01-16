@@ -488,7 +488,7 @@ class TaskRoutes(BaseRouteHandler):
                 # Check permission to access this task
                 self._check_permission(request, task.user_id, "access")
 
-                return task.to_dict()
+                return task.output()
 
         except Exception as e:
             logger.error(f"Error getting task detail: {str(e)}", exc_info=True)
@@ -594,7 +594,7 @@ class TaskRoutes(BaseRouteHandler):
                         # Check permission to access this task
                         try:
                             self._check_permission(request, task.user_id, "access")
-                            tasks.append(task.to_dict())
+                            tasks.append(task.output())
                         except ValueError:
                             # Permission denied, skip this task
                             logger.warning(f"Permission denied for task {task_id}")
@@ -670,7 +670,7 @@ class TaskRoutes(BaseRouteHandler):
                         if task.user_id:
                             self._check_permission(request, task.user_id, "access")
 
-                        task_dict = task.to_dict()
+                        task_dict = task.output()
 
                         # Check if task has children (if has_children field is not set or False, check database)
                         if not task_dict.get("has_children"):
@@ -807,7 +807,7 @@ class TaskRoutes(BaseRouteHandler):
                     try:
                         if child.user_id:
                             self._check_permission(request, child.user_id, "access")
-                        child_dicts.append(child.to_dict())
+                        child_dicts.append(task.output())
                     except ValueError:
                         # Permission denied, skip this child task
                         logger.warning(f"Permission denied for child task {child.id}")
@@ -1225,7 +1225,7 @@ class TaskRoutes(BaseRouteHandler):
                 # Check permission to access this task
                 self._check_permission(request, task.user_id, "access")
 
-                return task.to_dict()
+                return task.output()
 
         except Exception as e:
             logger.error(f"Error getting task: {str(e)}", exc_info=True)
@@ -1339,7 +1339,7 @@ class TaskRoutes(BaseRouteHandler):
                     raise ValueError(f"Task {task_id} not found after update")
 
                 logger.info(f"Updated task {task_id}")
-                return updated_task.to_dict()
+                return updated_task.output()
 
         except ValueError:
             # Re-raise ValueError (validation errors) as-is

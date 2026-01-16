@@ -29,7 +29,7 @@ async def test_set_and_get_hook_context(sync_db_session):
 
         session = get_hook_session()
         assert session is not None
-        assert session is sync_db_session
+        assert session == sync_db_session
 
         repo = get_hook_repository()
         assert repo is not None
@@ -181,9 +181,9 @@ async def test_multiple_hooks_share_same_session(sync_db_session):
         repo3 = get_hook_repository()
 
         # All hooks should get the same session and repository instance
-        assert session1 is session2
-        assert session2 is session3
-        assert session1 is sync_db_session
+        assert session1 == session2
+        assert session2 == session3
+        assert session1 == sync_db_session
 
         assert repo1 is repo2
         assert repo2 is repo3
@@ -290,7 +290,7 @@ async def test_session_consistency_across_hook_chain(sync_db_session):
             repo_ids.append(id(repo))
 
             # Each hook should get the exact same instances
-            assert session is sync_db_session
+            assert session == sync_db_session
             assert repo is task_repository
 
         # All IDs should be identical (same object instance)

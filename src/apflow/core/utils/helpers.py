@@ -308,7 +308,7 @@ def tree_node_to_dict(node) -> Dict[str, Any]:
         task_dict = tree_node_to_dict(task_tree_node)
     """
     
-    task_dict = node.task.to_dict()
+    task_dict = node.task.output()
     if node.children:
         task_dict["children"] = [tree_node_to_dict(child) for child in node.children]
     return task_dict

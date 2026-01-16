@@ -258,6 +258,18 @@ class TaskTreeNode:
         self.task.update_from_dict(data)
         for child in self.children:
             child.update(data)
+            
+    def output(self) -> Dict[str, Any]:
+        """
+        Generate a nested dictionary representing the task tree structure
+        
+        Returns:
+            A dictionary with task IDs as keys and their child structures as values
+        """
+        return {
+            "task": self.task.output(),
+            "children": [child.output() for child in self.children]
+        }
 
 
 __all__ = [

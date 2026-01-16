@@ -293,7 +293,7 @@ class TestAgentExecutor:
             mock_repo_class.return_value = mock_repository
             mock_creator = AsyncMock()
             mock_creator.from_copy = AsyncMock()
-            # Simulate a TaskTreeNode with .task.to_dict()
+            # Simulate a TaskTreeNode with .task.output()
             mock_tree = Mock()
             mock_tree.task.to_dict.return_value = {"id": copied_task_id, "user_id": "test-user", "name": "Copied Task", "status": "pending"}
             mock_tree.children = []
@@ -986,7 +986,7 @@ class TestAgentExecutor:
             # Convert TaskTreeNode to dictionary format for JSON display
             def tree_node_to_dict(node):
                 """Convert TaskTreeNode to dictionary"""
-                task_dict = node.task.to_dict()
+                task_dict = node.task.output()
                 if node.children:
                     task_dict["children"] = [tree_node_to_dict(child) for child in node.children]
                 return task_dict

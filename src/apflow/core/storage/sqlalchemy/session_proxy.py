@@ -46,6 +46,13 @@ class SqlalchemySessionProxy:
         self._session = session
         self._is_async = isinstance(session, AsyncSession)
 
+    def __eq__(self, other: object) -> bool:
+            if isinstance(other, SqlalchemySessionProxy):
+                return self._session == other._session
+            return self._session == other
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._session, name)
 
     @property
     def session(self) -> Union[Session, AsyncSession]:

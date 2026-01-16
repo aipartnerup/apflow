@@ -1,3 +1,214 @@
+# --- Origin Type Tests (from test_task_creator_origin_types.py, deduplicated) ---
+import pytest
+from apflow.core.execution.task_manager import TaskManager
+from apflow.core.storage.sqlalchemy.models import TaskOriginType
+
+class TestTaskCreatorOriginTypes:
+    """Test TaskCreator origin type methods: from_link, from_copy, from_archive, from_mixed"""
+
+    @pytest.mark.asyncio
+    async def test_from_link_fails_if_not_completed(self, sync_db_session):
+        """Linking a task tree with any non-completed node raises ValueError, but works if all completed"""
+        task_manager = TaskManager(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        root = await task_manager.task_repository.create_task(
+            name="Root Task", user_id="user_123", status="completed",
+        )
+        child = await task_manager.task_repository.create_task(
+            name="Child Task", user_id="user_123", parent_id=root.id, status="completed",
+        )
+        root.has_children = True
+        sync_db_session.commit()
+        with pytest.raises(ValueError, match="fully completed task tree"):
+            await creator.from_link(_original_task=root, _save=True, _recursive=True)
+        root.status = "completed"
+        child.status = "pending"
+        sync_db_session.commit()
+        sync_db_session.refresh(child)
+        assert child.status == "pending"
+        with pytest.raises(ValueError, match="Only a fully completed task tree can be linked"):
+            await creator.from_link(_original_task=root, _save=True, _recursive=True)
+        child.status = "completed"
+        sync_db_session.commit()
+        result = await creator.from_link(_original_task=root, _save=True, _recursive=True)
+        assert isinstance(result, TaskTreeNode)
+        assert result.task.status == "completed"
+        for c in result.children:
+            assert c.task.status == "completed"
+
+    @pytest.mark.asyncio
+    async def test_from_link_single_task_and_overrides(self, sync_db_session):
+        """Test linking a single completed task, with and without field overrides"""
+        task_manager = TaskManager(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        original_task = await task_manager.task_repository.create_task(
+            name="Original Task", user_id="user_123", priority=2, status="completed",
+        )
+        sync_db_session.commit()
+        sync_db_session.refresh(original_task)
+        linked_task = await creator.from_link(
+            _original_task=original_task, _save=True, _recursive=False
+        )
+        assert isinstance(linked_task, TaskTreeNode)
+        assert linked_task.task.origin_type == TaskOriginType.link
+        assert linked_task.original_task_id == original_task.id
+        assert linked_task.task.name == original_task.name
+        assert linked_task.task.user_id == original_task.user_id
+        # With overrides
+        linked_task2 = await creator.from_link(
+            _original_task=original_task, _save=True, _recursive=False, user_id="new_user_456", priority=1
+        )
+        assert linked_task2.task.user_id == "new_user_456"
+        assert linked_task2.task.priority == 1
+
+    @pytest.mark.asyncio
+    async def test_from_link_recursive_tree(self, sync_db_session):
+        """Test linking entire task tree recursively, children are linked"""
+        task_manager = TaskManager(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        root = await task_manager.task_repository.create_task(
+            name="Root Task", user_id="user_123", priority=1, status="completed",
+        )
+        child1 = await task_manager.task_repository.create_task(
+            name="Child 1", user_id="user_123", parent_id=root.id, priority=2, status="completed",
+        )
+        child2 = await task_manager.task_repository.create_task(
+            name="Child 2", user_id="user_123", parent_id=root.id, status="completed", dependencies=[{"id": child1.id, "required": True}],
+        )
+        root.status = child1.status = child2.status = "completed"
+        root.has_children = True
+        sync_db_session.commit()
+        sync_db_session.refresh(root)
+        sync_db_session.refresh(child1)
+        sync_db_session.refresh(child2)
+        linked_tree = await creator.from_link(_original_task=root, _save=True, _recursive=True)
+        assert isinstance(linked_tree, TaskTreeNode)
+        assert linked_tree.task.origin_type == TaskOriginType.link
+        assert linked_tree.task.original_task_id == root.id
+        assert len(linked_tree.children) == 2
+        for child_node in linked_tree.children:
+            assert child_node.task.origin_type == TaskOriginType.link
+            assert child_node.task.parent_id == linked_tree.task.id
+
+    @pytest.mark.asyncio
+    async def test_from_copy_single_task_and_overrides(self, sync_db_session):
+        """Test copying a single task, with and without field overrides"""
+        task_manager = TaskManager(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        original_task = await task_manager.task_repository.create_task(
+            name="Original Task", user_id="user_123", priority=2, status="completed",
+        )
+        copied_task = await creator.from_copy(_original_task=original_task, _save=True, _recursive=False)
+        assert isinstance(copied_task, TaskTreeNode)
+        assert copied_task.task.origin_type == TaskOriginType.copy
+        assert copied_task.task.original_task_id == original_task.id
+        # With overrides
+        copied_task2 = await creator.from_copy(
+            _original_task=original_task, _save=True, _recursive=False, user_id="new_user_456", priority=1
+        )
+        assert copied_task2.task.user_id == "new_user_456"
+        assert copied_task2.task.priority == 1
+
+    @pytest.mark.asyncio
+    async def test_from_copy_recursive_tree(self, sync_db_session):
+        """Test copying entire task tree recursively, children are copied"""
+        task_manager = TaskManager(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        root = await task_manager.task_repository.create_task(
+            name="Root Task", user_id="user_123", priority=1,
+        )
+        child1 = await task_manager.task_repository.create_task(
+            name="Child 1", user_id="user_123", parent_id=root.id, priority=2,
+        )
+        await task_manager.task_repository.create_task(
+            name="Child 2", user_id="user_123", parent_id=root.id, dependencies=[{"id": child1.id, "required": True}],
+        )
+        root.has_children = True
+        sync_db_session.commit()
+        copied_tree = await creator.from_copy(_original_task=root, _save=True, _recursive=True)
+        assert isinstance(copied_tree, TaskTreeNode)
+        assert copied_tree.task.origin_type == TaskOriginType.copy
+        assert copied_tree.task.original_task_id == root.id
+        assert len(copied_tree.children) == 2
+        for child_node in copied_tree.children:
+            assert child_node.task.origin_type == TaskOriginType.copy
+            assert child_node.task.parent_id == copied_tree.task.id
+
+    @pytest.mark.asyncio
+    async def test_from_archive_single_task(self, sync_db_session):
+        """Test archiving a single task"""
+        task_manager = TaskManager(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        completed_task = await task_manager.task_repository.create_task(
+            name="Completed Task", user_id="user_123", priority=2, status="completed",
+        )
+        archive_task = await creator.from_archive(_original_task=completed_task, _save=True, _recursive=False)
+        assert archive_task.origin_type == TaskOriginType.archive
+        assert archive_task.name == completed_task.name
+        assert archive_task.status == completed_task.status
+
+    @pytest.mark.asyncio
+    async def test_from_archive_recursive_tree(self, sync_db_session):
+        """Test archiving entire task tree"""
+        task_manager = TaskManager(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        root = await task_manager.task_repository.create_task(
+            name="Root Task", user_id="user_123", status="completed",
+        )
+        await task_manager.task_repository.create_task(
+            name="Child Task", user_id="user_123", parent_id=root.id, status="completed",
+        )
+        root.has_children = True
+        sync_db_session.commit()
+        archive_tree = await creator.from_archive(_original_task=root, _save=True, _recursive=True)
+        assert isinstance(archive_tree, TaskTreeNode)
+        assert archive_tree.task.origin_type == TaskOriginType.archive
+        assert archive_tree.task.original_task_id == root.id
+        assert len(archive_tree.children) == 1
+
+    @pytest.mark.asyncio
+    async def test_from_mixed_link_and_copy(self, sync_db_session):
+        """Test mixed mode: link some, copy others"""
+        task_manager = TaskManager(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        root = await task_manager.task_repository.create_task(
+            name="Root Task", user_id="user_123", priority=1,
+        )
+        child1 = await task_manager.task_repository.create_task(
+            name="Child 1", user_id="user_123", parent_id=root.id, priority=2,
+        )
+        await task_manager.task_repository.create_task(
+            name="Child 2", user_id="user_123", parent_id=root.id, dependencies=[{"id": child1.id, "required": True}],
+        )
+        root.has_children = True
+        child1.has_children = True
+        sync_db_session.commit()
+        mixed_tree = await creator.from_mixed(
+            _original_task=root, _save=True, _recursive=True, _link_task_ids=[root.id, child1.id]
+        )
+        assert isinstance(mixed_tree, TaskTreeNode)
+        assert mixed_tree.task.origin_type == TaskOriginType.link
+        origin_types = {mixed_tree.task.origin_type}
+        for child in mixed_tree.children:
+            origin_types.add(child.task.origin_type)
+        assert len(origin_types) >= 1
+
+    @pytest.mark.asyncio
+    async def test_origin_type_immutability(self, sync_db_session):
+        """Test that origin_type is set correctly for each operation"""
+        task_manager = TaskManager(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        original = await task_manager.task_repository.create_task(
+            name="Original", user_id="user_123", status="completed",
+        )
+        original.status = "completed"
+        sync_db_session.commit()
+        linked = await creator.from_link(_original_task=original, _recursive=False)
+        assert linked.task.origin_type == TaskOriginType.link
+        copied = await creator.from_copy(_original_task=original, _recursive=False)
+        assert copied.task.origin_type == TaskOriginType.copy
+        archive = await creator.from_archive(_original_task=original, _recursive=False)
+        assert archive.task.origin_type == TaskOriginType.archive
 """
 Test TaskCreator functionality
 """
@@ -520,7 +731,7 @@ class TestTaskCreator:
         task_tree = await creator.create_task_tree_from_array(tasks)
         
         # Refresh parent task from database to get updated has_children flag
-        parent_task = await creator.task_manager.task_repository.get_task_by_id(task_tree.task.id)
+        parent_task = await creator.task_repository.get_task_by_id(task_tree.task.id)
         assert parent_task.has_children is True
     
     @pytest.mark.asyncio

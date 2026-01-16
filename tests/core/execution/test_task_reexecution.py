@@ -92,7 +92,7 @@ class TestTaskReexecution:
         
         # Set parent-child relationship
         child_task.parent_id = parent_task.id
-        if task_repository.is_async:
+        if task_repository.db.is_async:
             await use_test_db_session.commit()
             await use_test_db_session.refresh(child_task)
         else:
@@ -115,7 +115,7 @@ class TestTaskReexecution:
         # Manually set parent task to failed status
         parent_after_first.status = "failed"
         parent_after_first.error = "Simulated failure for testing"
-        if task_repository.is_async:
+        if task_repository.db.is_async:
             await use_test_db_session.commit()
             await use_test_db_session.refresh(parent_after_first)
         else:

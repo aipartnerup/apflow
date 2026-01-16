@@ -339,7 +339,7 @@ class TestCriticalFieldValidation:
         task_repository = TaskRepository(use_test_db_session, task_model_class=get_task_model_class())
         child2 = await task_repository.get_task_by_id(task_tree_with_dependencies["child2_id"])
         child2.dependencies = [{"id": task_tree_with_dependencies["child1_id"], "required": True}]
-        if task_repository.is_async:
+        if task_repository.db.is_async:
             await use_test_db_session.commit()
         else:
             use_test_db_session.commit()

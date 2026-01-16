@@ -599,30 +599,16 @@ def _clone_command(
             tasks_dicts = []
             import datetime
             for t in tasks_list:
-                d = t.to_dict()
-                for dt_field in ("created_at", "updated_at", "started_at", "completed_at"):
-                    val = d.get(dt_field)
-                    if val is None or isinstance(val, datetime.datetime):
-                        continue
-                    if isinstance(val, str):
-                        try:
-                            # Remove trailing Z for fromisoformat if present
-                            dt_val = val[:-1] if val.endswith("Z") else val
-                            d[dt_field] = datetime.datetime.fromisoformat(dt_val)
-                        except Exception:
-                            d[dt_field] = None
-                    else:
-                        d[dt_field] = None
-                tasks_dicts.append(d)
+                tasks_dicts.append(t.output())
             result_dict = {"tasks": tasks_dicts, "saved": False}
             task_count = len(tasks_dicts)
 
         if output:
             with open(output, "w") as f:
-                json.dump(result_dict, f, indent=2)
+                json.dump(result_dict, f, indent=2, default=str)
             typer.echo(f"{command_label} {'preview' if dry_run else 'result'} saved to {output}")
         else:
-            typer.echo(json.dumps(result_dict, indent=2))
+            typer.echo(json.dumps(result_dict, indent=2, default=str))
 
         if save:
             typer.echo(
@@ -703,7 +689,7 @@ def get(
                     task = await task_repository.get_task_by_id(task_id)
                     if not task:
                         raise ValueError(f"Task {task_id} not found")
-                    return task.to_dict()
+                    return task.output()
         
         task_dict = run_async_safe(get_task())
         typer.echo(json.dumps(task_dict, indent=2))
@@ -915,7 +901,7 @@ def update(
             if not updated_task:
                 raise ValueError(f"Task {task_id} not found after update")
             
-            return updated_task.to_dict()
+            return updated_task.output()
         
         task_dict = run_async_safe(update_task())
         typer.echo(json.dumps(task_dict, indent=2))
@@ -1112,7 +1098,7 @@ def children(
             children = await task_repository.get_child_tasks_by_parent_id(parent_task_id)
             
             # Convert to dictionaries
-            return [child.to_dict() for child in children]
+            return [child.output() for child in children]
         
         result = run_async_safe(get_children())
         typer.echo(json.dumps(result, indent=2))
@@ -1198,7 +1184,7 @@ def list_tasks(
                         # Convert to dictionaries
                         task_dicts = []
                         for task in tasks:
-                            task_dict = task.to_dict()
+                            task_dict = task.output()
                             
                             # Check if task has children
                             if not task_dict.get("has_children"):
