@@ -143,16 +143,12 @@ class TestCustomTaskModelWithRepository:
         Since SQLAlchemy's metadata.tables is immutable, we use a new Base instance
         for the custom model to avoid conflicts.
         """
-        import uuid
         from apflow.core.storage.sqlalchemy.models import TASK_TABLE_NAME
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         from sqlalchemy import (
-            Column, String, Integer, JSON, Text, Numeric, 
-            Boolean, DateTime, func
+            Column, String
         )
         from sqlalchemy import text
-        from sqlalchemy.orm import declarative_base
-        
         # Drop existing table using raw SQL first
         try:
             sync_db_session.execute(text(f"DROP TABLE IF EXISTS {TASK_TABLE_NAME}"))
@@ -160,38 +156,21 @@ class TestCustomTaskModelWithRepository:
         except Exception:
             sync_db_session.rollback()
         
-        # Create a new Base instance for the custom model to avoid metadata conflicts
-        CustomBase = declarative_base()
-        
         # Define custom TaskModel with project_id field using the new Base
-        class CustomTaskModel(CustomBase):
-            __tablename__ = TASK_TABLE_NAME
-            
-            # Copy all columns from TaskModel (including id default generator)
-            id = Column(String(255), primary_key=True, default=lambda: str(uuid.uuid4()))
-            parent_id = Column(String(255), nullable=True, index=True)
-            user_id = Column(String(255), nullable=True, index=True)
-            name = Column(String(100), nullable=False, index=True)
-            status = Column(String(50), default="pending")
-            priority = Column(Integer, default=1)
-            dependencies = Column(JSON, nullable=True)
-            inputs = Column(JSON, nullable=True)
-            params = Column(JSON, nullable=True)
-            result = Column(JSON, nullable=True)
-            error = Column(Text, nullable=True)
-            schemas = Column(JSON, nullable=True)
-            progress = Column(Numeric(3, 2), default=0.0)
-            created_at = Column(DateTime(timezone=True), server_default=func.now())
-            started_at = Column(DateTime(timezone=True), nullable=True)
-            updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-            completed_at = Column(DateTime(timezone=True), nullable=True)
-            has_children = Column(Boolean, default=False)
+        class CustomTaskModel(TaskModel):
             
             # Add custom field
             project_id = Column(String(255), nullable=True)
+
+            # Configure mapper to use single-table inheritance
+            # This ensures we use the same table as BaseTaskModel
+            __mapper_args__ = {
+                'concrete': False,  # Not concrete inheritance
+            }
+            
         
         # Create table with custom model
-        CustomBase.metadata.create_all(sync_db_session.bind)
+        CustomTaskModel.metadata.create_all(sync_db_session.bind)
         
         repo = TaskRepository(sync_db_session, task_model_class=CustomTaskModel)
         

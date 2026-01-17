@@ -4,7 +4,6 @@
 ## [Unreleased]
 
 ### Added
-- Added more comprehensive tests for all `TaskCreator` origin-type methods, including edge cases and error conditions.
 
 - **Task Model Enhancements**
   - Added `task_tree_id` field to TaskModel for managing task hierarchy and relationships

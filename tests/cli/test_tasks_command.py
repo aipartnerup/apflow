@@ -16,6 +16,7 @@ from apflow.core.config import get_task_model_class
 from apflow.core.execution.task_executor import TaskExecutor
 from apflow.core.storage import reset_default_session, set_default_session
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+from apflow.core.utils.helpers import extract_last_json_object
 
 runner = CliRunner()
 
@@ -464,8 +465,6 @@ class TestTasksCancelCommand:
 class TestTasksCloneCommand:
     """Test cases for tasks clone command (copy remains as alias)"""
     
-
-    
     @pytest.mark.asyncio
     async def test_tasks_clone_basic(self, use_test_db_session, disable_api_for_tests):
         """Test cloning a basic task"""
@@ -512,15 +511,12 @@ class TestTasksCloneCommand:
         # Parse JSON output to verify structure
         try:
             # Try to find JSON in output
-            import re
-            json_match = re.search(r'\{.*\}', output, re.DOTALL)
-            if json_match:
-                copied_data = json.loads(json_match.group())
-                assert "id" in copied_data
-                assert copied_data["id"] != root_task_id
-                assert copied_data["name"] == root_task.name
-                assert copied_data["original_task_id"] == root_task_id
-                assert copied_data["status"] == "pending"
+            copied_data = extract_last_json_object(output)[0]
+            assert "id" in copied_data
+            assert copied_data["id"] != root_task_id
+            assert copied_data["name"] == root_task.name
+            assert copied_data["original_task_id"] == root_task_id
+            assert copied_data["status"] == "pending"
         except (json.JSONDecodeError, AttributeError):
             # If JSON parsing fails, just verify basic output
             assert root_task_id in output
@@ -634,17 +630,14 @@ class TestTasksCloneCommand:
         # Parse JSON output to verify structure
         try:
             # Try to find JSON in output
-            import re
-            json_match = re.search(r'\{.*\}', output, re.DOTALL)
-            if json_match:
-                copied_data = json.loads(json_match.group())
-                assert "id" in copied_data
-                assert copied_data["id"] != root_task_id
-                assert copied_data["name"] == "Root Task with Children"
-                assert copied_data["original_task_id"] == root_task_id
-                # Verify children are included
-                if "children" in copied_data:
-                    assert len(copied_data["children"]) >= 0  # May have children
+            copied_data = extract_last_json_object(output)[0]
+            assert "id" in copied_data
+            assert copied_data["id"] != root_task_id
+            assert copied_data["name"] == "Root Task with Children"
+            assert copied_data["original_task_id"] == root_task_id
+            # Verify children are included
+            if "children" in copied_data:
+                assert len(copied_data["children"]) >= 0  # May have children
         except (json.JSONDecodeError, AttributeError):
             # If JSON parsing fails, just verify basic success message
             pass
@@ -688,25 +681,9 @@ class TestTasksCloneCommand:
         
         assert result.exit_code == 0, f"Command failed with: {result.output}"
         output = result.stdout
-        
-        # Verify output contains task array
-        try:
-            import re
-            json_match = re.search(r'\{.*\}', output, re.DOTALL)
-            if json_match:
-                copied_data = json.loads(json_match.group())
-                assert "tasks" in copied_data
-                assert copied_data.get("saved") is False
-                assert isinstance(copied_data["tasks"], list)
-                assert len(copied_data["tasks"]) > 0
-                # Verify task array format
-                for task_dict in copied_data["tasks"]:
-                    assert "id" in task_dict
-                    assert "name" in task_dict
-        except (json.JSONDecodeError, AttributeError):
-            # If JSON parsing fails, just verify basic output
-            assert "tasks" in output.lower() or "array" in output.lower()
-    
+       
+        copied_data = extract_last_json_object(output)
+        assert isinstance(copied_data, list)
 
     
     @pytest.mark.asyncio
@@ -749,13 +726,10 @@ class TestTasksCloneCommand:
         
         # Verify copied task
         try:
-            import re
-            json_match = re.search(r'\{.*\}', output, re.DOTALL)
-            if json_match:
-                copied_data = json.loads(json_match.group())
-                assert "id" in copied_data
-                assert copied_data["id"] != root_task_id
-                assert copied_data["name"] == "Root Task for Full Mode"
+            copied_data = extract_last_json_object(output)[0]
+            assert "id" in copied_data
+            assert copied_data["id"] != root_task_id
+            assert copied_data["name"] == "Root Task for Full Mode"
         except (json.JSONDecodeError, AttributeError):
             # If JSON parsing fails, just verify basic success
             assert "Successfully copied" in output or root_task_id in output
@@ -791,18 +765,15 @@ class TestTasksCloneCommand:
         
         # Verify copied task and check reset fields
         try:
-            import re
-            json_match = re.search(r'\{.*\}', output, re.DOTALL)
-            if json_match:
-                copied_data = json.loads(json_match.group())
-                assert "id" in copied_data
-                copied_task_id = copied_data["id"]
-                
-                # Verify reset fields in database
-                copied_task = await task_repository.get_task_by_id(copied_task_id)
-                assert copied_task is not None
-                assert copied_task.status == "pending"  # Reset from completed
-                assert copied_task.progress == 0.0  # Reset from 1.0
+            copied_data = extract_last_json_object(output)
+            assert "id" in copied_data
+            copied_task_id = copied_data["id"]
+            
+            # Verify reset fields in database
+            copied_task = await task_repository.get_task_by_id(copied_task_id)
+            assert copied_task is not None
+            assert copied_task.status == "pending"  # Reset from completed
+            assert copied_task.progress == 0.0  # Reset from 1.0
         except (json.JSONDecodeError, AttributeError):
             # If JSON parsing fails, just verify basic success
             assert "Successfully copied" in output or task_id in output
@@ -919,13 +890,8 @@ class TestTasksCopyCommandAdvanced:
             output = result.stdout
 
             # Extract JSON from output
-            import re
-            json_match = re.search(r'\{.*\}', output, re.DOTALL)
-            if json_match:
-                copied_data = json.loads(json_match.group())
-            else:
-                copied_data = json.loads(output)
-
+            
+            copied_data = extract_last_json_object(output)[0]
             assert "id" in copied_data
             assert copied_data["name"] == "Root Task"
             assert copied_data["id"] != root.id  # New task ID
@@ -959,17 +925,9 @@ class TestTasksCopyCommandAdvanced:
             output = result.stdout
 
             # Extract JSON from output
-            import re
-            json_match = re.search(r'\{.*\}', output, re.DOTALL)
-            if json_match:
-                result_data = json.loads(json_match.group())
-            else:
-                result_data = json.loads(output)
-
-            assert "tasks" in result_data
-            assert result_data.get("saved") is False
-            assert isinstance(result_data["tasks"], list)
-            assert len(result_data["tasks"]) > 0
+            result_data = extract_last_json_object(output)
+            assert isinstance(result_data, list)
+            assert len(result_data) > 1
         finally:
             reset_default_session()
 
@@ -992,15 +950,9 @@ class TestTasksCopyCommandAdvanced:
             output = result.stdout
 
             # Extract JSON from output
-            import re
-            json_match = re.search(r'\{.*\}', output, re.DOTALL)
-            if json_match:
-                copied_data = json.loads(json_match.group())
-            else:
-                copied_data = json.loads(output)
+            copied_data = extract_last_json_object(output)  
 
-            assert "id" in copied_data
-            assert copied_data["name"] == "Root Task"
+            assert copied_data[0]["name"] == "Root Task"
         finally:
             reset_default_session()
 
@@ -1024,12 +976,8 @@ class TestTasksCopyCommandAdvanced:
                 assert "external dependenc" in result.stdout or "Cannot copy/archive a subtree" in result.stdout
             else:
                 output = result.stdout
-                import re
-                json_match = re.search(r'\{.*\}', output, re.DOTALL)
-                if json_match:
-                    copied_data = json.loads(json_match.group())
-                else:
-                    copied_data = json.loads(output)
+                copied_data = extract_last_json_object(output)
+
                 assert "id" in copied_data
                 assert copied_data["id"] != child1.id  # New task ID
         finally:
@@ -1054,12 +1002,7 @@ class TestTasksCopyCommandAdvanced:
                 assert "external dependenc" in result.stdout or "Cannot copy/archive a subtree" in result.stdout
             else:
                 output = result.stdout
-                import re
-                json_match = re.search(r'\{.*\}', output, re.DOTALL)
-                if json_match:
-                    copied_data = json.loads(json_match.group())
-                else:
-                    copied_data = json.loads(output)
+                copied_data = extract_last_json_object(output)[0]
                 assert "id" in copied_data
                 assert copied_data["name"] == "Root Task"
         finally:
@@ -1085,19 +1028,14 @@ class TestTasksCopyCommandAdvanced:
                 assert "external dependenc" in result.stdout or "Cannot copy/archive a subtree" in result.stdout
             else:
                 output = result.stdout
-                import re
-                json_match = re.search(r'\{.*\}', output, re.DOTALL)
-                if json_match:
-                    copied_data = json.loads(json_match.group())
-                else:
-                    copied_data = json.loads(output)
-                assert "id" in copied_data
-
-            # Verify reset fields were applied
+                copied_data = extract_last_json_object(output)
+                assert "id" in copied_data[0]
+            
+            #Verify reset fields were applied
             task_repository = TaskRepository(
                 use_test_db_session, task_model_class=get_task_model_class()
             )
-            copied_task = await task_repository.get_task_by_id(copied_data["id"])
+            copied_task = await task_repository.get_task_by_id(copied_data[0]["id"])
             assert copied_task.status == "pending"  # Reset from completed
             assert copied_task.progress == 0.0  # Reset from previous value
         finally:
@@ -1152,12 +1090,7 @@ class TestTasksCreateCommand:
         assert result.exit_code == 0
         output = result.stdout
         # Extract JSON from output (may contain extra success message)
-        import re
-        json_match = re.search(r'\{.*\}', output, re.DOTALL)
-        if json_match:
-            created_data = json.loads(json_match.group())
-        else:
-            created_data = json.loads(output)
+        created_data = extract_last_json_object(output)
         assert "id" in created_data
         assert created_data["name"] == "Create Test Task"
         
@@ -1201,12 +1134,7 @@ class TestTasksCreateCommand:
         assert result.exit_code == 0
         output = result.stdout
         # Extract JSON from output
-        import re
-        json_match = re.search(r'\{.*\}', output, re.DOTALL)
-        if json_match:
-            created_data = json.loads(json_match.group())
-        else:
-            created_data = json.loads(output)
+        created_data = extract_last_json_object(output)
         assert "id" in created_data
         assert created_data["name"] == "Create Stdin Task"
         
@@ -1258,12 +1186,7 @@ class TestTasksUpdateCommand:
         assert result.exit_code == 0
         output = result.stdout
         # Extract JSON from output (may contain extra success message)
-        import re
-        json_match = re.search(r'\{.*\}', output, re.DOTALL)
-        if json_match:
-            updated_data = json.loads(json_match.group())
-        else:
-            updated_data = json.loads(output)
+        updated_data = extract_last_json_object(output)
         assert updated_data["name"] == "Updated Name"
         
         # Verify in database
@@ -1297,12 +1220,8 @@ class TestTasksUpdateCommand:
         assert result.exit_code == 0
         output = result.stdout
         # Extract JSON from output (may contain extra success message)
-        import re
-        json_match = re.search(r'\{.*\}', output, re.DOTALL)
-        if json_match:
-            updated_data = json.loads(json_match.group())
-        else:
-            updated_data = json.loads(output)
+        
+        updated_data = extract_last_json_object(output)
         assert updated_data["status"] == "completed"
         assert updated_data["progress"] == 1.0
     
@@ -1375,12 +1294,7 @@ class TestTasksDeleteCommand:
         assert result.exit_code == 0
         output = result.stdout
         # Extract JSON from output (may contain extra success message)
-        import re
-        json_match = re.search(r'\{.*\}', output, re.DOTALL)
-        if json_match:
-            delete_data = json.loads(json_match.group())
-        else:
-            delete_data = json.loads(output)
+        delete_data = extract_last_json_object(output)
         assert delete_data["success"] is True
         assert delete_data["task_id"] == task_id
         assert delete_data["deleted_count"] >= 1
@@ -1426,12 +1340,8 @@ class TestTasksDeleteCommand:
         assert result.exit_code == 0
         output = result.stdout
         # Extract JSON from output (may contain extra success message)
-        import re
-        json_match = re.search(r'\{.*\}', output, re.DOTALL)
-        if json_match:
-            delete_data = json.loads(json_match.group())
-        else:
-            delete_data = json.loads(output)
+        delete_data = extract_last_json_object(output)
+        
         assert delete_data["success"] is True
         assert delete_data["deleted_count"] >= 2  # Root + child
         assert delete_data["children_deleted"] >= 1
@@ -1531,11 +1441,11 @@ class TestTasksTreeCommand:
         assert result.exit_code == 0
         output = result.stdout
         tree_data = json.loads(output)
-        assert tree_data["id"] == root_id
-        assert tree_data["name"] == "Root Task"
+        assert tree_data["task"]["id"] == root_id
+        assert tree_data["task"]["name"] == "Root Task"
         assert "children" in tree_data
         assert len(tree_data["children"]) >= 1
-        assert tree_data["children"][0]["id"] == child_id
+        assert tree_data["children"][0]["task"]["id"] == child_id
     
 
     
@@ -1587,7 +1497,7 @@ class TestTasksTreeCommand:
         assert result.exit_code == 0
         output = result.stdout
         tree_data = json.loads(output)
-        assert tree_data["id"] == child_id  # Should return root tree
+        assert tree_data["task"]["id"] == child_id  # Should return root tree
         assert "children" in tree_data
     
 

@@ -162,8 +162,8 @@ def test_jsonrpc_tasks_create_multiple(json_rpc_client):
     
     # Verify task tree was created
     created_tree = result["result"]
-    assert "id" in created_tree
-    assert "children" in created_tree or "name" in created_tree
+    assert "id" in created_tree[0]
+    assert "children" in created_tree[0] or "name" in created_tree[0]
 
 
 def test_jsonrpc_tasks_get(json_rpc_client):
@@ -331,7 +331,7 @@ def test_jsonrpc_tasks_tree(json_rpc_client):
     
     create_response = json_rpc_client.post("/tasks", json=create_request)
     created_result = create_response.json()
-    root_id = created_result["result"]["id"]
+    root_id = created_result["result"][0]["id"]
     
     # Get tree
     tree_request = {
@@ -355,7 +355,7 @@ def test_jsonrpc_tasks_tree(json_rpc_client):
     assert "jsonrpc" in result
     assert "result" in result
     tree = result["result"]
-    assert tree["id"] == root_id
+    assert tree['task']["id"] == root_id
     assert "children" in tree
 
 
@@ -670,7 +670,7 @@ def test_jsonrpc_tasks_copy(json_rpc_client):
     create_response = json_rpc_client.post("/tasks", json=create_request)
     assert create_response.status_code == 200
     created_result = create_response.json()
-    root_task_id = created_result["result"]["id"]
+    root_task_id = created_result["result"][0]["id"]
     
     # Copy task
     copy_request = {
@@ -779,7 +779,7 @@ def test_jsonrpc_tasks_copy_with_children(json_rpc_client):
     create_response = json_rpc_client.post("/tasks", json=create_request)
     assert create_response.status_code == 200
     created_result = create_response.json()
-    root_task_id = created_result["result"]["id"]
+    root_task_id = created_result["result"][0]["id"]
     
     # Copy task with recursive=True
     copy_request = {
@@ -1240,7 +1240,7 @@ def test_jsonrpc_tasks_execute_task_tree(json_rpc_client):
     create_response = json_rpc_client.post("/tasks", json=create_request)
     assert create_response.status_code == 200
     created_result = create_response.json()
-    root_task_id = created_result["result"]["id"]
+    root_task_id = created_result["result"][0]["id"]
     
     # Execute the root task (will execute entire tree)
     execute_request = {
@@ -1368,7 +1368,7 @@ def test_jsonrpc_tasks_children(json_rpc_client):
     create_response = json_rpc_client.post("/tasks", json=create_request)
     assert create_response.status_code == 200
     created_result = create_response.json()
-    root_task_id = created_result["result"]["id"]
+    root_task_id = created_result["result"][0]["id"]
     
     # Get children
     children_request = {

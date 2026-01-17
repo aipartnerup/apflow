@@ -994,16 +994,7 @@ class TestAgentExecutor:
             
             # Query and display complete task tree data
             task_tree = await repo.build_task_tree(root_task)
-            
-            # Convert TaskTreeNode to dictionary format for JSON display
-            def tree_node_to_dict(node):
-                """Convert TaskTreeNode to dictionary"""
-                task_dict = node.task.output()
-                if node.children:
-                    task_dict["children"] = [tree_node_to_dict(child) for child in node.children]
-                return task_dict
-            
-            task_tree_dict = tree_node_to_dict(task_tree)
+            task_tree_dict = task_tree.output()
             
             # Display task tree as JSON
             logger.info("==Task Tree Data (JSON)==\n" + json.dumps(task_tree_dict, indent=2, ensure_ascii=False))
@@ -1013,14 +1004,14 @@ class TestAgentExecutor:
             assert len(task_tree_dict["children"]) == 3  # cpu-info, memory-info, disk-info
             
             # Verify each child task has result
-            child_ids = [child["id"] for child in task_tree_dict["children"]]
+            child_ids = [child["task"]["id"] for child in task_tree_dict["children"]]
             assert "cpu-info" in child_ids
             assert "memory-info" in child_ids
             assert "disk-info" in child_ids
             
             for child in task_tree_dict["children"]:
-                assert child["status"] == "completed"
-                assert child["result"] is not None
+                assert child["task"]["status"] == "completed"
+                assert child["task"]["result"] is not None
     
     # ============================================================================
     # Cancel Method Tests

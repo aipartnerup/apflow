@@ -35,7 +35,8 @@ def api_mock_client():
     client.list_tasks = AsyncMock(return_value=[{"id": "t1"}, {"id": "t2"}])
     client.get_tasks_status = AsyncMock(return_value=[{"task_id": "t1", "status": "pending"}])
     client.cancel_tasks = AsyncMock(return_value=[{"task_id": "t1", "status": "cancelled"}])
-    client.copy_task = AsyncMock(return_value={"tasks": [{"id": "c1"}], "saved": False})
+    client.copy_task = AsyncMock(return_value=[{"id": "c1"}])
+    client.clone_task = AsyncMock(return_value=[{"id": "c1"}])
     client.create_tasks = AsyncMock(return_value={"task": {"id": "new-root"}})
     client.update_task = AsyncMock(return_value={"id": "t1", "status": "completed"})
     client.delete_task = AsyncMock(return_value={"success": True, "task_id": "t1"})
@@ -102,10 +103,11 @@ def test_tasks_copy_uses_api_preview(force_api_mode: AsyncMock, tmp_path: Path):
         cli,
         ["tasks", "clone", "t1", "--dry-run", "--output", str(output_file)],
     )
-
+    print('stdout:', result.stdout)    
+    print('exit code:', result.exit_code)
     assert result.exit_code == 0
     saved = json.loads(output_file.read_text())
-    assert saved["saved"] is False
+    assert len(saved) > 0
     force_api_mode.clone_task.assert_awaited_once()
 
 

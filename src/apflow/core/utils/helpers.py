@@ -6,7 +6,8 @@ import logging
 from typing import Any, Dict, List, Type
 from pydantic import BaseModel, HttpUrl
 from urllib.parse import urlparse, urlunparse, ParseResult
-
+import json
+import re
 
 # Use standard library logging directly
 logger = logging.getLogger(__name__)
@@ -287,33 +288,6 @@ def validate_url(url: str|HttpUrl, url_name: str = 'URL') -> ParseResult:
     return parsed
 
 
-def tree_node_to_dict(node) -> Dict[str, Any]:
-    """
-    Convert TaskTreeNode to dictionary format recursively
-    
-    This utility function converts a TaskTreeNode (which represents a task tree structure)
-    into a nested dictionary format suitable for JSON serialization and API responses.
-    
-    Args:
-        node: TaskTreeNode instance to convert
-        
-    Returns:
-        Dictionary representation of the task tree with nested children
-        
-    Example:
-        from apflow.core.types import TaskTreeNode
-        from apflow.core.utils.helpers import tree_node_to_dict
-        
-        # Convert task tree to dict
-        task_dict = tree_node_to_dict(task_tree_node)
-    """
-    
-    task_dict = node.task.output()
-    if node.children:
-        task_dict["children"] = [tree_node_to_dict(child) for child in node.children]
-    return task_dict
-
-
 def normalize_input_schema(input_schema: Dict[str, Any]) -> Dict[str, Any]:
     """
     Convert simplified input_schema format to standard JSON Schema format
@@ -421,3 +395,91 @@ def normalize_input_schema(input_schema: Dict[str, Any]) -> Dict[str, Any]:
         "properties": properties,
         "required": required_fields
     }
+
+
+def extract_all_json_object(output: str, scope: str = "mixed") -> object:
+    """
+    Extract all non-empty JSON arrays and/or objects from CLI output.
+    If scope == 'list', only return arrays; if 'object', only objects; if 'mixed', prefer arrays if any exist, else objects.
+    Returns:
+        List of dicts: {"data": <json>, "end_idx": <int>} for each match.
+        Raises ValueError if no qualified JSON structure is detected.
+    """
+    def find_all_valid_json(s: str, start_char: str, end_char: str, typ: type) -> list[tuple[int, Any]]:
+        matches = []
+        start_indices = [m.start() for m in re.finditer(re.escape(start_char), s)]
+        for start_idx in start_indices:
+            current_pos = start_idx + 1
+            count = 1
+            end_idx = -1
+            while current_pos < len(s) and count > 0:
+                char = s[current_pos]
+                if char == start_char:
+                    count += 1
+                elif char == end_char:
+                    count -= 1
+                    if count == 0:
+                        end_idx = current_pos
+                        break
+                current_pos += 1
+            if end_idx != -1:
+                json_str = s[start_idx:end_idx+1]
+                try:
+                    json_data = json.loads(json_str)
+                    if isinstance(json_data, typ) and len(json_data) > 0:
+                        matches.append((start_idx, json_data))
+                except json.JSONDecodeError:
+                    continue
+        return matches
+
+    arrays = find_all_valid_json(output, "[", "]", list)
+    objects = find_all_valid_json(output, "{", "}", dict)
+
+    if scope == "list":
+        if not arrays:
+            raise ValueError("No valid non-empty JSON array found in output")
+        return [item for _, item in arrays]
+    elif scope == "object":
+        if not objects:
+            raise ValueError("No valid non-empty JSON object found in output")
+        return [item for _, item in objects]
+    elif scope == "all":
+        # Merge arrays and objects by their order of appearance
+        all_items = arrays + objects
+        if not all_items:
+            raise ValueError("No valid non-empty JSON array/object found in output")
+        all_items.sort(key=lambda x: x[0])
+        return [item for _, item in all_items]
+    else:  # mixed (default)
+        if arrays:
+            return [item for _, item in arrays]
+        elif objects:
+            return [item for _, item in objects]
+        else:
+            raise ValueError("No valid non-empty JSON array/object found in output")
+
+
+def extract_first_json_object(output: str, scope: str = "mixed") -> Any:
+    """
+    Extract the first non-empty JSON array or object from CLI output.
+    Prefer array ([...]) over object ({...}) if both exist.
+    """
+    all_valid = extract_all_json_object(output, scope=scope)
+    if not all_valid:
+        raise ValueError("No valid non-empty JSON found in output")
+    return all_valid[0]
+
+
+def extract_last_json_object(output: str, scope: str = "mixed") -> Any:
+    """
+    Extract the last non-empty JSON array or object from CLI output.
+    Prefer array ([...]) over object ({...}) if both exist.
+    """
+
+    all_valid = extract_all_json_object(output, scope=scope)
+    if not all_valid:
+        raise ValueError("No valid non-empty JSON found in output")
+    return all_valid[-1]
+
+
+

@@ -21,7 +21,6 @@ from apflow.core.execution.task_creator import TaskCreator
 from apflow.core.storage import create_pooled_session
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from apflow.core.types import TaskStatus
-from apflow.core.utils.helpers import tree_node_to_dict
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
@@ -531,7 +530,7 @@ class TaskRoutes(BaseRouteHandler):
                 task_tree_node = await task_repository.get_task_tree_for_api(task)
 
                 # Convert TaskTreeNode to dictionary format
-                return tree_node_to_dict(task_tree_node)
+                return task_tree_node.output()
 
         except Exception as e:
             logger.error(f"Error getting task tree: {str(e)}", exc_info=True)
@@ -1089,7 +1088,7 @@ class TaskRoutes(BaseRouteHandler):
 
     async def handle_task_create(
         self, params: dict | list, request: Request, request_id: str
-    ) -> dict:
+    ) -> dict|list:
         """
         Handle task creation
 
@@ -1117,6 +1116,12 @@ class TaskRoutes(BaseRouteHandler):
             - schemas: Task schemas (optional)
             - params: Task parameters (optional)
             - ... (any custom fields)
+
+        Returns:
+            Created task tree in dictionary format
+            1. If single task created, returns single task dict
+            2. If multiple tasks created, returns list of task dicts
+
         """
         try:
             # Convert params to tasks array format
@@ -1192,8 +1197,9 @@ class TaskRoutes(BaseRouteHandler):
                 )
 
                 # Convert task tree to dictionary format for response
-                result = tree_node_to_dict(task_tree)
-
+                result = task_tree.output_list()
+                if len(result) == 1:
+                    result = result[0]  # Return single task dict if only one task
                 logger.info(
                     f"Created task tree: root task {task_tree.task.name} "
                     f"with {len(task_tree.children)} direct children"
@@ -1585,7 +1591,7 @@ class TaskRoutes(BaseRouteHandler):
             logger.error(f"Error deleting task: {str(e)}", exc_info=True)
             raise
 
-    async def handle_task_clone(self, params: dict, request: Request, request_id: str) -> dict:
+    async def handle_task_clone(self, params: dict, request: Request, request_id: str) -> dict|list:
         """
         Handle task clone
 
@@ -1595,7 +1601,11 @@ class TaskRoutes(BaseRouteHandler):
             recursive: If True, copy/link entire subtree; if False, only single task (default: True)
             link_task_ids: List of task IDs to link (for mixed mode)
             reset_fields: Dict of field names to reset values (e.g., {"user_id": "new_user"})
-            save: If True (default), save to database. If False, return task array without saving.
+            save: If True (default), save to database. If False, return task array/dict without saving.
+
+        Returns:
+            - Single task dict if one task created
+            - List of task dicts if multiple tasks created
         """
         try:
             task_id = params.get("task_id")
@@ -1671,16 +1681,18 @@ class TaskRoutes(BaseRouteHandler):
 
                 # Handle result based on save parameter
                 response = result.output_list()
+                task_count = len(response)
                 if save:
                     logger.info(
-                        f"Copied task {task_id} to new task {result.task.id} (tasks={len(response)})"
+                        f"Copied task {task_id} to new task {result.task.id} (tasks={task_count})"
                     )
                 else:
                     # Return task array directly
                     logger.info(
-                        f"Generated task copy preview for {task_id}: {len(response)} tasks (not saved)"
+                        f"Generated task copy preview for {task_id}: {task_count} tasks (not saved)"
                     )
-                
+                if task_count == 1:
+                    response = response[0]  # Return single task dict if only one task  
                 return response
 
         except Exception as e:

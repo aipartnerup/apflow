@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Optional, List
 # TaskExecutor imported on-demand to avoid loading extensions at CLI startup
 from apflow.logger import get_logger
-from apflow.core.utils.helpers import tree_node_to_dict
 from apflow.cli.api_gateway_helper import (
     should_use_api,
     run_async_safe,
@@ -486,6 +485,7 @@ def _clone_command(
         using_api = should_use_api()
         log_api_usage(command_name, using_api)
 
+        # first try using API if configured
         async def try_api_clone():
             async with get_api_client_if_configured() as client:
                 if not client:
@@ -503,26 +503,21 @@ def _clone_command(
         api_response = run_async_safe(try_api_clone())
 
         if api_response is not None:
-            def _count_dict_tasks(node: dict) -> int:
-                child_nodes = node.get("children") or []
-                return 1 + sum(_count_dict_tasks(child) for child in child_nodes)
-
-            if save:
-                result_dict = api_response
-                task_count = _count_dict_tasks(api_response)
-                root_task_id = api_response.get("task", {}).get("id")
+            result_output = api_response
+            if isinstance(api_response, dict):
+                result_output = [api_response]
+                task_count = 1
+                root_task_id = result_output.get("id")
             else:
-                tasks_array = api_response.get("tasks", []) if isinstance(api_response, dict) else []
-                result_dict = {"tasks": tasks_array, "saved": False}
-                task_count = len(tasks_array)
-                root_task_id = None
-
+                task_count = len(result_output)
+                root_task_id = result_output[0].get("id")
+            
             if output:
                 with open(output, "w") as f:
-                    json.dump(result_dict, f, indent=2)
+                    json.dump(result_output, f, indent=2)
                 typer.echo(f"{command_label} {'preview' if dry_run else 'result'} saved to {output}")
             else:
-                typer.echo(json.dumps(result_dict, indent=2))
+                typer.echo(json.dumps(result_output, indent=2))
 
             if save:
                 typer.echo(
@@ -584,34 +579,23 @@ def _clone_command(
             )
 
         result = run_async_safe(clone_task())
-
-        if save:
-            result_dict = tree_node_to_dict(result)
-            task_count = 1
-            if hasattr(result, "children"):
-                def count_children(node):
-                    return 1 + sum(count_children(child) for child in node.children)
-
-                task_count = count_children(result)
-        else:
-            # result is a TaskTreeNode; get flat list of all tasks as dicts for JSON
-            tasks_list = result.to_list() if hasattr(result, "to_list") else [result]
-            tasks_dicts = []
-            for t in tasks_list:
-                tasks_dicts.append(t.output())
-            result_dict = {"tasks": tasks_dicts, "saved": False}
-            task_count = len(tasks_dicts)
+        result_output = result.output_list()
+        if len(result_output) == 1:
+            result_output = result_output[0]  # Return single task dict if only one task
+        
+        new_task_id = result.task.id
+        task_count = len(result_output)
 
         if output:
             with open(output, "w") as f:
-                json.dump(result_dict, f, indent=2, default=str)
+                json.dump(result_output, f, indent=2, default=str)
             typer.echo(f"{command_label} {'preview' if dry_run else 'result'} saved to {output}")
         else:
-            typer.echo(json.dumps(result_dict, indent=2, default=str))
+            typer.echo(json.dumps(result_output, indent=2, default=str))
 
         if save:
             typer.echo(
-                f"\n✅ Successfully {verb} task {task_id} to new task {result.task.id} "
+                f"\n✅ Successfully {verb} task {task_id} to new task {new_task_id} "
                 f"(origin_type: {origin_type}, recursive: {recursive})"
             )
         else:
@@ -710,6 +694,7 @@ def create(
     Args:
         file: JSON file containing task(s) definition
         stdin: Read from stdin instead of file
+        
     """
     try:
         import sys
@@ -759,8 +744,9 @@ def create(
             return await task_creator.create_task_tree_from_array(tasks=tasks_array)
         
         task_tree = run_async_safe(create_task())
-        result = tree_node_to_dict(task_tree)
-        
+        result = task_tree.output_list()
+        if len(result) == 1:    
+            result = result[0]  # Return single task dict if only one task
         typer.echo(json.dumps(result, indent=2))
         typer.echo(f"\n✅ Successfully created task tree: root task {task_tree.task.id}")
         
@@ -1044,7 +1030,7 @@ def tree(
             task_tree_node = await task_repository.get_task_tree_for_api(task)
             
             # Convert TaskTreeNode to dictionary format
-            return tree_node_to_dict(task_tree_node)
+            return task_tree_node.output()
         
         result = run_async_safe(get_tree())
         typer.echo(json.dumps(result, indent=2))
