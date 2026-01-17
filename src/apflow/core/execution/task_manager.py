@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional, List, Union
 import asyncio
 from decimal import Decimal
 from inspect import iscoroutinefunction
-from apflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.storage.sqlalchemy.models import TaskModelType
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from apflow.core.storage.context import set_hook_context, clear_hook_context
 from apflow.core.execution.streaming_callbacks import StreamingCallbacks
@@ -85,7 +85,7 @@ class TaskManager:
             db: Database session (sync or async)
             root_task_id: Optional root task ID for streaming
             pre_hooks: Optional list of pre-execution hook functions
-                Each hook receives (task: TaskModel)
+                Each hook receives (task: TaskModelType)
                 Hooks can access and modify task.inputs directly
                 Hooks can be sync or async functions
                 Example:
@@ -95,7 +95,7 @@ class TaskManager:
                             task.inputs["url"] = task.inputs["url"].strip()
                     task_manager = TaskManager(db, pre_hooks=[my_pre_hook])
             post_hooks: Optional list of post-execution hook functions
-                Each hook receives (task: TaskModel, inputs: Dict[str, Any], result: Any)
+                Each hook receives (task: TaskModelType, inputs: Dict[str, Any], result: Any)
                 Hooks can be sync or async functions
                 Example:
                     async def my_post_hook(task, inputs, result):
@@ -112,8 +112,8 @@ class TaskManager:
         self.db = db
         self.is_async = isinstance(db, AsyncSession)
         self.root_task_id = root_task_id
-        # Get task_model_class from config registry (supports custom TaskModel via decorators)
-        task_model_class = get_task_model_class() or TaskModel
+        # Get task_model_class from config registry (supports custom TaskModelType via decorators)
+        task_model_class = get_task_model_class() or TaskModelType
         self.task_repository = TaskRepository(db, task_model_class=task_model_class)
         self.streaming_callbacks = StreamingCallbacks(root_task_id=self.root_task_id)
         self.stream = False
@@ -624,7 +624,7 @@ class TaskManager:
                 self._add_children_to_priority_groups(child_node, priority_groups)
 
     
-    def _get_safe_task_id(self, task: TaskModel) -> Optional[str]:
+    def _get_safe_task_id(self, task: TaskModelType) -> Optional[str]:
         """
         Safely extract task ID avoiding SQLAlchemy lazy loading after session rollback
         
@@ -664,7 +664,7 @@ class TaskManager:
 
     async def _check_task_execution_preconditions(
         self,
-        task: TaskModel,
+        task: TaskModelType,
         task_id: str
     ) -> bool:
         """
@@ -712,7 +712,7 @@ class TaskManager:
         self,
         task_id: str,
         stage: str = "pre-execution"
-    ) -> Optional[TaskModel]:
+    ) -> Optional[TaskModelType]:
         """
         Check if task was cancelled and refresh task from database
         
@@ -739,7 +739,7 @@ class TaskManager:
 
     async def _resolve_and_update_task_inputs(
         self,
-        task: TaskModel,
+        task: TaskModelType,
         task_id: str
     ) -> Dict[str, Any]:
         """
@@ -773,7 +773,7 @@ class TaskManager:
     
     async def _execute_and_apply_pre_hooks(
         self,
-        task: TaskModel,
+        task: TaskModelType,
         task_id: str
     ) -> Dict[str, Any]:
         """
@@ -820,7 +820,7 @@ class TaskManager:
 
     async def _handle_task_execution_result(
         self,
-        task: TaskModel,
+        task: TaskModelType,
         task_id: str,
         task_result: Dict[str, Any]
     ) -> None:
@@ -887,7 +887,7 @@ class TaskManager:
         except Exception as e:
             logger.error(f"Error triggering dependent tasks for {task_id}: {str(e)}")
     
-    async def _are_dependencies_satisfied(self, task: TaskModel) -> bool:
+    async def _are_dependencies_satisfied(self, task: TaskModelType) -> bool:
         """
         Check if all dependencies for a task are satisfied
         
@@ -906,7 +906,7 @@ class TaskManager:
     
     async def _execute_single_task(
         self,
-        task: TaskModel,
+        task: TaskModelType,
         use_callback: bool = True
     ):
         """
@@ -1000,7 +1000,7 @@ class TaskManager:
                 except Exception as callback_error:
                     logger.warning(f"Failed to call task_failed callback for {task_id}: {callback_error}")
     
-    async def _execute_pre_hooks(self, task: TaskModel) -> None:
+    async def _execute_pre_hooks(self, task: TaskModelType) -> None:
         """
         Execute pre-execution hooks
         
@@ -1033,7 +1033,7 @@ class TaskManager:
     
     async def _execute_post_hooks(
         self,
-        task: TaskModel,
+        task: TaskModelType,
         inputs: Dict[str, Any],
         result: Any
     ) -> None:
@@ -1064,7 +1064,7 @@ class TaskManager:
                     f"Task execution already completed."
                 )
     
-    async def _resolve_task_dependencies(self, task: TaskModel) -> Dict[str, Any]:
+    async def _resolve_task_dependencies(self, task: TaskModelType) -> Dict[str, Any]:
         """
         Resolve task dependencies by merging results from dependency tasks
         
@@ -1079,7 +1079,7 @@ class TaskManager:
         """
         return await resolve_task_dependencies(task, self.task_repository)
     
-    async def _get_completed_tasks_by_id(self, task: TaskModel) -> Dict[str, TaskModel]:
+    async def _get_completed_tasks_by_id(self, task: TaskModelType) -> Dict[str, TaskModelType]:
         """
         Get all completed tasks in the same task tree by id
         
@@ -1090,16 +1090,16 @@ class TaskManager:
             task: Task to get sibling tasks for
             
         Returns:
-            Dictionary mapping task ids to completed TaskModel instances
+            Dictionary mapping task ids to completed TaskModelType instances
         """
         return await get_completed_tasks_by_id(task, self.task_repository)
     
-    async def _get_root_task(self, task: TaskModel) -> TaskModel:
+    async def _get_root_task(self, task: TaskModelType) -> TaskModelType:
         """Get root task of the task tree"""
         # Use repository method
         return await self.task_repository.get_root_task(task)
     
-    async def _get_all_tasks_in_tree(self, root_task: TaskModel) -> List[TaskModel]:
+    async def _get_all_tasks_in_tree(self, root_task: TaskModelType) -> List[TaskModelType]:
         """
         Get all tasks in the task tree (recursive)
         
@@ -1142,7 +1142,7 @@ class TaskManager:
         
         return False
 
-    async def _call_task_tree_hooks(self, hook_type: str, root_task: TaskModel, *args):
+    async def _call_task_tree_hooks(self, hook_type: str, root_task: TaskModelType, *args):
         """
         Call task tree lifecycle hooks
         
@@ -1171,7 +1171,7 @@ class TaskManager:
                     f"failed for root task {root_task.id}: {str(e)}. Continuing with task tree execution."
                 )
     
-    async def execute_after_task(self, completed_task: TaskModel):
+    async def execute_after_task(self, completed_task: TaskModelType):
         """
         Execute after task completion - execute post-hooks and trigger dependent tasks
         
@@ -1285,7 +1285,7 @@ class TaskManager:
         except Exception as e:
             logger.error(f"Error in execute_after_task for {completed_task.id}: {str(e)}", exc_info=True)
     
-    def _get_executor_id(self, task: TaskModel) -> Optional[str]:
+    def _get_executor_id(self, task: TaskModelType) -> Optional[str]:
         """
         Get executor ID for the task from params or schemas
         
@@ -1301,7 +1301,7 @@ class TaskManager:
         return params.get("executor_id") or schemas.get("method")
         
     
-    def _load_executor(self, task: TaskModel) -> Extension:
+    def _load_executor(self, task: TaskModelType) -> Extension:
         """
         Load executor instance for the task and store in _executor_instances
         
@@ -1339,7 +1339,7 @@ class TaskManager:
     
     async def _execute_task_with_schemas(
         self,
-        task: TaskModel,
+        task: TaskModelType,
         inputs: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
@@ -1422,14 +1422,14 @@ class TaskManager:
         # Note: Input validation is now handled by executor itself (in BaseTask or executor.execute)
         # Pass task context to executor for full access to task information (including custom fields)
         # This allows executors to:
-        # - Access all task fields (including custom TaskModel fields)
+        # - Access all task fields (including custom TaskModelType fields)
         # - Modify task context (e.g., update status, progress, custom fields)
         # - Share task object efficiently (lifecycle managed by TaskManager)
         registry = get_registry()
         executor = registry.create_executor_instance(
             extension_id=executor_id,
             inputs=inputs,  # inputs for execution (will be validated by executor)
-            task=task,  # Pass task context (TaskModel instance) - supports custom TaskModel classes
+            task=task,  # Pass task context (TaskModelType instance) - supports custom TaskModelType classes
             user_id=task.user_id,  # Also pass user_id for backward compatibility
             **init_params,  # initialization parameters (works, name, inputs_schema, etc.)
             cancellation_checker=cancellation_checker

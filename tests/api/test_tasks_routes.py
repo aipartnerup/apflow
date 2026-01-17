@@ -1492,16 +1492,16 @@ class TestHandleTaskCopy:
         result = await task_routes.handle_task_clone(params, mock_request, request_id)
 
         # Verify response
-        assert isinstance(result, dict)
-        assert "id" in result
-        assert result["name"] == "Root Task"
-        assert result["id"] != root.id  # New task ID
+        assert isinstance(result, list)
+        assert "id" in result[0]
+        assert result[0]["name"] == "Root Task"
+        assert result[0]["id"] != root.id  # New task ID
 
         # Verify task was saved to database
         task_repository = TaskRepository(
             use_test_db_session, task_model_class=get_task_model_class()
         )
-        copied_task = await task_repository.get_task_by_id(result["id"])
+        copied_task = await task_repository.get_task_by_id(result[0]["id"])
         assert copied_task is not None
         assert copied_task.name == "Root Task"
 
@@ -1509,21 +1509,17 @@ class TestHandleTaskCopy:
     async def test_copy_with_save_false(self, task_routes, mock_request, task_tree_for_copy):
         """Test copy with save=False returns task array"""
         root = task_tree_for_copy["root"]
-        params = {"task_id": root.id, "copy_mode": "minimal", "save": False}
+        params = {"task_id": root.id, "origin_type": "copy", "save": False}
         request_id = str(uuid.uuid4())
 
         result = await task_routes.handle_task_clone(params, mock_request, request_id)
 
         # Verify response is task array
-        assert isinstance(result, dict)
-        assert "tasks" in result
-        assert result["saved"] is False
-        assert isinstance(result["tasks"], list)
-        assert len(result["tasks"]) > 0
+        assert isinstance(result, list)
+        assert len(result) > 0
 
         # Verify task array format
-        task_array = result["tasks"]
-        for task_dict in task_array:
+        for task_dict in result:
             assert "id" in task_dict
             assert "name" in task_dict
 
@@ -1533,8 +1529,8 @@ class TestHandleTaskCopy:
         root = task_tree_for_copy["root"]
         params = {
             "task_id": root.id,
-            "copy_mode": "minimal",
-            "children": True,
+            "origin_type": "copy",
+            "recursive": True,
             "save": True,
         }
         request_id = str(uuid.uuid4())
@@ -1542,13 +1538,12 @@ class TestHandleTaskCopy:
         result = await task_routes.handle_task_clone(params, mock_request, request_id)
 
         # Verify response
-        assert isinstance(result, dict)
-        assert "id" in result
-        assert result["name"] == "Root Task"
+        assert isinstance(result, list)
+        assert "id" in result[0]
+        assert result[0]["name"] == "Root Task"
 
         # Verify children were copied
-        if "children" in result:
-            assert len(result["children"]) > 0
+        assert len(result) > 1
 
 
     @pytest.mark.asyncio
@@ -1561,6 +1556,6 @@ class TestHandleTaskCopy:
         result = await task_routes.handle_task_clone(params, mock_request, request_id)
 
         # Verify response
-        assert isinstance(result, dict)
-        assert "id" in result
-        assert result["name"] == "Root Task"
+        assert isinstance(result, list)
+        assert "id" in result[0]
+        assert result[0]["name"] == "Root Task"

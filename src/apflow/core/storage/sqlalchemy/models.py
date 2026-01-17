@@ -5,12 +5,15 @@ SQLAlchemy models for task storage
 from sqlalchemy import Column, String, Integer, DateTime, JSON, Text, Boolean, Numeric
 from sqlalchemy.sql import func
 from sqlalchemy.orm import declarative_base
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, TypeVar, Type
 from enum import auto, StrEnum
 import uuid
 import os
 
 Base = declarative_base()
+
+# Type variable for TaskModel subclasses
+TaskModelType = TypeVar("TaskModelType", bound="TaskModel")
 
 # Table name configuration - supports environment variable override
 # Default: "apflow_tasks" (apflow tasks)
@@ -168,7 +171,7 @@ class TaskModel(Base):
         data["completed_at"] = self.completed_at.isoformat() if self.completed_at else None
         return data
     
-    def copy(self, override: Optional[Dict[str, Any]] = None) -> "TaskModel":
+    def copy(self, override: Optional[Dict[str, Any]] = None) -> TaskModelType:
         """
         Return a new instance of this TaskModel (or subclass), optionally overriding fields.
         """
@@ -177,7 +180,7 @@ class TaskModel(Base):
             data.update(override)
         return self.__class__(**data)
     
-    def update_from_dict(self, data: Dict[str, Any]) -> None:
+    def update_from_dict(self, data: Dict[str, Any]) -> TaskModelType:
         """
         Update model fields from a dictionary
         """
@@ -186,6 +189,56 @@ class TaskModel(Base):
                 setattr(self, key, value)
 
         return self
+    
+    def default_values(self) -> Dict[str, Any]:
+        """
+        Return default values for TaskModel fields
+        """
+        return {
+            "user_id": None,
+            "parent_id": None,
+            "priority": 1,
+            "dependencies": [],
+            "inputs": {},
+            "schemas": {},
+            "params": {},
+            "status": "pending",
+            "progress": 0.0,
+            "has_children": False,
+            "original_task_id": None,
+            "origin_type": TaskOriginType.create,
+            "task_tree_id": None,
+            "has_references": False,
+        }
+    
+    @classmethod
+    def create(cls: Type[TaskModelType], data: Dict[str, Any]) -> TaskModelType:
+        """
+        Create a new TaskModel (or subclass) instance from a dictionary,
+        applying default values and filtering unavailable columns.
+        """
+        available_columns = {c.name for c in cls.__table__.columns} if hasattr(cls, '__table__') else set()
+        # Start with defaults, then update with provided data
+        task_data = cls().default_values()
+        task_data.update(data)
+        # Only keep keys that are valid columns
+        filtered_data = {k: v for k, v in task_data.items() if k in available_columns}
+        return cls(**filtered_data)
+    
+    def convert_to_link(self) -> TaskModelType:
+        """
+        Fields to reset when converting to a linked task.
+        """
+        if self.origin_type == TaskOriginType.link:
+            return self  # Already a link, no changes needed    
+        
+        self.origin_type = TaskOriginType.link
+        self.params = None
+        self.inputs = None
+        self.schemas = None
+        self.result = None  
+        return self
+        
 
     def __repr__(self):
         return f"<TaskModel(id='{self.id}', name='{self.name}', status='{self.status}')>"

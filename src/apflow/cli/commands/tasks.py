@@ -597,7 +597,6 @@ def _clone_command(
             # result is a TaskTreeNode; get flat list of all tasks as dicts for JSON
             tasks_list = result.to_list() if hasattr(result, "to_list") else [result]
             tasks_dicts = []
-            import datetime
             for t in tasks_list:
                 tasks_dicts.append(t.output())
             result_dict = {"tasks": tasks_dicts, "saved": False}

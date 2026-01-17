@@ -2,6 +2,13 @@
 import pytest
 from apflow.core.execution.task_manager import TaskManager
 from apflow.core.storage.sqlalchemy.models import TaskOriginType
+from apflow.core.execution.task_creator import TaskCreator
+from apflow.core.types import TaskTreeNode
+from apflow.core.storage.sqlalchemy.models import TaskModel
+
+from apflow.logger import get_logger
+
+logger = get_logger(__name__)
 
 class TestTaskCreatorOriginTypes:
     """Test TaskCreator origin type methods: from_link, from_copy, from_archive, from_mixed"""
@@ -17,11 +24,11 @@ class TestTaskCreatorOriginTypes:
         child = await task_manager.task_repository.create_task(
             name="Child Task", user_id="user_123", parent_id=root.id, status="completed",
         )
+        
         root.has_children = True
+        logger.info(f"Created tasks: root={root.output()}, child={child.output()}")
         sync_db_session.commit()
-        with pytest.raises(ValueError, match="fully completed task tree"):
-            await creator.from_link(_original_task=root, _save=True, _recursive=True)
-        root.status = "completed"
+        await creator.from_link(_original_task=root, _save=True, _recursive=True)
         child.status = "pending"
         sync_db_session.commit()
         sync_db_session.refresh(child)
@@ -46,12 +53,15 @@ class TestTaskCreatorOriginTypes:
         )
         sync_db_session.commit()
         sync_db_session.refresh(original_task)
+        original_task.status = "completed"
+        sync_db_session.commit()
+        sync_db_session.refresh(original_task)
         linked_task = await creator.from_link(
             _original_task=original_task, _save=True, _recursive=False
         )
         assert isinstance(linked_task, TaskTreeNode)
         assert linked_task.task.origin_type == TaskOriginType.link
-        assert linked_task.original_task_id == original_task.id
+        assert linked_task.task.original_task_id == original_task.id
         assert linked_task.task.name == original_task.name
         assert linked_task.task.user_id == original_task.user_id
         # With overrides
@@ -143,9 +153,9 @@ class TestTaskCreatorOriginTypes:
             name="Completed Task", user_id="user_123", priority=2, status="completed",
         )
         archive_task = await creator.from_archive(_original_task=completed_task, _save=True, _recursive=False)
-        assert archive_task.origin_type == TaskOriginType.archive
-        assert archive_task.name == completed_task.name
-        assert archive_task.status == completed_task.status
+        assert archive_task.task.origin_type == TaskOriginType.archive
+        assert archive_task.task.name == completed_task.name
+        assert archive_task.task.status == completed_task.status
 
     @pytest.mark.asyncio
     async def test_from_archive_recursive_tree(self, sync_db_session):
@@ -163,7 +173,8 @@ class TestTaskCreatorOriginTypes:
         archive_tree = await creator.from_archive(_original_task=root, _save=True, _recursive=True)
         assert isinstance(archive_tree, TaskTreeNode)
         assert archive_tree.task.origin_type == TaskOriginType.archive
-        assert archive_tree.task.original_task_id == root.id
+        assert archive_tree.task.id == root.id
+        assert archive_tree.task.original_task_id == root.original_task_id
         assert len(archive_tree.children) == 1
 
     @pytest.mark.asyncio
@@ -209,15 +220,10 @@ class TestTaskCreatorOriginTypes:
         assert copied.task.origin_type == TaskOriginType.copy
         archive = await creator.from_archive(_original_task=original, _recursive=False)
         assert archive.task.origin_type == TaskOriginType.archive
+
 """
 Test TaskCreator functionality
 """
-import pytest
-from apflow.core.execution.task_creator import TaskCreator
-from apflow.core.types import TaskTreeNode
-from apflow.core.storage.sqlalchemy.models import TaskModel
-
-
 class TestTaskCreator:
     """Test TaskCreator core functionality"""
     

@@ -499,7 +499,7 @@ class TestTasksCloneCommand:
         
         # Clone task
         result = runner.invoke(cli, [
-            "tasks", "clone", root_task_id
+            "tasks", "clone", root_task_id, "--reset-fields", "status=pending"
         ])
         
         assert result.exit_code == 0
@@ -619,10 +619,10 @@ class TestTasksCloneCommand:
             progress=1.0
         )
         
-        # Copy task with --children flag
+        # Copy task with --recursive flag
         result = runner.invoke(cli, [
             "tasks", "clone", root_task_id,
-            "--children"
+            "--recursive"
         ])
         
         assert result.exit_code == 0
@@ -985,7 +985,7 @@ class TestTasksCopyCommandAdvanced:
                 "tasks", "clone",
                 root.id,
                 "--origin-type", "copy",
-                "--children"
+                "--recursive"
             ])
 
             assert result.exit_code == 0

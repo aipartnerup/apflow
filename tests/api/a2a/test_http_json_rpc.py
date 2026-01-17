@@ -697,7 +697,7 @@ def test_jsonrpc_tasks_copy(json_rpc_client):
     assert "result" in result
     
     # Verify copied task
-    copied_task = result["result"]
+    copied_task = result["result"][0]
     assert "id" in copied_task
     assert copied_task["id"] != root_task_id  # New task ID
     assert copied_task["name"] == root_task_data["name"]
@@ -807,13 +807,12 @@ def test_jsonrpc_tasks_copy_with_children(json_rpc_client):
     assert "result" in result
     
     # Verify copied task
-    copied_task = result["result"]
+    copied_task = result["result"][0]
     assert "id" in copied_task
     assert copied_task["id"] != root_task_id
     assert copied_task["name"] == root_task_data["name"]
     assert copied_task["original_task_id"] == root_task_id
-    assert "children" in copied_task
-    assert len(copied_task["children"]) == 2  # Should have both children
+    assert len(result["result"]) == 3  # Should have root and both children
 
 
 def test_jsonrpc_tasks_execute(json_rpc_client):

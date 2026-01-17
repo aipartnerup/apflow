@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
-from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING, Type, TypeVar, Set
+from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING, Type, Set
 from datetime import datetime
-from apflow.core.storage.sqlalchemy.models import TaskModel, TaskOriginType
+from apflow.core.storage.sqlalchemy.models import TaskModel, TaskOriginType, TaskModelType
 from apflow.core.execution.errors import ValidationError
 from apflow.core.storage.sqlalchemy.session_proxy import SqlalchemySessionProxy
 from apflow.logger import get_logger
@@ -21,9 +21,6 @@ if TYPE_CHECKING:
     from apflow.core.types import TaskTreeNode
 
 logger = get_logger(__name__)
-
-# Type variable for TaskModel subclasses
-TaskModelType = TypeVar("TaskModelType", bound=TaskModel)
 
 
 class TaskRepository():
@@ -71,17 +68,6 @@ class TaskRepository():
     async def create_task(
         self,
         name: str,
-        user_id: Optional[str] = None,
-        parent_id: Optional[str] = None,
-        priority: int = 1,
-        dependencies: Optional[List[Dict[str, Any]]] = None,
-        inputs: Optional[Dict[str, Any]] = None,
-        schemas: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None,
-        id: Optional[str] = None,  # Optional task ID (if not provided, TaskModel will auto-generate)
-        original_task_id: Optional[str] = None,  # Original task ID (for copies/references)
-        origin_type: Optional[TaskOriginType] = None,  # Task origin type (self, copy, reference, link, archive)
-        task_tree_id: Optional[str] = None,  # Task tree identifier (for grouping/querying across trees)
         **kwargs  # User-defined custom fields (e.g., project_id, department, etc.)
     ) -> TaskModelType:
         """
@@ -89,96 +75,14 @@ class TaskRepository():
         
         Args:
             name: Task name
-            user_id: User ID (optional, for multi-user scenarios)
-            parent_id: Parent task ID
-            priority: Priority level (0=urgent/highest, 1=high, 2=normal, 3=low/lowest). ASC order: smaller numbers execute first.
-            dependencies: Task dependencies: [{"id": "uuid", "required": true}]
-            inputs: Execution-time input parameters for executor.execute(inputs)
-            schemas: Validation schemas (input_schema, output_schema)
-            params: Executor initialization parameters (must include executor_id)
-            id: Optional task ID. If not provided, TaskModel will auto-generate using default (UUID).
-            original_task_id: Original task ID (for copies/references)
-            origin_type: Task origin type (TaskOriginType.own, TaskOriginType.copy, etc.). Default: TaskOriginType.own
-            task_tree_id: Task tree identifier for grouping/querying across trees (optional)
-            **kwargs: User-defined custom fields (e.g., project_id="proj-123", department="engineering")
-                These fields will be set on the task if they exist as columns in the TaskModel
-                Example: create_task(..., project_id="proj-123", department="engineering")
+            **kwargs: These fields will be set on the task if they exist as columns in the TaskModel
             
         Returns:
             Created TaskModel instance (or custom TaskModel subclass if configured)
         """
-        # Get available columns from the task_model_class table
-        # This supports both default TaskModel and custom TaskModel subclasses
-        available_columns = set()
-        if hasattr(self.task_model_class, '__table__'):
-            available_columns = {c.name for c in self.task_model_class.__table__.columns}
-        
-        task_data = {}
-        
-        # Only add fields that exist in the table
-        if 'name' in available_columns:
-            task_data["name"] = name
-        if 'user_id' in available_columns:
-            task_data["user_id"] = user_id
-        if 'parent_id' in available_columns:
-            task_data["parent_id"] = parent_id
-        if 'priority' in available_columns:
-            task_data["priority"] = priority
-        if 'dependencies' in available_columns:
-            task_data["dependencies"] = dependencies or []
-        if 'inputs' in available_columns:
-            task_data["inputs"] = inputs or {}
-        if 'schemas' in available_columns:
-            task_data["schemas"] = schemas or {}
-        if 'params' in available_columns:
-            task_data["params"] = params or {}
-        if 'status' in available_columns:
-            task_data["status"] = "pending"
-        if 'progress' in available_columns:
-            task_data["progress"] = 0.0
-        if 'has_children' in available_columns:
-            task_data["has_children"] = False
-        if 'original_task_id' in available_columns:
-            task_data["original_task_id"] = original_task_id
-        if 'origin_type' in available_columns:
-            task_data["origin_type"] = origin_type if origin_type is not None else TaskOriginType.create
-        if 'task_tree_id' in available_columns:
-            task_data["task_tree_id"] = task_tree_id
-        if 'has_references' in available_columns:
-            task_data["has_references"] = False
-        
-        # Set id if provided (otherwise TaskModel will use its default)
-        if id is not None and 'id' in available_columns:
-            task_data["id"] = id
-        
-        # Add custom fields from kwargs if they exist as columns in the TaskModel
-        # This allows users to pass custom fields like project_id, department, etc.
-        # Note: 'id' should not be passed via kwargs, use the id parameter instead
-        # Note: 'status' should not be overridden from kwargs for new tasks (always starts as 'pending')
-        
-        # Add custom fields from kwargs if they exist as columns in the TaskModel
-        for key, value in kwargs.items():
-            if key == "id":
-                logger.warning(
-                    "id should be passed as a named parameter, not via kwargs. Ignoring id from kwargs."
-                )
-                continue
-            elif key == "status":
-                if original_task_id:
-                    task_data["status"] = value
-                else:
-                    logger.debug(f"Ignoring status '{value}' from kwargs - new tasks always start as 'pending'")
-                    continue
-            elif key in available_columns:
-                task_data[key] = value
-            else:
-                logger.warning(
-                    f"Custom field '{key}' ignored - not found in {self.task_model_class.__name__}. "
-                    f"Available columns: {sorted(available_columns)}"
-                )
         
         # Create task instance using configured TaskModel class
-        task = self.task_model_class(**task_data)
+        task = self.task_model_class.create({"name": name, **kwargs})
         
         self.db.add(task)
         

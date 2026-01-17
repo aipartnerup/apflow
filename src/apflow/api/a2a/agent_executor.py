@@ -422,7 +422,7 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
             else:
                 raise ValueError(f"Unsupported copy mode: {mode}")
             logger.info(f"Extracted 1 task tree from {mode} scenario (task_id={task_id})")
-            return self._tree_node_to_tasks_array(tree)
+            return tree.output_list()
         # Default: extract tasks from message parts
         tasks = []
         if context.message and hasattr(context.message, "parts"):
@@ -439,39 +439,6 @@ class AIPartnerUpFlowAgentExecutor(AgentExecutor):
         logger.info(f"Extracted {len(tasks)} tasks from context.message.parts")
         return tasks
 
-    def _tree_node_to_tasks_array(self, root_node) -> List[Dict[str, Any]]:
-        """
-        Convert TaskTreeNode to tasks array format for execution
-        
-        Args:
-            root_node: Root TaskTreeNode
-            
-        Returns:
-            List of task dictionaries in tasks array format
-        """
-        from apflow.core.types import TaskTreeNode
-        
-        tasks = []
-        
-        def collect_tasks(node: TaskTreeNode):
-            """Recursively collect tasks from tree"""
-            # Convert TaskModel to dict
-            task_dict = node.task.output()
-            
-            # Set parent_id if node has parent
-            # Note: In TaskTreeNode, parent is not directly stored, but we can infer from tree structure
-            # For now, we'll rely on the task's parent_id field which should be set during copy
-            
-            # Add to tasks array
-            tasks.append(task_dict)
-            
-            # Recursively process children
-            for child in node.children:
-                collect_tasks(child)
-        
-        collect_tasks(root_node)
-        return tasks
-    
     def _extract_single_part_data(self, part) -> Any:
         """
         Extract data from a single part

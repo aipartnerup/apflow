@@ -248,7 +248,7 @@ class TaskTreeNode:
         return new_node
             
 
-    def update(self, data: Dict[str, Any]) -> None:
+    def update(self, data: Dict[str, Any]) -> "TaskTreeNode":
         """
         Update the task model associated with this node
         
@@ -258,6 +258,8 @@ class TaskTreeNode:
         self.task.update_from_dict(data)
         for child in self.children:
             child.update(data)
+
+        return self
             
     def output(self) -> Dict[str, Any]:
         """
@@ -270,6 +272,18 @@ class TaskTreeNode:
             "task": self.task.output(),
             "children": [child.output() for child in self.children]
         }
+    
+    def output_list(self) -> List[Dict[str, Any]]:
+        """
+        Generate a flat list of task dictionaries from the task tree
+        
+        Returns:
+            A list of dictionaries representing each task in the tree
+        """
+        tasks = [self.task.output()]
+        for child in self.children:
+            tasks.extend(child.output_list())
+        return tasks
 
 
 __all__ = [

@@ -807,7 +807,7 @@ class TaskRoutes(BaseRouteHandler):
                     try:
                         if child.user_id:
                             self._check_permission(request, child.user_id, "access")
-                        child_dicts.append(task.output())
+                        child_dicts.append(child.output())
                     except ValueError:
                         # Permission denied, skip this child task
                         logger.warning(f"Permission denied for child task {child.id}")
@@ -1670,19 +1670,15 @@ class TaskRoutes(BaseRouteHandler):
                     )
 
                 # Handle result based on save parameter
+                response = result.output_list()
                 if save:
-                    # Return TaskTreeNode as dict
-                    response = tree_node_to_dict(result)
-                    # Count children if possible
-                    children = len(result.children) if hasattr(result, "children") and result.children is not None else 0
                     logger.info(
-                        f"Copied task {task_id} to new task {result.task.id} (children={children})"
+                        f"Copied task {task_id} to new task {result.task.id} (tasks={len(response)})"
                     )
                 else:
                     # Return task array directly
-                    response = {"tasks": result, "saved": False}
                     logger.info(
-                        f"Generated task copy preview for {task_id}: {len(result)} tasks (not saved)"
+                        f"Generated task copy preview for {task_id}: {len(response)} tasks (not saved)"
                     )
                 
                 return response

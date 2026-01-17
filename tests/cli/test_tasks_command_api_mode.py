@@ -100,7 +100,7 @@ def test_tasks_copy_uses_api_preview(force_api_mode: AsyncMock, tmp_path: Path):
     output_file = tmp_path / "copy.json"
     result = runner.invoke(
         cli,
-        ["tasks", "copy", "t1", "--dry-run", "--output", str(output_file)],
+        ["tasks", "clone", "t1", "--dry-run", "--output", str(output_file)],
     )
 
     assert result.exit_code == 0
