@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional, TypeVar, Type
 from enum import auto, StrEnum
 import uuid
 import os
+from datetime import timezone
 
 Base = declarative_base()
 
@@ -188,6 +189,11 @@ class TaskModel(Base):
             if hasattr(self, key):
                 setattr(self, key, value)
 
+        if 'status' in data:
+            if data['status'] in {"completed", "failed", "cancelled"}:
+                from datetime import datetime
+                self.completed_at = datetime.now(timezone.utc)
+                    
         return self
     
     def default_values(self) -> Dict[str, Any]:
@@ -238,7 +244,13 @@ class TaskModel(Base):
         self.schemas = None
         self.result = None  
         return self
-        
+    
+    def is_json_field(self, field: str) -> bool:
+        column = self.__class__.__table__.columns.get(field)
+        if column is not None and isinstance(column.type, JSON):
+            return True
+        return False
+   
 
     def __repr__(self):
         return f"<TaskModel(id='{self.id}', name='{self.name}', status='{self.status}')>"

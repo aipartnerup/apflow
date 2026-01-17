@@ -11,7 +11,6 @@ from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING, Type, Set
-from datetime import datetime
 from apflow.core.storage.sqlalchemy.models import TaskModel, TaskOriginType, TaskModelType
 from apflow.core.execution.errors import ValidationError
 from apflow.core.storage.sqlalchemy.session_proxy import SqlalchemySessionProxy
@@ -364,258 +363,43 @@ class TaskRepository():
         
         return task_node
     
-    async def update_task_status(
-        self,
-        task_id: str,
-        status: str,
-        error: Optional[str] = None,
-        result: Optional[Dict[str, Any]] = None,
-        progress: Optional[float] = None,
-        started_at: Optional[datetime] = None,
-        completed_at: Optional[datetime] = None,
-    ) -> bool:
-        """
-        Update task status and related fields
-        
-        Args:
-            task_id: Task ID
-            status: New status
-            error: Error message (if any)
-            result: Task result
-            progress: Task progress (0.0 to 1.0)
-            started_at: Task start time
-            completed_at: Task completion time
-            
-        Returns:
-            True if successful, False if task not found
-        """
-        try:
-            task = await self.get_task_by_id(task_id)
-            if not task:
-                return False
-            
-            task.status = status
-            # Handle error field: if explicitly set to None and status is completed, clear it
-            # This allows clearing error when task completes successfully after re-execution
-            # Use a sentinel value to distinguish between "not provided" and "explicitly None"
-            if error is not None:
-                task.error = error
-            elif status == "completed":
-                # Clear error when task completes successfully (re-execution scenario)
-                task.error = None
-            if result is not None:
-                task.result = result
-                # Mark JSON field as modified for SQLAlchemy change detection
-                flag_modified(task, "result")
-            if progress is not None:
-                task.progress = progress
-            if started_at is not None:
-                task.started_at = started_at
-            if completed_at is not None:
-                task.completed_at = completed_at
-            
-            await self.db.commit()
-            await self.db.refresh(task)
 
-            return True
-            
+    async def update_task(self, task_id: str, **fields: Any) -> TaskModelType:
+        """
+        Update arbitrary fields of a task.
+
+        TODO: check dependencies and validate for task tree if dependencies exist
+
+        Args:
+            task_id: Task ID
+            **fields: Fields to update (e.g., status="completed", inputs={...})
+
+        Returns:
+            True if successful, False if task not found
+        """
+        try:
+            task = await self.get_task_by_id(task_id)
+            if not task:
+                raise ValueError(f"Task with id {task_id} not found")
+
+            task.update_from_dict(fields)   
+
+            for key, _ in fields.items():
+                if hasattr(task, key):
+                    # Mark JSON fields as modified for SQLAlchemy change detection
+                    if task.is_json_field(key):
+                        flag_modified(task, key)
+
+            await self.db.commit()
+            await self.db.refresh(task)
+            logger.info(f"Updated task {task_id} fields: {list(fields.keys())}")
+            return task
+
         except Exception as e:
-            logger.error(f"Error updating task status for {task_id}: {str(e)}")
+            logger.error(f"Error updating task {task_id}: {str(e)}")
             await self.db.rollback()
-            return False
-    
-    async def update_task_inputs(self, task_id: str, inputs: Dict[str, Any]) -> bool:
-        """
-        Update task inputs
-        
-        Args:
-            task_id: Task ID
-            inputs: New input parameters
-            
-        Returns:
-            True if successful, False if task not found
-        """
-        try:
-            task = await self.get_task_by_id(task_id)
-            if not task:
-                return False
-            
-            task.inputs = inputs
-            # Mark JSON field as modified for SQLAlchemy change detection
-            flag_modified(task, "inputs")
-            
-            await self.db.commit()
-            await self.db.refresh(task)
-            
-            # Verify the update was successful
-            logger.debug(
-                f"Updated inputs for task {task_id}: "
-                f"keys={list(inputs.keys())}, saved_keys={list(task.inputs.keys()) if task.inputs else []}"
-            )
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error updating task inputs for {task_id}: {str(e)}")
-            if self.is_async:
-                await self.db.rollback()
-            else:
-                self.db.rollback()
-            return False
-    
-    async def update_task_dependencies(self, task_id: str, dependencies: List[Dict[str, Any]]) -> bool:
-        """
-        Update task dependencies
-        
-        Args:
-            task_id: Task ID
-            dependencies: New dependencies list
-            
-        Returns:
-            True if successful, False if task not found
-        """
-        try:
-            task = await self.get_task_by_id(task_id)
-            if not task:
-                return False
-            
-            task.dependencies = dependencies
-            # Mark JSON field as modified for SQLAlchemy change detection
-            flag_modified(task, "dependencies")
-            
-            await self.db.commit()
-            await self.db.refresh(task)
-            
-            logger.debug(f"Updated dependencies for task {task_id}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error updating task dependencies for {task_id}: {str(e)}")
-            await self.db.rollback()
-            return False
-    
-    async def update_task_name(self, task_id: str, name: str) -> bool:
-        """
-        Update task name
-        
-        Args:
-            task_id: Task ID
-            name: New task name
-            
-        Returns:
-            True if successful, False if task not found
-        """
-        try:
-            task = await self.get_task_by_id(task_id)
-            if not task:
-                return False
-            
-            task.name = name
-            
-            await self.db.commit()
-            await self.db.refresh(task)
-            
-            logger.debug(f"Updated name for task {task_id}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error updating task name for {task_id}: {str(e)}")
-            await self.db.rollback()
-            return False
-    
-    async def update_task_priority(self, task_id: str, priority: int) -> bool:
-        """
-        Update task priority
-        
-        Args:
-            task_id: Task ID
-            priority: New priority level
-            
-        Returns:
-            True if successful, False if task not found
-        """
-        try:
-            task = await self.get_task_by_id(task_id)
-            if not task:
-                return False
-            
-            task.priority = priority
-            
-            await self.db.commit()
-            await self.db.refresh(task)
-            
-            logger.debug(f"Updated priority for task {task_id}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error updating task priority for {task_id}: {str(e)}")
-            await self.db.rollback()
-            return False
-    
-    async def update_task_params(self, task_id: str, params: Dict[str, Any]) -> bool:
-        """
-        Update task params
-        
-        Args:
-            task_id: Task ID
-            params: New executor parameters
-            
-        Returns:
-            True if successful, False if task not found
-        """
-        try:
-            task = await self.get_task_by_id(task_id)
-            if not task:
-                return False
-            
-            task.params = params
-            # Mark JSON field as modified for SQLAlchemy change detection
-            flag_modified(task, "params")
-            
-            await self.db.commit()
-            await self.db.refresh(task)
-            
-            logger.debug(f"Updated params for task {task_id}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error updating task params for {task_id}: {str(e)}")
-            if self.is_async:
-                await self.db.rollback()
-            else:
-                self.db.rollback()
-            return False
-    
-    async def update_task_schemas(self, task_id: str, schemas: Dict[str, Any]) -> bool:
-        """
-        Update task schemas
-        
-        Args:
-            task_id: Task ID
-            schemas: New validation schemas
-            
-        Returns:
-            True if successful, False if task not found
-        """
-        try:
-            task = await self.get_task_by_id(task_id)
-            if not task:
-                return False
-            
-            task.schemas = schemas
-            # Mark JSON field as modified for SQLAlchemy change detection
-            flag_modified(task, "schemas")
-            
-            await self.db.commit()
-            await self.db.refresh(task)
-            
-            logger.debug(f"Updated schemas for task {task_id}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error updating task schemas for {task_id}: {str(e)}")
-            await self.db.rollback()
-            return False
+            raise
+
     
     async def get_completed_tasks_by_ids(self, task_ids: List[str]) -> Dict[str, TaskModelType]:
         """

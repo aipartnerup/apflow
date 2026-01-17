@@ -306,13 +306,7 @@ Database operations for tasks.
 - `get_task_by_id(task_id)`: Get task by ID
 - `get_root_task(task)`: Get root task
 - `build_task_tree(task)`: Build task tree from task
-- `update_task_status(task_id, status, ...)`: Update task status and related fields (error, result, progress, timestamps)
-- `update_task_inputs(task_id, inputs)`: Update task inputs
-- `update_task_dependencies(task_id, dependencies)`: Update task dependencies (with validation)
-- `update_task_name(task_id, name)`: Update task name
-- `update_task_priority(task_id, priority)`: Update task priority
-- `update_task_params(task_id, params)`: Update executor parameters
-- `update_task_schemas(task_id, schemas)`: Update validation schemas
+- `update_task(task_id, **kwarg)` Update task fields
 - `delete_task(task_id)`: Physically delete a task from the database
 - `get_all_children_recursive(task_id)`: Recursively get all child tasks (including grandchildren)
 - `find_dependent_tasks(task_id)`: Find all tasks that depend on a given task (reverse dependencies)
@@ -513,7 +507,7 @@ async def my_hook(task):
     repo = get_hook_repository()
     if repo:
         # Modify task fields
-        await repo.update_task_priority(task.id, 10)
+        await repo.update_task(task.id, priority=10)
         # Query other tasks
         pending = await repo.get_tasks_by_status("pending")
 ```

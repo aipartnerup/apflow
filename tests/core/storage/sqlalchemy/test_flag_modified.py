@@ -29,13 +29,13 @@ class TestFlagModifiedJsonFields:
 
         # Update status with result
         result_data = {"output": "test_value", "nested": {"key": "value"}}
-        success = await repo.update_task_status(
+        success = await repo.update_task(
             task_id=task.id,
             status="completed",
             result=result_data,
         )
 
-        assert success is True
+        assert success is not None
 
         # Retrieve task in a fresh query to verify persistence
         updated_task = await repo.get_task_by_id(task.id)
@@ -59,9 +59,9 @@ class TestFlagModifiedJsonFields:
 
         # Update inputs
         new_inputs = {"url": "https://example.com", "params": {"key": "value"}}
-        success = await repo.update_task_inputs(task.id, new_inputs)
+        success = await repo.update_task(task.id, inputs=new_inputs)
 
-        assert success is True
+        assert success is not None
 
         # Retrieve task in a fresh query
         updated_task = await repo.get_task_by_id(task.id)
@@ -87,9 +87,9 @@ class TestFlagModifiedJsonFields:
 
         # Update dependencies
         new_deps = [{"id": dep_task.id, "required": True, "type": "data"}]
-        success = await repo.update_task_dependencies(task.id, new_deps)
+        success = await repo.update_task(task.id, dependencies=new_deps)
 
-        assert success is True
+        assert success is not None
 
         # Retrieve task in a fresh query
         updated_task = await repo.get_task_by_id(task.id)
@@ -111,9 +111,9 @@ class TestFlagModifiedJsonFields:
 
         # Update params
         new_params = {"executor_id": "test_executor", "config": {"timeout": 60}}
-        success = await repo.update_task_params(task.id, new_params)
+        success = await repo.update_task(task.id, params=new_params)
 
-        assert success is True
+        assert success is not None
 
         # Retrieve task in a fresh query
         updated_task = await repo.get_task_by_id(task.id)
@@ -138,9 +138,9 @@ class TestFlagModifiedJsonFields:
             "method": "custom_executor",
             "input_schema": {"type": "object", "properties": {"url": {"type": "string"}}},
         }
-        success = await repo.update_task_schemas(task.id, new_schemas)
+        success = await repo.update_task(task.id, schemas=new_schemas)
 
-        assert success is True
+        assert success is not None
 
         # Retrieve task in a fresh query
         updated_task = await repo.get_task_by_id(task.id)
@@ -161,16 +161,16 @@ class TestFlagModifiedJsonFields:
         )
 
         # Update inputs
-        await repo.update_task_inputs(task.id, {"input_key": "input_value"})
+        await repo.update_task(task.id, inputs={"input_key": "input_value"})
 
         # Update params
-        await repo.update_task_params(task.id, {"param_key": "param_value"})
+        await repo.update_task(task.id, params={"param_key": "param_value"})
 
         # Update schemas
-        await repo.update_task_schemas(task.id, {"method": "test_method"})
+        await repo.update_task(task.id, schemas={"method": "test_method"})
 
         # Update status with result
-        await repo.update_task_status(
+        await repo.update_task(
             task_id=task.id,
             status="completed",
             result={"result_key": "result_value"},
@@ -199,7 +199,7 @@ class TestFlagModifiedJsonFields:
         original_id = task.id
 
         # Update status multiple times
-        await repo.update_task_status(
+        await repo.update_task(
             task_id=task.id,
             status="in_progress",
             progress=0.5,
@@ -211,7 +211,7 @@ class TestFlagModifiedJsonFields:
         assert float(task_v1.progress) == 0.5
 
         # Update again
-        await repo.update_task_status(
+        await repo.update_task(
             task_id=task.id,
             status="completed",
             progress=1.0,
@@ -250,7 +250,7 @@ class TestFlagModifiedJsonFields:
             "mixed": {"int": 42, "float": 3.14, "bool": True, "null": None},
         }
 
-        await repo.update_task_status(
+        await repo.update_task(
             task_id=task.id,
             status="completed",
             result=complex_result,

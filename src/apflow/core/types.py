@@ -11,28 +11,28 @@ tied to any specific implementation layer.
 from typing import TYPE_CHECKING, List, Dict, Any, Union, Callable, Awaitable, Optional
 
 if TYPE_CHECKING:
-    from apflow.core.storage.sqlalchemy.models import TaskModel
+    from apflow.core.storage.sqlalchemy.models import TaskModelType
 
 
 # ============================================================================
 # Type Aliases
 # ============================================================================
 
-TaskPreHook = Callable[["TaskModel"], Union[None, Awaitable[None]]]
+TaskPreHook = Callable[["TaskModelType"], Union[None, Awaitable[None]]]
 """
 Type alias for pre-execution hook functions.
 
 Pre-hooks are called before task execution, allowing modification of task.inputs.
-They receive only the TaskModel instance and can modify it in-place.
+They receive only the TaskModelType instance and can modify it in-place.
 
 Example:
-    async def my_pre_hook(task: TaskModel) -> None:
+    async def my_pre_hook(task: TaskModelType) -> None:
         if task.inputs is None:
             task.inputs = {}
         task.inputs["timestamp"] = datetime.now().isoformat()
 """
 
-TaskPostHook = Callable[["TaskModel", Dict[str, Any], Any], Union[None, Awaitable[None]]]
+TaskPostHook = Callable[["TaskModelType", Dict[str, Any], Any], Union[None, Awaitable[None]]]
 """
 Type alias for post-execution hook functions.
 
@@ -40,12 +40,12 @@ Post-hooks are called after task execution completes, receiving the task,
 final input data, and execution result. Useful for logging, notifications, etc.
 
 Args:
-    task: The TaskModel instance
+    task: The TaskModelType instance
     inputs: The final input parameters used for execution
     result: The execution result (or error information)
 
 Example:
-    async def my_post_hook(task: TaskModel, inputs: Dict[str, Any], result: Any) -> None:
+    async def my_post_hook(task: TaskModelType, inputs: Dict[str, Any], result: Any) -> None:
         logger.info(f"Task {task.id} completed with result: {result}")
 """
 
@@ -120,7 +120,7 @@ class TaskTreeNode:
     for building and managing task hierarchies.
     
     Attributes:
-        task: The TaskModel instance associated with this node
+        task: The TaskModelType instance associated with this node
         children: List of child TaskTreeNode instances
     
     Methods:
@@ -129,12 +129,12 @@ class TaskTreeNode:
         calculate_status: Calculate the overall status of the task tree
     """
     
-    def __init__(self, task: "TaskModel"):
+    def __init__(self, task: "TaskModelType"):
         """
         Initialize a task tree node
         
         Args:
-            task: The TaskModel instance to associate with this node
+            task: The TaskModelType instance to associate with this node
         """
         self.task = task
         self.children: List["TaskTreeNode"] = []
@@ -210,24 +210,24 @@ class TaskTreeNode:
         for child in self.children:
             yield from child
 
-    def to_list(self) -> List["TaskModel"]:
+    def to_list(self) -> List["TaskModelType"]:
         """
-        Convert the task tree to a flat list of TaskModel instances
+        Convert the task tree to a flat list of TaskModelType instances
         
         Returns:
-            List of TaskModel instances in the tree
+            List of TaskModelType instances in the tree
         """
         tasks = [self.task]
         for child in self.children:
             tasks.extend(child.to_list())
         return tasks    
     
-    def to_mapping(self) -> Dict[str, "TaskModel"]:
+    def to_mapping(self) -> Dict[str, "TaskModelType"]:
         """
-        Convert the task tree to a mapping of task IDs to TaskModel instances
+        Convert the task tree to a mapping of task IDs to TaskModelType instances
         
         Returns:
-            Dictionary mapping task IDs to TaskModel instances
+            Dictionary mapping task IDs to TaskModelType instances
         """
         mapping = {self.task.id: self.task}
         for child in self.children:
@@ -253,7 +253,7 @@ class TaskTreeNode:
         Update the task model associated with this node
         
         Args:
-            kwargs: Key-value pairs to update on the TaskModel
+            kwargs: Key-value pairs to update on the TaskModelType
         """
         self.task.update_from_dict(data)
         for child in self.children:

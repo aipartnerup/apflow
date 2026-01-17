@@ -74,7 +74,7 @@ async def completed_task(use_test_db_session):
         dependencies=[]
     )
     # Update status to completed (create_task always creates pending tasks)
-    await task_repository.update_task_status(
+    await task_repository.update_task(
         task_id=task_id,
         status="completed",
         progress=1.0
@@ -100,7 +100,7 @@ async def in_progress_task(use_test_db_session):
         dependencies=[]
     )
     # Update status to in_progress (create_task always creates pending tasks)
-    await task_repository.update_task_status(
+    await task_repository.update_task(
         task_id=task_id,
         status="in_progress",
         progress=0.5
@@ -233,7 +233,7 @@ class TestCriticalFieldValidation:
             dependencies=[]
         )
         # Update status to completed (create_task always creates pending tasks)
-        await task_repository.update_task_status(
+        await task_repository.update_task(
             task_id=completed_id,
             status="completed",
             progress=1.0
@@ -288,7 +288,7 @@ class TestCriticalFieldValidation:
             dependencies=[]
         )
         # Update status to in_progress (create_task always creates pending tasks)
-        await task_repository.update_task_status(
+        await task_repository.update_task(
             task_id=in_progress_id,
             status="in_progress",
             progress=0.5

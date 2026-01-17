@@ -128,7 +128,7 @@ class TestTaskRepository:
         assert task.status == "pending"
         
         # Update status
-        await repo.update_task_status(
+        await repo.update_task(
             task_id=task.id,
             status="completed",
             result={"output": "result"},
@@ -155,7 +155,7 @@ class TestTaskRepository:
         
         # Update input data
         new_input = {"updated": "data", "url": "https://example.com"}
-        await repo.update_task_inputs(task.id, new_input)
+        await repo.update_task(task.id, inputs=new_input)
         
         # Retrieve and verify
         updated_task = await repo.get_task_by_id(task.id)

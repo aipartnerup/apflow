@@ -239,7 +239,7 @@ Return: {
 ```
 1. CLI/API: tasks cancel task-123
    ↓
-2. TaskRepository.update_task_status(task_id, status="cancelled")
+2. TaskRepository.update_task(task_id, status="cancelled")
    ↓
 3. TaskManager._execute_single_task() checks status at multiple points:
    - Before starting execution

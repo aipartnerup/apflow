@@ -103,7 +103,7 @@ def get_hook_repository() -> Optional["TaskRepository"]:
             if repo:
                 # Use repository methods directly
                 other_task = await repo.get_task_by_id(some_id)
-                await repo.update_task_status(other_task.id, "pending")
+                await repo.update_task(other_task.id, "pending")
         ```
     
     Note:

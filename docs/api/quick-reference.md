@@ -113,32 +113,11 @@ task = await task_manager.task_repository.get_task_by_id(task_id)
 
 ```python
 # Update status and related fields
-await task_repository.update_task_status(
+await task_repository.update_task(
     task_id,
     status="completed",
     result={"data": "result"},
     progress=1.0
-)
-
-# Update inputs
-await task_repository.update_task_inputs(task_id, {"key": "new_value"})
-
-# Update name
-await task_repository.update_task_name(task_id, "New Task Name")
-
-# Update priority
-await task_repository.update_task_priority(task_id, 2)
-
-# Update params
-await task_repository.update_task_params(task_id, {"executor_id": "new_executor"})
-
-# Update schemas
-await task_repository.update_task_schemas(task_id, {"input_schema": {...}})
-
-# Update dependencies (only for pending tasks, with validation)
-await task_repository.update_task_dependencies(
-    task_id,
-    [{"id": "dep-task-id", "required": True}]
 )
 ```
 
@@ -389,8 +368,7 @@ async def modify_task_with_db(task):
     repo = get_hook_repository()
     if repo:
         # Update task fields
-        await repo.update_task_name(task.id, "New Name")
-        await repo.update_task_priority(task.id, 10)
+        await repo.update_task(task.id, name="New Name")
         
         # Query other tasks
         pending_tasks = await repo.get_tasks_by_status("pending")

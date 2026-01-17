@@ -246,7 +246,7 @@ async def test_failed_task_can_be_reexecuted(sync_db_session):
     assert task.status == "failed"
     
     # Mark for re-execution by resetting status
-    await task_repository.update_task_status(
+    await task_repository.update_task(
         task_id=task.id,
         status="pending",
         error=None,
@@ -255,7 +255,7 @@ async def test_failed_task_can_be_reexecuted(sync_db_session):
     
     # Re-execute with different input (should still fail but with different error)
     # Update task inputs for re-execution
-    await task_repository.update_task_inputs(task.id, {"error_type": "configuration"})
+    await task_repository.update_task(task.id, inputs={"error_type": "configuration"})
     
     await task_manager._execute_single_task(task, use_callback=False)
     

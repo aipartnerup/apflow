@@ -261,17 +261,11 @@ async def modify_task_fields(task):
         return  # Not in hook context
     
     # Modify task fields explicitly
-    await repo.update_task_name(task.id, "Modified Name")
-    await repo.update_task_priority(task.id, 10)
+    await repo.update_task(task.id, name="Modified Name", priority=10)
     
     # Query other tasks
     pending_tasks = await repo.get_tasks_by_status("pending")
     print(f"Found {len(pending_tasks)} pending tasks")
-    
-    # Modify dependency tasks
-    if task.dependencies:
-        dep_id = task.dependencies[0]["id"]
-        await repo.update_task_priority(dep_id, 100)
 ```
 
 **Key Points:**
@@ -292,11 +286,7 @@ Hook database access is managed through a context that spans the entire task tre
 For detailed lifecycle information, see [Task Tree Execution Lifecycle](../architecture/task-tree-lifecycle.md).
 
 **Available Hook Repository Methods:**
-- `update_task_name(task_id, name)` - Update task name
-- `update_task_priority(task_id, priority)` - Update task priority
-- `update_task_status(task_id, status)` - Update task status
-- `update_task_params(task_id, params)` - Update task params
-- `update_task_inputs(task_id, inputs)` - Update task inputs (usually not needed, direct modification is auto-saved)
+- `update_task(task_id, **kwarg)` - Update task (usually not needed, direct modification is auto-saved)
 - `get_task_by_id(task_id)` - Query task by ID
 - `get_tasks_by_status(status)` - Query tasks by status
 - And all other TaskRepository methods...

@@ -384,7 +384,7 @@ async def adjust_priority_by_load(task):
     
     # Adjust priority if system is overloaded
     if pending_count > 100:
-        await repo.update_task_priority(task.id, task.priority + 1)
+        await repo.update_task(task.id, priority=task.priority + 1)
 ```
 
 **Remember:**

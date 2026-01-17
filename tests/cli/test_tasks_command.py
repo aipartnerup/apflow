@@ -16,9 +16,18 @@ from apflow.core.config import get_task_model_class
 from apflow.core.execution.task_executor import TaskExecutor
 from apflow.core.storage import reset_default_session, set_default_session
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-from apflow.core.utils.helpers import extract_last_json_object
+import jsonfinder
+
 
 runner = CliRunner()
+
+
+def extract_first_json_object(text: str):
+    for start, end, obj in jsonfinder.jsonfinder(text, json_only=True):
+        if isinstance(obj, (dict, list)):
+            return obj
+    raise ValueError("No JSON object found in text")
+
 
 # History tests for CLI tasks
 class TestTasksHistoryCommands:
@@ -186,7 +195,7 @@ class TestTasksCountCommand:
             )
             # Update status (create_task defaults to pending)
             if status != "pending":
-                await task_repository.update_task_status(task_id, status)
+                await task_repository.update_task(task_id, status=status)
         
         result = runner.invoke(cli, ["tasks", "count", "--format", "json"])
         
@@ -511,7 +520,7 @@ class TestTasksCloneCommand:
         # Parse JSON output to verify structure
         try:
             # Try to find JSON in output
-            copied_data = extract_last_json_object(output)[0]
+            copied_data = extract_first_json_object(output)[0]
             assert "id" in copied_data
             assert copied_data["id"] != root_task_id
             assert copied_data["name"] == root_task.name
@@ -630,7 +639,7 @@ class TestTasksCloneCommand:
         # Parse JSON output to verify structure
         try:
             # Try to find JSON in output
-            copied_data = extract_last_json_object(output)[0]
+            copied_data = extract_first_json_object(output)[0]
             assert "id" in copied_data
             assert copied_data["id"] != root_task_id
             assert copied_data["name"] == "Root Task with Children"
@@ -682,7 +691,7 @@ class TestTasksCloneCommand:
         assert result.exit_code == 0, f"Command failed with: {result.output}"
         output = result.stdout
        
-        copied_data = extract_last_json_object(output)
+        copied_data = extract_first_json_object(output)
         assert isinstance(copied_data, list)
 
     
@@ -726,7 +735,7 @@ class TestTasksCloneCommand:
         
         # Verify copied task
         try:
-            copied_data = extract_last_json_object(output)[0]
+            copied_data = extract_first_json_object(output)[0]
             assert "id" in copied_data
             assert copied_data["id"] != root_task_id
             assert copied_data["name"] == "Root Task for Full Mode"
@@ -765,7 +774,7 @@ class TestTasksCloneCommand:
         
         # Verify copied task and check reset fields
         try:
-            copied_data = extract_last_json_object(output)
+            copied_data = extract_first_json_object(output)
             assert "id" in copied_data
             copied_task_id = copied_data["id"]
             
@@ -801,7 +810,7 @@ class TestTasksGetCommand:
             result={"output": "test result"}
         )
         # Update status to completed
-        await task_repository.update_task_status(
+        await task_repository.update_task(
             task_id=task_id,
             status="completed",
             progress=1.0
@@ -891,7 +900,7 @@ class TestTasksCopyCommandAdvanced:
 
             # Extract JSON from output
             
-            copied_data = extract_last_json_object(output)[0]
+            copied_data = extract_first_json_object(output)[0]
             assert "id" in copied_data
             assert copied_data["name"] == "Root Task"
             assert copied_data["id"] != root.id  # New task ID
@@ -925,7 +934,7 @@ class TestTasksCopyCommandAdvanced:
             output = result.stdout
 
             # Extract JSON from output
-            result_data = extract_last_json_object(output)
+            result_data = extract_first_json_object(output)
             assert isinstance(result_data, list)
             assert len(result_data) > 1
         finally:
@@ -950,7 +959,7 @@ class TestTasksCopyCommandAdvanced:
             output = result.stdout
 
             # Extract JSON from output
-            copied_data = extract_last_json_object(output)  
+            copied_data = extract_first_json_object(output)  
 
             assert copied_data[0]["name"] == "Root Task"
         finally:
@@ -976,7 +985,7 @@ class TestTasksCopyCommandAdvanced:
                 assert "external dependenc" in result.stdout or "Cannot copy/archive a subtree" in result.stdout
             else:
                 output = result.stdout
-                copied_data = extract_last_json_object(output)
+                copied_data = extract_first_json_object(output)
 
                 assert "id" in copied_data
                 assert copied_data["id"] != child1.id  # New task ID
@@ -1002,7 +1011,7 @@ class TestTasksCopyCommandAdvanced:
                 assert "external dependenc" in result.stdout or "Cannot copy/archive a subtree" in result.stdout
             else:
                 output = result.stdout
-                copied_data = extract_last_json_object(output)[0]
+                copied_data = extract_first_json_object(output)[0]
                 assert "id" in copied_data
                 assert copied_data["name"] == "Root Task"
         finally:
@@ -1028,7 +1037,7 @@ class TestTasksCopyCommandAdvanced:
                 assert "external dependenc" in result.stdout or "Cannot copy/archive a subtree" in result.stdout
             else:
                 output = result.stdout
-                copied_data = extract_last_json_object(output)
+                copied_data = extract_first_json_object(output)
                 assert "id" in copied_data[0]
             
             #Verify reset fields were applied
@@ -1090,7 +1099,7 @@ class TestTasksCreateCommand:
         assert result.exit_code == 0
         output = result.stdout
         # Extract JSON from output (may contain extra success message)
-        created_data = extract_last_json_object(output)
+        created_data = extract_first_json_object(output)
         assert "id" in created_data
         assert created_data["name"] == "Create Test Task"
         
@@ -1134,7 +1143,7 @@ class TestTasksCreateCommand:
         assert result.exit_code == 0
         output = result.stdout
         # Extract JSON from output
-        created_data = extract_last_json_object(output)
+        created_data = extract_first_json_object(output)
         assert "id" in created_data
         assert created_data["name"] == "Create Stdin Task"
         
@@ -1186,7 +1195,7 @@ class TestTasksUpdateCommand:
         assert result.exit_code == 0
         output = result.stdout
         # Extract JSON from output (may contain extra success message)
-        updated_data = extract_last_json_object(output)
+        updated_data = extract_first_json_object(output)
         assert updated_data["name"] == "Updated Name"
         
         # Verify in database
@@ -1221,7 +1230,7 @@ class TestTasksUpdateCommand:
         output = result.stdout
         # Extract JSON from output (may contain extra success message)
         
-        updated_data = extract_last_json_object(output)
+        updated_data = extract_first_json_object(output)
         assert updated_data["status"] == "completed"
         assert updated_data["progress"] == 1.0
     
@@ -1294,7 +1303,7 @@ class TestTasksDeleteCommand:
         assert result.exit_code == 0
         output = result.stdout
         # Extract JSON from output (may contain extra success message)
-        delete_data = extract_last_json_object(output)
+        delete_data = extract_first_json_object(output)
         assert delete_data["success"] is True
         assert delete_data["task_id"] == task_id
         assert delete_data["deleted_count"] >= 1
@@ -1340,7 +1349,7 @@ class TestTasksDeleteCommand:
         assert result.exit_code == 0
         output = result.stdout
         # Extract JSON from output (may contain extra success message)
-        delete_data = extract_last_json_object(output)
+        delete_data = extract_first_json_object(output)
         
         assert delete_data["success"] is True
         assert delete_data["deleted_count"] >= 2  # Root + child
@@ -1363,7 +1372,7 @@ class TestTasksDeleteCommand:
             has_children=False,
             progress=1.0
         )
-        await task_repository.update_task_status(
+        await task_repository.update_task(
             task_id=task_id,
             status="completed",
             progress=1.0
@@ -1711,7 +1720,7 @@ class TestTasksAllCommand:
             progress=1.0
         )
         # Update status to completed
-        await task_repository.update_task_status(
+        await task_repository.update_task(
             task_id=completed_id,
             status="completed",
             progress=1.0

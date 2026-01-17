@@ -39,7 +39,7 @@ class TestTaskRepositoryAdditional:
         repo = TaskRepository(sync_db_session)
 
         task = await repo.create_task(name="original", user_id="test_user")
-        await repo.update_task_name(task.id, "updated_name")
+        await repo.update_task(task.id, name="updated_name")
 
         updated_task = await repo.get_task_by_id(task.id)
         assert updated_task.name == "updated_name"
@@ -50,7 +50,7 @@ class TestTaskRepositoryAdditional:
         repo = TaskRepository(sync_db_session)
 
         task = await repo.create_task(name="test", user_id="test_user")
-        await repo.update_task_priority(task.id, 10)
+        await repo.update_task(task.id, priority=10)
 
         updated_task = await repo.get_task_by_id(task.id)
         assert updated_task.priority == 10
@@ -62,7 +62,7 @@ class TestTaskRepositoryAdditional:
 
         task = await repo.create_task(name="test", user_id="test_user")
         new_params = {"new_key": "new_value"}
-        await repo.update_task_params(task.id, new_params)
+        await repo.update_task(task.id, params=new_params)
 
         updated_task = await repo.get_task_by_id(task.id)
         assert updated_task.params == new_params
@@ -74,7 +74,7 @@ class TestTaskRepositoryAdditional:
 
         task = await repo.create_task(name="test", user_id="test_user")
         new_schemas = {"output_schema": {"type": "object"}}
-        await repo.update_task_schemas(task.id, new_schemas)
+        await repo.update_task(task.id, schemas=new_schemas)
 
         updated_task = await repo.get_task_by_id(task.id)
         assert updated_task.schemas == new_schemas
@@ -86,7 +86,7 @@ class TestTaskRepositoryAdditional:
 
         task = await repo.create_task(name="test", user_id="test_user")
         result_data = {"completed": True, "output": "success"}
-        await repo.update_task_status(
+        await repo.update_task(
             task_id=task.id,
             status="completed",
             result=result_data
@@ -102,7 +102,7 @@ class TestTaskRepositoryAdditional:
 
         task = await repo.create_task(name="test", user_id="test_user")
         new_inputs = {"input1": "value1"}
-        await repo.update_task_inputs(task.id, new_inputs)
+        await repo.update_task(task.id, inputs=new_inputs)
 
         updated_task = await repo.get_task_by_id(task.id)
         assert updated_task.inputs == new_inputs

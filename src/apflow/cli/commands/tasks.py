@@ -694,7 +694,7 @@ def create(
     Args:
         file: JSON file containing task(s) definition
         stdin: Read from stdin instead of file
-        
+
     """
     try:
         import sys
@@ -841,7 +841,7 @@ def update(
             
             # Update status-related fields if status is provided
             if "status" in update_params:
-                await task_repository.update_task_status(
+                await task_repository.update_task(
                     task_id=task_id,
                     status=update_params["status"],
                     error=update_params.get("error"),
@@ -851,19 +851,19 @@ def update(
             else:
                 # Update individual fields
                 if "error" in update_params:
-                    await task_repository.update_task_status(
+                    await task_repository.update_task(
                         task_id=task_id,
                         status=task.status,
                         error=update_params["error"]
                     )
                 if "result" in update_params:
-                    await task_repository.update_task_status(
+                    await task_repository.update_task(
                         task_id=task_id,
                         status=task.status,
                         result=update_params["result"]
                     )
                 if "progress" in update_params:
-                    await task_repository.update_task_status(
+                    await task_repository.update_task(
                         task_id=task_id,
                         status=task.status,
                         progress=update_params["progress"]
@@ -871,15 +871,15 @@ def update(
             
             # Update other fields
             if "name" in update_params:
-                await task_repository.update_task_name(task_id, update_params["name"])
+                await task_repository.update_task(task_id, name=update_params["name"])
             if "priority" in update_params:
-                await task_repository.update_task_priority(task_id, update_params["priority"])
+                await task_repository.update_task(task_id, priority=update_params["priority"])
             if "inputs" in update_params:
-                await task_repository.update_task_inputs(task_id, update_params["inputs"])
+                await task_repository.update_task(task_id, inputs=update_params["inputs"])
             if "params" in update_params:
-                await task_repository.update_task_params(task_id, update_params["params"])
+                await task_repository.update_task(task_id, params=update_params["params"])
             if "schemas" in update_params:
-                await task_repository.update_task_schemas(task_id, update_params["schemas"])
+                await task_repository.update_task(task_id, schemas=update_params["schemas"])
             
             # Get updated task
             updated_task = await task_repository.get_task_by_id(task_id)

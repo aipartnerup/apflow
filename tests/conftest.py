@@ -416,7 +416,7 @@ def mock_storage():
     storage = Mock()
     storage.save_task = AsyncMock(return_value=True)
     storage.get_task = AsyncMock(return_value=None)
-    storage.update_task_status = AsyncMock(return_value=True)
+    storage.update_task = AsyncMock(return_value=True)
     storage.list_tasks = AsyncMock(return_value=[])
     storage.delete_task = AsyncMock(return_value=True)
     storage.close = AsyncMock()

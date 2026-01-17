@@ -184,7 +184,7 @@ async def execute_task_tree(
    task = await self.task_repository.get_task_by_id(task_id)
    
    # Update to in_progress
-   await self.task_repository.update_task_status(
+   await self.task_repository.update_task(
        task_id=task_id,
        status="in_progress",
        started_at=datetime.now(timezone.utc)
@@ -197,7 +197,7 @@ async def execute_task_tree(
    resolved_inputs = await resolve_task_dependencies(task, self.task_repository)
    
    if resolved_inputs != (task.inputs or {}):
-       await self.task_repository.update_task_inputs(task_id, resolved_inputs)
+       await self.task_repository.update_task(task_id, inputs=resolved_inputs)
    ```
 
 3. **Pre-Hook Execution** (lines 761-794)
@@ -210,7 +210,7 @@ async def execute_task_tree(
    
    # Auto-persist if inputs changed
    if inputs_after_pre_hooks != inputs_before_pre_hooks:
-       await self.task_repository.update_task_inputs(task_id, inputs_to_save)
+       await self.task_repository.update_task(task_id, inputs=inputs_to_save)
        task = await self.task_repository.get_task_by_id(task_id)  # Refresh
    ```
 
@@ -223,7 +223,7 @@ async def execute_task_tree(
 5. **Status Update and Cleanup** (lines 832-856)
    ```python
    # Update task status
-   await self.task_repository.update_task_status(
+   await self.task_repository.update_task(
        task_id=task_id,
        status="completed",
        progress=1.0,
@@ -267,11 +267,11 @@ TaskExecutor.execute_task_tree (session created)
 │   ├── on_tree_started hooks
 │   ├── _execute_task_tree_recursive
 │   │   ├── _execute_single_task (task 1)
-│   │   │   ├── update_task_status
+│   │   │   ├── update_task
 │   │   │   ├── resolve_task_dependencies
 │   │   │   ├── pre-hooks (can modify task.inputs)
 │   │   │   ├── execute task
-│   │   │   ├── update_task_status
+│   │   │   ├── update_task
 │   │   │   └── post-hooks
 │   │   ├── _execute_single_task (task 2)
 │   │   └── ...
@@ -285,12 +285,6 @@ TaskExecutor.execute_task_tree (session created)
 
 **Per-Operation Commits**:
 - Each `TaskRepository` method commits its own transaction
-- Example in `update_task_status()`:
-  ```python
-  await self.db.commit()
-  flag_modified(task, "result")  # For JSON fields
-  await self.db.refresh(task)    # Ensure fresh data
-  ```
 
 **Benefits**:
 - No cascading rollbacks across the entire task tree
@@ -439,7 +433,7 @@ async def update_metadata(task, inputs, result):
     repo = get_hook_repository()
     
     # Explicit repository call required for non-inputs fields
-    await repo.update_task_params(
+    await repo.update_task(
         task_id=task.id,
         params={"processed_at": datetime.now().isoformat()}
     )
@@ -458,7 +452,7 @@ async def aggregate_results(root_task, status):
     
     # Aggregate and update
     total_tokens = sum(t.result.get("token_usage", 0) for t in all_tasks if t.result)
-    await repo.update_task_result(
+    await repo.update_task(
         task_id=root_task.id,
         result={"total_tokens": total_tokens}
     )
@@ -474,7 +468,7 @@ try:
     task_result = await self._execute_task_with_schemas(task, final_inputs)
 except Exception as e:
     # Update task status to failed
-    await self.task_repository.update_task_status(
+    await self.task_repository.update_task(
         task_id=task_id,
         status="failed",
         error=str(e),

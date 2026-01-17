@@ -256,7 +256,7 @@ class TestTaskExecutorAdditional:
             user_id="test-user"
         )
         # Update to failed status
-        await repo.update_task_status(task.id, status="failed")
+        await repo.update_task(task.id, status="failed")
         task = await repo.get_task_by_id(task.id)
         
         task_tree = TaskTreeNode(task)

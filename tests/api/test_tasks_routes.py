@@ -414,7 +414,7 @@ class TestHandleTaskDelete:
         )
 
         # Update child2 to non-pending status
-        await task_repository.update_task_status(child2.id, status="in_progress")
+        await task_repository.update_task(child2.id, status="in_progress")
 
         params = {"task_id": root.id}
         request_id = str(uuid.uuid4())
@@ -445,7 +445,7 @@ class TestHandleTaskDelete:
 
         # Create a task and update to non-pending status
         task = await task_repository.create_task(name="Task to Delete", user_id="test_user")
-        await task_repository.update_task_status(task.id, status="completed")
+        await task_repository.update_task(task.id, status="completed")
 
         params = {"task_id": task.id}
         request_id = str(uuid.uuid4())
@@ -520,7 +520,7 @@ class TestHandleTaskDelete:
         )
 
         # Update child1 to non-pending status
-        await task_repository.update_task_status(child1.id, status="completed")
+        await task_repository.update_task(child1.id, status="completed")
 
         # Create a task that depends on root
         dependent = await task_repository.create_task(

@@ -229,7 +229,7 @@ class TaskManager:
                     update_data["result"] = {"token_usage": token_usage}
             
             # Update task status in one call (combines status, error, result, token_usage)
-            await self.task_repository.update_task_status(
+            await self.task_repository.update_task(
                 task_id=task_id,
                 **update_data
             )
@@ -485,7 +485,7 @@ class TaskManager:
             # Update task status if possible
             try:
                 if node_task_id:
-                    await self.task_repository.update_task_status(
+                    await self.task_repository.update_task(
                         task_id=node_task_id,
                         status="failed",
                         error=str(e),
@@ -763,7 +763,7 @@ class TaskManager:
         # Update inputs if they changed
         if resolved_inputs != (task.inputs or {}):
             logger.debug(f"Dependency resolution modified inputs for task {task_id}")
-            await self.task_repository.update_task_inputs(task_id, resolved_inputs)
+            await self.task_repository.update_task(task_id, inputs=resolved_inputs)
             # Refresh task object
             task = await self._check_cancellation_and_refresh_task(task_id, "after input update")
             if not task:
@@ -805,7 +805,7 @@ class TaskManager:
             )
             # Save modified inputs
             inputs_to_save = copy.deepcopy(inputs_after_pre_hooks) if inputs_after_pre_hooks else {}
-            await self.task_repository.update_task_inputs(task_id, inputs_to_save)
+            await self.task_repository.update_task(task_id, inputs=inputs_to_save)
             
             # Refresh task and check cancellation
             task = await self._check_cancellation_and_refresh_task(task_id, "after pre-hook input update")
@@ -860,7 +860,7 @@ class TaskManager:
             logger.debug(f"Cleared task context for task {task_id} after successful execution")
         
         # Update task status to completed
-        await self.task_repository.update_task_status(
+        await self.task_repository.update_task(
             task_id=task_id,
             status="completed",
             progress=1.0,
@@ -941,7 +941,7 @@ class TaskManager:
                 self.streaming_callbacks.task_start(task_id)
             
             # Update status to in_progress
-            await self.task_repository.update_task_status(
+            await self.task_repository.update_task(
                 task_id=task_id,
                 status="in_progress",
                 error=None,
@@ -984,7 +984,7 @@ class TaskManager:
             # Update task status
             if task_id:
                 try:
-                    await self.task_repository.update_task_status(
+                    await self.task_repository.update_task(
                         task_id=task_id,
                         status="failed",
                         error=str(e),
@@ -1268,7 +1268,7 @@ class TaskManager:
                             else:
                                 logger.error(f"❌ Failed to execute dependent task {task.id}: {str(e)}", exc_info=True)
                             # Update task status using repository
-                            await self.task_repository.update_task_status(
+                            await self.task_repository.update_task(
                                 task_id=task.id,
                                 status="failed",
                                 error=str(e)

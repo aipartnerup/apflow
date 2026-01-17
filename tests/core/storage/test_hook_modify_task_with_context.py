@@ -89,10 +89,10 @@ async def test_pre_hook_modifies_other_fields_requires_explicit_save(sync_db_ses
         assert repo is not None, "Hook context should provide repository"
 
         # Modify task name using repository
-        await repo.update_task_name(task.id, "Modified by Hook")
+        await repo.update_task(task.id, name="Modified by Hook")
 
         # Modify task priority using repository
-        await repo.update_task_priority(task.id, 10)
+        await repo.update_task(task.id, priority=10)
 
     try:
         repo = TaskRepository(sync_db_session)
@@ -143,7 +143,7 @@ async def test_post_hook_modifies_task_after_execution(sync_db_session):
         assert repo is not None
 
         # Add metadata to task params
-        await repo.update_task_params(task.id, {
+        await repo.update_task(task.id, params={
             "post_hook_executed": True,
             "execution_result": result,
         })

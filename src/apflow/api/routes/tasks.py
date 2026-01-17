@@ -1288,7 +1288,7 @@ class TaskRoutes(BaseRouteHandler):
                 # Update status and related fields if provided
                 status = params.get("status")
                 if status is not None:
-                    await task_repository.update_task_status(
+                    await task_repository.update_task(
                         task_id=task_id,
                         status=status,
                         error=params.get("error"),
@@ -1300,44 +1300,44 @@ class TaskRoutes(BaseRouteHandler):
                 else:
                     # Update individual status-related fields if status is not provided
                     if "error" in params:
-                        await task_repository.update_task_status(
+                        await task_repository.update_task(
                             task_id=task_id, status=task.status, error=params.get("error")
                         )
                     if "result" in params:
-                        await task_repository.update_task_status(
+                        await task_repository.update_task(
                             task_id=task_id, status=task.status, result=params.get("result")
                         )
                     if "progress" in params:
-                        await task_repository.update_task_status(
+                        await task_repository.update_task(
                             task_id=task_id, status=task.status, progress=params.get("progress")
                         )
                     if "started_at" in params:
-                        await task_repository.update_task_status(
+                        await task_repository.update_task(
                             task_id=task_id, status=task.status, started_at=params.get("started_at")
                         )
                     if "completed_at" in params:
-                        await task_repository.update_task_status(
+                        await task_repository.update_task(
                             task_id=task_id, status=task.status, completed_at=params.get("completed_at")
                         )
 
                 # Update other fields
                 if "inputs" in params:
-                    await task_repository.update_task_inputs(task_id, params["inputs"])
+                    await task_repository.update_task(task_id, inputs=params["inputs"])
 
                 if "dependencies" in params:
-                    await task_repository.update_task_dependencies(task_id, params["dependencies"])
+                    await task_repository.update_task(task_id, dependencies=params["dependencies"])
 
                 if "name" in params:
-                    await task_repository.update_task_name(task_id, params["name"])
+                    await task_repository.update_task(task_id, name=params["name"])
 
                 if "priority" in params:
-                    await task_repository.update_task_priority(task_id, params["priority"])
+                    await task_repository.update_task(task_id, priority=params["priority"])
 
                 if "params" in params:
-                    await task_repository.update_task_params(task_id, params["params"])
+                    await task_repository.update_task(task_id, params=params["params"])
 
                 if "schemas" in params:
-                    await task_repository.update_task_schemas(task_id, params["schemas"])
+                    await task_repository.update_task(task_id, schemas=params["schemas"])
 
                 # Refresh task to get updated values
                 updated_task = await task_repository.get_task_by_id(task_id)
