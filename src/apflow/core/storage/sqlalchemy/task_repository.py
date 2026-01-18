@@ -507,7 +507,7 @@ class TaskRepository():
     async def save_task_tree(self, root_node: "TaskTreeNode") -> bool:
         """Save task tree structure to database recursively"""
         try:
-            changed_tasks: List[TaskModel] = []
+            changed_tasks: List[TaskModelType] = []
 
             # Recursively save children with proper parent_id
             child_changed_tasks = await self._save_task_tree_recursive(root_node)
@@ -644,28 +644,6 @@ class TaskRepository():
             logger.error(f"Error deleting task {task_id}: {str(e)}")
             await self.db.rollback()
             return False
-
-    def assign_task_tree_id_recursive(self, task_id: str, tree_id: str) -> None:
-        """
-        Recursively assign task_tree_id to a task and all its descendants
-        
-        Args:
-            task_id: ID of current task to update
-            tree_id: ID of root task (tree identifier)
-        """
-        # Update current task
-        task = self.db.query(TaskModel).filter(TaskModel.id == task_id).first()
-        if task and task.task_tree_id is None:
-            task.task_tree_id = tree_id
-        
-        # Recursively update all children
-        children = self.db.query(TaskModel).filter(
-            TaskModel.parent_id == task_id,
-            TaskModel.task_tree_id.is_(None)
-        ).all()
-        
-        for child in children:
-            self.assign_task_tree_id_recursive(child.id, tree_id)
 
     async def get_task_tree_for_api(self, root_task: TaskModelType) -> "TaskTreeNode":
         """

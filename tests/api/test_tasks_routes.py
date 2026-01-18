@@ -1490,20 +1490,22 @@ class TestHandleTaskCopy:
         request_id = str(uuid.uuid4())
 
         result = await task_routes.handle_task_clone(params, mock_request, request_id)
-
+        print('result', result)
         # Verify response
         assert isinstance(result, list)
         assert "id" in result[0]
         assert result[0]["name"] == "Root Task"
         assert result[0]["id"] != root.id  # New task ID
 
+        import asyncio
+        await asyncio.sleep(0.01)  # Ensure DB commit
+
         # Verify task was saved to database
-        task_repository = TaskRepository(
-            use_test_db_session, task_model_class=get_task_model_class()
-        )
-        copied_task = await task_repository.get_task_by_id(result[0]["id"])
+        params = {"task_id": result[0]["id"]}
+        copied_task = await task_routes.handle_task_get(params, mock_request, request_id)
+        print('copied_task', copied_task)
         assert copied_task is not None
-        assert copied_task.name == "Root Task"
+        assert copied_task['name'] == "Root Task"
 
     @pytest.mark.asyncio
     async def test_copy_with_save_false(self, task_routes, mock_request, task_tree_for_copy):

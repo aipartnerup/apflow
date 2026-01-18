@@ -10,7 +10,7 @@ from apflow.core.types import TaskPostHook, TaskPreHook
 from apflow.logger import get_logger
 
 if TYPE_CHECKING:
-    from apflow.core.storage.sqlalchemy.models import TaskModel
+    from apflow.core.storage.sqlalchemy.models import TaskModelTypel
 
 logger = get_logger(__name__)
 
@@ -171,10 +171,10 @@ class ConfigManager:
                 self.set_admin_auth_token(auth_token)
                 logger.debug("Loaded admin auth token from environment")
 
-    def set_task_model_class(self, task_model_class: Optional['TaskModel']) -> None:
+    def set_task_model_class(self, task_model_class: Optional['TaskModelTypel']) -> None:
         self._registry.set_task_model_class(task_model_class)
 
-    def get_task_model_class(self) -> 'TaskModel':
+    def get_task_model_class(self) -> 'TaskModelTypel':
         return self._registry.get_task_model_class()
 
     def register_pre_hook(self, hook: TaskPreHook) -> None:

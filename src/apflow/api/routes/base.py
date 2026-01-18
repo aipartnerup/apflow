@@ -9,7 +9,7 @@ from typing import Optional, Callable, Type, Tuple, Union
 from starlette.requests import Request
 from sqlalchemy.orm import Session
 from sqlalchemy.ext.asyncio import AsyncSession
-from apflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.storage.sqlalchemy.models import TaskModelType
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from apflow.core.storage import get_default_session
 from apflow.logger import get_logger
@@ -28,7 +28,7 @@ class BaseRouteHandler:
 
     def __init__(
         self,
-        task_model_class: Type[TaskModel],
+        task_model_class: Type[TaskModelType],
         verify_token_func: Optional[Callable[[str], Optional[dict]]] = None,
         verify_permission_func: Optional[
             Callable[[str, Optional[str], Optional[list]], bool]
@@ -38,7 +38,7 @@ class BaseRouteHandler:
         Initialize base route handler
 
         Args:
-            task_model_class: TaskModel class to use for database operations
+            task_model_class: TaskModelType class to use for database operations
             verify_token_func: Optional function to verify JWT tokens
             verify_permission_func: Optional function to verify user permissions
         """

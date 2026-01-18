@@ -158,15 +158,10 @@ class TestCustomTaskModelWithRepository:
         
         # Define custom TaskModel with project_id field using the new Base
         class CustomTaskModel(TaskModel):
-            
-            # Add custom field
+            __tablename__ = TASK_TABLE_NAME
+            __table_args__ = {'extend_existing': True}
             project_id = Column(String(255), nullable=True)
 
-            # Configure mapper to use single-table inheritance
-            # This ensures we use the same table as BaseTaskModel
-            __mapper_args__ = {
-                'concrete': False,  # Not concrete inheritance
-            }
             
         
         # Create table with custom model

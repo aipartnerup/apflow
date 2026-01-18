@@ -7,7 +7,7 @@ These functions can be used by TaskManager and other orchestration components.
 """
 
 from typing import Dict, Any
-from apflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.storage.sqlalchemy.models import TaskModelType
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from apflow.logger import get_logger
 
@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 
 
 async def are_dependencies_satisfied(
-    task: TaskModel,
+    task: TaskModelType,
     task_repository: TaskRepository,
     tasks_to_reexecute: set[str]
 ) -> bool:
@@ -103,7 +103,7 @@ async def are_dependencies_satisfied(
 
 
 async def resolve_task_dependencies(
-    task: TaskModel,
+    task: TaskModelType,
     task_repository: TaskRepository
 ) -> Dict[str, Any]:
     """
@@ -214,9 +214,9 @@ async def resolve_task_dependencies(
 
 
 async def get_completed_tasks_by_id(
-    task: TaskModel,
+    task: TaskModelType,
     task_repository: TaskRepository
-) -> Dict[str, TaskModel]:
+) -> Dict[str, TaskModelType]:
     """
     Get all completed tasks in the same task tree by id
     
@@ -225,7 +225,7 @@ async def get_completed_tasks_by_id(
         task_repository: TaskRepository instance for querying tasks
         
     Returns:
-        Dictionary mapping task ids to completed TaskModel instances
+        Dictionary mapping task ids to completed TaskModelType instances
     """
     # Get root task to find all tasks in the tree
     root_task = await task_repository.get_root_task(task)

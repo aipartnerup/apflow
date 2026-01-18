@@ -205,7 +205,7 @@ class BaseTask(ExecutableTask):
         that matches their actual execution results.
         
         Args:
-            task: TaskModel instance for this task
+            task: TaskModelTypel instance for this task
             inputs: Input parameters for the task
         
         Returns:
@@ -238,7 +238,7 @@ class BaseTask(ExecutableTask):
         - Would require TaskRepository or Redis client access
         
         Returns:
-            TaskModel instance, or None if not available or garbage collected
+            TaskModelTypel instance, or None if not available or garbage collected
         """
         if self._task_ref is None:
             return None
@@ -259,7 +259,7 @@ class BaseTask(ExecutableTask):
         collected prematurely.
         
         Args:
-            value: TaskModel instance, or None to clear
+            value: TaskModelTypel instance, or None to clear
         """
         if value is None:
             self._task_ref = None

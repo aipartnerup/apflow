@@ -11,7 +11,7 @@ from apflow.core.execution.task_manager import TaskManager
 from apflow.core.execution.task_tracker import TaskTracker
 from apflow.core.types import TaskTreeNode
 from apflow.core.storage import create_pooled_session
-from apflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.storage.sqlalchemy.models import TaskModelType
 from apflow.core.config import (
     get_task_model_class,
     get_pre_hooks,
@@ -797,7 +797,7 @@ class TaskExecutor:
             raise ValueError("No root task found (task without parent_id)")
         
         # Build task tree recursively
-        def build_node(task: TaskModel) -> TaskTreeNode:
+        def build_node(task: TaskModelType) -> TaskTreeNode:
             """Recursively build tree node"""
             node = TaskTreeNode(task)
             # Find children

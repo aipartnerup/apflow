@@ -158,7 +158,7 @@ class TaskModel(Base):
             "has_children": self.has_children,
             # Task origin/reference fields
             "original_task_id": self.original_task_id,
-            "origin_type": self.origin_type,
+            "origin_type": self.origin_type.value if isinstance(self.origin_type, TaskOriginType) else self.origin_type,
             "has_references": self.has_references,
         }
     
