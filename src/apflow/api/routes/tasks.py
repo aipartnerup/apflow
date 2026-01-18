@@ -1453,21 +1453,6 @@ class TaskRoutes(BaseRouteHandler):
         """
         return await task_repository.get_all_children_recursive(task_id)
 
-    async def _find_dependent_tasks(
-        self, task_repository: TaskRepository, task_id: str
-    ) -> List[Any]:
-        """
-        Find all tasks that depend on the given task (reverse dependencies)
-
-        Args:
-            task_repository: TaskRepository instance
-            task_id: Task ID to find dependents for
-
-        Returns:
-            List of tasks that depend on the given task
-        """
-        return await task_repository.find_dependent_tasks(task_id)
-
     def _check_all_tasks_pending(self, tasks: List[Any]) -> Tuple[bool, List[Dict[str, str]]]:
         """
         Check if all tasks are pending
@@ -1521,8 +1506,9 @@ class TaskRoutes(BaseRouteHandler):
                 # Check if all tasks are pending
                 all_pending, non_pending_tasks = self._check_all_tasks_pending(all_tasks_to_check)
 
-                # Check for dependent tasks (always check, regardless of pending status)
-                dependent_tasks = await self._find_dependent_tasks(task_repository, task_id)
+                # has_references: check if any other tasks depend on this task
+                from apflow.core.storage.sqlalchemy.models import TaskOriginType
+                has_references = await task_repository.task_has_references(task_id, TaskOriginType.link)
 
                 # Build error message if deletion is not allowed
                 error_parts = []
@@ -1548,10 +1534,9 @@ class TaskRoutes(BaseRouteHandler):
                         error_parts.append(f"task status is '{main_task_status}' (must be 'pending')")
 
                 # Check for dependent tasks
-                if dependent_tasks:
-                    dependent_task_ids = [t.id for t in dependent_tasks]
+                if has_references:
                     error_parts.append(
-                        f"{len(dependent_tasks)} tasks depend on this task: [{', '.join(dependent_task_ids)}]"
+                        "task has dependent tasks and cannot be deleted"
                     )
 
                 # If there are any errors, raise exception

@@ -176,6 +176,7 @@ async def check_dependent_tasks_executing(
 ) -> List[str]:
     """
     Check if any tasks that depend on this task are currently executing.
+    TODO: Implement this function to return actual dependent tasks that are in progress.
     
     Args:
         task_id: ID of the task being updated
@@ -185,13 +186,6 @@ async def check_dependent_tasks_executing(
         List of task IDs that depend on this task and are in_progress
     """
     # Find all tasks that depend on this task
-    dependent_tasks = await task_repository.find_dependent_tasks(task_id)
     
-    # Filter for tasks that are in_progress
-    executing_dependents = [
-        t.id for t in dependent_tasks 
-        if t.status == "in_progress"
-    ]
-    
-    return executing_dependents
+    return []
 

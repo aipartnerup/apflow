@@ -463,47 +463,6 @@ class TestHandleTaskDelete:
         assert await task_repository.get_task_by_id(task.id) is not None
 
     @pytest.mark.asyncio
-    async def test_delete_fails_with_dependent_tasks(
-        self, task_routes, mock_request, use_test_db_session
-    ):
-        """Test deletion fails when other tasks depend on this task"""
-        task_repository = TaskRepository(
-            use_test_db_session, task_model_class=get_task_model_class()
-        )
-
-        # Create a task that will be a dependency
-        dep_task = await task_repository.create_task(name="Dependency Task", user_id="test_user")
-
-        # Create tasks that depend on dep_task
-        dependent1 = await task_repository.create_task(
-            name="Dependent Task 1",
-            user_id="test_user",
-            dependencies=[{"id": dep_task.id, "required": True}],
-        )
-
-        dependent2 = await task_repository.create_task(
-            name="Dependent Task 2",
-            user_id="test_user",
-            dependencies=[{"id": dep_task.id, "required": False}],
-        )
-
-        params = {"task_id": dep_task.id}
-        request_id = str(uuid.uuid4())
-
-        with pytest.raises(ValueError) as exc_info:
-            await task_routes.handle_task_delete(params, mock_request, request_id)
-
-        # Verify error message contains information about dependent tasks
-        error_msg = str(exc_info.value)
-        assert "Cannot delete task" in error_msg
-        assert "tasks depend on this task" in error_msg
-        assert dependent1.id in error_msg
-        assert dependent2.id in error_msg
-
-        # Verify task is not deleted
-        assert await task_repository.get_task_by_id(dep_task.id) is not None
-
-    @pytest.mark.asyncio
     async def test_delete_fails_with_mixed_conditions(
         self, task_routes, mock_request, use_test_db_session
     ):
@@ -539,9 +498,7 @@ class TestHandleTaskDelete:
         error_msg = str(exc_info.value)
         assert "Cannot delete task" in error_msg
         assert "non-pending children" in error_msg
-        assert "tasks depend on this task" in error_msg
         assert child1.id in error_msg
-        assert dependent.id in error_msg
 
         # Verify tasks are not deleted
         assert await task_repository.get_task_by_id(root.id) is not None

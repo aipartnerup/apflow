@@ -938,8 +938,9 @@ def delete(
             all_tasks_to_check = [task] + all_children
             non_pending = [t for t in all_tasks_to_check if t.status != "pending"]
             
-            # Check for dependent tasks
-            dependent_tasks = await task_repository.find_dependent_tasks(task_id)
+            # Check for linked tasks
+            from apflow.core.storage.sqlalchemy.models import TaskOriginType
+            has_references = await task_repository.task_has_references(task_id, TaskOriginType.link)
             
             # Build error message if deletion is not allowed
             error_parts = []
@@ -952,9 +953,8 @@ def delete(
                     main_task_status = next(t.status for t in non_pending if t.id == task_id)
                     error_parts.append(f"task status is '{main_task_status}' (must be 'pending')")
             
-            if dependent_tasks:
-                dependent_task_ids = [t.id for t in dependent_tasks]
-                error_parts.append(f"{len(dependent_tasks)} tasks depend on this task: [{', '.join(dependent_task_ids)}]")
+            if has_references:
+                error_parts.append("task has dependent tasks")
             
             if error_parts and not force:
                 error_message = "Cannot delete task: " + "; ".join(error_parts)

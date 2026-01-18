@@ -309,7 +309,6 @@ Database operations for tasks.
 - `update_task(task_id, **kwarg)` Update task fields
 - `delete_task(task_id)`: Physically delete a task from the database
 - `get_all_children_recursive(task_id)`: Recursively get all child tasks (including grandchildren)
-- `find_dependent_tasks(task_id)`: Find all tasks that depend on a given task (reverse dependencies)
 - `list_tasks(...)`: List tasks with filters
 
 **See**: `src/apflow/core/storage/sqlalchemy/task_repository.py` for all methods and `tests/core/storage/sqlalchemy/test_task_repository.py` for examples.

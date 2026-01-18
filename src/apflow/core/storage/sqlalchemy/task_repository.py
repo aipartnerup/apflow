@@ -587,49 +587,6 @@ class TaskRepository():
         await collect_children(task_id)
         return all_children
     
-    async def find_dependent_tasks(self, task_id: str) -> List[TaskModelType]:
-        """
-        Find all tasks that depend on the given task (reverse dependencies)
-        
-        This method searches for tasks that have the given task_id in their dependencies field.
-        
-        Args:
-            task_id: Task ID to find dependents for
-            
-        Returns:
-            List of TaskModel instances (or custom TaskModel subclass) that depend on the given task
-        """
-        try:
-            # Get all tasks from the database
-            # We need to check all tasks' dependencies field to find reverse dependencies
-            stmt = select(self.task_model_class)
-            result = await self.db.execute(stmt)
-            all_tasks = result.scalars().all()
-   
-            dependent_tasks = []
-            for task in all_tasks:
-                dependencies = task.dependencies or []
-                if not dependencies:
-                    continue
-                
-                # Check if this task depends on the given task_id
-                for dep in dependencies:
-                    dep_id = None
-                    if isinstance(dep, dict):
-                        dep_id = dep.get("id")
-                    elif isinstance(dep, str):
-                        dep_id = dep
-                    
-                    if dep_id == task_id:
-                        dependent_tasks.append(task)
-                        break  # Found dependency, no need to check other dependencies
-            
-            return dependent_tasks
-            
-        except Exception as e:
-            logger.error(f"Error finding dependent tasks for {task_id}: {str(e)}")
-            return []
-    
     async def delete_task(self, task_id: str) -> bool:
         """
         Physically delete a task from the database
@@ -724,6 +681,52 @@ class TaskRepository():
         result = await self.db.execute(stmt)
         task = result.scalar_one_or_none()
         return task is not None
+
+    async def task_has_references(
+        self,
+        task_id: str,
+        origin_type: Optional[TaskOriginType] = None
+    ) -> bool:
+        """
+        Check if a task is referenced by other tasks.
+
+        Args:
+            task_id: The ID of the task to check.
+            origin_type: Optional origin type to filter references.
+
+        Returns:
+            True if the task is referenced, False otherwise.
+
+        Raises:
+            ValueError: If the task does not exist.
+        """
+        task: Optional[TaskModelType] = await self.get_task_by_id(task_id)
+        if task is None:
+            raise ValueError(f"Task with id {task_id} not found")
+
+        if not hasattr(task, "has_references"):
+            return False
+
+        if not getattr(task, "has_references", False):
+            return False
+
+        filters = [self.task_model_class.original_task_id == task_id]
+        if origin_type is not None:
+            filters.append(self.task_model_class.origin_type == origin_type)
+
+        stmt = select(self.task_model_class).filter(*filters).limit(1)
+        result = await self.db.execute(stmt)
+        reference = result.scalar_one_or_none()
+
+        if reference is None:
+            if origin_type is None:
+                # only reset has_references if no origin_type filter (all references)
+                logger.info(f"Resetting has_references to False for task {task_id} as no references found")
+                await self.update_task(task_id, has_references=False)
+            return False
+
+        return True
+    
     
     def add_tasks_in_db(self, tasks: List[TaskModelType]) -> None:
         """add tasks from database to get latest state"""
