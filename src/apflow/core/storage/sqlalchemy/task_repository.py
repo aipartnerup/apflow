@@ -63,6 +63,19 @@ class TaskRepository():
         """
         self.db = SqlalchemySessionProxy(db)
         self.task_model_class = task_model_class
+
+    def build_task(self, **kwargs: Any) -> TaskModelType:
+        """
+        Build a TaskModel instance without saving to database
+        
+        Args:
+            **kwargs: Fields to set on the task
+            
+        Returns:
+            TaskModel instance (or custom TaskModel subclass if configured)
+        """
+        task = self.task_model_class.create(kwargs)
+        return task
     
     async def create_task(
         self,
@@ -702,6 +715,15 @@ class TaskRepository():
             return node
 
         return await build_tree(root_task)
+
+    async def task_tree_id_exists(self, task_tree_id: str) -> bool:
+        """Check if any task exists with the given task_tree_id"""
+        stmt = select(self.task_model_class).filter(
+            self.task_model_class.task_tree_id == task_tree_id
+        ).limit(1)
+        result = await self.db.execute(stmt)
+        task = result.scalar_one_or_none()
+        return task is not None
     
     def add_tasks_in_db(self, tasks: List[TaskModelType]) -> None:
         """add tasks from database to get latest state"""

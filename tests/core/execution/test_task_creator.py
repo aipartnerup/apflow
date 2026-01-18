@@ -303,8 +303,8 @@ class TestTaskCreator:
         assert child_task.dependencies[0]["required"] is True
     
     @pytest.mark.asyncio
-    async def test_error_mixed_id_and_name(self, sync_db_session):
-        """Test error when mixing tasks with id and without id"""
+    async def test_error_multiple_root(self, sync_db_session):
+        """Test error when multiple tasks"""
         creator = TaskCreator(sync_db_session)
         
         # Mixed mode: some tasks have id, some don't (not supported)
@@ -315,12 +315,13 @@ class TestTaskCreator:
                 "user_id": "user_123",
             },
             {
-                "name": "Task 2",  # No id - mixed mode not supported
+                "id": "task_2",  # Has id
+                "name": "Task 2",  
                 "user_id": "user_123",
             }
         ]
         
-        with pytest.raises(ValueError, match="Mixed mode not supported"):
+        with pytest.raises(ValueError, match="All tasks must be in a single task tree"):
             await creator.create_task_tree_from_array(tasks)
     
     @pytest.mark.asyncio
@@ -444,9 +445,16 @@ class TestTaskCreator:
                 "user_id": "user_123",
             },
             {
-                "id": "task_1",  # Duplicate id in same array
-                "name": "Task 2",
+                "id": "task_1_1",  # Duplicate id in same array
+                "name": "Task 1_1",
                 "user_id": "user_123",
+                "parent_id": "task_1",
+            },
+            {
+                "id": "task_1_1",  # Duplicate id in same array
+                "name": "Task 1_2",
+                "user_id": "user_123",
+                "parent_id": "task_1",
             }
         ]
         
@@ -454,8 +462,8 @@ class TestTaskCreator:
             await creator.create_task_tree_from_array(tasks)
     
     @pytest.mark.asyncio
-    async def test_auto_generate_id_when_exists_in_db(self, sync_db_session):
-        """Test that new UUID is generated when provided ID already exists in database"""
+    async def test_error_id_when_exists_in_db(self, sync_db_session):
+        """Test error that when provided ID already exists in database"""
         creator = TaskCreator(sync_db_session)
         
         # First, create a task with a specific ID
@@ -485,23 +493,8 @@ class TestTaskCreator:
             }
         ]
         
-        task_tree = await creator.create_task_tree_from_array(tasks)
-        
-        # Verify that the new task has a different ID (auto-generated UUID)
-        assert task_tree.task.name == "New Task 1"
-        assert task_tree.task.id != "task_1"  # Should be a new UUID
-        assert len(task_tree.task.id) == 36  # UUID format
-        
-        # Verify that the existing task in DB still has the original ID
-        existing_task_refreshed = await repo.get_task_by_id("task_1")
-        assert existing_task_refreshed is not None
-        assert existing_task_refreshed.name == "Existing Task"
-        
-        # Verify parent_id reference still works (using provided_id for mapping)
-        assert len(task_tree.children) == 1
-        child_task = task_tree.children[0].task
-        assert child_task.name == "New Task 2"
-        assert child_task.parent_id == task_tree.task.id  # Should reference the new UUID
+        with pytest.raises(ValueError, match="already exists in database"):
+            await creator.create_task_tree_from_array(tasks)
     
     @pytest.mark.asyncio
     async def test_error_duplicate_name_without_id(self, sync_db_session):
@@ -519,8 +512,8 @@ class TestTaskCreator:
             }
         ]
         
-        with pytest.raises(ValueError, match="name.*is not unique"):
-            await creator.create_task_tree_from_array(tasks)
+        with pytest.raises(ValueError, match="Duplicate task name"):
+            await creator.create_task_trees_from_array(tasks)
     
     @pytest.mark.asyncio
     async def test_error_invalid_parent_id(self, sync_db_session):
@@ -541,7 +534,7 @@ class TestTaskCreator:
             }
         ]
         
-        with pytest.raises(ValueError, match="parent_id.*not in the tasks array"):
+        with pytest.raises(ValueError, match="which is not in the task array"):
             await creator.create_task_tree_from_array(tasks)
     
     @pytest.mark.asyncio
@@ -563,8 +556,8 @@ class TestTaskCreator:
             }
         ]
         
-        with pytest.raises(ValueError, match="dependency.*not in the tasks array"):
-            await creator.create_task_tree_from_array(tasks)
+        with pytest.raises(ValueError, match="dependency.*which is not a valid id or name in the task array"):
+            await creator.create_task_trees_from_array(tasks)
     
     @pytest.mark.asyncio
     async def test_error_invalid_dependency_name(self, sync_db_session):
@@ -583,8 +576,8 @@ class TestTaskCreator:
             }
         ]
         
-        with pytest.raises(ValueError, match="dependency.*not in the tasks array"):
-            await creator.create_task_tree_from_array(tasks)
+        with pytest.raises(ValueError, match="dependency.*which is not a valid id or name in the task array"):
+            await creator.create_task_trees_from_array(tasks)
     
     @pytest.mark.asyncio
     async def test_error_dependency_missing_id_and_name(self, sync_db_session):
@@ -605,8 +598,8 @@ class TestTaskCreator:
             }
         ]
         
-        with pytest.raises(ValueError, match="dependency must have 'id' or 'name' field"):
-            await creator.create_task_tree_from_array(tasks)
+        with pytest.raises(ValueError, match="not a valid id or name in the task array"):
+            await creator.create_task_trees_from_array(tasks)
     
     @pytest.mark.asyncio
     async def test_error_empty_tasks_array(self, sync_db_session):
@@ -675,8 +668,7 @@ class TestTaskCreator:
         child_task = task_tree.children[0].task
         assert child_task.dependencies is not None
         assert len(child_task.dependencies) == 1
-        assert child_task.dependencies[0]["id"] == task_tree.task.id
-        assert child_task.dependencies[0]["required"] is True
+        assert child_task.dependencies[0] == task_tree.task.id
     
     @pytest.mark.asyncio
     async def test_tree_to_flat_list(self, sync_db_session):

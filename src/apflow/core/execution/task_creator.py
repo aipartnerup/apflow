@@ -62,348 +62,240 @@ class TaskCreator:
         self.task_model_class = get_task_model_class()
         self.task_repository = TaskRepository(db, task_model_class=self.task_model_class)
 
+        
+    def task_dicts_to_task_models(self, tasks: List[Dict[str, Any]]) -> List[TaskModelType]:
+        """
+        Convert list of task dicts to list of TaskModelType instances
+        
+        Args:
+            dicts: List of task dictionaries
+            
+        Returns:
+            List of TaskModelType instances
+        """
+        if not tasks:
+            return []
+        
+        # Step 1: Validate and collect names/ids, and build name->id mapping
+        name_id_mapping: Dict[str, str] = {}
+        id_set: Set[str] = set()
+        name_set: Set[str] = set()
+        # task id: task dict mapping for easy lookup
+        tasks_mapping: Dict[str, Dict[str, Any]] = {}
+        
+        # First pass: assign id if missing, check uniqueness
+        for idx, task in enumerate(tasks):
+            name = task.get("name")
+            if not name:
+                raise ValueError(f"Task at index {idx} must have a 'name' field")
+            if name in name_set:
+                raise ValueError(f"Duplicate task name '{name}' at index {idx}")
+            name_set.add(name)
+            provided_id = task.get("id")
+            if provided_id:
+                if provided_id in id_set:
+                    raise ValueError(f"Duplicate task id '{provided_id}' at index {idx}")
+                id_set.add(provided_id)
+                name_id_mapping[name] = provided_id
+            else:
+                # Generate a new UUID for this task
+                new_id = str(uuid.uuid4())
+                task["id"] = new_id
+                id_set.add(new_id)
+                name_id_mapping[name] = new_id
+            
+            tasks_mapping[task["id"]] = task
+            
+
+        # Step 2: Map all references (parent_id, dependencies) from name to id
+        for idx, task in enumerate(tasks):
+            # Map parent_id if it's a name
+            parent_id = task.get("parent_id")
+            if parent_id and parent_id not in id_set and parent_id in name_id_mapping:
+                parent_id = name_id_mapping[parent_id]
+                task["parent_id"] = parent_id
+                tasks_mapping[parent_id]['has_children'] = True
+            elif parent_id and parent_id in id_set:
+                tasks_mapping[parent_id]['has_children'] = True
+            elif parent_id:
+                raise ValueError(f"Task at index {idx} has parent_id '{parent_id}' which is not in the task array.")
+            
+            # Map dependencies
+            dependencies = task.get("dependencies")
+            if dependencies:
+                new_deps = []
+                dep_ids_seen: Set[str] = set()
+                for dep in dependencies:
+                    # Support both dict and string formats for dependencies
+                    if isinstance(dep, dict):
+                        dep_id = dep.get("id") or dep.get("name")
+                        if dep_id in id_set:
+                            dep = {**dep, "id": dep_id}
+                            dep.pop("name", None)
+                        elif dep_id in name_id_mapping:
+                            dep_id = name_id_mapping[dep_id]
+                            dep = {**dep, "id": dep_id}
+                            dep.pop("name", None)
+                        else:
+                            raise ValueError(f"Task at index {idx} has dependency reference '{dep_id}' which is not a valid id or name in the task array.")
+                    else:
+                        dep_id = dep
+                        if dep_id in id_set:
+                            dep_id = dep_id
+                        elif dep_id in name_id_mapping:
+                            dep_id = name_id_mapping[dep_id]
+                        else:
+                            raise ValueError(f"Task at index {idx} has dependency reference '{dep_id}' which is not a valid id or name in the task array.") 
+                        dep = dep_id
+                    # Avoid duplicate dependencies
+                    if dep_id and dep_id not in dep_ids_seen:
+                        dep_ids_seen.add(dep_id)
+                        new_deps.append(dep)
+                task["dependencies"] = new_deps
+
+        # Step 3: Assign task_tree_id for each root task and propagate to children
+        root_tasks = [task for task in tasks if task.get("parent_id") is None]
+        tree_ids: Set[str] = set()
+        for root_task in root_tasks:
+            task_tree_id = root_task.get('task_tree_id') or root_task.get("id")  
+            self._update_task_tree_id_for_task_dics(tasks, root_task, task_tree_id)
+            if task_tree_id in tree_ids:
+                raise ValueError("Different root tasks cannot share the same task_tree_id")
+            tree_ids.add(task_tree_id)
+
+        all_ids = {task["id"] for task in tasks}
+        
+        # Step 4: Detect circular dependencies and validate dependent task inclusion (reuse existing helpers)
+        # All references are now ids, so pass only id sets
+        self._detect_circular_dependencies(tasks)
+        self._validate_dependent_task_inclusion(tasks)
+
+        # Step 5: Validate all references (parent_id, dependencies) are valid ids
+        for idx, task in enumerate(tasks):
+            parent_id = task.get("parent_id")
+            if parent_id and parent_id not in all_ids:
+                raise ValueError(f"Task at index {idx} has parent_id '{parent_id}' which is not a valid id in the task array.")
+            dependencies = task.get("dependencies")
+            if dependencies:
+                for dep in dependencies:
+                    if isinstance(dep, dict):
+                        dep_id = dep.get("id")
+                        if dep_id and dep_id not in all_ids:
+                            raise ValueError(f"Task at index {idx} has dependency id '{dep_id}' which is not in the task array.")
+                    else:
+                        if dep not in all_ids:
+                            raise ValueError(f"Task at index {idx} has dependency '{dep}' which is not in the task array.")
+
+        tasks_models: List[TaskModelType] = []
+        for task_data in tasks:
+            task = self.task_repository.build_task(**task_data)  # type: ignore
+            tasks_models.append(task)
+        return tasks_models
 
     async def create_task_tree_from_array(self, tasks: List[Dict[str, Any]]) -> TaskTreeNode:
         """
-        Create task tree from tasks array
-        Args:
-            tasks: Array of task objects in JSON format. Each task must have:
-                - id: Task ID (optional) - if provided, ALL tasks must have id and use id for references
-                - name: Task name (required) - if id is not provided, ALL tasks must not have id, 
-                    name must be unique and used for references
-                - user_id: User ID (optional, can be None) - if not provided, will be None
-                - priority: Priority level (optional, default: 1)
-                - inputs: Execution-time input parameters (optional)
-                - schemas: Task schemas (optional)
-                - params: Task parameters (optional)
-                - parent_id: Parent task ID or name (optional)
-                    - If all tasks have id: use id value
-                    - If all tasks don't have id: use name value (name must be unique)
-                    - Mixed mode (some with id, some without) is not supported
-                    - parent_id must reference a task within the same array, or be None for root tasks
-                - dependencies: Dependencies list (optional)
-                    - Each dependency must have "id" or "name" field pointing to a task in the array
-                    - Will be validated to ensure the dependency exists and hierarchy is correct
-                - Any other TaskModelType fields
-            
-        Returns:
+        Create a task tree from a list of task dicts.
+        Supports both id and name as input, but always generates a unique UUID id for each task internally.
+        All references (parent_id, dependencies) are mapped to id before creation, so downstream logic is unified.
+        If an id is provided and is not a valid UUID, check for existence in the database to avoid conflicts.
+        
+        Args:  
+            tasks: List of task dictionaries
+
+        Returns:    
             TaskTreeNode: Root task node of the created task tree
-            
-        Raises:
-            ValueError: If tasks array is empty, invalid, or dependencies are invalid
         """
         if not tasks:
             raise ValueError("Tasks array cannot be empty")
-        
+
         logger.info(f"Creating task tree from {len(tasks)} tasks")
+
+        # Step 1: Validate single root task
+        root_tasks = [task for task in tasks if task.get("parent_id") is None]
+        if len(root_tasks) == 0:
+            raise ValueError("No root task found (task with no parent_id). At least one task in the array must have parent_id=None or no parent_id field.")
+        if len(root_tasks) > 1:
+            raise ValueError("Multiple root tasks found. All tasks must be in a single task tree. Only one task should have parent_id=None or no parent_id field.")
         
-        # Step 1: Extract and validate task identifiers (id or name)
-        # Rule: Either all tasks have id, or all tasks don't have id (use name)
-        # Mixed mode is not supported for clarity and consistency
-        provided_ids: Set[str] = set()
-        provided_id_to_index: Dict[str, int] = {}  # provided_id -> index in array
-        task_names: Set[str] = set()
-        task_name_to_index: Dict[str, int] = {}  # task_name -> index in array
+        # Step 2: Convert dicts to tasks with validated references
+        task_models = self.task_dicts_to_task_models(tasks)
+
+        # Step 3: Check for existing task ids in DB (for provided ids that are not valid UUIDs)
+        await self._check_tasks_existence(tasks)   
+
+        # Step 4: Create all tasks (parent_id and dependencies will be set after creation)
+        self.task_repository.add_tasks_in_db(task_models)
+        await self.db.commit()
+
+        # Step 5: Build task tree structure
+        root_models: List[TaskModelType] = [task for task in task_models if task.parent_id is None]
+        root_task = root_models[0]
+        task_tree = self.build_task_tree_from_task_models(root_task, task_models)
+        logger.info(f"Created task tree: root task {task_tree.task.id}")
+        return task_tree
+    
+
+    async def create_task_trees_from_array(self, tasks: List[Dict[str, Any]]) -> List[TaskTreeNode]:
+        """
+        Create task trees from a list of task dicts.
+        Supports both id and name as input, but always generates a unique UUID id for each task internally.
+        All references (parent_id, dependencies) are mapped to id before creation, so downstream logic is unified.
+        If an id is provided and is not a valid UUID, check for existence in the database to avoid conflicts.
         
-        # First pass: check if all tasks have id or all don't have id
-        tasks_with_id = 0
-        tasks_without_id = 0
+        Args:  
+            tasks: List of task dictionaries
+
+        Returns:    
+            List[TaskTreeNode]: List of root task nodes of the created task trees
+        """
+
+        if not tasks:
+            raise ValueError("Tasks array cannot be empty")
+
+        logger.info(f"Creating task trees from {len(tasks)} tasks")
+
+        # Step 1: Convert dicts to tasks with validated references
+        task_models = self.task_dicts_to_task_models(tasks)
+
+        # Step 2: Check for existing task ids in DB (for provided ids that are not valid UUIDs)
+        await self._check_tasks_existence(tasks)   
+
+        # Step 3: Create all tasks (parent_id and dependencies will be set after creation)
+        self.task_repository.add_tasks_in_db(task_models)
+        await self.db.commit()
+
+        # Step 4: Build task trees structure
         
-        for index, task_data in enumerate(tasks):
-            task_name = task_data.get("name")
-            if not task_name:
-                raise ValueError(f"Task at index {index} must have a 'name' field")
-            
+        task_trees = self.build_task_trees_from_task_models(task_models)
+        logger.info(f"Created task trees, total root tasks: {', '.join([node.task.id for node in task_trees])}")
+        return task_trees
+
+    async def _check_tasks_existence(self, tasks: List[Dict[str, Any]]) -> None:
+        """
+        Check if tasks with provided ids already exist in the database.
+        Only checks tasks that have an id provided and is not a valid UUID.
+        
+        Args:
+            tasks: List of task dictionaries
+        """
+        import re
+        uuid_regex = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
+        self.db.expire_all()
+
+        root_tasks = [task for task in tasks if task.get("parent_id") is None]
+        for tree_id in [root_task.get('task_tree_id') for root_task in root_tasks]:
+            if tree_id and not uuid_regex.match(tree_id):
+                existing_task = await self.task_repository.task_tree_id_exists(tree_id)
+                if existing_task:
+                    raise ValueError(f"Task tree id already exists in database (tree_id: {tree_id}).")
+                
+        for _, task_data in enumerate(tasks):
             provided_id = task_data.get("id")
-            if provided_id:
-                tasks_with_id += 1
-            else:
-                tasks_without_id += 1
-        
-        # Validate: either all have id or all don't have id
-        if tasks_with_id > 0 and tasks_without_id > 0:
-            raise ValueError(
-                "Mixed mode not supported: either all tasks must have 'id', or all tasks must not have 'id'. "
-                f"Found {tasks_with_id} tasks with id and {tasks_without_id} tasks without id."
-            )
-        
-        # Second pass: build identifier maps
-        for index, task_data in enumerate(tasks):
-            task_name = task_data.get("name")
-            provided_id = task_data.get("id")
-            
-            if provided_id:
-                # Task has id - validate uniqueness
-                if provided_id in provided_ids:
-                    raise ValueError(f"Duplicate task id '{provided_id}' at index {index}")
-                provided_ids.add(provided_id)
-                provided_id_to_index[provided_id] = index
-            else:
-                # Task has no id - must use name, and name must be unique
-                if task_name in task_names:
-                    raise ValueError(
-                        f"Task at index {index} has no 'id' but name '{task_name}' is not unique. "
-                        f"When using name-based references, all task names must be unique."
-                    )
-                task_names.add(task_name)
-                task_name_to_index[task_name] = index
-        
-        # Step 2: Validate all tasks first (parent_id, dependencies)
-        for index, task_data in enumerate(tasks):
-            task_name = task_data.get("name")
-            provided_id = task_data.get("id")
-            
-            # Validate parent_id exists in the array (if provided)
-            # parent_id can be either id (if tasks have id) or name (if tasks don't have id)
-            # parent_id must reference a task within the same array, or be None for root tasks
-            parent_id = task_data.get("parent_id")
-            if parent_id:
-                if parent_id not in provided_ids and parent_id not in task_names:
-                    raise ValueError(
-                        f"Task '{task_name}' at index {index} has parent_id '{parent_id}' "
-                        f"which is not in the tasks array (not found as id or name). "
-                        f"parent_id must reference a task within the same array."
-                    )
-            
-            # Validate dependencies exist in the array
-            dependencies = task_data.get("dependencies")
-            if dependencies:
-                self._validate_dependencies(
-                    dependencies, task_name, index, provided_ids, provided_id_to_index,
-                    task_names, task_name_to_index
-                )
-        
-        # Step 2.5: Detect circular dependencies before creating tasks
-        self._detect_circular_dependencies(
-            tasks, provided_ids, provided_id_to_index, task_names, task_name_to_index
-        )
-        
-        # Step 2.6: Validate dependent task inclusion
-        # Ensure all tasks that depend on tasks in the tree are also included
-        self._validate_dependent_task_inclusion(
-            tasks, provided_ids, task_names
-        )
-        
-        # Step 3: Create all tasks
-        created_tasks: List[TaskModelType] = []
-        identifier_to_task: Dict[str, TaskModelType] = {}  # id or name -> TaskModelType
-        
-        for index, task_data in enumerate(tasks):
-            task_name = task_data.get("name")
-            provided_id = task_data.get("id")
-            
-            # user_id is optional (can be None) - get directly from task_data
-            task_user_id = task_data.get("user_id")
-            
-            # Check if provided_id already exists in database
-            # If it exists, generate a new UUID to avoid primary key conflict
-            actual_id = provided_id
-            if provided_id:
-                # Refresh session state before query to ensure we see latest database state
-                # This prevents blocking in sync sessions when there are uncommitted transactions
-                self.db.expire_all()
+            if provided_id and not uuid_regex.match(provided_id):
                 existing_task = await self.task_repository.get_task_by_id(provided_id)
                 if existing_task:
-                    # ID already exists, generate new UUID
-                    import uuid
-                    actual_id = str(uuid.uuid4())
-                    logger.warning(
-                        f"Task ID '{provided_id}' already exists in database. "
-                        f"Generating new ID '{actual_id}' to avoid conflict."
-                    )
-                    # Update the task_data to use the new ID for internal reference tracking
-                    # Note: We'll still use provided_id for identifier_to_task mapping
-                    # but create the task with actual_id
-            
-            # Create task (parent_id and dependencies will be set in step 4)
-            # Use actual_id (may be different from provided_id if conflict detected)
-            logger.debug(f"Creating task: name={task_name}, provided_id={provided_id}, actual_id={actual_id}")
-            task = await self.task_repository.create_task(
-                name=task_name,
-                user_id=task_user_id,
-                parent_id=None,  # Will be set in step 4
-                priority=task_data.get("priority", 1),
-                dependencies=None,  # Will be set in step 4
-                inputs=task_data.get("inputs"),
-                schemas=task_data.get("schemas"),
-                params=task_data.get("params"),
-                id=actual_id,  # Use actual_id (may be auto-generated if provided_id conflicts)
-                origin_type=TaskOriginType.create,
-                task_tree_id=None,  # Will be set after root task is determined
-            )
-            
-            logger.debug(f"Task created: id={task.id}, name={task.name}, provided_id={provided_id}, actual_id={actual_id}")
-            
-            # Verify the task was created with the expected ID
-            # If actual_id was generated due to conflict, task.id should match actual_id (not provided_id)
-            expected_id = actual_id if actual_id else provided_id
-            if expected_id and task.id != expected_id:
-                logger.error(
-                    f"Task ID mismatch: expected {expected_id}, got {task.id}. "
-                    f"This indicates an issue with ID assignment."
-                )
-                raise ValueError(
-                    f"Task ID mismatch: expected {expected_id}, got {task.id}. "
-                    f"Task was not created with the expected ID."
-                )
-            
-            # Note: TaskRepository.create_task already commits and refreshes the task
-            # No need to commit again here
-            
-            created_tasks.append(task)
-            
-            # Map identifier (id or name) to created task
-            if provided_id:
-                identifier_to_task[provided_id] = task
-            else:
-                # Use name as identifier when id is not provided
-                identifier_to_task[task_name] = task
-        
-        # Step 4: Set parent_id and dependencies using actual task ids
-        for index, (task_data, task) in enumerate(zip(tasks, created_tasks)):
-            # Resolve parent_id (can be id or name, depending on whether tasks have id)
-            # If tasks have id: parent_id should be an id
-            # If tasks don't have id: parent_id should be a name (name must be unique)
-            parent_id = task_data.get("parent_id")
-            actual_parent_id = None
-            
-            if parent_id:
-                # Find the actual task that corresponds to the parent_id (id or name)
-                parent_task = identifier_to_task.get(parent_id)
-                if parent_task:
-                    actual_parent_id = parent_task.id
-                    # Update parent's has_children flag
-                    parent_task.has_children = True
-                    # Update parent task in database
-                    
-                    await self.db.commit()
-                    await self.db.refresh(parent_task)
-                else:
-                    raise ValueError(
-                        f"Task '{task.name}' at index {index} has parent_id '{parent_id}' "
-                        f"which does not map to any created task"
-                    )
-            
-            # Resolve dependencies to actual task ids
-            # Whether user provides id or name, we convert to actual task id
-            # If user provided id, use it; otherwise use system-generated UUID
-            dependencies = task_data.get("dependencies")
-            actual_dependencies = None
-            if dependencies:
-                actual_dependencies = []
-                for dep in dependencies:
-                    if isinstance(dep, dict):
-                        # Support both "id" and "name" for dependency reference
-                        # User can provide either id or name, we'll map it to actual task id
-                        dep_ref = dep.get("id") or dep.get("name")
-                        if dep_ref:
-                            # Find the actual task that corresponds to the dependency reference (id or name)
-                            dep_task = identifier_to_task.get(dep_ref)
-                            if dep_task:
-                                # Use actual task id (user-provided if provided, otherwise system-generated)
-                                # Final structure is always: {"id": "actual_task_id", "required": bool, "type": str}
-                                actual_dependencies.append({
-                                    "id": dep_task.id,  # Use actual task id (user-provided or system-generated)
-                                    "required": dep.get("required", True),
-                                    "type": dep.get("type", "result"),
-                                })
-                            else:
-                                raise ValueError(
-                                    f"Task '{task.name}' at index {index} has dependency reference '{dep_ref}' "
-                                    f"which does not map to any created task"
-                                )
-                        else:
-                            raise ValueError(f"Task '{task.name}' dependency must have 'id' or 'name' field")
-                    else:
-                        # Simple string dependency (can be id or name)
-                        dep_ref = str(dep)
-                        dep_task = identifier_to_task.get(dep_ref)
-                        if dep_task:
-                            # Use actual task id (user-provided or system-generated)
-                            actual_dependencies.append({
-                                "id": dep_task.id,  # Use actual task id
-                                "required": True,
-                                "type": "result",
-                            })
-                        else:
-                            raise ValueError(
-                                f"Task '{task.name}' at index {index} has dependency '{dep_ref}' "
-                                f"which does not map to any created task"
-                            )
-                
-                actual_dependencies = actual_dependencies if actual_dependencies else None
-            
-            # Update task with parent_id and dependencies
-            if actual_parent_id is not None or actual_dependencies is not None:
-                task.parent_id = actual_parent_id
-                task.dependencies = actual_dependencies
-                # Update in database
-                await self.db.commit()
-                await self.db.refresh(task)
-        
-        # Step 5: Build task tree structure
-        # Find root task (task with no parent_id)
-        root_tasks = [task for task in created_tasks if task.parent_id is None]
-        
-        if not root_tasks:
-            raise ValueError(
-                "No root task found (task with no parent_id). "
-                "At least one task in the array must have parent_id=None or no parent_id field."
-            )
-        
-        if len(root_tasks) > 1:
-            root_task_names = [task.name for task in root_tasks]
-            raise ValueError(
-                f"Multiple root tasks found: {root_task_names}. "
-                f"All tasks must be in a single task tree. "
-                f"Only one task should have parent_id=None or no parent_id field."
-            )
-        
-        root_task = root_tasks[0]
-
-        # Set task_tree_id for all tasks in this newly created tree to the root task id
-        for t in created_tasks:
-            t.task_tree_id = root_task.id
-
-        await self.db.commit()
-        # Refresh all tasks to ensure task_tree_id is persisted
-        for t in created_tasks:
-            await self.db.refresh(t)
-
-        
-        # Verify all tasks are reachable from the root task (in the same tree)
-        # Build a set of all task IDs that are reachable from root
-        reachable_task_ids: Set[str] = {root_task.id}
-        
-        def collect_reachable_tasks(task_id: str):
-            """Recursively collect all tasks reachable from the given task via parent_id chain"""
-            for task in created_tasks:
-                if task.parent_id == task_id and task.id not in reachable_task_ids:
-                    reachable_task_ids.add(task.id)
-                    collect_reachable_tasks(task.id)
-        
-        collect_reachable_tasks(root_task.id)
-        
-        # Check if all tasks are reachable
-        all_task_ids = {task.id for task in created_tasks}
-        unreachable_task_ids = all_task_ids - reachable_task_ids
-        
-        if unreachable_task_ids:
-            unreachable_task_names = [
-                task.name for task in created_tasks 
-                if task.id in unreachable_task_ids
-            ]
-            raise ValueError(
-                f"Tasks not in the same tree: {unreachable_task_names}. "
-                f"All tasks must be reachable from the root task via parent_id chain. "
-                f"These tasks are not connected to the root task '{root_task.name}'."
-            )
-        
-        root_node = await self._build_task_tree(root_task, created_tasks)
-        
-        logger.info(f"Created task tree: root task {root_node.task.name} "
-                    f"with {len(root_node.children)} direct children")
-        return root_node
+                    raise ValueError(f"Task id already exists in database (id: {provided_id}).")
     
     def _validate_dependencies(
         self,
@@ -468,35 +360,21 @@ class TaskCreator:
     def _detect_circular_dependencies(
         self,
         tasks: List[Dict[str, Any]],
-        provided_ids: Set[str],
-        id_to_index: Dict[str, int],
-        task_names: Set[str],
-        name_to_index: Dict[str, int]
     ) -> None:
         """
         Detect circular dependencies in task array using DFS.
         
         Args:
             tasks: List of task dictionaries
-            provided_ids: Set of all provided task IDs
-            id_to_index: Map of id -> index in array
-            task_names: Set of all task names
-            name_to_index: Map of name -> index in array
             
         Raises:
             ValueError: If circular dependencies are detected
         """
         # Build dependency graph: identifier -> set of identifiers it depends on
         dependency_graph: Dict[str, Set[str]] = {}
-        identifier_to_name: Dict[str, str] = {}  # identifier -> task name for error messages
         
         for index, task_data in enumerate(tasks):
-            task_name = task_data.get("name")
-            provided_id = task_data.get("id")
-            
-            # Use id if provided, otherwise use name as identifier
-            identifier = provided_id if provided_id else task_name
-            identifier_to_name[identifier] = task_name
+            identifier = task_data.get("id")
             
             # Initialize empty set for this task
             dependency_graph[identifier] = set()
@@ -506,7 +384,7 @@ class TaskCreator:
             if dependencies:
                 for dep in dependencies:
                     if isinstance(dep, dict):
-                        dep_ref = dep.get("id") or dep.get("name")
+                        dep_ref = dep.get("id")
                         if dep_ref:
                             dependency_graph[identifier].add(dep_ref)
                     else:
@@ -564,9 +442,8 @@ class TaskCreator:
                 cycle_path = dfs(identifier, [])
                 if cycle_path:
                     # Format cycle path with task names for better error message
-                    cycle_names = [identifier_to_name.get(id, id) for id in cycle_path]
                     raise ValueError(
-                        f"Circular dependency detected: {' -> '.join(cycle_names)}. "
+                        f"Circular dependency detected: {' -> '.join(cycle_path)}. "
                         f"Tasks cannot have circular dependencies as this would cause infinite loops."
                     )
     
@@ -599,7 +476,7 @@ class TaskCreator:
             # Check if this task depends on the specified task_identifier
             for dep in dependencies:
                 if isinstance(dep, dict):
-                    dep_ref = dep.get("id") or dep.get("name")
+                    dep_ref = dep.get("id")
                     if dep_ref == task_identifier:
                         dependent_tasks.append(task_data)
                         break
@@ -614,9 +491,7 @@ class TaskCreator:
     def _find_transitive_dependents(
         self,
         task_identifiers: Set[str],
-        all_tasks: List[Dict[str, Any]],
-        provided_ids: Set[str],
-        task_names: Set[str]
+        all_tasks: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
         Find all tasks that depend on any of the specified task identifiers (including transitive).
@@ -624,8 +499,6 @@ class TaskCreator:
         Args:
             task_identifiers: Set of task identifiers (id or name) to find dependents for
             all_tasks: All tasks in the array
-            provided_ids: Set of all provided task IDs
-            task_names: Set of all task names
             
         Returns:
             List of tasks that depend on any of the specified task identifiers (directly or transitively)
@@ -660,7 +533,7 @@ class TaskCreator:
                     depends_on_identifier = False
                     for dep in dependencies:
                         if isinstance(dep, dict):
-                            dep_ref = dep.get("id") or dep.get("name")
+                            dep_ref = dep.get("id")
                             if dep_ref == identifier:
                                 depends_on_identifier = True
                                 break
@@ -675,7 +548,7 @@ class TaskCreator:
                         dependent_tasks.append(task_data)
                         
                         # Add this task's identifier to next iteration
-                        task_identifier = task_data.get("id") or task_data.get("name")
+                        task_identifier = task_data.get("id")
                         if task_identifier and task_identifier not in processed_identifiers:
                             next_identifiers.add(task_identifier)
             
@@ -685,17 +558,13 @@ class TaskCreator:
     
     def _validate_dependent_task_inclusion(
         self,
-        tasks: List[Dict[str, Any]],
-        provided_ids: Set[str],
-        task_names: Set[str]
+        tasks: List[Dict[str, Any]]
     ) -> None:
         """
         Validate that all tasks that depend on tasks in the tree are also included.
         
         Args:
             tasks: List of task dictionaries
-            provided_ids: Set of all provided task IDs
-            task_names: Set of all task names
             
         Raises:
             ValueError: If dependent tasks are missing
@@ -704,15 +573,13 @@ class TaskCreator:
         tree_identifiers: Set[str] = set()
         for task_data in tasks:
             provided_id = task_data.get("id")
-            task_name = task_data.get("name")
             if provided_id:
                 tree_identifiers.add(provided_id)
-            else:
-                tree_identifiers.add(task_name)
+            
         
         # Find all tasks that depend on tasks in the tree (including transitive)
         all_dependent_tasks = self._find_transitive_dependents(
-            tree_identifiers, tasks, provided_ids, task_names
+            tree_identifiers, tasks
         )
         
         # Check if all dependent tasks are included in the tree
@@ -720,19 +587,39 @@ class TaskCreator:
         missing_dependents = []
         
         for dep_task in all_dependent_tasks:
-            dep_identifier = dep_task.get("id") or dep_task.get("name")
+            dep_identifier = dep_task.get("id")
             if dep_identifier and dep_identifier not in included_identifiers:
                 missing_dependents.append(dep_task)
         
         if missing_dependents:
-            missing_names = [task.get("name", "Unknown") for task in missing_dependents]
+            missing_ids = [task.get("id", "Unknown") for task in missing_dependents]
             raise ValueError(
-                f"Missing dependent tasks: {missing_names}. "
+                f"Missing dependent tasks: {missing_ids}. "
                 f"All tasks that depend on tasks in the tree must be included. "
                 f"These tasks depend on tasks in the tree but are not included in the tasks array."
             )
     
-    async def _build_task_tree(
+
+    def build_task_trees_from_task_models(self, tasks: List[TaskModelType]) -> List[TaskTreeNode]:
+        """
+        Build task tree structure from flat list of tasks
+        
+        Args:
+            tasks: List of TaskModelType instances
+            
+        Returns:
+            List of TaskTreeNode representing the root nodes of the task tree
+        """
+        root_tasks: List[TaskModelType] = [task for task in tasks if task.parent_id is None]
+        task_trees: List[TaskTreeNode] = []
+
+        for root_task in root_tasks:
+            task_node = self.build_task_tree_from_task_models(root_task, tasks)
+            task_trees.append(task_node)
+
+        return task_trees
+
+    def build_task_tree_from_task_models(
         self,
         root_task: TaskModelType,
         all_tasks: List[TaskModelType]
@@ -755,7 +642,7 @@ class TaskCreator:
         
         # Recursively build children
         for child_task in children:
-            child_node = await self._build_task_tree(child_task, all_tasks)
+            child_node = self.build_task_tree_from_task_models(child_task, all_tasks)
             task_node.add_child(child_node)
         
         return task_node
@@ -1901,6 +1788,28 @@ class TaskCreator:
         
         await collect_children(root_task_id)
         return all_tasks
+    
+    def _update_task_tree_id_for_task_dics(
+        self,
+        all_tasks: List[Dict],
+        parent_task: Dict,
+        task_tree_id: str,
+    ) -> None:
+        """
+        Update task_tree_id for task dicts in the array
+        
+        Args:
+            tasks: List of task dicts
+        """
+
+        parent_task["task_tree_id"] = task_tree_id
+     
+        # Find children (tasks with parent_id == parent_task['id'])
+        children = [task for task in all_tasks if task.get("parent_id") == parent_task.get("id")]
+        
+        # Recursively build children
+        for child_task in children:
+            self._update_task_tree_id_for_task_dics(all_tasks, child_task, task_tree_id) 
 
 
 __all__ = [

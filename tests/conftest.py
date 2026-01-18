@@ -1,16 +1,29 @@
+
 """
 Test configuration and fixtures for apflow
 """
+
+import os
+import uuid
+
 import pytest
 import pytest_asyncio
 import sys
-import os
-import uuid
 import signal
 from unittest.mock import Mock, AsyncMock, patch
 from typing import Optional
 
-# IMPORTANT: Set environment variables BEFORE any imports that might use them
+# Add project root to Python path for development
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# Set DATABASE_URL to a unique DuckDB file for the whole test session before any apflow or DB-related imports
+test_db_file = f"{project_root}/.data/apflow_{uuid.uuid4().hex[:8]}.test.duckdb"
+os.environ["DATABASE_URL"] = f"duckdb:///{test_db_file}"
+print(f"set DATABASE_URL: {os.getenv('DATABASE_URL')}")
+
+# IMPORTANT: Set other environment variables BEFORE any imports that might use them
 # This prevents CrewAI, LiteLLM, and OpenTelemetry from starting background threads
 os.environ.setdefault("CREWAI_TRACING_ENABLED", "false")
 os.environ.setdefault("CREWAI_DISABLE_EVENT_BUS", "true")
@@ -20,10 +33,7 @@ os.environ.setdefault("LITELLM_LOG", "ERROR")
 os.environ.setdefault("LITELLM_TURN_OFF_MESSAGE_LOGGING", "true")
 os.environ.setdefault("LITELLM_TURN_OFF_LOGGING", "true")
 
-# Add project root to Python path for development
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+
 
 # Add src directory to path for imports
 src_path = os.path.join(project_root, "src")
@@ -119,6 +129,18 @@ def _get_test_database_url() -> Optional[str]:
     """Get test database URL from environment variable"""
     return os.getenv("APFLOW_TEST_DATABASE_URL") or os.getenv("TEST_DATABASE_URL")
 
+@pytest.fixture(scope="session", autouse=True)
+def cleanup_test_db_file():
+    yield
+    db_file = os.environ["DATABASE_URL"].replace("duckdb:///", "")
+    print('cleanup_test_db_file called')
+    print('db_file:', db_file, 'exists:', os.path.exists(db_file))
+    if db_file.endswith('.test.duckdb') and os.path.exists(db_file):
+        try:
+            print('Removing test database file:', db_file)
+            os.remove(db_file)
+        except Exception:
+            pass  # Ignore errors
 
 @pytest.fixture(scope="function")
 def temp_db_path(tmp_path):
