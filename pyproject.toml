@@ -29,6 +29,7 @@ dependencies = [
     "pydantic-settings>=2.0.0",
     # Default storage support (embedded DuckDB)
     "sqlalchemy>=2.0.0",
+    "sqlalchemy-session-proxy>=0.1.0",
     "alembic>=1.13.0",
     "duckdb-engine>=0.10.0",
     "pytz>=2024.1",  # Required for DuckDB timezone support

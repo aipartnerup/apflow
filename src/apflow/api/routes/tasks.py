@@ -2003,6 +2003,7 @@ class TaskRoutes(BaseRouteHandler):
             async with create_pooled_session() as db_session:
                 if execution_mode == "task_id":
                     # Mode 1: Execute by task_id
+                    execution_task_id = task_id
                     task_repository = self._get_task_repository(db_session)
                     task = await task_repository.get_task_by_id(task_id)
                     if not task:
