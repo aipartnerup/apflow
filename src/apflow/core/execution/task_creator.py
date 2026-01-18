@@ -22,7 +22,7 @@ from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from apflow.core.storage.sqlalchemy.models import TaskModelType, TaskOriginType
 from apflow.logger import get_logger
 from apflow.core.config import get_task_model_class
-from apflow.core.storage.sqlalchemy.session_proxy import SqlalchemySessionProxy
+from sqlalchemy_session_proxy import SqlalchemySessionProxy
 
 logger = get_logger(__name__)
 

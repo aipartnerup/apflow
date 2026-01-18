@@ -13,7 +13,7 @@ from sqlalchemy import select, delete
 from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING, Type, Set
 from apflow.core.storage.sqlalchemy.models import TaskModel, TaskOriginType, TaskModelType
 from apflow.core.execution.errors import ValidationError
-from apflow.core.storage.sqlalchemy.session_proxy import SqlalchemySessionProxy
+from sqlalchemy_session_proxy import SqlalchemySessionProxy
 from apflow.logger import get_logger
 
 if TYPE_CHECKING:
