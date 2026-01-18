@@ -1,6 +1,5 @@
 # Changelog
 
-
 ## [Unreleased]
 
 ### Added
@@ -72,6 +71,12 @@
   - Enhanced task execution logic with improved error handling
   - Implemented priority grouping for better task scheduling
   - Optimized task tree retrieval using `task_tree_id` with fallback mechanism
+
+- **TaskRepository Refactored**
+  - Refactored task update methods in `TaskRepository` for improved maintainability and clarity.
+  - Use the method `task_update(self, task_id: str, **kwargs)` instead of all `update_task_*` series functions.
+  - Refactored `TaskModel` to `TaskModelType` and enhanced task creation methods for better type safety and extensibility.
+
 
 ### Fixed
 - **Database Schema Management**
@@ -915,7 +920,7 @@
   - Other fields: Can be updated freely without status restrictions (inputs, name, priority, params, schemas, status, result, error, progress, timestamps)
   - Comprehensive error reporting: All validation errors are collected and returned in a single response
   - New TaskRepository methods:
-    - `update_task_dependencies()`: Update task dependencies with validation
+    - `update_task()`: Update task dependencies with validation
     - `update_task_name()`: Update task name
     - `update_task_priority()`: Update task priority
     - `update_task_params()`: Update executor parameters
