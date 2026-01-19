@@ -1,7 +1,6 @@
 """
 Unit tests for apflow.core.dependency.resolver
 """
-import pytest
 from apflow.core.dependency import resolver
 
 def test_are_dependencies_satisfied():

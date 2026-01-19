@@ -2,9 +2,8 @@
 Unit tests for apflow.core.dependency.validator
 """
 import pytest
-from types import SimpleNamespace
+import asyncio
 from apflow.core.dependency import validator
-import re
 
 class DummyTask:
     def __init__(self, id, name=None, dependencies=None, status=None, user_id=None):
@@ -31,8 +30,6 @@ def test_detect_circular_dependencies(tasks, task_id, new_deps, should_raise):
     else:
         validator.detect_circular_dependencies(task_id, new_deps, tasks)
 
-import asyncio
-
 class DummyRepo:
     def __init__(self, tasks):
         self.tasks = {t.id: t for t in tasks}
@@ -46,7 +43,6 @@ class DummyRepo:
 
 
 # Test dependency reference validation with user_id and only_within_tree
-import pytest_asyncio
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("tasks,task_id,new_deps,user_id,only_within_tree,should_raise", [
