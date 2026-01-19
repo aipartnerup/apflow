@@ -253,8 +253,10 @@ class TestTaskCreator:
         
         assert isinstance(task_tree, TaskTreeNode)
         assert task_tree.task.name == "Task 1"
+        assert task_tree.task.task_tree_id == 'task_1'
         assert len(task_tree.children) == 1
         assert task_tree.children[0].task.name == "Task 2"
+        assert task_tree.children[0].task.task_tree_id == 'task_1'
         
         # Verify parent_id is set correctly
         child_task = task_tree.children[0].task
