@@ -174,3 +174,6 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
 
+[project.urls]
+Homepage = "https://aipartnerup.com"
+Source = "https://github.com/aipartnerup/apflow" 
