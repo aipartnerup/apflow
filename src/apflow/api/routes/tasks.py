@@ -1398,7 +1398,7 @@ class TaskRoutes(BaseRouteHandler):
         Returns:
             Error message string if validation fails, None if validation passes
         """
-        from apflow.core.utils.dependency_validator import (
+        from apflow.core.validator.dependency_validator import (
             validate_dependency_references,
             detect_circular_dependencies,
             check_dependent_tasks_executing,
@@ -1416,7 +1416,7 @@ class TaskRoutes(BaseRouteHandler):
 
         try:
             # Check 2: Validate all dependency references exist in the same task tree
-            await validate_dependency_references(task.id, new_dependencies, task_repository)
+            await validate_dependency_references(task.id, new_dependencies, task_repository, task.user_id)
 
             # Check 3: Detect circular dependencies
             root_task = await task_repository.get_root_task(task)

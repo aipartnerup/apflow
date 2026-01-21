@@ -413,7 +413,35 @@ class TaskRepository():
             await self.db.rollback()
             raise
 
-    
+        
+    async def get_completed_tasks_by_id(self, task: TaskModelType) -> Dict[str, TaskModelType]:
+        """
+        Get all completed tasks in the same task tree by id
+        
+        Args:
+            task: Task to get sibling tasks for
+            
+        Returns:
+            Dictionary mapping task ids to completed TaskModelType instances
+        """
+        # Get root task to find all tasks in the tree
+        root_task = await self.get_root_task(task)
+        
+        # Get all tasks in the tree
+        all_tasks = await self.get_all_tasks_in_tree(root_task)
+        
+        # Filter completed tasks with results
+        completed_tasks = [
+            t for t in all_tasks 
+            if t.status == "completed" and t.result is not None
+        ]
+        
+        # Create a map of completed tasks by id
+        completed_tasks_by_id = {t.id: t for t in completed_tasks}
+        
+        return completed_tasks_by_id
+
+
     async def get_completed_tasks_by_ids(self, task_ids: List[str]) -> Dict[str, TaskModelType]:
         """
         Get completed tasks by a list of IDs

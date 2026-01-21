@@ -14,7 +14,8 @@ from apflow.core.types import TaskPreHook, TaskPostHook
 from apflow.logger import get_logger
 
 if TYPE_CHECKING:
-    from apflow.core.storage.sqlalchemy.models import TaskModel
+    from apflow.core.storage.sqlalchemy.models import TaskModel, TaskModelType
+    from apflow.core.execution.task_creator import TaskCreatorType
 
 logger = get_logger(__name__)
 
@@ -36,10 +37,10 @@ class ConfigRegistry:
 
     def __init__(self):
         """Initialize empty registry"""
-        self._task_model_class: Optional['TaskModel'] = None
+        self._task_model_class: Optional['TaskModelType'] = None
         self._pre_hooks: List[TaskPreHook] = []
         self._post_hooks: List[TaskPostHook] = []
-        self._use_task_creator: bool = True  # Default to True for rigorous task creation
+        self._use_task_creator: Optional['TaskCreatorType'] = None  # Default to True for rigorous task creation
         self._require_existing_tasks: bool = False  # Default to False for convenience (auto-create)
         # Task tree lifecycle hooks
         self._task_tree_hooks: Dict[str, List[Callable]] = {
@@ -163,26 +164,30 @@ class ConfigRegistry:
         """
         return self._post_hooks.copy()
 
-    def set_use_task_creator(self, use_task_creator: bool) -> None:
+    def set_use_task_creator(self, use_task_creator: Optional['TaskCreatorType']) -> None:
         """
         Set whether to use TaskCreator for rigorous task creation
 
         Args:
-            use_task_creator: If True, use TaskCreator.create_task_tree_from_array for rigorous validation.
-                             If False, use quick create mode (not recommended, may have issues).
-                             Default is True.
+            use_task_creator: If use_task_creator, use TaskCreator.create_task_tree_from_array for rigorous validation.
+                             If not, use quick create mode (not recommended, may have issues).
+                             Default is TaskCreator for rigorous creation.
         """
         self._use_task_creator = use_task_creator
         logger.debug(f"Set use_task_creator: {use_task_creator}")
 
-    def get_use_task_creator(self) -> bool:
+    def get_use_task_creator(self) -> 'TaskCreatorType':
         """
         Get whether to use TaskCreator for task creation
 
         Returns:
             True if TaskCreator should be used (default), False otherwise
         """
-        return self._use_task_creator
+        if self._use_task_creator is not None:
+            return self._use_task_creator
+        # Lazy import TaskCreator on first access
+        from apflow.core.execution.task_creator import TaskCreator
+        return TaskCreator
 
     def set_require_existing_tasks(self, require_existing_tasks: bool) -> None:
         """
@@ -274,7 +279,7 @@ class ConfigRegistry:
         self._task_model_class = None
         self._pre_hooks.clear()
         self._post_hooks.clear()
-        self._use_task_creator = True  # Reset to default
+        self._use_task_creator = None  # Reset to default
         self._require_existing_tasks = False  # Reset to default
         # Clear task tree hooks
         for hook_list in self._task_tree_hooks.values():
@@ -437,7 +442,7 @@ def set_use_task_creator(use_task_creator: bool) -> None:
     _get_registry().set_use_task_creator(use_task_creator)
 
 
-def get_use_task_creator() -> bool:
+def get_use_task_creator() -> 'TaskCreatorType':
     """
     Get whether to use TaskCreator for task creation
 

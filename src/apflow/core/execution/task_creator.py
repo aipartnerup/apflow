@@ -12,7 +12,7 @@ This module validates that dependencies exist in the array and hierarchy is corr
 
 """
 
-from typing import List, Dict, Any, Optional, Set
+from typing import List, Dict, Any, Optional, Set, TypeVar
 import uuid
 import os
 from sqlalchemy.orm import Session
@@ -26,6 +26,8 @@ from sqlalchemy_session_proxy import SqlalchemySessionProxy
 
 logger = get_logger(__name__)
 
+# Type variable for TaskModel subclasses
+TaskCreatorType = TypeVar("TaskCreatorType", bound="TaskCreator")
 
 DEFAULT_MAX_DEPTH = os.getenv("APFLOW_MAX_DEPTH", 100)
 DEFAULT_MAX_DEPTH = int(DEFAULT_MAX_DEPTH) if DEFAULT_MAX_DEPTH else 100

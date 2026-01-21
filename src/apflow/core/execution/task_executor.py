@@ -709,24 +709,11 @@ class TaskExecutor:
             # Use configuration to determine whether to use TaskCreator
             use_task_creator = get_use_task_creator()
             
-            if use_task_creator:
-                # Use TaskCreator for rigorous task creation (recommended)
-                from apflow.core.execution.task_creator import TaskCreator
-                task_creator = TaskCreator(db_session)
-                logger.debug(f"Creating task tree from {len(tasks)} tasks with IDs: {[t.get('id') for t in tasks]}")
-                task_tree = await task_creator.create_task_tree_from_array(tasks)
-                logger.info(f"Created task tree using TaskCreator: root {task_tree.task.id}")
-                logger.debug(f"Root task details: id={task_tree.task.id}, name={task_tree.task.name}")
-            else:
-                # Use quick create mode (not recommended, may have issues)
-                logger.warning(
-                    "Using quick create mode (use_task_creator=False). "
-                    "This mode may have issues. Consider using TaskCreator (default) for rigorous validation."
-                )
-                logger.info(f"Creating task tree from {len(tasks)} tasks (quick mode)")
-                task_tree = self._build_task_tree_from_tasks(tasks)
-                # Save tasks to database
-                await self._save_tasks_to_database(task_tree, db_session)
+            task_creator = use_task_creator(db_session)
+            logger.debug(f"Creating task tree from {len(tasks)} tasks with IDs: {[t.get('id') for t in tasks]}")
+            task_tree = await task_creator.create_task_tree_from_array(tasks)
+            logger.info(f"Created task tree using TaskCreator: root {task_tree.task.id}")
+            logger.debug(f"Root task details: id={task_tree.task.id}, name={task_tree.task.name}")
         
         # Use root task ID if not provided
         if root_task_id is None:

@@ -24,7 +24,7 @@ class AggregateResultsExecutor(BaseTask):
        **How aggregation works:**
        
        1. **Dependency Resolution (by TaskManager):**
-          Before this executor runs, TaskManager's _resolve_task_dependencies() merges
+          Before this executor runs, TaskManager's resolve_task_dependencies() merges
           dependency task results into the task's inputs dictionary:
           
           - For each dependency in task.dependencies, it adds: inputs[dep_id] = dep_task.result
@@ -190,7 +190,7 @@ class AggregateResultsExecutor(BaseTask):
         # ============================================================
         # Step 1: Extract dependency results from inputs
         # ============================================================
-        # TaskManager's _resolve_task_dependencies() has already merged dependency results
+        # TaskManager's resolve_task_dependencies() has already merged dependency results
         # into inputs with keys matching dependency task IDs.
         # 
         # Example inputs structure:

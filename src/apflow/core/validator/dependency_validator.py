@@ -8,7 +8,7 @@ All dependency validation logic is centralized here for maintainability.
 """
 
 from typing import Dict, Any, List, Set, Optional
-from apflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.storage.sqlalchemy.models import TaskModelType
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from apflow.logger import get_logger
 
@@ -18,24 +18,31 @@ logger = get_logger(__name__)
 def detect_circular_dependencies(
     task_id: str,
     new_dependencies: List[Any],
-    all_tasks_in_tree: List[TaskModel]
+    all_tasks_in_tree: List[TaskModelType]
 ) -> None:
     """
     Detect circular dependencies using DFS algorithm.
+    
     This function builds a dependency graph including the task being updated
     and all other tasks in the tree, then uses DFS to detect cycles.
+    
     Args:
         task_id: ID of the task being updated
         new_dependencies: New dependencies list for the task
         all_tasks_in_tree: All tasks in the same task tree
+        
     Raises:
         ValueError: If circular dependencies are detected
     """
+    # Build dependency graph: task_id -> set of task_ids it depends on
     dependency_graph: Dict[str, Set[str]] = {}
-    task_id_to_name: Dict[str, str] = {}
+    task_id_to_name: Dict[str, str] = {}  # For better error messages
+    
+    # Initialize graph with all tasks in tree
     for task in all_tasks_in_tree:
         dependency_graph[task.id] = set()
         task_id_to_name[task.id] = task.name
+    
     # Add dependencies for the task being updated (using new_dependencies)
     for dep in new_dependencies:
         dep_id = None
@@ -43,12 +50,15 @@ def detect_circular_dependencies(
             dep_id = dep.get("id")
         elif isinstance(dep, str):
             dep_id = dep
+        
         if dep_id and dep_id in dependency_graph:
             dependency_graph[task_id].add(dep_id)
+    
     # Add dependencies for all other tasks (using their current dependencies)
     for task in all_tasks_in_tree:
         if task.id == task_id:
-            continue
+            continue  # Already handled above
+        
         task_deps = task.dependencies or []
         for dep in task_deps:
             dep_id = None
@@ -56,31 +66,58 @@ def detect_circular_dependencies(
                 dep_id = dep.get("id")
             elif isinstance(dep, str):
                 dep_id = dep
+            
             if dep_id and dep_id in dependency_graph:
                 dependency_graph[task.id].add(dep_id)
+    
+    # DFS to detect cycles
     visited: Set[str] = set()
+    
     def dfs(node: str, path: List[str]) -> Optional[List[str]]:
+        """
+        DFS to detect cycles.
+        
+        Args:
+            node: Current node being visited
+            path: Current path from root to this node
+            
+        Returns:
+            Cycle path if cycle detected, None otherwise
+        """
         if node in path:
+            # Found a cycle - extract the cycle path
             cycle_start = path.index(node)
-            cycle = path[cycle_start:] + [node]
+            cycle = path[cycle_start:] + [node]  # Complete the cycle
             return cycle
+        
         if node in visited:
+            # Already processed this node completely, no cycle from here
             return None
+        
+        # Mark as visited and add to current path
         visited.add(node)
         path.append(node)
+        
+        # Visit all dependencies
         node_deps = dependency_graph.get(node, set())
         for dep in node_deps:
+            # Skip if dependency is not in the graph
             if dep not in dependency_graph:
                 continue
             cycle = dfs(dep, path)
             if cycle:
                 return cycle
+        
+        # Remove from current path (backtrack)
         path.pop()
         return None
+    
+    # Check all nodes for cycles
     for identifier in dependency_graph.keys():
         if identifier not in visited:
             cycle_path = dfs(identifier, [])
             if cycle_path:
+                # Format cycle path with task names for better error message
                 cycle_names = [task_id_to_name.get(id, id) for id in cycle_path]
                 raise ValueError(
                     f"Circular dependency detected: {' -> '.join(cycle_names)}. "
@@ -182,18 +219,89 @@ async def check_dependent_tasks_executing(
     return dependent_task_ids
 
 
-def are_dependencies_satisfied(task_id: str, completed_task_ids: Set[str], dependencies: List[Any]) -> bool:
+async def are_dependencies_satisfied(
+    task: TaskModelType,
+    task_repository: TaskRepository,
+    tasks_to_reexecute: set[str]
+) -> bool:
     """
-    Check if all dependencies for a task are satisfied (i.e., completed).
+    Check if all dependencies for a task are satisfied
+    
+    Re-execution Logic:
+    - A dependency is satisfied if the dependency task is `completed`
+    - Even if a dependency is marked for re-execution, if it's already `completed`,
+      its result is available and can satisfy dependent tasks
+    - This allows dependent tasks to proceed while still allowing re-execution
+      of dependencies if needed
+    
     Args:
-        task_id: ID of the task being checked
-        completed_task_ids: Set of completed task IDs
-        dependencies: List of dependencies (task IDs or dicts with 'id')
+        task: Task to check dependencies for
+        task_repository: TaskRepository instance for querying tasks
+        tasks_to_reexecute: Set of task IDs marked for re-execution
+        
     Returns:
         True if all dependencies are satisfied, False otherwise
     """
-    for dep in dependencies:
-        dep_id = dep.get("id") if isinstance(dep, dict) else dep
-        if dep_id not in completed_task_ids:
-            return False
+    task_dependencies = task.dependencies or []
+    if not task_dependencies:
+        logger.info(f"🔍 [DEBUG] No dependencies for task {task.id}, ready to execute")
+        return True
+    
+    # Get all completed tasks by id in the same task tree using repository
+    completed_tasks_by_id = await task_repository.get_completed_tasks_by_id(task)
+    logger.info(f"🔍 [DEBUG] Available tasks for {task.id}: {list(completed_tasks_by_id.keys())}")
+    
+    # Check each dependency
+    for dep in task_dependencies:
+        if isinstance(dep, dict):
+            dep_id = dep.get("id")  # This is the task id of the dependency
+            dep_required = dep.get("required", True)
+            
+            logger.info(f"🔍 [DEBUG] Checking dependency {dep_id} (required: {dep_required}) for task {task.id}")
+            
+            if dep_required and dep_id not in completed_tasks_by_id:
+                logger.info(f"❌ Task {task.id} dependency {dep_id} not satisfied (not found in tasks: {list(completed_tasks_by_id.keys())})")
+                return False
+            elif dep_required and dep_id in completed_tasks_by_id:
+                # Check if the dependency task is actually completed
+                dep_task = completed_tasks_by_id[dep_id]
+                dep_task_id = str(dep_task.id)
+                # If dependency is marked for re-execution and is still in progress or pending, it's not satisfied yet
+                # But if it's already completed, we can consider it satisfied (it will be re-executed but result is available)
+                if dep_task_id in tasks_to_reexecute:
+                    # Check current status from database to see if it's actually completed
+                    # If it's completed, we can use the result even if marked for re-execution
+                    if dep_task.status == "completed":
+                        logger.info(f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed, marked for re-execution but result available)")
+                    else:
+                        logger.info(f"❌ Task {task.id} dependency {dep_id} is marked for re-execution and not completed yet (status: {dep_task.status})")
+                        return False
+                elif dep_task.status != "completed":
+                    logger.info(f"❌ Task {task.id} dependency {dep_id} found but not completed (status: {dep_task.status})")
+                    return False
+                else:
+                    logger.info(f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed)")
+        elif isinstance(dep, str):
+            # Simple string dependency (just the id) - backward compatibility
+            dep_id = dep
+            if dep_id not in completed_tasks_by_id:
+                logger.info(f"❌ Task {task.id} dependency {dep_id} not satisfied")
+                return False
+            dep_task = completed_tasks_by_id[dep_id]
+            dep_task_id = str(dep_task.id)
+            # If dependency is marked for re-execution, check if it's actually completed
+            if dep_task_id in tasks_to_reexecute:
+                # If it's completed, we can use the result even if marked for re-execution
+                if dep_task.status == "completed":
+                    logger.info(f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed, marked for re-execution but result available)")
+                else:
+                    logger.info(f"❌ Task {task.id} dependency {dep_id} is marked for re-execution and not completed yet (status: {dep_task.status})")
+                    return False
+            elif dep_task.status != "completed":
+                logger.info(f"❌ Task {task.id} dependency {dep_id} found but not completed (status: {dep_task.status})")
+                return False
+            else:
+                logger.info(f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed)")
+    
+    logger.info(f"✅ All dependencies satisfied for task {task.id}")
     return True

@@ -20,10 +20,8 @@ from apflow.core.types import (
     TaskPostHook,
 )
 from apflow.core.config import get_pre_hooks, get_post_hooks, get_task_model_class, get_task_tree_hooks
-from apflow.core.execution.dependency_resolver import (
+from apflow.core.validator.dependency_validator import (
     are_dependencies_satisfied,
-    resolve_task_dependencies,
-    get_completed_tasks_by_id,
 )
 from apflow.core.execution.errors import BusinessError, ExecutorError
 from apflow.logger import get_logger
@@ -753,7 +751,7 @@ class TaskManager:
             Resolved task inputs
         """
         # Resolve dependencies first (merge dependency results into inputs)
-        resolved_inputs = await resolve_task_dependencies(task, self.task_repository)
+        resolved_inputs = await self.resolve_task_dependencies(task)
         
         # Check cancellation before proceeding
         task = await self._check_cancellation_and_refresh_task(task_id, "during dependency resolution")
@@ -1064,36 +1062,7 @@ class TaskManager:
                     f"Task execution already completed."
                 )
     
-    async def _resolve_task_dependencies(self, task: TaskModelType) -> Dict[str, Any]:
-        """
-        Resolve task dependencies by merging results from dependency tasks
-        
-        This is a wrapper around the dependency_resolver.resolve_task_dependencies
-        function that passes the necessary context from TaskManager.
-        
-        Args:
-            task: Task to resolve dependencies for
-            
-        Returns:
-            Resolved input data dictionary
-        """
-        return await resolve_task_dependencies(task, self.task_repository)
-    
-    async def _get_completed_tasks_by_id(self, task: TaskModelType) -> Dict[str, TaskModelType]:
-        """
-        Get all completed tasks in the same task tree by id
-        
-        This is a wrapper around the dependency_resolver.get_completed_tasks_by_id
-        function that passes the necessary context from TaskManager.
-        
-        Args:
-            task: Task to get sibling tasks for
-            
-        Returns:
-            Dictionary mapping task ids to completed TaskModelType instances
-        """
-        return await get_completed_tasks_by_id(task, self.task_repository)
-    
+
     async def _get_root_task(self, task: TaskModelType) -> TaskModelType:
         """Get root task of the task tree"""
         # Use repository method
@@ -1566,6 +1535,115 @@ class TaskManager:
             self._executor_instances.pop(task.id, None)
             # Re-raise the exception to let TaskManager mark the task as failed
             raise
+
+        
+    async def resolve_task_dependencies(self, task: TaskModelType) -> Dict[str, Any]:
+        """
+        Resolve task dependencies by merging results from dependency tasks
+        
+        Args:
+            task: Task to resolve dependencies for
+            
+        Returns:
+            Resolved input data dictionary
+        """
+        inputs = task.inputs.copy() if task.inputs else {}
+        
+        # Get task dependencies from the dependencies field
+        task_dependencies = task.dependencies or []
+        if not task_dependencies:
+            logger.debug(f"No dependencies found for task {task.id}")
+            return inputs
+        
+        # Get all completed tasks by id in the same task tree
+        completed_tasks_by_id = await self.task_repository.get_completed_tasks_by_id(task)
+        
+        logger.info(f"🔍 [Dependency Resolution] Task {task.id} (name: {task.name}) has dependencies: {task_dependencies}")
+        logger.info(f"🔍 [Dependency Resolution] Available completed tasks: {list(completed_tasks_by_id.keys())}")
+        logger.info(f"🔍 [Dependency Resolution] Initial inputs: {inputs}")
+        
+        # Resolve dependencies based on id
+        for dep in task_dependencies:
+            if isinstance(dep, dict):
+                dep_id = dep.get("id")  # This is the task id of the dependency
+                dep_type = dep.get("type", "result")
+                dep_required = dep.get("required", True)
+                
+                logger.info(f"🔍 [Dependency Resolution] Processing dependency: {dep_id} (type: {dep_type}, required: {dep_required})")
+                
+                if dep_id in completed_tasks_by_id:
+                    # Found the dependency task, get its result
+                    source_task = completed_tasks_by_id[dep_id]
+                    source_result = source_task.result
+                    
+                    logger.info(f"🔍 [Dependency Resolution] Found dependency {dep_id} in task {source_task.id}")
+                    
+                    if source_result is not None:
+                        # Check if we need to map dependency result fields to input parameters
+                        if isinstance(source_result, dict):
+                            # Check if the result is nested in a 'result' field
+                            actual_result = source_result
+                            if "result" in source_result and isinstance(source_result["result"], dict):
+                                actual_result = source_result["result"]
+                                logger.info(f"🔍 [Dependency Resolution] Using nested result from {dep_id}: {actual_result}")
+                            else:
+                                # Direct result structure
+                                logger.info(f"🔍 [Dependency Resolution] Using direct result from {dep_id}: {actual_result}")
+                            
+                            # Get the input schema for this task to determine which fields to map
+                            input_schema = {}
+                            if task.schemas and isinstance(task.schemas, dict):
+                                input_schema = task.schemas.get("input_schema", {})
+                            
+                            logger.info(f"🔍 [Dependency Resolution] Input schema for task {task.id}: {input_schema}")
+                            
+                            if input_schema and "properties" in input_schema:
+                                # Map dependency result fields to input parameters based on input_schema
+                                schema_properties = input_schema["properties"]
+                                mapped_count = 0
+                                
+                                logger.info(f"🔍 [Dependency Resolution] Schema properties: {list(schema_properties.keys())}")
+                                logger.info(f"🔍 [Dependency Resolution] Available result fields: {list(actual_result.keys())}")
+                                
+                                for field_name, field_schema in schema_properties.items():
+                                    if field_name in actual_result:
+                                        inputs[field_name] = actual_result[field_name]
+                                        mapped_count += 1
+                                        logger.info(f"✅ Mapped {field_name} from {dep_id} result: {actual_result[field_name]}")
+                                
+                                logger.info(f"✅ Resolved {dep_id} dependency for task {task.id} with {mapped_count} fields")
+                                logger.info(f"🔍 [Dependency Resolution] Final inputs after mapping: {inputs}")
+                            else:
+                                # No input schema or properties found, use the result as-is
+                                inputs[dep_id] = source_result
+                                logger.debug(f"✅ Resolved dependency {dep_id} with result from task {source_task.id} (no schema mapping)")
+                        else:
+                            # For non-dict results, use the result as-is
+                            inputs[dep_id] = source_result
+                            logger.debug(f"✅ Resolved dependency {dep_id} with result from task {source_task.id}")
+                    else:
+                        logger.warning(f"⚠️ Task {source_task.id} completed but has no result for dependency {dep_id}")
+                        if dep_required:
+                            logger.error(f"❌ Required dependency {dep_id} not resolved for task {task.id}")
+                else:
+                    logger.warning(f"⚠️ Could not resolve dependency {dep_id} for task {task.id} - no completed task found with id {dep_id}")
+                    if dep_required:
+                        logger.error(f"❌ Required dependency {dep_id} not resolved for task {task.id}")
+            elif isinstance(dep, str):
+                # Simple string dependency (just the id) - backward compatibility
+                dep_id = dep
+                if dep_id in completed_tasks_by_id:
+                    source_task = completed_tasks_by_id[dep_id]
+                    if source_task.result:
+                        if isinstance(source_task.result, dict):
+                            inputs.update(source_task.result)
+                        else:
+                            inputs[dep_id] = source_task.result
+        
+        logger.info(f"🔍 [Dependency Resolution] Final resolved inputs for task {task.id}: {inputs}")
+        return inputs
+
+
     
 __all__ = [
     "TaskManager",

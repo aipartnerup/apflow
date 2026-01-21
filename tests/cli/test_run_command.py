@@ -238,7 +238,8 @@ class TestRunCommand:
             "run", "flow",
             "--tasks", tasks_json
         ])
-        
+        print('output:',result.output)
+        print('exit_code:',result.exit_code)
         assert result.exit_code == 0
         
         # Verify task tree was created

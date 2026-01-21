@@ -123,21 +123,3 @@ def test_check_dependent_tasks_executing():
     result = asyncio.run(dependency_validator.check_dependent_tasks_executing("A", repo))
     assert result == ["B"]
 
-
-def test_are_dependencies_satisfied():
-    # All dependencies satisfied
-    assert dependency_validator.are_dependencies_satisfied(
-        "A", {"B", "C"}, ["B", "C"]
-    ) is True
-    # Not all dependencies satisfied
-    assert dependency_validator.are_dependencies_satisfied(
-        "A", {"B"}, ["B", "C"]
-    ) is False
-    # Dependency as dict
-    assert dependency_validator.are_dependencies_satisfied(
-        "A", {"B"}, [{"id": "B"}]
-    ) is True
-    # Empty dependencies
-    assert dependency_validator.are_dependencies_satisfied(
-        "A", set(), []
-    ) is True

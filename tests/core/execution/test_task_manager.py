@@ -396,7 +396,7 @@ class TestTaskManager:
         sync_db_session.add(task)
         sync_db_session.commit()
         
-        resolved_data = await task_manager._resolve_task_dependencies(task)
+        resolved_data = await task_manager.resolve_task_dependencies(task)
         
         # Should have resolved fields from dependency
         assert resolved_data["url"] == "https://resolved.com"

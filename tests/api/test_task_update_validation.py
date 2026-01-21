@@ -321,7 +321,7 @@ class TestCriticalFieldValidation:
         with pytest.raises(ValueError) as exc_info:
             await task_routes.handle_task_update(params, mock_request, request_id)
         
-        assert "Dependency reference 'non-existent-task-id' not found in task tree" in str(exc_info.value)
+        assert "Dependency reference 'non-existent-task-id' not found for user 'test_user'" in str(exc_info.value)
     
     @pytest.mark.asyncio
     async def test_update_dependencies_circular_dependency(

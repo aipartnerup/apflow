@@ -209,7 +209,7 @@ class TestAggregateResultsExecutor:
         assert memory_result is not None
         assert disk_result is not None
         
-        # Step 2: Simulate TaskManager's _resolve_task_dependencies() behavior
+        # Step 2: Simulate TaskManager's resolve_task_dependencies() behavior
         # In production, TaskManager would merge these results into inputs like this:
         inputs = {
             "cpu-info": cpu_result,      # Dependency result from cpu-info task
