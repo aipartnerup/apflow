@@ -93,8 +93,8 @@ async def validate_dependency_references(
     task_id: str,
     new_dependencies: List[Any],
     task_repository: TaskRepository,
-    user_id: str,
-    only_within_tree: bool = True,
+    user_id: Optional[str] = None,
+    only_within_tree: Optional[bool] = False,
 ) -> None:
     """
     Validate that all dependency references exist and belong to the same user.
@@ -105,7 +105,7 @@ async def validate_dependency_references(
         new_dependencies: New dependencies list for the task
         task_repository: TaskRepository instance
         user_id: The user ID that all dependencies must match
-        only_within_tree: If True, dependencies must be in the same task tree (default True)
+        only_within_tree: If True, dependencies must be in the same task tree (default False)
     Raises:
         ValueError: If any dependency reference is not found or user_id does not match
     """
@@ -129,10 +129,12 @@ async def validate_dependency_references(
                 raise ValueError("Dependency must have 'id' field or be a string task ID")
             if dep_id not in task_ids_in_tree:
                 raise ValueError(f"Dependency reference '{dep_id}' not found in task tree")
-            # Check user_id match
             dep_task = next((t for t in all_tasks_in_tree if t.id == dep_id), None)
-            if dep_task is not None and getattr(dep_task, "user_id", None) != user_id:
-                raise ValueError(f"Dependency '{dep_id}' does not belong to user '{user_id}'")
+            if dep_task is not None:
+                dep_user_id = getattr(dep_task, "user_id", None)
+                # Only check user_id if both are not None
+                if user_id is not None and dep_user_id is not None and user_id != dep_user_id:
+                    raise ValueError(f"Dependency '{dep_id}' does not belong to user '{user_id}'")
     else:
         # Allow dependencies to any task with the same user_id
         for dep in new_dependencies:
@@ -146,7 +148,9 @@ async def validate_dependency_references(
             dep_task = await task_repository.get_task_by_id(dep_id)
             if not dep_task:
                 raise ValueError(f"Dependency reference '{dep_id}' not found for user '{user_id}'")
-            if getattr(dep_task, "user_id", None) != user_id:
+            dep_user_id = getattr(dep_task, "user_id", None)
+            # Only check user_id if both are not None
+            if user_id is not None and dep_user_id is not None and user_id != dep_user_id:
                 raise ValueError(f"Dependency '{dep_id}' does not belong to user '{user_id}'")
 
 
@@ -176,3 +180,20 @@ async def check_dependent_tasks_executing(
             if dep_id == task_id and getattr(t, "status", None) == "in_progress":
                 dependent_task_ids.append(t.id)
     return dependent_task_ids
+
+
+def are_dependencies_satisfied(task_id: str, completed_task_ids: Set[str], dependencies: List[Any]) -> bool:
+    """
+    Check if all dependencies for a task are satisfied (i.e., completed).
+    Args:
+        task_id: ID of the task being checked
+        completed_task_ids: Set of completed task IDs
+        dependencies: List of dependencies (task IDs or dicts with 'id')
+    Returns:
+        True if all dependencies are satisfied, False otherwise
+    """
+    for dep in dependencies:
+        dep_id = dep.get("id") if isinstance(dep, dict) else dep
+        if dep_id not in completed_task_ids:
+            return False
+    return True

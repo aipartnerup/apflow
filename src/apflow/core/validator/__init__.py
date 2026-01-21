@@ -1,12 +1,9 @@
 # Dependency module exports
-from .validator import (
+from .dependency_validator import (
     detect_circular_dependencies,
     validate_dependency_references,
     check_dependent_tasks_executing,
-)
-from .resolver import (
     are_dependencies_satisfied,
-    resolve_task_dependencies,
 )
 
 __all__ = [
@@ -14,7 +11,5 @@ __all__ = [
     "detect_circular_dependencies",
     "validate_dependency_references",
     "check_dependent_tasks_executing",
-    # Resolution
     "are_dependencies_satisfied",
-    "resolve_task_dependencies",
 ]
