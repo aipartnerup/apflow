@@ -864,6 +864,7 @@ Dependency results are automatically merged into task inputs:
 - Creates a reference to an existing task (no data duplication)
 - Linked tasks share results with the original
 - Useful for deduplication and sharing computation
+**Note:** If `user_id` is specified, the linked task's `user_id` must match. Linking to a task with a different `user_id` is not allowed for security and data isolation reasons.
 
 **from_archive:**
 - Creates a frozen, read-only copy of a task or tree
@@ -873,6 +874,7 @@ Dependency results are automatically merged into task inputs:
 **from_mixed:**
 - Advanced: mix links and copies in a new tree
 - Enables hybrid workflows (e.g., copy some tasks, link others)
+**Note:** When using links in a mixed tree, if `user_id` is specified, all linked tasks must have the same `user_id`. Linking to tasks with a different `user_id` is not permitted.
 
 **What Gets Copied or Linked:**
 - Task definition (name, schemas, inputs, params, etc.)

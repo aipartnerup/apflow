@@ -23,6 +23,7 @@ from apflow.core.storage.sqlalchemy.models import TaskModelType, TaskOriginType
 from apflow.logger import get_logger
 from apflow.core.config import get_task_model_class
 from sqlalchemy_session_proxy import SqlalchemySessionProxy
+from apflow.core.validator import check_tasks_user_ownership
 
 logger = get_logger(__name__)
 
@@ -649,27 +650,6 @@ class TaskCreator:
         
         return task_node
     
-    def tree_to_flat_list(self, root_node: TaskTreeNode) -> List[TaskModelType]:
-        """
-        Convert tree structure to flat list for database operations
-        
-        Args:
-            root_node: Root task node
-            
-        Returns:
-            List[TaskModelType]: Flat list of all tasks in the tree
-        """
-        tasks = [root_node.task]
-        
-        def collect_children(node: TaskTreeNode):
-            for child in node.children:
-                tasks.append(child.task)
-                collect_children(child)
-        
-        collect_children(root_node)
-        return tasks
-    
-
 
     async def _find_dependent_tasks_for_identifiers(
         self,
@@ -1211,6 +1191,9 @@ class TaskCreator:
             logger.error(f"Only a fully completed task tree can be linked, status:{task_tree_status}.")
             raise ValueError("Only a fully completed task tree can be linked. There are unfinished tasks in the tree.")
 
+        if 'user_id' in reset_kwargs and not check_tasks_user_ownership(task_tree, reset_kwargs.get('user_id')):
+            raise ValueError("Deny linking to a different user's task.")
+        
         reset_kwargs.update(self._link_reset_fields())
 
         if not _recursive:
@@ -1411,6 +1394,9 @@ class TaskCreator:
         if not _recursive:
             # Single task - determine if should link or copy
             if _link_task_ids and str(_original_task.id) in [str(id) for id in _link_task_ids]:
+                if 'user_id' in reset_kwargs and not check_tasks_user_ownership(_original_task, reset_kwargs.get('user_id')):
+                    raise ValueError("Deny linking to a different user's task.")
+        
                 reset_kwargs.update(self._link_reset_fields())
                 reset_kwargs['origin_type'] = TaskOriginType.link
             else:
@@ -1433,6 +1419,9 @@ class TaskCreator:
         
         # Build original subtree
         original_tree = await self.task_repository.build_task_tree(_original_task)
+
+        if _link_task_ids and 'user_id' in reset_kwargs and not check_tasks_user_ownership(original_tree, reset_kwargs.get('user_id')):
+            raise ValueError("Deny linking to a different user's task.")
         
         # Separate tasks into copy and link sets
         link_set = set(str(id) for id in (_link_task_ids if _link_task_ids else []))

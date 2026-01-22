@@ -1,10 +1,9 @@
 # --- Origin Type Tests (from test_task_creator_origin_types.py, deduplicated) ---
 import pytest
-from apflow.core.execution.task_manager import TaskManager
 from apflow.core.storage.sqlalchemy.models import TaskOriginType
 from apflow.core.execution.task_creator import TaskCreator
 from apflow.core.types import TaskTreeNode
-from apflow.core.storage.sqlalchemy.models import TaskModel
+from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
 from apflow.logger import get_logger
 
@@ -16,12 +15,12 @@ class TestTaskCreatorOriginTypes:
     @pytest.mark.asyncio
     async def test_from_link_fails_if_not_completed(self, sync_db_session):
         """Linking a task tree with any non-completed node raises ValueError, but works if all completed"""
-        task_manager = TaskManager(sync_db_session)
+        task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
-        root = await task_manager.task_repository.create_task(
+        root = await task_repository.create_task(
             name="Root Task", user_id="user_123", status="completed",
         )
-        child = await task_manager.task_repository.create_task(
+        child = await task_repository.create_task(
             name="Child Task", user_id="user_123", parent_id=root.id, status="completed",
         )
         
@@ -46,9 +45,9 @@ class TestTaskCreatorOriginTypes:
     @pytest.mark.asyncio
     async def test_from_link_single_task_and_overrides(self, sync_db_session):
         """Test linking a single completed task, with and without field overrides"""
-        task_manager = TaskManager(sync_db_session)
+        task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
-        original_task = await task_manager.task_repository.create_task(
+        original_task = await task_repository.create_task(
             name="Original Task", user_id="user_123", priority=2, status="completed",
         )
         sync_db_session.commit()
@@ -66,23 +65,22 @@ class TestTaskCreatorOriginTypes:
         assert linked_task.task.user_id == original_task.user_id
         # With overrides
         linked_task2 = await creator.from_link(
-            _original_task=original_task, _save=True, _recursive=False, user_id="new_user_456", priority=1
+            _original_task=original_task, _save=True, _recursive=False, priority=0
         )
-        assert linked_task2.task.user_id == "new_user_456"
-        assert linked_task2.task.priority == 1
+        assert linked_task2.task.priority == 0
 
     @pytest.mark.asyncio
     async def test_from_link_recursive_tree(self, sync_db_session):
         """Test linking entire task tree recursively, children are linked"""
-        task_manager = TaskManager(sync_db_session)
+        task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
-        root = await task_manager.task_repository.create_task(
+        root = await task_repository.create_task(
             name="Root Task", user_id="user_123", priority=1, status="completed",
         )
-        child1 = await task_manager.task_repository.create_task(
+        child1 = await task_repository.create_task(
             name="Child 1", user_id="user_123", parent_id=root.id, priority=2, status="completed",
         )
-        child2 = await task_manager.task_repository.create_task(
+        child2 = await task_repository.create_task(
             name="Child 2", user_id="user_123", parent_id=root.id, status="completed", dependencies=[{"id": child1.id, "required": True}],
         )
         root.status = child1.status = child2.status = "completed"
@@ -100,12 +98,38 @@ class TestTaskCreatorOriginTypes:
             assert child_node.task.origin_type == TaskOriginType.link
             assert child_node.task.parent_id == linked_tree.task.id
 
+
+    @pytest.mark.asyncio
+    async def test_user_id_error_from_link(self, sync_db_session):
+        """Test all tasks must have same user_id or none"""
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        root = await task_repository.create_task(
+            name="Root Task", user_id="user_123", priority=1, status="completed",
+        )
+        child1 = await task_repository.create_task(
+            name="Child 1", user_id="user_123", parent_id=root.id, priority=2, status="completed",
+        )
+        child2 = await task_repository.create_task(
+            name="Child 2", user_id="user_123", parent_id=root.id, status="completed", dependencies=[{"id": child1.id, "required": True}],
+        )
+
+        root.status = child1.status = child2.status = "completed"
+        root.has_children = True
+        sync_db_session.commit()
+        sync_db_session.refresh(root)
+        sync_db_session.refresh(child1)
+        sync_db_session.refresh(child2)
+        with pytest.raises(ValueError, match="Deny linking to a different user's task."):
+            await creator.from_link(_original_task=root, _save=True, _recursive=True, user_id="different_user")
+        
+
     @pytest.mark.asyncio
     async def test_from_copy_single_task_and_overrides(self, sync_db_session):
         """Test copying a single task, with and without field overrides"""
-        task_manager = TaskManager(sync_db_session)
+        task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
-        original_task = await task_manager.task_repository.create_task(
+        original_task = await task_repository.create_task(
             name="Original Task", user_id="user_123", priority=2, status="completed",
         )
         copied_task = await creator.from_copy(_original_task=original_task, _save=True, _recursive=False)
@@ -122,15 +146,15 @@ class TestTaskCreatorOriginTypes:
     @pytest.mark.asyncio
     async def test_from_copy_recursive_tree(self, sync_db_session):
         """Test copying entire task tree recursively, children are copied"""
-        task_manager = TaskManager(sync_db_session)
+        task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
-        root = await task_manager.task_repository.create_task(
+        root = await task_repository.create_task(
             name="Root Task", user_id="user_123", priority=1,
         )
-        child1 = await task_manager.task_repository.create_task(
+        child1 = await task_repository.create_task(
             name="Child 1", user_id="user_123", parent_id=root.id, priority=2,
         )
-        await task_manager.task_repository.create_task(
+        await task_repository.create_task(
             name="Child 2", user_id="user_123", parent_id=root.id, dependencies=[{"id": child1.id, "required": True}],
         )
         root.has_children = True
@@ -147,9 +171,9 @@ class TestTaskCreatorOriginTypes:
     @pytest.mark.asyncio
     async def test_from_archive_single_task(self, sync_db_session):
         """Test archiving a single task"""
-        task_manager = TaskManager(sync_db_session)
+        task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
-        completed_task = await task_manager.task_repository.create_task(
+        completed_task = await task_repository.create_task(
             name="Completed Task", user_id="user_123", priority=2, status="completed",
         )
         archive_task = await creator.from_archive(_original_task=completed_task, _save=True, _recursive=False)
@@ -160,12 +184,12 @@ class TestTaskCreatorOriginTypes:
     @pytest.mark.asyncio
     async def test_from_archive_recursive_tree(self, sync_db_session):
         """Test archiving entire task tree"""
-        task_manager = TaskManager(sync_db_session)
+        task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
-        root = await task_manager.task_repository.create_task(
+        root = await task_repository.create_task(
             name="Root Task", user_id="user_123", status="completed",
         )
-        await task_manager.task_repository.create_task(
+        await task_repository.create_task(
             name="Child Task", user_id="user_123", parent_id=root.id, status="completed",
         )
         root.has_children = True
@@ -180,15 +204,15 @@ class TestTaskCreatorOriginTypes:
     @pytest.mark.asyncio
     async def test_from_mixed_link_and_copy(self, sync_db_session):
         """Test mixed mode: link some, copy others"""
-        task_manager = TaskManager(sync_db_session)
+        task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
-        root = await task_manager.task_repository.create_task(
+        root = await task_repository.create_task(
             name="Root Task", user_id="user_123", priority=1,
         )
-        child1 = await task_manager.task_repository.create_task(
+        child1 = await task_repository.create_task(
             name="Child 1", user_id="user_123", parent_id=root.id, priority=2,
         )
-        await task_manager.task_repository.create_task(
+        await task_repository.create_task(
             name="Child 2", user_id="user_123", parent_id=root.id, dependencies=[{"id": child1.id, "required": True}],
         )
         root.has_children = True
@@ -207,9 +231,9 @@ class TestTaskCreatorOriginTypes:
     @pytest.mark.asyncio
     async def test_origin_type_immutability(self, sync_db_session):
         """Test that origin_type is set correctly for each operation"""
-        task_manager = TaskManager(sync_db_session)
+        task_repository = TaskRepository(sync_db_session)
         creator = TaskCreator(sync_db_session)
-        original = await task_manager.task_repository.create_task(
+        original = await task_repository.create_task(
             name="Original", user_id="user_123", status="completed",
         )
         original.status = "completed"
@@ -221,6 +245,37 @@ class TestTaskCreatorOriginTypes:
         archive = await creator.from_archive(_original_task=original, _recursive=False)
         assert archive.task.origin_type == TaskOriginType.archive
 
+
+    @pytest.mark.asyncio
+    async def test_user_id_error_from_mixed(self, sync_db_session):
+        """Test all tasks must have same user_id or none"""
+        task_repository = TaskRepository(sync_db_session)
+        creator = TaskCreator(sync_db_session)
+        root = await task_repository.create_task(
+            name="Root Task", user_id="user_123", priority=1, status="completed",
+        )
+        child1 = await task_repository.create_task(
+            name="Child 1", user_id="user_123", parent_id=root.id, priority=2, status="completed",
+        )
+        child2 = await task_repository.create_task(
+            name="Child 2", user_id="user_123", parent_id=root.id, status="completed", dependencies=[{"id": child1.id, "required": True}],
+        )
+
+        root.status = child1.status = child2.status = "completed"
+        root.has_children = True
+        sync_db_session.commit()
+        sync_db_session.refresh(root)
+        sync_db_session.refresh(child1)
+        sync_db_session.refresh(child2)
+
+        # Test recursive
+        with pytest.raises(ValueError, match="Deny linking to a different user's task."):
+            await creator.from_mixed(_original_task=root, _save=True, _recursive=True, user_id="different_user", _link_task_ids=[root.id, child1.id])
+        
+        # Test non-recursive
+        with pytest.raises(ValueError, match="Deny linking to a different user's task."):
+            await creator.from_mixed(_original_task=root, _save=True, _recursive=False, user_id="different_user", _link_task_ids=[root.id])
+       
 """
 Test TaskCreator functionality
 """
@@ -673,43 +728,6 @@ class TestTaskCreator:
         assert child_task.dependencies[0] == task_tree.task.id
     
     @pytest.mark.asyncio
-    async def test_tree_to_flat_list(self, sync_db_session):
-        """Test converting task tree to flat list"""
-        creator = TaskCreator(sync_db_session)
-        
-        tasks = [
-            {
-                "id": "root",
-                "name": "Root",
-                "user_id": "user_123",
-            },
-            {
-                "id": "child_1",
-                "name": "Child 1",
-                "user_id": "user_123",
-                "parent_id": "root",
-            },
-            {
-                "id": "child_2",
-                "name": "Child 2",
-                "user_id": "user_123",
-                "parent_id": "root",
-            }
-        ]
-        
-        task_tree = await creator.create_task_tree_from_array(tasks)
-        flat_list = creator.tree_to_flat_list(task_tree)
-        
-        assert len(flat_list) == 3
-        assert all(isinstance(task, TaskModel) for task in flat_list)
-        
-        # Verify all tasks are in the list
-        task_names = {task.name for task in flat_list}
-        assert "Root" in task_names
-        assert "Child 1" in task_names
-        assert "Child 2" in task_names
-    
-    @pytest.mark.asyncio
     async def test_parent_has_children_flag(self, sync_db_session):
         """Test that parent task's has_children flag is set correctly"""
         creator = TaskCreator(sync_db_session)
@@ -1006,8 +1024,8 @@ class TestTaskCreator:
         assert len(task_tree.children) == 2  # task_b and task_c are children of task_a
         
         # Verify dependencies are set correctly
-        task_b = next((t for t in creator.tree_to_flat_list(task_tree) if t.name == "Task B"), None)
-        task_c = next((t for t in creator.tree_to_flat_list(task_tree) if t.name == "Task C"), None)
+        task_b = next((t for t in task_tree.to_list() if t.name == "Task B"), None)
+        task_c = next((t for t in task_tree.to_list() if t.name == "Task C"), None)
         
         assert task_b is not None
         assert task_c is not None
@@ -1164,4 +1182,3 @@ class TestTaskCreator:
         # Should be caught by "Multiple root tasks found" since task_e is also a root
         with pytest.raises(ValueError, match="Multiple root tasks found"):
             await creator.create_task_tree_from_array(tasks)
-
