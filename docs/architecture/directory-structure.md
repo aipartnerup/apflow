@@ -8,46 +8,60 @@ The core framework provides task orchestration and execution specifications. All
 
 ```
 core/
-├── interfaces/     # Core interfaces (abstract contracts)
-│   └── executable_task.py  # ExecutableTask interface
-├── base/           # Base class implementations
-│   └── base_task.py  # BaseTask base class with common functionality
-├── types.py        # Core type definitions (TaskTreeNode, TaskStatus, hooks)
-├── decorators.py   # Unified decorators (Flask-style API)
-│                    # register_pre_hook, register_post_hook, extension_register
-├── config/         # Configuration registry
-│   └── registry.py  # ConfigRegistry for hooks and TaskModel
-├── execution/      # Task orchestration specifications
-│   ├── task_manager.py      # TaskManager - core orchestration engine
-│   ├── task_executor.py     # TaskExecutor - task execution interface
-│   ├── task_creator.py      # TaskCreator - task tree creation and validation
-│   ├── task_tracker.py      # TaskTracker - task execution tracking
-│   ├── executor_registry.py # ExecutorRegistry - executor registration
-│   └── streaming_callbacks.py  # Streaming support
-├── extensions/     # Extension system
-│   ├── base.py     # Extension base class
-│   ├── decorators.py  # @extension_register decorator
-│   ├── registry.py   # ExtensionRegistry
-│   ├── protocol.py   # Protocol-based design (ExecutorLike, ExecutorFactory)
-│   ├── types.py      # ExtensionCategory enum
-│   ├── hook.py       # Hook system implementation
-│   └── storage.py    # Storage extension base
-├── storage/        # Storage implementation
-│   ├── factory.py  # create_storage() function
-│   ├── sqlalchemy/ # SQLAlchemy implementation
-│   │   ├── models.py         # SQLAlchemy models
-│   │   └── task_repository.py # Task repository implementation
-│   └── dialects/   # Database dialects (DuckDB/PostgreSQL)
-│       ├── duckdb.py
-│       ├── postgres.py
-│       └── registry.py
-├── tools/          # Tool system
-│   ├── base.py     # Tool base class
-│   ├── decorators.py  # @tool_register decorator
-│   └── registry.py   # ToolRegistry
-└── utils/          # Utility functions
-    ├── logger.py   # Logging utilities
-    └── helpers.py  # Helper functions
+├── __init__.py
+├── base/
+│   └── base_task.py
+├── builders.py
+├── config/
+│   └── registry.py
+├── config_manager.py
+├── decorators.py
+├── dependency/
+├── execution/
+│   ├── errors.py
+│   ├── executor_registry.py
+│   ├── streaming_callbacks.py
+│   ├── task_creator.py
+│   ├── task_executor.py
+│   ├── task_manager.py
+│   └── task_tracker.py
+├── extensions/
+│   ├── base.py
+│   ├── decorators.py
+│   ├── executor_metadata.py
+│   ├── hook.py
+│   ├── manager.py
+│   ├── protocol.py
+│   ├── registry.py
+│   ├── storage.py
+│   └── types.py
+├── interfaces/
+│   └── executable_task.py
+├── storage/
+│   ├── context.py
+│   ├── dialects/
+│   │   ├── duckdb.py
+│   │   ├── postgres.py
+│   │   └── registry.py
+│   ├── factory.py
+│   ├── migrate.py
+│   ├── migrations/
+│   └── sqlalchemy/
+│       ├── models.py
+│       └── task_repository.py
+├── tools/
+│   ├── base.py
+│   ├── decorators.py
+│   └── registry.py
+├── types.py
+├── utils/
+│   ├── helpers.py
+│   ├── llm_key_context.py
+│   ├── llm_key_injector.py
+│   ├── logger.py
+│   └── project_detection.py
+├── validator/
+└── __pycache__/
 ```
 
 ## Extensions (`extensions/`)
