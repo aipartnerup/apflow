@@ -26,9 +26,9 @@ class DummyTask:
 def test_detect_circular_dependencies(tasks, task_id, new_deps, should_raise):
     if should_raise:
         with pytest.raises(ValueError, match="circular|Circular|infinite"):
-            dependency_validator.detect_circular_dependencies(task_id, new_deps, tasks)
+            dependency_validator.detect_circular_dependencies(all_tasks=tasks, task_id=task_id, new_dependencies=new_deps)
     else:
-        dependency_validator.detect_circular_dependencies(task_id, new_deps, tasks)
+        dependency_validator.detect_circular_dependencies(all_tasks=tasks, task_id=task_id, new_dependencies=new_deps)
 
 class DummyRepo:
     def __init__(self, tasks):

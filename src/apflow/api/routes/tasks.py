@@ -1421,7 +1421,7 @@ class TaskRoutes(BaseRouteHandler):
             # Check 3: Detect circular dependencies
             root_task = await task_repository.get_root_task(task)
             all_tasks_in_tree = await task_repository.get_all_tasks_in_tree(root_task)
-            detect_circular_dependencies(task.id, new_dependencies, all_tasks_in_tree)
+            detect_circular_dependencies(all_tasks=all_tasks_in_tree, task_id = task.id, new_dependencies=new_dependencies)
 
             # Check 4: Check if any dependent tasks are executing
             executing_dependents = await check_dependent_tasks_executing(task.id, task_repository)

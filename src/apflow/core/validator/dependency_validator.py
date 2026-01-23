@@ -7,7 +7,7 @@ including circular dependency detection and dependency reference validation.
 All dependency validation logic is centralized here for maintainability.
 """
 
-from typing import Dict, Any, List, Set, Optional
+from typing import Dict, Any, List, Set, Optional, Union
 from apflow.core.storage.sqlalchemy.models import TaskModelType
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from apflow.logger import get_logger
@@ -16,114 +16,144 @@ logger = get_logger(__name__)
 
 
 def detect_circular_dependencies(
-    task_id: str,
-    new_dependencies: List[Any],
-    all_tasks_in_tree: List[TaskModelType]
+    all_tasks: Union[List[Dict[str, Any]], List[TaskModelType]],
+    task_id: Optional[str] = None,
+    new_dependencies: Optional[List[Any]] = None,
+    detail: bool = False,
 ) -> None:
     """
-    Detect circular dependencies using DFS algorithm.
-    
-    This function builds a dependency graph including the task being updated
-    and all other tasks in the tree, then uses DFS to detect cycles.
-    
+    Detect circular dependencies in the task graph.
+
+    If task_id and new_dependencies are provided, simulate updating that task's dependencies.
+    If not, check the current graph for cycles.
+
     Args:
-        task_id: ID of the task being updated
-        new_dependencies: New dependencies list for the task
-        all_tasks_in_tree: All tasks in the same task tree
-        
+        all_tasks: All tasks in the same task tree.
+        task_id: (Optional) ID of the task being updated.
+        new_dependencies: (Optional) New dependencies list for the task being updated.
+        detail: If True, provide detailed cycle path in error message.
+
     Raises:
-        ValueError: If circular dependencies are detected
+        ValueError: If circular dependencies are detected.
     """
-    # Build dependency graph: task_id -> set of task_ids it depends on
+    dependency_graph = _build_dependency_graph(all_tasks, task_id, new_dependencies)
+    if detail:
+        _detect_circular_dependencies_detail(dependency_graph)
+    else:
+        _detect_circular_dependencies_fast(dependency_graph)
+
+
+def _build_dependency_graph(
+    all_tasks: Union[List[Dict[str, Any]], List[TaskModelType]],
+    task_id: Optional[str] = None,
+    new_dependencies: Optional[List[Any]] = None,
+) -> Dict[str, Set[str]]:
+    """
+    Build a dependency graph for all tasks.
+
+    If task_id and new_dependencies are provided, simulate updating that task's dependencies.
+    Otherwise, use the current dependencies for all tasks.
+
+    Args:
+        all_tasks: List of all tasks (dict or model).
+        task_id: (Optional) ID of the task being updated.
+        new_dependencies: (Optional) New dependencies for the task being updated.
+
+    Returns:
+        A dictionary mapping task IDs to sets of dependent task IDs.
+    """
     dependency_graph: Dict[str, Set[str]] = {}
-    task_id_to_name: Dict[str, str] = {}  # For better error messages
-    
-    # Initialize graph with all tasks in tree
-    for task in all_tasks_in_tree:
-        dependency_graph[task.id] = set()
-        task_id_to_name[task.id] = task.name
-    
-    # Add dependencies for the task being updated (using new_dependencies)
-    for dep in new_dependencies:
-        dep_id = None
-        if isinstance(dep, dict):
-            dep_id = dep.get("id")
-        elif isinstance(dep, str):
-            dep_id = dep
-        
-        if dep_id and dep_id in dependency_graph:
-            dependency_graph[task_id].add(dep_id)
-    
-    # Add dependencies for all other tasks (using their current dependencies)
-    for task in all_tasks_in_tree:
-        if task.id == task_id:
-            continue  # Already handled above
-        
-        task_deps = task.dependencies or []
-        for dep in task_deps:
-            dep_id = None
-            if isinstance(dep, dict):
-                dep_id = dep.get("id")
-            elif isinstance(dep, str):
-                dep_id = dep
-            
+    # Initialize graph nodes
+    for task in all_tasks:
+        tid = task["id"] if isinstance(task, dict) else task.id
+        dependency_graph[tid] = set()
+    # Override dependencies for the updated task if needed
+    if task_id is not None and new_dependencies is not None:
+        for dep in new_dependencies:
+            dep_id = dep.get("id") if isinstance(dep, dict) else dep
             if dep_id and dep_id in dependency_graph:
-                dependency_graph[task.id].add(dep_id)
-    
-    # DFS to detect cycles
+                dependency_graph[task_id].add(dep_id)
+    # Add dependencies for all other tasks (or all tasks if not simulating an update)
+    for task in all_tasks:
+        tid = task["id"] if isinstance(task, dict) else task.id
+        if task_id is not None and new_dependencies is not None and tid == task_id:
+            continue  # Already handled above
+        task_deps = task.get("dependencies", []) if isinstance(task, dict) else getattr(task, "dependencies", []) or []
+        for dep in task_deps:
+            dep_id = dep.get("id") if isinstance(dep, dict) else dep
+            if dep_id and dep_id in dependency_graph:
+                dependency_graph[tid].add(dep_id)
+    return dependency_graph
+
+def _detect_circular_dependencies_fast(dependency_graph: Dict[str, Set[str]]) -> None:
+    """
+    Fast cycle detection using DFS, only reports the first node involved in a cycle.
+
+    Args:
+        dependency_graph: The dependency graph to check.
+
+    Raises:
+        ValueError: If a cycle is detected.
+    """
     visited: Set[str] = set()
-    
-    def dfs(node: str, path: List[str]) -> Optional[List[str]]:
-        """
-        DFS to detect cycles.
-        
-        Args:
-            node: Current node being visited
-            path: Current path from root to this node
-            
-        Returns:
-            Cycle path if cycle detected, None otherwise
-        """
-        if node in path:
-            # Found a cycle - extract the cycle path
-            cycle_start = path.index(node)
-            cycle = path[cycle_start:] + [node]  # Complete the cycle
-            return cycle
-        
+    stack: Set[str] = set()
+
+    def dfs(node: str):
+        if node in stack:
+            raise ValueError(
+                f"Circular dependency detected involving task '{node}'. "
+                f"Tasks cannot have circular dependencies as this would cause infinite loops."
+            )
         if node in visited:
-            # Already processed this node completely, no cycle from here
+            return
+        stack.add(node)
+        for dep in dependency_graph[node]:
+            dfs(dep)
+        stack.remove(node)
+        visited.add(node)
+
+    for identifier in dependency_graph.keys():
+        if identifier not in visited:
+            dfs(identifier)
+
+def _detect_circular_dependencies_detail(dependency_graph: Dict[str, Set[str]]) -> None:
+    """
+    Detailed cycle detection using DFS, reports the full cycle path.
+
+    Args:
+        dependency_graph: The dependency graph to check.
+
+    Raises:
+        ValueError: If a cycle is detected, with the full cycle path.
+    """
+    visited: Set[str] = set()
+
+    def dfs(node: str, path: List[str]) -> Optional[List[str]]:
+        if node in path:
+            cycle_start = path.index(node)
+            cycle = path[cycle_start:] + [node]
+            return cycle
+        if node in visited:
             return None
-        
-        # Mark as visited and add to current path
         visited.add(node)
         path.append(node)
-        
-        # Visit all dependencies
-        node_deps = dependency_graph.get(node, set())
-        for dep in node_deps:
-            # Skip if dependency is not in the graph
+        for dep in dependency_graph.get(node, set()):
             if dep not in dependency_graph:
                 continue
             cycle = dfs(dep, path)
             if cycle:
                 return cycle
-        
-        # Remove from current path (backtrack)
         path.pop()
         return None
-    
-    # Check all nodes for cycles
+
     for identifier in dependency_graph.keys():
         if identifier not in visited:
             cycle_path = dfs(identifier, [])
             if cycle_path:
-                # Format cycle path with task names for better error message
-                cycle_names = [task_id_to_name.get(id, id) for id in cycle_path]
                 raise ValueError(
-                    f"Circular dependency detected: {' -> '.join(cycle_names)}. "
+                    f"Circular dependency detected: {' -> '.join(cycle_path)}. "
                     f"Tasks cannot have circular dependencies as this would cause infinite loops."
                 )
-
 
 
 async def validate_dependency_references(
