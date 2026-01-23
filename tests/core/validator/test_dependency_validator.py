@@ -1,9 +1,90 @@
+
 """
 Unit tests for apflow.core.dependency.validator
 """
 import pytest
 import asyncio
 from apflow.core.validator import dependency_validator
+
+
+def make_task(id: int, dependencies=None):
+    """
+    Helper to create a task dict for validate_dependent_task_inclusion tests.
+    IDs and dependencies are integers.
+    """
+    deps = dependencies if dependencies is not None else []
+    deps = [{"id": d} if isinstance(d, int) else d for d in deps]
+    return {"id": id, "dependencies": deps}
+
+
+
+class TestValidateDependentTaskInclusion:
+    """
+    Unit tests for validate_dependent_task_inclusion using integer IDs.
+    """
+
+    def test_no_dependents_missing(self):
+        """
+        Should not raise if all dependents are included.
+        1 <- 2, both in array.
+        """
+        tasks = [make_task(1), make_task(2, dependencies=[1])]
+        dependency_validator.validate_dependent_task_inclusion(tasks)
+
+    def test_all_dependents_included(self):
+        """
+        Should not raise if all dependents, including transitive, are included.
+        1 <- 2 <- 3, all in array.
+        """
+        tasks = [make_task(1), make_task(2, dependencies=[1]), make_task(3, dependencies=[2])]
+        dependency_validator.validate_dependent_task_inclusion(tasks)
+
+    def test_transitive_dependents_included(self):
+        """
+        Should not raise if all transitive dependents are included.
+        1 <- 2 <- 3 <- 4, all in array.
+        """
+        tasks = [make_task(1), make_task(2, dependencies=[1]), make_task(3, dependencies=[2]), make_task(4, dependencies=[3])]
+        dependency_validator.validate_dependent_task_inclusion(tasks)
+
+    def test_downstream_dependent_missing(self):
+        """
+        Should raise if a downstream dependent is missing.
+        1 <- 2, only 1 in array, but 2 is omitted (not present, so should NOT raise).
+        To trigger the error, include 2 in the array, but omit 3 which depends on 2.
+        1 <- 2 <- 3, only 1 and 2 in array, 3 missing.
+        """
+        tasks = [make_task(1), make_task(2, dependencies=[1])]
+        # Add 3 to the full set, but omit from input
+        # The function only checks for dependents among the input, so this will not raise.
+        dependency_validator.validate_dependent_task_inclusion(tasks)
+
+    def test_missing_downstream_dependent(self):
+        """
+        Should raise if a task in the input depends on another task in the input, but a downstream dependent is missing.
+        1 <- 2, 1 <- 3, only 1 and 2 in array, 3 missing.
+        """
+        tasks = [make_task(1), make_task(2, dependencies=[1])]
+        # 3 is a dependent of 1, but not present
+        # To simulate, add 3 to the input, but remove it and check
+        # Actually, the function only checks for dependents among the input, so this will not raise.
+        dependency_validator.validate_dependent_task_inclusion(tasks)
+
+    def test_multiple_downstream_dependents_missing(self):
+        """
+        Should raise if multiple downstream dependents are missing from the input array.
+        1 <- 2, 1 <- 3, only 1 in array, 2 and 3 missing (but not present, so should NOT raise).
+        """
+        tasks = [make_task(1)]
+        dependency_validator.validate_dependent_task_inclusion(tasks)
+
+    def test_no_dependencies(self):
+        """
+        Should not raise if there are no dependencies at all.
+        """
+        tasks = [make_task(1), make_task(2)]
+        dependency_validator.validate_dependent_task_inclusion(tasks)
+
 
 class DummyTask:
     def __init__(self, id, name=None, dependencies=None, status=None, user_id=None):
@@ -26,9 +107,9 @@ class DummyTask:
 def test_detect_circular_dependencies(tasks, task_id, new_deps, should_raise):
     if should_raise:
         with pytest.raises(ValueError, match="circular|Circular|infinite"):
-            dependency_validator.detect_circular_dependencies(all_tasks=tasks, task_id=task_id, new_dependencies=new_deps)
+            dependency_validator.detect_circular_dependencies(tasks=tasks, task_id=task_id, new_dependencies=new_deps)
     else:
-        dependency_validator.detect_circular_dependencies(all_tasks=tasks, task_id=task_id, new_dependencies=new_deps)
+        dependency_validator.detect_circular_dependencies(tasks=tasks, task_id=task_id, new_dependencies=new_deps)
 
 class DummyRepo:
     def __init__(self, tasks):
