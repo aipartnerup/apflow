@@ -259,3 +259,57 @@ apflow users stat
 ```
 
 For more details on how to develop these extensions, see the [Extending Guide](../development/extending.md#creating-cli-extensions).
+
+## Extending and Overriding CLI Commands
+
+apflow allows you to register new CLI command groups or single commands, extend existing groups, or override built-in commands and groups. This is done using the `@cli_register` decorator, with the `group` and `override=True` parameters.
+
+### Register a New Command or Group
+```python
+from apflow.cli.decorators import cli_register
+
+@cli_register(name="my-group", help="My command group")
+class MyGroup:
+    def foo(self):
+        print("foo")
+    def bar(self):
+        print("bar")
+```
+
+### Add a Subcommand to an Existing Group
+```python
+@cli_register(group="my-group", name="baz", help="Baz command")
+def baz():
+    print("baz")
+```
+
+### Override an Existing Command or Group
+
+```python
+@cli_register(name="my-group", override=True)
+class NewMyGroup:
+    ...
+
+@cli_register(group="my-group", name="foo", override=True)
+def new_foo():
+    print("new foo")
+```
+
+**Override a built-in command (e.g., 'run'):**
+```python
+from apflow.cli.decorators import cli_register
+
+@cli_register(name="run", override=True, help="Override built-in run command")
+def my_run():
+    print("This is my custom run command!")
+```
+Now, running `apflow run` will execute your custom logic instead of the built-in command.
+
+### Core Extension Override
+
+apflow also supports custom extensions for executors, hooks, storage backends, and more. You can register your own or override built-in extensions by passing `override=True` when registering.
+
+**Best Practices:**
+- Use `override=True` only when you want to replace an existing command or extension.
+- Keep extension logic simple and well-documented.
+- Test your extensions thoroughly.

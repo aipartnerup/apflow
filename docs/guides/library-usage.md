@@ -406,6 +406,64 @@ This means your custom middleware runs **after** the default middleware, so it c
 5. **Test middleware** thoroughly as it affects all requests
 6. **Use type hints** for better code clarity
 
+## Extending and Overriding CLI Commands and Extensions
+
+apflow supports advanced extensibility for both CLI commands and core extensions. You can add your own commands, extend existing groups, or override built-in commands and extensions using simple decorators and parameters.
+
+### CLI Command Extension and Override
+
+
+You can register new CLI command groups or single commands using the `@cli_register` decorator. To extend an existing group, use the `group` parameter. To override an existing command or group, set `override=True`.
+
+**Register a new command group:**
+```python
+from apflow.cli.decorators import cli_register
+
+@cli_register(name="my-group", help="My command group")
+class MyGroup:
+    def foo(self):
+        print("foo")
+    def bar(self):
+        print("bar")
+```
+
+**Add a subcommand to an existing group:**
+```python
+@cli_register(group="my-group", name="baz", help="Baz command")
+def baz():
+    print("baz")
+```
+
+**Override an existing command or group:**
+```python
+@cli_register(name="my-group", override=True)
+class NewMyGroup:
+    ...
+
+@cli_register(group="my-group", name="foo", override=True)
+def new_foo():
+    print("new foo")
+```
+
+**Override a built-in command (e.g., 'run'):**
+```python
+from apflow.cli.decorators import cli_register
+
+@cli_register(name="run", override=True, help="Override built-in run command")
+def my_run():
+    print("This is my custom run command!")
+```
+Now, running `apflow run` will execute your custom logic instead of the built-in command.
+
+### Core Extension Override
+
+apflow also supports custom extensions for executors, hooks, storage backends, and more. You can register your own or override built-in extensions by passing `override=True` when registering.
+
+**Best Practices:**
+- Use `override=True` only when you want to replace an existing command or extension.
+- Keep extension logic simple and well-documented.
+- Test your extensions thoroughly.
+
 ## Quick Reference: What main.py Does
 
 For reference, here's what `apflow.api.main.main()` and `create_runnable_app()` do:

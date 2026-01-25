@@ -407,7 +407,7 @@ Apache-2.0
 
 ## 🔗 Links
 
-- **Documentation**: [docs/index.md](docs/index.md) - Complete documentation
+- **Documentation**: [docs/index.md](docs/README.md) - Complete documentation
 - **Website**: [aipartnerup.com](https://aipartnerup.com)
 - **GitHub**: [aipartnerup/apflow](https://github.com/aipartnerup/apflow)
 - **PyPI**: [apflow](https://pypi.org/project/apflow/)
