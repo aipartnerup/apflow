@@ -1,8 +1,9 @@
-"""
-REST API Executor for executing HTTP requests
 
-This executor allows tasks to make HTTP requests to external APIs,
-webhooks, and HTTP-based services.
+"""
+REST API Executor for calling REST API endpoints.
+
+This executor is designed to make HTTP requests to third-party REST API services, webhooks, and HTTP-based endpoints.
+It supports authentication, custom headers, query parameters, and request bodies, making it suitable for integrating with external APIs such as SaaS platforms, cloud services, or any HTTP-based API provider.
 """
 
 import json
@@ -19,11 +20,10 @@ logger = get_logger(__name__)
 @executor_register()
 class RestExecutor(BaseTask):
     """
-    Executor for executing HTTP/REST API requests
-    
-    Supports GET, POST, PUT, DELETE, PATCH methods with authentication,
-    custom headers, query parameters, and request bodies.
-    
+    Executor for calling REST API endpoints, typically provided by third-party services.
+    Supports GET, POST, PUT, DELETE, PATCH methods with authentication, custom headers, query parameters, and request bodies.
+    This is ideal for integrating with external APIs, SaaS platforms, cloud services, or any HTTP-based API provider.
+
     Example usage in task schemas:
     {
         "schemas": {

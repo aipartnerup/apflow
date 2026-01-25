@@ -180,27 +180,30 @@ def _extract_keywords_from_requirement(requirement: str) -> list:
         'file', 'read', 'write', 'download', 'upload', 'parse',
         'parallel', 'sequential', 'dependency', 'wait', 'after', 'before',
         'data', 'process', 'analyze', 'filter', 'aggregate',
-        'workflow', 'pipeline', 'tree', 'hierarchy', 'parent', 'child'
+        'workflow', 'pipeline', 'tree', 'hierarchy', 'parent', 'child',
+        # Web scraping and content extraction related
+        'scrape', 'scraping', 'website', 'webpage', 'web page', 'content', 'metadata', 'main text', 'extract', 'information extraction', 'site', 'analyze website', 'web analysis', 'web content', 'site content', 'web data', 'web info', 'web information'
     ]
-    
+
     requirement_lower = requirement.lower()
     found_keywords = []
-    
+
     for keyword in task_keywords:
         if keyword in requirement_lower:
             found_keywords.append(keyword)
-    
+
     # Also extract executor-related terms
     executor_terms = [
         'rest_executor', 'command_executor', 'system_info_executor',
+        'scrape_executor', 'limitedscrapewebsitetool', 'web_scraper',
         'crewai', 'batch', 'mcp', 'ssh', 'docker', 'grpc'
     ]
-    
+
     for term in executor_terms:
         if term in requirement_lower:
             found_keywords.append(term)
-    
-    return found_keywords[:10]  # Limit to top 10 keywords
+
+    return found_keywords[:12]  # Slightly increase limit for richer context
 
 
 def load_relevant_docs_for_requirement(requirement: str, max_chars_per_section: int = 2000) -> str:

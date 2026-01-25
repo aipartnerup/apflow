@@ -72,6 +72,11 @@ EXTENSION_CONFIG: dict[str, dict[str, Any]] = {
         "classes": [("McpExecutor", "mcp_executor")],
         "always_available": True,
     },
+    "scrape": {
+        "dependencies": ["bs4", "trafilatura", "requests"],  # From [scrape] extra
+        "module": "apflow.extensions.scrape",
+        "classes": [("ScrapeExecutor", "scrape_executor")],
+    },
 }
 
 

@@ -1,3 +1,35 @@
+# Example 7: Scrape Website Content and Analyze
+
+This example demonstrates how to use `scrape_executor` to extract the main content and metadata from a website, then analyze it with an LLM.
+
+```json
+[
+    {
+        "id": "task_1",
+        "name": "Scrape Website Content",
+        "schemas": {"method": "scrape_executor"},
+        "inputs": {
+            "url": "https://aipartnerup.com",
+            "max_chars": 5000,
+            "extract_metadata": true
+        }
+    },
+    {
+        "id": "task_2",
+        "name": "Analyze Scraped Content",
+        "schemas": {"method": "llm_executor"},
+        "parent_id": "task_1",
+        "dependencies": [{"id": "task_1", "required": true}],
+        "inputs": {
+            "model": "gpt-4",
+            "messages": [
+                {"role": "user", "content": "Analyze the content and provide an evaluation of what the website is about."}
+            ]
+        }
+    }
+]
+```
+
 # Task Tree Examples
 
 > **See also:**

@@ -119,10 +119,18 @@ llm = [
     "litellm>=1.0.0",
 ]
 
+tools = [
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "trafilatura>=2.0.0",
+    "brotli==1.2.0",
+    "bs4>=0.0.2",
+]
+
 # Standard installation (recommended for most use cases)
 # Includes A2A server, CLI tools, CrewAI, and LLM support
 standard = [
-    "apflow[a2a,cli,crewai,llm]",
+    "apflow[a2a,cli,crewai,llm,tools]",
 ]
 
 # Development dependencies
@@ -142,7 +150,7 @@ dev = [
 
 # Full installation (all features)
 all = [
-    "apflow[crewai,a2a,cli,postgres,llm-key-config,ssh,docker,grpc,mcp,llm]",
+    "apflow[crewai,a2a,cli,postgres,llm-key-config,ssh,docker,grpc,mcp,llm,tools]",
 ]
 
 [project.scripts]

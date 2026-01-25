@@ -1,3 +1,44 @@
+# Web Content Extraction: scrape_executor
+
+For any requirement involving extracting the main text or metadata from a website (such as analyzing, summarizing, or evaluating website content), you MUST use the `scrape_executor`.
+
+**Do NOT use `rest_executor` or `command_executor` for web content extraction.**
+
+**scrape_executor** is designed to fetch and extract the main content and metadata from a given URL, making it suitable for analytics, machine learning, or information retrieval tasks.
+
+### Example: Scrape and Analyze a Website
+
+```json
+[
+    {
+        "id": "task_1",
+        "name": "Scrape Website Content",
+        "schemas": {"method": "scrape_executor"},
+        "inputs": {
+            "url": "https://example.com",
+            "max_chars": 5000,
+            "extract_metadata": true
+        }
+    },
+    {
+        "id": "task_2",
+        "name": "Analyze Scraped Content",
+        "schemas": {"method": "llm_executor"},
+        "parent_id": "task_1",
+        "dependencies": [{"id": "task_1", "required": true}],
+        "inputs": {
+            "model": "gpt-4",
+            "messages": [
+                {"role": "user", "content": "Analyze the content and provide an evaluation."}
+            ]
+        }
+    }
+]
+```
+
+**Tip:**
+- Use `scrape_executor` for any workflow that needs to extract readable content or metadata from a website for downstream analysis.
+- Only use `rest_executor` for raw HTTP APIs, and `command_executor` for unrelated shell commands.
 # Custom Tasks Guide
 
 > **For contributors:** See [Extending apflow](../development/extending.md) for advanced extension patterns and framework internals. This guide is focused on user-level custom executor development.
