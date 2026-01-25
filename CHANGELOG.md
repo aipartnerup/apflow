@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.12.1] 2026-01-25
+
+### Added
+- Implemented dependency validation and resolution utilities with corresponding unit tests
+- Implemented user ownership validation for task linking and copying
+- Added assertions for task_tree_id in TaskCreator tests
+- Add project URLs for homepage and source in pyproject.toml
+
+### Changed
+- Standardized parameter names in dependency validation functions and enhanced tests for task inclusion validation
+- Updated circular dependency detection function signature and tests for consistency
+- Refactored dependency validation and resolution logic for clarity and maintainability
+- Remove unused imports from test files
+- Update directory structure documentation for clarity and organization
+- Simplified 'apflow serve' command usage in documentation
+
+### Fixed
+- Improved dependency cycle and edge case handling in task linking/copying
+
+
 ## [0.12.0] 2026-01-18
 
 ### Added
