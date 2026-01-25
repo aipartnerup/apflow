@@ -164,6 +164,12 @@ class MigrationManager:
         # Get applied migrations
         applied = MigrationHistoryTable.get_applied(engine)
 
+        # Build set of all applied ids and aliases
+        applied_all: Set[str] = set(applied)
+        for migration in self._migrations:
+            aliases = getattr(migration, "aliases", [])
+            applied_all.update(aliases)
+
         # Run pending migrations
         pending = [m for m in self._migrations if m.id not in applied]
 

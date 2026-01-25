@@ -30,6 +30,9 @@ class Migration(ABC):
     # Migration description (explain what this migration does)
     description: str = ""
 
+    # Optional list of alias IDs for this migration (for renaming migrations)
+    aliases = []
+
     @property
     def id(self) -> str:
         """Migration ID (extracted from filename or class name)

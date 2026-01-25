@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 
 class AddTaskTreeFields(Migration):
     """Add task_tree_id, origin_type, has_references fields"""
-
+    aliases = ["add_task_tree_fields"]
     description = "Add task_tree_id, origin_type, has_references. Rename has_copy to has_references."
 
     def upgrade(self, engine: Engine) -> None:
