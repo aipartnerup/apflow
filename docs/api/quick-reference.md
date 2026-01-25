@@ -774,10 +774,10 @@ apflow run task --task-id task_123
 
 ```bash
 # Start API server
-apflow serve start --port 8000
+apflow serve --port 8000
 
 # Start with specific host
-apflow serve start --host 0.0.0.0 --port 8000
+apflow serve --host 0.0.0.0 --port 8000
 ```
 
 ### Task Management

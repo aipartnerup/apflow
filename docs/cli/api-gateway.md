@@ -221,7 +221,7 @@ rm -rf .data/config.cli.yaml
 curl http://localhost:8000/health
 
 # If not, start it
-apflow serve start
+apflow serve
 # Or for daemon mode
 apflow daemon start --port 8000
 ```
@@ -254,7 +254,7 @@ ps aux | grep apflow
 
 # Use API server instead to avoid conflicts
 apflow config init-server
-apflow serve start
+apflow serve
 ```
 
 ### Error Recovery
@@ -401,7 +401,7 @@ apflow run batch --tasks '[...]'
 # - They share data automatically
 
 # Start API server
-apflow serve start --reload
+apflow serve --reload
 
 # In another terminal, use CLI
 apflow run batch --tasks '[...]'

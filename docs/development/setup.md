@@ -174,9 +174,9 @@ pytest tests/api/a2a/ -v
 
 ```bash
 # Method 1: Using CLI (if installed with [cli] extra)
-apflow serve start --port 8000 --reload
+apflow serve --port 8000 --reload
 # Or use shorthand:
-apflow serve start --port 8000 --reload
+apflow serve --port 8000 --reload
 # Note: 'serve --port 8000' (without 'start') also works
 
 # Method 2: Using Python module directly (recommended)

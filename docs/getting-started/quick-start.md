@@ -125,7 +125,7 @@ The API server provides an alternative way to execute tasks via HTTP. This is us
 In one terminal, start the API server:
 
 ```bash
-apflow serve start
+apflow serve
 ```
 
 The server will start on `http://localhost:8000` by default.
@@ -333,7 +333,7 @@ apflow run flow --tasks-file tasks.json
 Start the API server (if not already running):
 
 ```bash
-apflow serve start
+apflow serve
 ```
 
 Execute via API:
@@ -856,7 +856,7 @@ apflow --version
 **Solutions:**
 ```bash
 # Use a different port
-apflow serve start --port 8080
+apflow serve --port 8080
 ```
 
 # Check if port is in use

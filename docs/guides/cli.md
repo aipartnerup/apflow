@@ -123,7 +123,7 @@ apflow config gen-token --role admin --save api_auth_token
 apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}}]'
 
 # Use API server for integration testing
-apflow serve start --reload
+apflow serve --reload
 # Then test API endpoints
 ```
 
