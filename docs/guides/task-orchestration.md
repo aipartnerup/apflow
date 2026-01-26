@@ -913,3 +913,23 @@ Dependency results are automatically merged into task inputs:
 ---
 
 **Need help?** Check the [FAQ](faq.md) or [Quick Start Guide](../getting-started/quick-start.md)
+
+## Task Data Fields: inputs, params, and result
+
+To ensure clean, composable, and predictable task orchestration, apflow enforces a strict separation of concerns for task data fields:
+
+- **inputs**: Only business input data for the task. This is the data the executor will process (e.g., text to summarize, file to process, etc.). It should never include configuration, credentials, or executor-specific settings.
+- **params**: Only executor configuration and setup parameters (e.g., API keys, model names, connection info). These are used to initialize the executor and are not passed as business data.
+- **result**: Only the pure business output of the task. This is the value that downstream tasks will consume as their `inputs`. The `result` should not include logs, token usage, internal metadata, or any executor-specific structure—just the output relevant to the user or next task.
+
+**Why this matters:**
+This separation ensures that:
+- Task data flows are clean and composable in a task tree.
+- Executors are reusable and predictable.
+- Downstream tasks can directly use upstream results as their inputs, without worrying about mixed-in configuration or irrelevant metadata.
+
+**Best Practice:**
+- Executors should only use `params` for initialization, process `inputs` as business data, and return a clean `result`.
+- Never mix configuration into `inputs` or `result`.
+
+For detailed field definitions and examples, see the [Data Model Protocol documentation](https://flow-docs.aipartnerup.com/protocol/03-data-model/).
