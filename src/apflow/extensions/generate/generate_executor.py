@@ -369,6 +369,93 @@ class GenerateExecutor(BaseTask):
 
         return "\n".join(prompt_parts)
 
+    def _attempt_json_repair(self, response: str) -> Optional[str]:
+        """
+        Attempt to repair truncated or malformed JSON
+
+        This method tries to fix common issues with LLM-generated JSON:
+        1. Truncated responses (incomplete objects/arrays)
+        2. Missing closing brackets
+        3. Trailing commas
+
+        Args:
+            response: Potentially malformed JSON string
+
+        Returns:
+            Repaired JSON string, or None if repair failed
+        """
+        try:
+            # Strategy: Parse incrementally and keep only complete objects
+            repaired = response.strip()
+
+            # If it starts with '[', we expect a JSON array
+            if repaired.startswith("["):
+                # Try to extract complete objects from the array
+                # Find all complete objects (those with matching braces)
+                complete_objects = []
+                depth = 0
+                in_string = False
+                escape_next = False
+                current_obj_start = None
+
+                for i, char in enumerate(repaired):
+                    if escape_next:
+                        escape_next = False
+                        continue
+
+                    if char == "\\":
+                        escape_next = True
+                        continue
+
+                    if char == '"' and not escape_next:
+                        in_string = not in_string
+                        continue
+
+                    if in_string:
+                        continue
+
+                    if char == "{":
+                        if depth == 0:
+                            current_obj_start = i
+                        depth += 1
+                    elif char == "}":
+                        depth -= 1
+                        if depth == 0 and current_obj_start is not None:
+                            # We have a complete object
+                            obj_str = repaired[current_obj_start : i + 1]
+                            try:
+                                json.loads(obj_str)
+                                complete_objects.append(obj_str)
+                            except json.JSONDecodeError:
+                                # Skip malformed objects
+                                pass
+                            current_obj_start = None
+
+                if complete_objects:
+                    # Build a valid JSON array from complete objects
+                    repaired = "[" + ", ".join(complete_objects) + "]"
+                    json.loads(repaired)  # Validate
+                    return repaired
+
+            # Fallback: Try simple bracket matching
+            open_braces = response.count("{")
+            close_braces = response.count("}")
+            open_brackets = response.count("[")
+            close_brackets = response.count("]")
+
+            repaired = response
+            if close_braces < open_braces:
+                repaired += "}" * (open_braces - close_braces)
+            if close_brackets < open_brackets:
+                repaired += "]" * (open_brackets - close_brackets)
+
+            json.loads(repaired)
+            return repaired
+
+        except Exception as e:
+            logger.debug(f"JSON repair attempt failed: {e}")
+            return None
+
     def _parse_llm_response(self, response: str) -> List[Dict[str, Any]]:
         """
         Parse LLM JSON response
@@ -399,9 +486,22 @@ class GenerateExecutor(BaseTask):
         try:
             tasks = json.loads(response)
         except json.JSONDecodeError as e:
-            raise ValueError(
-                f"Failed to parse JSON from LLM response: {e}. Response: {response[:500]}"
-            )
+            # Try to repair truncated JSON by attempting to parse partial content
+            repaired_response = self._attempt_json_repair(response)
+            if repaired_response:
+                try:
+                    tasks = json.loads(repaired_response)
+                    logger.warning(
+                        f"Repaired truncated JSON response. Original error: {e}"
+                    )
+                except json.JSONDecodeError:
+                    raise ValueError(
+                        f"Failed to parse JSON from LLM response: {e}. Response: {response[:500]}"
+                    )
+            else:
+                raise ValueError(
+                    f"Failed to parse JSON from LLM response: {e}. Response: {response[:500]}"
+                )
 
         # Validate it's a list
         if not isinstance(tasks, list):

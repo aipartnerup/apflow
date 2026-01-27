@@ -255,8 +255,8 @@ def load_extension_by_name(extension_name: str) -> None:
         module = __import__(module_path, fromlist=[cls[0] for cls in classes])
         logger.debug(f"Loaded extension '{extension_name}', module: {module.__name__}")
         
-        # If module was already imported but executors not registered, manually register them
-        if _loaded_extensions.get(extension_name) and not all_registered:
+        # If executors not registered (e.g., registry was cleared in tests), manually register them
+        if not all_registered:
             from apflow.core.extensions.decorators import _register_extension
             from apflow.core.extensions.types import ExtensionCategory
             for class_name, executor_id in classes:

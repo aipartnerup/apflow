@@ -25,7 +25,7 @@ classifiers = [
 
 # Core dependencies (pure orchestration framework - NO CrewAI)
 dependencies = [
-    "pydantic>=2.0.0",
+    "pydantic[email]>=2.0.0",
     "pydantic-settings>=2.0.0",
     # Default storage support (embedded DuckDB)
     "sqlalchemy>=2.0.0",

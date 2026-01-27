@@ -50,6 +50,56 @@ class TestGenerateExecutor:
         with pytest.raises(ValueError, match="Failed to parse JSON"):
             executor._parse_llm_response("invalid json")
     
+    def test_parse_llm_response_truncated_json(self):
+        """Test parsing truncated JSON with auto-repair"""
+        executor = GenerateExecutor()
+        # Simulate truncated JSON like in the error log
+        truncated_response = """[
+    {
+        "id": "de7dc7ef-2b6d-4b9a-9bc7-4b88e3896619",
+        "name": "Scrape Website Content",
+        "user_id": "demo_user_91c0194805d17ad1",
+        "schemas": {
+            "method": "scrape_executor"
+        },
+        "inputs": {
+            "url": "https://aipartnerup.com",
+            "max_chars": 5000,
+            "extract_metadata": true
+        },
+        "priority": 1
+    },
+    {
+        "id": "ecec2f09-9f3a-47c7-906f-6cf623e561a3",
+        "name": "Analyze Scraped Content"
+"""
+        # Should successfully parse and return only the complete task
+        tasks = executor._parse_llm_response(truncated_response)
+        assert isinstance(tasks, list)
+        assert len(tasks) == 1  # Only the first complete task
+        assert tasks[0]["name"] == "Scrape Website Content"
+    
+    def test_attempt_json_repair_truncated(self):
+        """Test JSON repair for truncated response"""
+        executor = GenerateExecutor()
+        truncated = '[{"name": "task1"}, {"name": "task2"'
+        repaired = executor._attempt_json_repair(truncated)
+        assert repaired is not None
+        parsed = json.loads(repaired)
+        assert isinstance(parsed, list)
+        assert len(parsed) == 1  # Second task is incomplete, only first is valid
+    
+    def test_attempt_json_repair_missing_closing_brackets(self):
+        """Test JSON repair for missing closing brackets"""
+        executor = GenerateExecutor()
+        incomplete = '[{"name": "task1", "inputs": {"key": "value"}'
+        repaired = executor._attempt_json_repair(incomplete)
+        assert repaired is not None
+        parsed = json.loads(repaired)
+        assert isinstance(parsed, list)
+        assert len(parsed) == 1
+        assert parsed[0]["name"] == "task1"
+    
     def test_validate_tasks_array_empty(self):
         """Test validation of empty array"""
         executor = GenerateExecutor()
