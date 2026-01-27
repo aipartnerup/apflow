@@ -67,10 +67,10 @@ logger = get_logger(__name__)
 class ApFlowApiExecutor(BaseTask):
     """
     Executor for calling other apflow API instances
-    
+
     Supports all task management methods (tasks.execute, tasks.create, tasks.get, etc.)
     with authentication, streaming, and result polling.
-    
+
     Example usage in task schemas:
     {
         "schemas": {
@@ -85,7 +85,7 @@ class ApFlowApiExecutor(BaseTask):
         }
     }
     """
-    
+
     id = "apflow_api_executor"
     name = "apflow API Executor"
     description = "Call other apflow API instances for distributed execution"
@@ -93,21 +93,21 @@ class ApFlowApiExecutor(BaseTask):
     examples = [
         "Call remote apflow instance",
         "Distributed task execution",
-        "Service orchestration across instances"
+        "Service orchestration across instances",
     ]
-    
+
     # Cancellation support: Can be cancelled by stopping HTTP request
     cancelable: bool = True
-    
+
     @property
     def type(self) -> str:
         """Extension type identifier for categorization"""
         return "apflow"
-    
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute an apflow API call
-        
+
         Args:
             inputs: Dictionary containing:
                 - base_url: apflow API base URL (e.g., "http://localhost:8000") (required)
@@ -119,18 +119,18 @@ class ApFlowApiExecutor(BaseTask):
                 - poll_interval: Polling interval in seconds when waiting for completion (default: 1.0)
                 - timeout: Total timeout in seconds (default: 300.0)
                 - headers: Additional HTTP headers dict (optional)
-        
+
         Returns:
             Dictionary with API response data
         """
         base_url = inputs.get("base_url")
         if not base_url:
             raise ValueError("base_url is required in inputs")
-        
+
         method = inputs.get("method")
         if not method:
             raise ValueError("method is required in inputs")
-        
+
         params = inputs.get("params", {})
         auth_token = inputs.get("auth_token")
         inputs.get("use_streaming", False)
@@ -138,29 +138,26 @@ class ApFlowApiExecutor(BaseTask):
         poll_interval = inputs.get("poll_interval", 1.0)
         timeout = inputs.get("timeout", 300.0)
         headers = inputs.get("headers", {})
-        
+
         # Prepare headers
-        request_headers = {
-            "Content-Type": "application/json",
-            **headers
-        }
-        
+        request_headers = {"Content-Type": "application/json", **headers}
+
         if auth_token:
             request_headers["Authorization"] = f"Bearer {auth_token}"
-        
+
         # Prepare JSON-RPC request
         jsonrpc_request = {
             "jsonrpc": "2.0",
             "method": method,
             "params": params,
-            "id": f"apflow_executor_{asyncio.get_event_loop().time()}"
+            "id": f"apflow_executor_{asyncio.get_event_loop().time()}",
         }
-        
+
         # Construct API endpoint URL
         api_url = f"{base_url.rstrip('/')}/tasks"
-        
+
         logger.info(f"Calling apflow API {method} on {base_url}")
-        
+
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 # Check for cancellation before making request
@@ -170,16 +167,12 @@ class ApFlowApiExecutor(BaseTask):
                         "success": False,
                         "error": "Call was cancelled",
                         "base_url": base_url,
-                        "method": method
+                        "method": method,
                     }
-                
+
                 # Make JSON-RPC request
-                response = await client.post(
-                    api_url,
-                    json=jsonrpc_request,
-                    headers=request_headers
-                )
-                
+                response = await client.post(api_url, json=jsonrpc_request, headers=request_headers)
+
                 # Check for cancellation after request
                 if self.cancellation_checker and self.cancellation_checker():
                     logger.info("apflow API call cancelled after request")
@@ -188,9 +181,9 @@ class ApFlowApiExecutor(BaseTask):
                         "error": "Call was cancelled",
                         "base_url": base_url,
                         "method": method,
-                        "status_code": response.status_code
+                        "status_code": response.status_code,
                     }
-                
+
                 # Parse response
                 if response.status_code != 200:
                     logger.error(
@@ -202,11 +195,11 @@ class ApFlowApiExecutor(BaseTask):
                         "status_code": response.status_code,
                         "response": response.text,
                         "base_url": base_url,
-                        "method": method
+                        "method": method,
                     }
-                
+
                 json_response = response.json()
-                
+
                 # Check for JSON-RPC error
                 if "error" in json_response:
                     error = json_response["error"]
@@ -217,11 +210,11 @@ class ApFlowApiExecutor(BaseTask):
                         "error_code": error.get("code"),
                         "error_data": error.get("data"),
                         "base_url": base_url,
-                        "method": method
+                        "method": method,
                     }
-                
+
                 result_data = json_response.get("result", {})
-                
+
                 # Handle tasks.execute with wait_for_completion
                 if method == "tasks.execute" and wait_for_completion:
                     task_id = result_data.get("task_id") or result_data.get("root_task_id")
@@ -233,24 +226,24 @@ class ApFlowApiExecutor(BaseTask):
                             auth_token=auth_token,
                             poll_interval=poll_interval,
                             timeout=timeout,
-                            headers=headers
+                            headers=headers,
                         )
                         return final_result
-                
+
                 return {
                     "success": True,
                     "result": result_data,
                     "base_url": base_url,
-                    "method": method
+                    "method": method,
                 }
-                
+
         except httpx.TimeoutException:
             logger.error(f"apflow API call timeout after {timeout} seconds: {base_url}")
             return {
                 "success": False,
                 "error": f"Request timeout after {timeout} seconds",
                 "base_url": base_url,
-                "method": method
+                "method": method,
             }
         except httpx.RequestError as e:
             logger.error(f"apflow API request error: {e}", exc_info=True)
@@ -258,17 +251,12 @@ class ApFlowApiExecutor(BaseTask):
                 "success": False,
                 "error": f"Request error: {str(e)}",
                 "base_url": base_url,
-                "method": method
+                "method": method,
             }
         except Exception as e:
             logger.error(f"Unexpected error calling apflow API: {e}", exc_info=True)
-            return {
-                "success": False,
-                "error": str(e),
-                "base_url": base_url,
-                "method": method
-            }
-    
+            return {"success": False, "error": str(e), "base_url": base_url, "method": method}
+
     async def _wait_for_task_completion(
         self,
         base_url: str,
@@ -276,18 +264,18 @@ class ApFlowApiExecutor(BaseTask):
         auth_token: Optional[str],
         poll_interval: float,
         timeout: float,
-        headers: Dict[str, Any]
+        headers: Dict[str, Any],
     ) -> Dict[str, Any]:
         """
         Wait for task completion by polling task status with production-grade retry logic
-        
+
         Production features:
         - Exponential backoff on failures
         - Configurable failure thresholds
         - Error classification (retryable vs non-retryable)
         - Circuit breaker pattern for persistent failures
         - Detailed logging for debugging
-        
+
         Args:
             base_url: API base URL
             task_id: Task ID to wait for
@@ -295,35 +283,32 @@ class ApFlowApiExecutor(BaseTask):
             poll_interval: Base polling interval in seconds
             timeout: Total timeout in seconds
             headers: Additional headers
-        
+
         Returns:
             Final task result
         """
-        request_headers = {
-            "Content-Type": "application/json",
-            **headers
-        }
-        
+        request_headers = {"Content-Type": "application/json", **headers}
+
         if auth_token:
             request_headers["Authorization"] = f"Bearer {auth_token}"
-        
+
         api_url = f"{base_url.rstrip('/')}/tasks"
         start_time = asyncio.get_event_loop().time()
-        
+
         # Production-grade retry configuration
         max_consecutive_failures = 10  # Circuit breaker threshold
         max_total_failures = 20  # Total failure threshold across all polls
         base_backoff = poll_interval  # Base wait time
         max_backoff = 30.0  # Maximum backoff time (30 seconds)
-        
+
         consecutive_failures = 0
         total_failures = 0
         poll_count = 0
         last_error = None
-        
+
         while True:
             poll_count += 1
-            
+
             # Check timeout
             elapsed = asyncio.get_event_loop().time() - start_time
             if elapsed > timeout:
@@ -337,9 +322,9 @@ class ApFlowApiExecutor(BaseTask):
                     "task_id": task_id,
                     "base_url": base_url,
                     "poll_count": poll_count,
-                    "total_failures": total_failures
+                    "total_failures": total_failures,
                 }
-            
+
             # Check for cancellation
             if self.cancellation_checker and self.cancellation_checker():
                 logger.info(f"Task {task_id} polling cancelled after {poll_count} polls")
@@ -348,34 +333,32 @@ class ApFlowApiExecutor(BaseTask):
                     "error": "Wait was cancelled",
                     "task_id": task_id,
                     "base_url": base_url,
-                    "poll_count": poll_count
+                    "poll_count": poll_count,
                 }
-            
+
             # Poll task status
             poll_success = False
             current_backoff = base_backoff
-            
+
             try:
                 jsonrpc_request = {
                     "jsonrpc": "2.0",
                     "method": "tasks.get",
                     "params": {"task_id": task_id},
-                    "id": f"apflow_poll_{asyncio.get_event_loop().time()}"
+                    "id": f"apflow_poll_{asyncio.get_event_loop().time()}",
                 }
-                
+
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     response = await client.post(
-                        api_url,
-                        json=jsonrpc_request,
-                        headers=request_headers
+                        api_url, json=jsonrpc_request, headers=request_headers
                     )
-                    
+
                     if response.status_code == 200:
                         json_response = response.json()
                         if "result" in json_response:
                             task = json_response["result"]
                             status = task.get("status")
-                            
+
                             # Successful poll - reset failure counters
                             if consecutive_failures > 0:
                                 logger.info(
@@ -384,7 +367,7 @@ class ApFlowApiExecutor(BaseTask):
                                 )
                             consecutive_failures = 0
                             poll_success = True
-                            
+
                             if status in ("completed", "failed", "cancelled"):
                                 logger.info(
                                     f"Task {task_id} finished with status: {status} "
@@ -397,9 +380,9 @@ class ApFlowApiExecutor(BaseTask):
                                     "task": task,
                                     "base_url": base_url,
                                     "poll_count": poll_count,
-                                    "total_failures": total_failures
+                                    "total_failures": total_failures,
                                 }
-                            
+
                             logger.debug(f"Task {task_id} status: {status}, waiting...")
                         else:
                             # Missing result field - treat as non-retryable error
@@ -432,7 +415,7 @@ class ApFlowApiExecutor(BaseTask):
                                 "base_url": base_url,
                                 "poll_count": poll_count,
                                 "total_failures": total_failures,
-                                "error_type": "client_error"
+                                "error_type": "client_error",
                             }
                     else:
                         # Server error (5xx) - retryable
@@ -443,7 +426,7 @@ class ApFlowApiExecutor(BaseTask):
                             f"Task {task_id} poll {poll_count}: {last_error} "
                             f"(consecutive: {consecutive_failures}, total: {total_failures})"
                         )
-                    
+
             except httpx.TimeoutException as e:
                 # Network timeout - retryable
                 consecutive_failures += 1
@@ -470,9 +453,9 @@ class ApFlowApiExecutor(BaseTask):
                 logger.error(
                     f"Task {task_id} poll {poll_count}: {last_error} "
                     f"(consecutive: {consecutive_failures}, total: {total_failures})",
-                    exc_info=True
+                    exc_info=True,
                 )
-            
+
             # Circuit breaker: Stop if too many consecutive failures
             if consecutive_failures >= max_consecutive_failures:
                 logger.error(
@@ -488,9 +471,9 @@ class ApFlowApiExecutor(BaseTask):
                     "poll_count": poll_count,
                     "total_failures": total_failures,
                     "consecutive_failures": consecutive_failures,
-                    "error_type": "circuit_breaker"
+                    "error_type": "circuit_breaker",
                 }
-            
+
             # Total failure threshold
             if total_failures >= max_total_failures:
                 logger.error(
@@ -504,29 +487,26 @@ class ApFlowApiExecutor(BaseTask):
                     "base_url": base_url,
                     "poll_count": poll_count,
                     "total_failures": total_failures,
-                    "error_type": "max_failures"
+                    "error_type": "max_failures",
                 }
-            
+
             # Exponential backoff: Increase wait time on failures
             if not poll_success and consecutive_failures > 0:
                 # Exponential backoff: base_backoff * 2^(failures-1), capped at max_backoff
-                current_backoff = min(
-                    base_backoff * (2 ** (consecutive_failures - 1)),
-                    max_backoff
-                )
+                current_backoff = min(base_backoff * (2 ** (consecutive_failures - 1)), max_backoff)
                 logger.debug(
                     f"Task {task_id} applying exponential backoff: {current_backoff:.2f}s "
                     f"(failures: {consecutive_failures})"
                 )
-            
+
             # Wait before next poll
             await asyncio.sleep(current_backoff)
-    
+
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo API call result"""
         method = inputs.get("method", "tasks.get")
         params = inputs.get("params", {})
-        
+
         # Generate appropriate demo response based on method
         if method == "tasks.execute":
             return {
@@ -535,10 +515,10 @@ class ApFlowApiExecutor(BaseTask):
                     "success": True,
                     "protocol": "jsonrpc",
                     "root_task_id": params.get("task_id", "demo-task-123"),
-                    "status": "completed"
+                    "status": "completed",
                 },
                 "id": "demo-request-id",
-                "_demo_sleep": 0.4  # Simulate API call and task execution time
+                "_demo_sleep": 0.4,  # Simulate API call and task execution time
             }
         elif method == "tasks.create":
             return {
@@ -549,12 +529,12 @@ class ApFlowApiExecutor(BaseTask):
                         {
                             "id": "demo-created-task-456",
                             "name": params.get("name", "demo_task"),
-                            "status": "pending"
+                            "status": "pending",
                         }
-                    ]
+                    ],
                 },
                 "id": "demo-request-id",
-                "_demo_sleep": 0.2  # Simulate API call latency
+                "_demo_sleep": 0.2,  # Simulate API call latency
             }
         elif method == "tasks.get":
             return {
@@ -563,64 +543,147 @@ class ApFlowApiExecutor(BaseTask):
                     "id": params.get("task_id", "demo-task-123"),
                     "name": "demo_task",
                     "status": "completed",
-                    "result": {"output": "Demo execution result"}
+                    "result": {"output": "Demo execution result"},
                 },
                 "id": "demo-request-id",
-                "_demo_sleep": 0.2  # Simulate API call latency
+                "_demo_sleep": 0.2,  # Simulate API call latency
             }
         else:
             return {
                 "jsonrpc": "2.0",
-                "result": {
-                    "success": True,
-                    "message": f"Demo {method} completed"
-                },
+                "result": {"success": True, "message": f"Demo {method} completed"},
                 "id": "demo-request-id",
-                "_demo_sleep": 0.2  # Simulate API call latency
+                "_demo_sleep": 0.2,  # Simulate API call latency
             }
-    
+
     def get_input_schema(self) -> Dict[str, Any]:
-        """Return input parameter schema"""
+        """
+        Get input schema for ApFlowApiExecutor execution inputs
+
+        Returns:
+            JSON Schema describing the input structure
+        """
         return {
             "type": "object",
             "properties": {
                 "base_url": {
                     "type": "string",
-                    "description": "apflow API base URL (e.g., 'http://localhost:8000')"
+                    "description": 'apflow API base URL (e.g., "http://localhost:8000") (required)',
                 },
                 "method": {
                     "type": "string",
-                    "description": "API method name (e.g., 'tasks.execute', 'tasks.create', 'tasks.get')"
+                    "description": 'API method name (e.g., "tasks.execute", "tasks.create") (required)',
                 },
                 "params": {
                     "type": "object",
-                    "description": "Method parameters as key-value pairs"
+                    "description": "Method parameters dict (required)",
+                    "additionalProperties": True,
                 },
                 "auth_token": {
                     "type": "string",
-                    "description": "JWT token for authentication (if API requires it)"
+                    "description": "Optional JWT token for authentication",
                 },
                 "use_streaming": {
                     "type": "boolean",
-                    "description": "Use streaming mode (only for tasks.execute, default: False)"
+                    "description": "Whether to use streaming mode (only for tasks.execute, default: False)",
+                    "default": False,
                 },
                 "wait_for_completion": {
                     "type": "boolean",
-                    "description": "Wait for task completion (only for tasks.execute, default: False)"
+                    "description": "Whether to wait for task completion (only for tasks.execute, default: False)",
+                    "default": False,
                 },
                 "poll_interval": {
                     "type": "number",
-                    "description": "Polling interval in seconds when waiting for completion (default: 1.0)"
+                    "description": "Polling interval in seconds when waiting for completion (default: 1.0)",
+                    "default": 1.0,
                 },
                 "timeout": {
                     "type": "number",
-                    "description": "Total timeout in seconds (default: 300.0)"
+                    "description": "Total timeout in seconds (default: 300.0)",
+                    "default": 300.0,
                 },
                 "headers": {
                     "type": "object",
-                    "description": "Additional HTTP headers as key-value pairs"
-                }
+                    "description": "Additional HTTP headers dict (optional)",
+                    "additionalProperties": {"type": "string"},
+                },
             },
-            "required": ["base_url", "method", "params"]
+            "required": ["base_url", "method", "params"],
         }
 
+    def get_output_schema(self) -> Dict[str, Any]:
+        """
+        Get output schema for ApFlowApiExecutor execution results
+
+        Returns:
+            JSON Schema describing the output structure
+        """
+        return {
+            "type": "object",
+            "properties": {
+                "success": {
+                    "type": "boolean",
+                    "description": "Whether the API call was successful",
+                },
+                "result": {
+                    "type": "object",
+                    "description": "API response result data (only present on success)",
+                },
+                "error": {
+                    "type": "string",
+                    "description": "Error message (only present on failure)",
+                },
+                "error_code": {
+                    "type": "integer",
+                    "description": "JSON-RPC error code (optional, only present for JSON-RPC errors)",
+                },
+                "error_data": {
+                    "type": "object",
+                    "description": "JSON-RPC error data (optional, only present for JSON-RPC errors)",
+                },
+                "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code (optional, only present for HTTP errors)",
+                },
+                "response": {
+                    "type": "string",
+                    "description": "Raw HTTP response text (optional, only present for HTTP errors)",
+                },
+                "base_url": {
+                    "type": "string",
+                    "description": "The apflow API base URL that was called",
+                },
+                "method": {"type": "string", "description": "The API method that was called"},
+                "task_id": {
+                    "type": "string",
+                    "description": "Task ID (only present when waiting for task completion)",
+                },
+                "status": {
+                    "type": "string",
+                    "description": "Final task status (only present when waiting for task completion)",
+                },
+                "task": {
+                    "type": "object",
+                    "description": "Complete task data (only present when waiting for task completion)",
+                },
+                "poll_count": {
+                    "type": "integer",
+                    "description": "Number of polling attempts (only present when waiting for task completion)",
+                },
+                "total_failures": {
+                    "type": "integer",
+                    "description": "Total polling failures (only present when waiting for task completion)",
+                },
+                "consecutive_failures": {
+                    "type": "integer",
+                    "description": "Consecutive polling failures (only present in circuit breaker scenarios)",
+                },
+                "error_type": {
+                    "type": "string",
+                    "enum": ["client_error", "circuit_breaker", "max_failures"],
+                    "description": "Type of polling error (only present in specific error scenarios)",
+                },
+            },
+            "required": ["success", "base_url", "method"],
+        }

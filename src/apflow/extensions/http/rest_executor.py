@@ -1,4 +1,3 @@
-
 """
 REST API Executor for calling REST API endpoints.
 
@@ -6,7 +5,6 @@ This executor is designed to make HTTP requests to third-party REST API services
 It supports authentication, custom headers, query parameters, and request bodies, making it suitable for integrating with external APIs such as SaaS platforms, cloud services, or any HTTP-based API provider.
 """
 
-import json
 import httpx
 from typing import Dict, Any, Optional
 from apflow.core.base import BaseTask
@@ -37,7 +35,7 @@ class RestExecutor(BaseTask):
         }
     }
     """
-    
+
     id = "rest_executor"
     name = "REST API Executor"
     description = "Execute HTTP/REST API requests with authentication and custom headers"
@@ -45,61 +43,54 @@ class RestExecutor(BaseTask):
     examples = [
         "Call external REST API",
         "Send webhook notification",
-        "Fetch data from HTTP service"
+        "Fetch data from HTTP service",
     ]
-    
+
     # Cancellation support: Can be cancelled by closing the HTTP client
     cancelable: bool = True
-    
+
+    def __init__(self, headers=None, auth=None, verify=True, follow_redirects=True, **kwargs):
+        super().__init__(**kwargs)
+        self.default_headers = headers or {}
+        self.default_auth = auth
+        self.default_verify = verify
+        self.default_follow_redirects = follow_redirects
+
     @property
     def type(self) -> str:
         """Extension type identifier for categorization"""
         return "http"
-    
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute an HTTP request
-        
+
         Args:
             inputs: Dictionary containing:
                 - url: Target URL (required)
                 - method: HTTP method (GET, POST, PUT, DELETE, PATCH, default: GET)
-                - headers: Optional HTTP headers dict
+                - headers: Optional HTTP headers dict (merged with default)
                 - params: Optional query parameters dict
                 - json: Optional JSON body (dict)
                 - data: Optional form data (dict)
                 - timeout: Optional timeout in seconds (default: 30.0)
-                - auth: Optional authentication dict:
-                    - {"type": "bearer", "token": "..."}
-                    - {"type": "basic", "username": "...", "password": "..."}
-                    - {"type": "apikey", "key": "...", "value": "...", "location": "header|query"}
-                - verify: Optional SSL verification (default: True)
-                - follow_redirects: Optional follow redirects (default: True)
-        
+
         Returns:
-            Dictionary with response data:
-                - status_code: HTTP status code
-                - headers: Response headers
-                - body: Response body (text)
-                - json: Response body (parsed JSON, if applicable)
-                - success: Boolean indicating if request was successful (2xx status)
-                - url: Final URL after redirects
+            Dictionary with response data (json or body).
         """
         url = inputs.get("url")
         if not url:
             raise ValidationError(f"[{self.id}] url is required in inputs")
-        
+
         method = inputs.get("method", "GET").upper()
-        headers = inputs.get("headers", {})
+        headers = {**self.default_headers, **inputs.get("headers", {})}
         params = inputs.get("params")
         json_data = inputs.get("json")
         data = inputs.get("data")
         timeout = inputs.get("timeout", 30.0)
-        verify = inputs.get("verify", True)
-        follow_redirects = inputs.get("follow_redirects", True)
-        
-        # Handle authentication
-        auth_config = inputs.get("auth")
+
+        # Handle authentication from inputs or defaults
+        auth_config = inputs.get("auth") or self.default_auth
         auth = None
         if auth_config:
             auth_type = auth_config.get("type", "").lower()
@@ -123,15 +114,15 @@ class RestExecutor(BaseTask):
                         if params is None:
                             params = {}
                         params[key] = value
-        
-        # Prepare request kwargs (verify and timeout go to AsyncClient, not request)
+
+        # Prepare request kwargs
         request_kwargs = {
             "method": method,
             "url": url,
             "headers": headers,
-            "follow_redirects": follow_redirects,
+            "follow_redirects": self.default_follow_redirects,
         }
-        
+
         if params:
             request_kwargs["params"] = params
         if json_data is not None:
@@ -140,134 +131,104 @@ class RestExecutor(BaseTask):
             request_kwargs["data"] = data
         if auth:
             request_kwargs["auth"] = auth
-        
+
         logger.info(f"Executing HTTP {method} request to {url}")
-        
-        async with httpx.AsyncClient(verify=verify, timeout=timeout) as client:
+
+        async with httpx.AsyncClient(
+            verify=inputs.get("verify", self.default_verify), timeout=timeout
+        ) as client:
             # Check for cancellation before making request
             if self.cancellation_checker and self.cancellation_checker():
-                logger.info("Request cancelled before execution")
-                return {
-                    "success": False,
-                    "error": "Request was cancelled",
-                    "url": url,
-                    "method": method
-                }
-            
-            # Exceptions (e.g., httpx.TimeoutException, httpx.ConnectError)
-            # will propagate to TaskManager
+                return {"success": False, "error": "Request was cancelled", "method": method}
+
             response = await client.request(**request_kwargs)
-            
+
             # Check for cancellation after request
             if self.cancellation_checker and self.cancellation_checker():
-                logger.info("Request cancelled after execution")
+                return {"success": False, "error": "Request was cancelled", "method": method}
+
+            if not (200 <= response.status_code < 300):
                 return {
                     "success": False,
-                    "error": "Request was cancelled",
-                    "url": url,
+                    "status_code": response.status_code,
+                    "url": str(response.url),
+                    "headers": dict(response.headers),
+                    "text": response.text,
                     "method": method,
-                    "status_code": response.status_code
                 }
-            
+
             # Try to parse JSON response
             json_response = None
             try:
                 json_response = response.json()
             except Exception:
                 pass
-            
-            result = {
-                "url": str(response.url),
-                "status_code": response.status_code,
-                "headers": dict(response.headers),
-                "body": response.text,
-                "json": json_response,
-                "success": 200 <= response.status_code < 300,
-                "method": method
-            }
-            
-            if not result["success"]:
-                logger.warning(
-                    f"HTTP request returned non-success status {response.status_code}: {url}"
-                )
-            
-            return result
-    
+
+            if json_response is not None:
+                return {
+                    "success": True,
+                    "status_code": response.status_code,
+                    "url": str(response.url),
+                    "headers": dict(response.headers),
+                    "json": json_response,
+                    "method": method,
+                }
+            else:
+                return {
+                    "success": True,
+                    "status_code": response.status_code,
+                    "url": str(response.url),
+                    "headers": dict(response.headers),
+                    "text": response.text,
+                    "method": method,
+                }
+
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo HTTP response data"""
-        url = inputs.get("url", "https://api.example.com/demo")
         method = inputs.get("method", "GET").upper()
-        
+
         # Generate appropriate demo response based on method
         if method == "GET":
             demo_json = {
                 "status": "success",
-                "data": {
-                    "id": "demo-123",
-                    "name": "Demo Resource",
-                    "value": 42
-                }
+                "data": {"id": "demo-123", "name": "Demo Resource", "value": 42},
             }
         elif method == "POST":
             demo_json = {
                 "status": "created",
                 "id": "new-resource-456",
-                "message": "Resource created successfully"
+                "message": "Resource created successfully",
             }
         else:
-            demo_json = {
-                "status": "success",
-                "message": f"{method} operation completed"
-            }
-        
+            demo_json = {"status": "success", "message": f"{method} operation completed"}
+
         return {
-            "url": url,
-            "status_code": 200 if method in ["GET", "POST", "PUT", "PATCH"] else 204,
-            "headers": {
-                "Content-Type": "application/json",
-                "X-Demo": "true"
-            },
-            "body": json.dumps(demo_json),
-            "json": demo_json,
             "success": True,
+            "status_code": 200,
+            "url": inputs.get("url", "https://api.example.com/demo"),
+            "headers": {"Content-Type": "application/json"},
+            "json": demo_json,
             "method": method,
-            "_demo_sleep": 0.3  # Simulate HTTP request latency (network round-trip)
         }
-    
+
     def get_input_schema(self) -> Dict[str, Any]:
         """Return input parameter schema"""
         return {
             "type": "object",
             "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "Target URL for the HTTP request"
-                },
+                "url": {"type": "string", "description": "Target URL for the HTTP request"},
                 "method": {
                     "type": "string",
                     "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
-                    "description": "HTTP method (default: GET)"
+                    "description": "HTTP method (default: GET)",
                 },
                 "headers": {
                     "type": "object",
-                    "description": "HTTP headers as key-value pairs"
+                    "description": "Additional HTTP headers as key-value pairs (merged with defaults)",
                 },
-                "params": {
-                    "type": "object",
-                    "description": "Query parameters as key-value pairs"
-                },
-                "json": {
-                    "type": "object",
-                    "description": "JSON request body"
-                },
-                "data": {
-                    "type": "object",
-                    "description": "Form data as key-value pairs"
-                },
-                "timeout": {
-                    "type": "number",
-                    "description": "Request timeout in seconds (default: 30.0)"
-                },
+                "params": {"type": "object", "description": "Query parameters as key-value pairs"},
+                "json": {"type": "object", "description": "JSON request body"},
+                "data": {"type": "object", "description": "Form data as key-value pairs"},
                 "auth": {
                     "type": "object",
                     "description": "Authentication configuration",
@@ -275,44 +236,54 @@ class RestExecutor(BaseTask):
                         "type": {
                             "type": "string",
                             "enum": ["bearer", "basic", "apikey"],
-                            "description": "Authentication type"
+                            "description": "Authentication type",
                         },
                         "token": {
                             "type": "string",
-                            "description": "Bearer token (for bearer auth)"
+                            "description": "Bearer token (for bearer auth)",
                         },
-                        "username": {
-                            "type": "string",
-                            "description": "Username (for basic auth)"
-                        },
-                        "password": {
-                            "type": "string",
-                            "description": "Password (for basic auth)"
-                        },
-                        "key": {
-                            "type": "string",
-                            "description": "API key name (for apikey auth)"
-                        },
+                        "username": {"type": "string", "description": "Username (for basic auth)"},
+                        "password": {"type": "string", "description": "Password (for basic auth)"},
+                        "key": {"type": "string", "description": "API key name (for apikey auth)"},
                         "value": {
                             "type": "string",
-                            "description": "API key value (for apikey auth)"
+                            "description": "API key value (for apikey auth)",
                         },
                         "location": {
                             "type": "string",
                             "enum": ["header", "query"],
-                            "description": "API key location (for apikey auth, default: header)"
-                        }
-                    }
+                            "description": "Where to place the API key (default: header)",
+                        },
+                    },
+                    "required": ["type"],
+                },
+                "timeout": {
+                    "type": "number",
+                    "description": "Request timeout in seconds (default: 30.0)",
                 },
                 "verify": {
                     "type": "boolean",
-                    "description": "SSL certificate verification (default: True)"
+                    "description": "Whether to verify SSL certificates (default: true)",
                 },
-                "follow_redirects": {
-                    "type": "boolean",
-                    "description": "Follow HTTP redirects (default: True)"
-                }
             },
-            "required": ["url"]
+            "required": ["url"],
         }
 
+    def get_output_schema(self) -> Dict[str, Any]:
+        """
+        Return the output result schema for this executor.
+        """
+        return {
+            "type": "object",
+            "properties": {
+                "success": {"type": "boolean", "description": "Whether the request was successful"},
+                "status_code": {"type": "integer", "description": "HTTP status code"},
+                "url": {"type": "string", "description": "Final URL after redirects"},
+                "headers": {"type": "object", "description": "Response headers"},
+                "method": {"type": "string", "description": "HTTP method used"},
+                "json": {"type": "object", "description": "JSON response body (if applicable)"},
+                "text": {"type": "string", "description": "Text response body (if applicable)"},
+                "error": {"type": "string", "description": "Error message (if applicable)"},
+            },
+            "required": ["success", "method"],
+        }

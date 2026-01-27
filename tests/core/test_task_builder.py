@@ -18,6 +18,20 @@ class _DummyExecutor(BaseTask):
     def type(self) -> str:
         return "test"
 
+    def get_input_schema(self):
+        return {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": True,
+        }
+
+    def get_output_schema(self):
+        return {
+            "type": "object",
+            "properties": {"echo": {"type": "object"}},
+            "required": ["echo"],
+        }
+
     async def execute(self, inputs):
         return {"echo": inputs}
 

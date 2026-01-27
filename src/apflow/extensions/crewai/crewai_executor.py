@@ -84,6 +84,9 @@ class CrewaiExecutor(BaseTask):
         self.is_sub_crew = is_sub_crew
         self.llm: Optional[str] = None
 
+        # Store token usage separately from result
+        self._last_token_usage: Optional[Dict[str, Any]] = None
+
         # Get model from kwargs if provided (from schemas or params)
         model = kwargs.get("model")
         if model:
@@ -165,6 +168,7 @@ class CrewaiExecutor(BaseTask):
                         resolved = resolve_tool(tool)
                         # Check if tool is CrewAI compatible
                         from apflow.core.tools import BaseTool as ApflowBaseTool
+
                         if isinstance(resolved, ApflowBaseTool):
                             if not resolved.is_crewai_compatible():
                                 logger.warning(
@@ -277,6 +281,41 @@ class CrewaiExecutor(BaseTask):
         # Default implementation
         return {}
 
+    def get_output_schema(self) -> Dict[str, Any]:
+        """
+        Get output result schema (JSON Schema format)
+
+        Returns:
+            Dictionary containing output result metadata
+        """
+        return {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string",
+                    "enum": ["success", "failed", "cancelled"],
+                    "description": "Execution status",
+                },
+                "result": {"description": "Execution result (processed crew output)"},
+                "error": {
+                    "type": "string",
+                    "description": "Error message (only present on failure)",
+                },
+                "token_usage": {
+                    "type": "object",
+                    "description": "Token usage statistics from LLM calls",
+                    "properties": {
+                        "total_tokens": {"type": "integer"},
+                        "prompt_tokens": {"type": "integer"},
+                        "completion_tokens": {"type": "integer"},
+                        "cached_prompt_tokens": {"type": "integer"},
+                        "successful_requests": {"type": "integer"},
+                    },
+                },
+            },
+            "required": ["status"],
+        }
+
     def _check_cancellation(self) -> bool:
         """
         Check if task has been cancelled
@@ -372,41 +411,43 @@ class CrewaiExecutor(BaseTask):
         self, processed_result: Any, token_usage: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
-        Build success result dictionary with token usage
+        Build success result dictionary including token_usage
 
         Args:
             processed_result: Processed execution result
-            token_usage: Token usage information if available
+            token_usage: Token usage information
 
         Returns:
-            Success result dictionary
+            Success result dictionary with business result and token_usage
         """
-        success_result = {"status": "success", "result": processed_result}
+        # Store token_usage separately for TaskManager access
+        self._last_token_usage = token_usage
 
+        result = {"status": "success", "result": processed_result}
         if token_usage:
-            success_result["token_usage"] = token_usage
-
-        return success_result
+            result["token_usage"] = token_usage
+        return result
 
     def _build_error_result(
         self, error: Exception, token_usage: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """
-        Build error result dictionary with token usage
+        Build error result dictionary including token_usage
 
         Args:
             error: Exception that occurred
-            token_usage: Token usage information if available
+            token_usage: Token usage information
 
         Returns:
-            Error result dictionary
+            Error result dictionary with error info and token_usage
         """
-        error_result = {"status": "failed", "error": str(error), "result": None}
+        # Store token_usage separately for TaskManager access
+        self._last_token_usage = token_usage
 
+        result = {"status": "failed", "error": str(error), "result": None}
         if token_usage:
-            error_result["token_usage"] = token_usage
-
-        return error_result
+            result["token_usage"] = token_usage
+        return result
 
     async def execute(self, inputs: Dict[str, Any] = {}) -> Dict[str, Any]:
         """
@@ -416,7 +457,7 @@ class CrewaiExecutor(BaseTask):
             inputs: Input parameters
 
         Returns:
-            Execution result dictionary with status, result/error, and token_usage
+            Execution result dictionary with status and result/error (token_usage handled separately)
 
         Note:
             **Cancellation Limitation**: CrewAI's `kickoff()` is a synchronous blocking call
@@ -433,11 +474,11 @@ class CrewaiExecutor(BaseTask):
         # This allows CrewAI/LiteLLM to automatically use the key
         from apflow.core.utils.llm_key_context import get_llm_key, get_llm_provider_from_header
         from apflow.core.utils.llm_key_injector import inject_llm_key, detect_provider_from_model
-        
+
         # Get user_id from task context (via self.user_id property) or fallback to inputs
         # self.user_id property automatically gets from task.user_id if task is available
         user_id = self.user_id or inputs.get("user_id")
-        
+
         # Detect provider from works configuration or header
         detected_provider = get_llm_provider_from_header()
         if not detected_provider and self.works:
@@ -448,19 +489,18 @@ class CrewaiExecutor(BaseTask):
                 if isinstance(agent_llm, str):
                     detected_provider = detect_provider_from_model(agent_llm)
                     break
-        
+
         # Get LLM key with unified priority order
         llm_key = get_llm_key(user_id=user_id, provider=detected_provider, context="auto")
         if llm_key:
             # Inject into environment variables (CrewAI/LiteLLM reads from env)
             inject_llm_key(
-                api_key=llm_key,
-                provider=detected_provider,
-                works=self.works,
-                model_name=None
+                api_key=llm_key, provider=detected_provider, works=self.works, model_name=None
             )
-            logger.debug(f"Injected LLM key for crew {self.name} (user: {user_id}, provider: {detected_provider or 'auto'})")
-        
+            logger.debug(
+                f"Injected LLM key for crew {self.name} (user: {user_id}, provider: {detected_provider or 'auto'})"
+            )
+
         token_usage = None
         token_usage = None
 

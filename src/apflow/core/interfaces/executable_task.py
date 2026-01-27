@@ -14,71 +14,71 @@ from apflow.core.extensions.types import ExtensionCategory
 class ExecutableTask(Extension, ABC):
     """
     Executable task interface - all executable units must implement this interface
-    
+
     This interface extends Extension, so all executors are registered extensions.
     Implementations include:
     - CrewaiExecutor [crewai]: LLM-based agent crews (via CrewAI) - available in extensions/crewai/
     - SystemInfoExecutor [stdio]: Safe system information queries - available in extensions/stdio/
     - CommandExecutor [stdio]: Shell command execution - available in extensions/stdio/
     - Custom tasks: Non-LLM tasks (web scraping, API calls, data processing, etc.)
-    
+
     Note: BatchCrewaiExecutor is NOT an ExecutableTask. BatchCrewaiExecutor is a container that batches multiple crews
     as an atomic operation (all crews execute, then merge results).
     """
-    
+
     @property
     def category(self) -> ExtensionCategory:
         """Extension category - always EXECUTOR for ExecutableTask"""
         return ExtensionCategory.EXECUTOR
-    
+
     @property
     @abstractmethod
     def id(self) -> str:
         """Unique identifier for this task (required by Extension)"""
         pass
-    
+
     @property
     @abstractmethod
     def name(self) -> str:
         """Display name for this task (required by Extension)"""
         pass
-    
+
     @property
     @abstractmethod
     def description(self) -> str:
         """Description of what this task does (required by Extension)"""
         pass
-    
+
     @abstractmethod
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute this task
-        
+
         Args:
             inputs: Input parameters for task execution
-            
+
         Returns:
             Execution result dictionary
         """
         pass
-    
+
     @abstractmethod
-    def get_input_schema(self) -> Dict[str, Any]:
+    def get_output_schema(self) -> Dict[str, Any]:
         """
-        Return input parameter schema (JSON Schema format)
-        
+        Return output result schema (JSON Schema format)
+
         Returns:
-            JSON Schema dictionary describing input parameters
+            JSON Schema dictionary describing output result structure
         """
         pass
-    
+
     async def cancel(self) -> Dict[str, Any]:
         """
         Cancel task execution (optional method)
-        
+
         This method is called by TaskManager when cancellation is requested.
         Executors that support cancellation should implement this method.
-        
+
         Returns:
             Dictionary with cancellation result:
             {
@@ -87,7 +87,7 @@ class ExecutableTask(Extension, ABC):
                 "partial_result": Any,  # Optional partial result if available
                 "token_usage": Dict,  # Optional token usage if available
             }
-        
+
         Note:
             - If executor doesn't implement this method, TaskManager will handle cancellation
               by checking cancellation status and stopping execution at checkpoints
@@ -98,9 +98,8 @@ class ExecutableTask(Extension, ABC):
         return {
             "status": "failed",
             "message": "Cancellation not supported by this executor",
-            "error": "Executor does not implement cancel() method"
+            "error": "Executor does not implement cancel() method",
         }
 
 
 __all__ = ["ExecutableTask"]
-

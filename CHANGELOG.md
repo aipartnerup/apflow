@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- Integration tests for schema-based task tree execution and generation, covering scrape_executor + llm_executor, scrape_executor + crewai_executor, and generate_executor flows (tests/integration/test_schema_based_execution.py).
+- Improved demo mode test coverage, including custom demo results, sleep scaling, and fallback logic (tests/core/test_demo_mode.py).
+- Enhanced TaskBuilder tests for input/output schema handling and multi-level dependencies (tests/core/test_task_builder.py).
+- More comprehensive failure handling tests for TaskManager, including all error types and re-execution (tests/core/execution/test_task_failure_handling.py).
+- Tests for hook context modification and persistence in pre_hook and post_hook scenarios (tests/core/storage/test_hook_modify_task_with_context.py).
+- Integration tests for TaskExecutor with custom and built-in tools (tests/core/execution/test_task_executor_tools_integration.py).
+
+### Changed
+- Refactored WebSocketExecutor to provide full input/output schema, error handling, and cancellation support (src/apflow/extensions/websocket/websocket_executor.py).
+- Refactored and cleaned up JSON-RPC API tests for clarity, conciseness, and modern style (tests/api/a2a/test_http_json_rpc.py).
+- Improved dummy executor and related test coverage for TaskBuilder (tests/core/test_task_builder.py).
+- Enhanced FailingExecutor and related tests for more robust error simulation (tests/core/execution/test_task_failure_handling.py).
+- Improved hook context usage and persistence in hook modification tests (tests/core/storage/test_hook_modify_task_with_context.py).
+- Expanded demo mode tests to cover more edge cases and sleep scaling (tests/core/test_demo_mode.py).
+- Improved schema-based execution tests for dependency mapping and fallback logic (tests/integration/test_schema_based_execution.py).
+
 ## [0.12.1] 2026-01-25
 
 ### Added

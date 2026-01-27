@@ -1,5 +1,3 @@
-
-
 """
 ScrapeExecutor: Uses LimitedScrapeWebsiteTool to fetch and extract website content for downstream use, such as data analysis, NLP, or further processing.
 This executor is designed to extract the main text and metadata from a given URL, making it suitable for analytics, machine learning, or information retrieval tasks.
@@ -13,6 +11,7 @@ from apflow.extensions.tools.limited_scrape_tools import LimitedScrapeWebsiteToo
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
+
 
 @executor_register()
 class ScrapeExecutor(BaseTask):
@@ -32,14 +31,13 @@ class ScrapeExecutor(BaseTask):
     examples = [
         "Scrape a blog post",
         "Extract main text and metadata from a news article",
-        "Fetch content from a documentation page"
+        "Fetch content from a documentation page",
     ]
     cancelable: bool = False
 
-    @property
-    def type(self) -> str:
-        """Return the extension type identifier."""
-        return "scrape"
+    def __init__(self, headers=None, **kwargs):
+        super().__init__(**kwargs)
+        self.headers = headers or {}
 
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -50,10 +48,9 @@ class ScrapeExecutor(BaseTask):
                 - url (str, required): Target website URL
                 - max_chars (int, optional): Maximum characters to extract (default: 5000)
                 - extract_metadata (bool, optional): Whether to extract metadata (default: True)
-                - headers (dict, optional): Custom HTTP headers
 
         Returns:
-            Dictionary with scraped content and status.
+            Dictionary with scraped content.
         """
         url = inputs.get("url")
         if not url:
@@ -62,7 +59,9 @@ class ScrapeExecutor(BaseTask):
         max_chars = inputs.get("max_chars", 5000)
         extract_metadata = inputs.get("extract_metadata", True)
 
-        logger.info(f"Scraping website: {url} (max_chars={max_chars}, extract_metadata={extract_metadata})")
+        logger.info(
+            f"Scraping website: {url} (max_chars={max_chars}, extract_metadata={extract_metadata})"
+        )
 
         # Use the LimitedScrapeWebsiteTool to perform the actual scraping
         tool = LimitedScrapeWebsiteTool()
@@ -72,29 +71,21 @@ class ScrapeExecutor(BaseTask):
                 website_url=url,
                 max_chars=max_chars,
                 extract_metadata=extract_metadata,
+                headers=self.headers,
             )
-            return {
-                "success": True,
-                "url": url,
-                "content": content
-            }
+            if content.startswith("Error:"):
+                raise ValidationError(content)
+            return {"result": content}
         except Exception as e:
             logger.error(f"Failed to scrape {url}: {str(e)}")
-            return {
-                "success": False,
-                "url": url,
-                "error": str(e)
-            }
+            raise ValidationError(f"Failed to scrape {url}: {str(e)}")
 
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """
         Provide a demo scrape result for documentation or dry-run purposes.
         """
-        url = inputs.get("url", "https://example.com/demo")
         return {
-            "success": True,
-            "url": url,
-            "content": "Title: Example Demo\nDescription: Example description.\nURL: https://example.com/demo\n\n---\n\nMain Text:\nThis is a demo of the website scraping executor.",
+            "result": "Title: Example Demo\nDescription: Example description.\nURL: https://example.com/demo\n\n---\n\nMain Text:\nThis is a demo of the website scraping executor.",
         }
 
     def get_input_schema(self) -> Dict[str, Any]:
@@ -104,23 +95,27 @@ class ScrapeExecutor(BaseTask):
         return {
             "type": "object",
             "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "Target website URL to scrape"
-                },
+                "url": {"type": "string", "description": "Target website URL to scrape"},
                 "max_chars": {
                     "type": "integer",
-                    "description": "Maximum number of characters to extract (default: 5000)"
+                    "description": "Maximum number of characters to extract (default: 5000)",
                 },
                 "extract_metadata": {
                     "type": "boolean",
-                    "description": "Whether to extract metadata like title and description (default: True)"
+                    "description": "Whether to extract metadata like title and description (default: True)",
                 },
-                "headers": {
-                    "type": "object",
-                    "description": "Optional HTTP headers to use for the request"
-                }
             },
-            "required": ["url"]
+            "required": ["url"],
         }
 
+    def get_output_schema(self) -> Dict[str, Any]:
+        """
+        Return the output result schema for this executor.
+        """
+        return {
+            "type": "object",
+            "properties": {
+                "result": {"type": "string", "description": "Scraped website content as string"},
+            },
+            "required": ["result"],
+        }

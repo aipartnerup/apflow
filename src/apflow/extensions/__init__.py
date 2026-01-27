@@ -27,6 +27,7 @@ except Exception:
 # Auto-import storage extensions to trigger registration
 try:
     from apflow.extensions.storage import duckdb_storage  # noqa: F401
+
     try:
         from apflow.extensions.storage import postgres_storage  # noqa: F401
     except ImportError:
@@ -59,5 +60,11 @@ except ImportError:
     # LLM extension may not be available (missing litellm), that's okay
     pass
 
-__all__ = []
+# Auto-import crewai extension to trigger registration
+try:
+    from apflow.extensions.crewai import crewai_executor  # noqa: F401
+except ImportError:
+    # CrewAI extension may not be available (missing crewai), that's okay
+    pass
 
+__all__ = []

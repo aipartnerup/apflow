@@ -18,6 +18,7 @@ logger = get_logger(__name__)
 
 try:
     import asyncssh
+
     ASYNCSSH_AVAILABLE = True
 except ImportError:
     ASYNCSSH_AVAILABLE = False
@@ -31,9 +32,9 @@ except ImportError:
 class SshExecutor(BaseTask):
     """
     Executor for executing commands on remote servers via SSH
-    
+
     Supports password and key-based authentication.
-    
+
     Example usage in task schemas:
     {
         "schemas": {
@@ -48,7 +49,7 @@ class SshExecutor(BaseTask):
         }
     }
     """
-    
+
     id = "ssh_executor"
     name = "SSH Executor"
     description = "Execute commands on remote servers via SSH"
@@ -56,29 +57,29 @@ class SshExecutor(BaseTask):
     examples = [
         "Execute command on remote server",
         "Run script on remote host",
-        "Remote system administration"
+        "Remote system administration",
     ]
-    
+
     # Cancellation support: Can be cancelled by closing SSH connection
     cancelable: bool = True
-    
+
     @property
     def type(self) -> str:
         """Extension type identifier for categorization"""
         return "ssh"
-    
+
     def _validate_key_file(self, key_file: str) -> None:
         """
         Validate SSH key file permissions
-        
+
         SSH keys should have restrictive permissions (600 or 400)
         """
         if not os.path.exists(key_file):
             raise FileNotFoundError(f"SSH key file not found: {key_file}")
-        
+
         file_stat = os.stat(key_file)
         mode = stat.filemode(file_stat.st_mode)
-        
+
         # Check if permissions are too permissive
         # Should be 600 (rw-------) or 400 (r--------)
         permissions = file_stat.st_mode & 0o777
@@ -87,11 +88,11 @@ class SshExecutor(BaseTask):
                 f"SSH key file {key_file} has permissions {mode}. "
                 f"Recommended: 600 (rw-------) or 400 (r--------)"
             )
-    
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a command on a remote server via SSH
-        
+
         Args:
             inputs: Dictionary containing:
                 - host: Remote hostname or IP (required)
@@ -102,7 +103,7 @@ class SshExecutor(BaseTask):
                 - command: Command to execute (required)
                 - timeout: Command timeout in seconds (default: 30)
                 - env: Environment variables dict (optional)
-        
+
         Returns:
             Dictionary with execution results:
                 - command: Executed command
@@ -116,52 +117,52 @@ class SshExecutor(BaseTask):
         host = inputs.get("host")
         if not host:
             raise ValidationError(f"[{self.id}] host is required")
-        
+
         username = inputs.get("username")
         if not username:
             raise ValidationError(f"[{self.id}] username is required")
-        
+
         command = inputs.get("command")
         if not command:
             raise ValidationError(f"[{self.id}] command is required")
-        
+
         # Check if asyncssh is available before authentication validation
         # If not available, raise ConfigurationError immediately
         if not ASYNCSSH_AVAILABLE:
             raise ConfigurationError(
                 f"[{self.id}] asyncssh is not installed. Install it with: pip install apflow[ssh]"
             )
-        
+
         # Validate authentication (only if asyncssh is available)
         password = inputs.get("password")
         key_file = inputs.get("key_file")
         if not password and not key_file:
             raise ValidationError(f"[{self.id}] Either password or key_file must be provided")
-        
+
         port = inputs.get("port", 22)
         timeout = inputs.get("timeout", 30)
         env = inputs.get("env", {})
-        
+
         # Validate key file if provided
         # Exceptions from _validate_key_file (e.g., FileNotFoundError) will propagate
         if key_file:
             self._validate_key_file(key_file)
-        
+
         logger.info(f"Executing SSH command on {username}@{host}:{port}: {command}")
-        
+
         # Prepare client kwargs
         client_kwargs = {
             "host": host,
             "port": port,
             "username": username,
         }
-        
+
         # Add authentication
         if key_file:
             client_kwargs["client_keys"] = [key_file]
         if password:
             client_kwargs["password"] = password
-        
+
         # Check for cancellation before connecting
         if self.cancellation_checker and self.cancellation_checker():
             logger.info("SSH command cancelled before connection")
@@ -169,9 +170,9 @@ class SshExecutor(BaseTask):
                 "success": False,
                 "error": "Command was cancelled",
                 "host": host,
-                "command": command
+                "command": command,
             }
-        
+
         # Exceptions (e.g., asyncssh.Error, asyncio.TimeoutError)
         # will propagate to TaskManager
         async with asyncssh.connect(**client_kwargs) as conn:
@@ -182,19 +183,16 @@ class SshExecutor(BaseTask):
                     "success": False,
                     "error": "Command was cancelled",
                     "host": host,
-                    "command": command
+                    "command": command,
                 }
-            
+
             # Prepare environment variables
             env_vars = " ".join([f"{k}={v}" for k, v in env.items()]) if env else ""
             full_command = f"{env_vars} {command}".strip() if env_vars else command
-            
+
             # Execute command with timeout
-            result = await asyncio.wait_for(
-                conn.run(full_command),
-                timeout=timeout
-            )
-            
+            result = await asyncio.wait_for(conn.run(full_command), timeout=timeout)
+
             # Check for cancellation after execution
             if self.cancellation_checker and self.cancellation_checker():
                 logger.info("SSH command cancelled after execution")
@@ -203,9 +201,9 @@ class SshExecutor(BaseTask):
                     "error": "Command was cancelled",
                     "host": host,
                     "command": command,
-                    "return_code": result.exit_status
+                    "return_code": result.exit_status,
                 }
-            
+
             return {
                 "command": command,
                 "stdout": result.stdout,
@@ -213,9 +211,9 @@ class SshExecutor(BaseTask):
                 "return_code": result.exit_status,
                 "success": result.exit_status == 0,
                 "host": host,
-                "username": username
+                "username": username,
             }
-    
+
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo SSH command execution result"""
         command = inputs.get("command", "echo 'Hello from remote server'")
@@ -227,47 +225,115 @@ class SshExecutor(BaseTask):
             "stdout": "Hello from remote server\nDemo SSH execution result",
             "stderr": "",
             "success": True,
-            "_demo_sleep": 0.5  # Simulate SSH connection and command execution time
+            "_demo_sleep": 0.5,  # Simulate SSH connection and command execution time
         }
-    
+
+    def get_output_schema(self) -> Dict[str, Any]:
+        """
+        Get output schema for SshExecutor execution results
+
+        Returns:
+            JSON Schema describing the output structure
+        """
+        return {
+            "type": "object",
+            "properties": {
+                "success": {
+                    "type": "boolean",
+                    "description": "Whether the SSH command executed successfully",
+                },
+                "error": {
+                    "type": "string",
+                    "description": "Error message (only present on cancellation)",
+                },
+                "command": {
+                    "type": "string",
+                    "description": "The command that was executed on the remote server",
+                },
+                "stdout": {
+                    "type": "string",
+                    "description": "Standard output from the executed command",
+                },
+                "stderr": {
+                    "type": "string",
+                    "description": "Standard error from the executed command",
+                },
+                "return_code": {
+                    "type": "integer",
+                    "description": "Command exit code (0 for success)",
+                },
+                "host": {"type": "string", "description": "Remote host that was connected to"},
+                "username": {
+                    "type": "string",
+                    "description": "SSH username used for the connection",
+                },
+            },
+            "required": ["success", "command", "host"],
+        }
+
     def get_input_schema(self) -> Dict[str, Any]:
-        """Return input parameter schema"""
+        """
+        Get input schema for SshExecutor execution parameters
+
+        Returns:
+            JSON Schema describing the input structure
+        """
         return {
             "type": "object",
             "properties": {
                 "host": {
                     "type": "string",
-                    "description": "Remote hostname or IP address"
+                    "description": "Remote hostname or IP address to connect to",
                 },
                 "port": {
                     "type": "integer",
-                    "description": "SSH port (default: 22)"
+                    "description": "SSH port number",
+                    "default": 22,
+                    "minimum": 1,
+                    "maximum": 65535,
                 },
                 "username": {
                     "type": "string",
-                    "description": "SSH username"
+                    "description": "SSH username for authentication",
                 },
                 "password": {
                     "type": "string",
-                    "description": "SSH password (if key_file not provided)"
+                    "description": "SSH password for authentication (optional if key_file provided)",
                 },
                 "key_file": {
                     "type": "string",
-                    "description": "Path to SSH private key file (if password not provided)"
+                    "description": "Path to SSH private key file (optional if password provided)",
                 },
                 "command": {
                     "type": "string",
-                    "description": "Command to execute on remote server"
+                    "description": "Command to execute on the remote server",
                 },
                 "timeout": {
-                    "type": "integer",
-                    "description": "Command timeout in seconds (default: 30)"
+                    "type": ["integer", "number"],
+                    "description": "Command execution timeout in seconds",
+                    "default": 30,
+                    "minimum": 1,
                 },
                 "env": {
                     "type": "object",
-                    "description": "Environment variables to set for command execution"
-                }
+                    "description": "Environment variables to set for the command execution",
+                    "additionalProperties": {"type": "string"},
+                },
             },
-            "required": ["host", "username", "command"]
+            "required": ["host", "username", "command"],
+            "allOf": [
+                {
+                    "if": {
+                        "not": {
+                            "anyOf": [
+                                {"required": ["password"]},
+                                {"required": ["key_file"]},
+                            ]
+                        }
+                    },
+                    "then": {
+                        "not": {}  # Always fail if neither password nor key_file is provided
+                    },
+                }
+            ],
         }
-

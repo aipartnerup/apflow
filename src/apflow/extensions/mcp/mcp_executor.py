@@ -22,6 +22,7 @@ logger = get_logger(__name__)
 
 try:
     import httpx
+
     HTTPX_AVAILABLE = True
 except ImportError:
     HTTPX_AVAILABLE = False
@@ -35,10 +36,10 @@ except ImportError:
 class McpExecutor(BaseTask):
     """
     Executor for interacting with MCP (Model Context Protocol) servers
-    
+
     Supports both stdio and HTTP/SSE transport modes for communication
     with MCP servers, enabling access to external tools and data sources.
-    
+
     Example usage in task schemas:
     {
         "schemas": {
@@ -53,7 +54,7 @@ class McpExecutor(BaseTask):
         }
     }
     """
-    
+
     id = "mcp_executor"
     name = "MCP Executor"
     description = "Interact with MCP (Model Context Protocol) servers for tool and resource access"
@@ -62,21 +63,21 @@ class McpExecutor(BaseTask):
         "Call MCP tool",
         "List available MCP tools",
         "Read MCP resource",
-        "Access external data sources via MCP"
+        "Access external data sources via MCP",
     ]
-    
+
     # Cancellation support: Can be cancelled by closing connection
     cancelable: bool = True
-    
+
     @property
     def type(self) -> str:
         """Extension type identifier for categorization"""
         return "mcp"
-    
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute an MCP operation
-        
+
         Args:
             inputs: Dictionary containing:
                 - transport: Transport mode - "stdio" or "http" (required)
@@ -98,20 +99,22 @@ class McpExecutor(BaseTask):
                 - For read_resource operation:
                     - resource_uri: Resource URI (required)
                 - timeout: Optional timeout in seconds (default: 30.0)
-        
+
         Returns:
             Dictionary with operation result
         """
         transport = inputs.get("transport")
         if not transport:
             raise ValueError("transport is required in inputs (stdio or http)")
-        
+
         operation = inputs.get("operation")
         if not operation:
-            raise ValueError("operation is required in inputs (list_tools, call_tool, list_resources, read_resource)")
-        
+            raise ValueError(
+                "operation is required in inputs (list_tools, call_tool, list_resources, read_resource)"
+            )
+
         timeout = inputs.get("timeout", 30.0)
-        
+
         # Check for cancellation before execution
         if self.cancellation_checker and self.cancellation_checker():
             logger.info("MCP operation cancelled before execution")
@@ -119,9 +122,9 @@ class McpExecutor(BaseTask):
                 "success": False,
                 "error": "Operation was cancelled",
                 "transport": transport,
-                "operation": operation
+                "operation": operation,
             }
-        
+
         try:
             if transport == "stdio":
                 return await self._execute_stdio(inputs, operation, timeout)
@@ -130,14 +133,14 @@ class McpExecutor(BaseTask):
                     return {
                         "success": False,
                         "error": "httpx is not installed. Install it with: pip install httpx",
-                        "transport": transport
+                        "transport": transport,
                     }
                 return await self._execute_http(inputs, operation, timeout)
             else:
                 return {
                     "success": False,
                     "error": f"Unsupported transport mode: {transport}. Use 'stdio' or 'http'",
-                    "transport": transport
+                    "transport": transport,
                 }
         except asyncio.TimeoutError:
             logger.error(f"MCP operation timeout after {timeout} seconds")
@@ -145,7 +148,7 @@ class McpExecutor(BaseTask):
                 "success": False,
                 "error": f"Operation timeout after {timeout} seconds",
                 "transport": transport,
-                "operation": operation
+                "operation": operation,
             }
         except Exception as e:
             logger.error(f"Error executing MCP operation: {e}", exc_info=True)
@@ -153,32 +156,29 @@ class McpExecutor(BaseTask):
                 "success": False,
                 "error": str(e),
                 "transport": transport,
-                "operation": operation
+                "operation": operation,
             }
-    
+
     async def _execute_stdio(
-        self,
-        inputs: Dict[str, Any],
-        operation: str,
-        timeout: float
+        self, inputs: Dict[str, Any], operation: str, timeout: float
     ) -> Dict[str, Any]:
         """Execute MCP operation via stdio transport"""
         command = inputs.get("command")
         if not command:
             raise ValueError("command is required for stdio transport (list of strings)")
-        
+
         if not isinstance(command, list):
             raise ValueError("command must be a list of strings")
-        
+
         env = inputs.get("env")
         cwd = inputs.get("cwd")
-        
+
         # Prepare MCP request
         request_id = f"mcp_{asyncio.get_event_loop().time()}"
         mcp_request = self._build_mcp_request(operation, inputs, request_id)
-        
+
         logger.info(f"Executing MCP {operation} via stdio: {command}")
-        
+
         try:
             # Run MCP server process
             process = await asyncio.create_subprocess_exec(
@@ -187,16 +187,15 @@ class McpExecutor(BaseTask):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 env=env,
-                cwd=cwd
+                cwd=cwd,
             )
-            
+
             # Send MCP request
             request_json = json.dumps(mcp_request) + "\n"
             stdout, stderr = await asyncio.wait_for(
-                process.communicate(input=request_json.encode('utf-8')),
-                timeout=timeout
+                process.communicate(input=request_json.encode("utf-8")), timeout=timeout
             )
-            
+
             # Check for cancellation
             if self.cancellation_checker and self.cancellation_checker():
                 process.kill()
@@ -204,29 +203,29 @@ class McpExecutor(BaseTask):
                 return {
                     "success": False,
                     "error": "Operation was cancelled",
-                    "operation": operation
+                    "operation": operation,
                 }
-            
+
             # Parse response
             if process.returncode != 0:
-                error_msg = stderr.decode('utf-8', errors='replace') if stderr else "Unknown error"
+                error_msg = stderr.decode("utf-8", errors="replace") if stderr else "Unknown error"
                 logger.error(f"MCP server error: {error_msg}")
                 return {
                     "success": False,
                     "error": f"MCP server error: {error_msg}",
                     "return_code": process.returncode,
                     "stderr": error_msg,
-                    "operation": operation
+                    "operation": operation,
                 }
-            
-            response_text = stdout.decode('utf-8', errors='replace').strip()
+
+            response_text = stdout.decode("utf-8", errors="replace").strip()
             if not response_text:
                 return {
                     "success": False,
                     "error": "Empty response from MCP server",
-                    "operation": operation
+                    "operation": operation,
                 }
-            
+
             # Parse JSON response (MCP uses JSON-RPC-like format)
             try:
                 response = json.loads(response_text)
@@ -236,9 +235,9 @@ class McpExecutor(BaseTask):
                     "success": False,
                     "error": f"Invalid JSON response: {str(e)}",
                     "raw_response": response_text[:500],  # First 500 chars
-                    "operation": operation
+                    "operation": operation,
                 }
-            
+
             # Extract result from MCP response
             if "error" in response:
                 error = response["error"]
@@ -247,45 +246,37 @@ class McpExecutor(BaseTask):
                     "error": error.get("message", "Unknown error"),
                     "error_code": error.get("code"),
                     "error_data": error.get("data"),
-                    "operation": operation
+                    "operation": operation,
                 }
-            
+
             result = response.get("result", {})
-            return {
-                "success": True,
-                "result": result,
-                "operation": operation,
-                "transport": "stdio"
-            }
-            
+            return {"success": True, "result": result, "operation": operation, "transport": "stdio"}
+
         except subprocess.TimeoutExpired:
             logger.error(f"MCP stdio operation timeout after {timeout} seconds")
             return {
                 "success": False,
                 "error": f"Operation timeout after {timeout} seconds",
-                "operation": operation
+                "operation": operation,
             }
-    
+
     async def _execute_http(
-        self,
-        inputs: Dict[str, Any],
-        operation: str,
-        timeout: float
+        self, inputs: Dict[str, Any], operation: str, timeout: float
     ) -> Dict[str, Any]:
         """Execute MCP operation via HTTP/SSE transport"""
         url = inputs.get("url")
         if not url:
             raise ValueError("url is required for http transport")
-        
+
         headers = inputs.get("headers", {})
         headers.setdefault("Content-Type", "application/json")
-        
+
         # Prepare MCP request
         request_id = f"mcp_{asyncio.get_event_loop().time()}"
         mcp_request = self._build_mcp_request(operation, inputs, request_id)
-        
+
         logger.info(f"Executing MCP {operation} via HTTP: {url}")
-        
+
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 # Check for cancellation before request
@@ -294,16 +285,12 @@ class McpExecutor(BaseTask):
                     return {
                         "success": False,
                         "error": "Operation was cancelled",
-                        "operation": operation
+                        "operation": operation,
                     }
-                
+
                 # Send MCP request
-                response = await client.post(
-                    url,
-                    json=mcp_request,
-                    headers=headers
-                )
-                
+                response = await client.post(url, json=mcp_request, headers=headers)
+
                 # Check for cancellation after request
                 if self.cancellation_checker and self.cancellation_checker():
                     logger.info("MCP HTTP operation cancelled after request")
@@ -311,21 +298,21 @@ class McpExecutor(BaseTask):
                         "success": False,
                         "error": "Operation was cancelled",
                         "operation": operation,
-                        "status_code": response.status_code
+                        "status_code": response.status_code,
                     }
-                
+
                 if response.status_code != 200:
                     logger.error(f"MCP HTTP error: {response.status_code} - {response.text}")
                     return {
                         "success": False,
                         "error": f"HTTP error {response.status_code}: {response.text[:200]}",
                         "status_code": response.status_code,
-                        "operation": operation
+                        "operation": operation,
                     }
-                
+
                 # Parse response
                 json_response = response.json()
-                
+
                 if "error" in json_response:
                     error = json_response["error"]
                     return {
@@ -333,45 +320,35 @@ class McpExecutor(BaseTask):
                         "error": error.get("message", "Unknown error"),
                         "error_code": error.get("code"),
                         "error_data": error.get("data"),
-                        "operation": operation
+                        "operation": operation,
                     }
-                
+
                 result = json_response.get("result", {})
                 return {
                     "success": True,
                     "result": result,
                     "operation": operation,
-                    "transport": "http"
+                    "transport": "http",
                 }
-                
+
         except httpx.TimeoutException:
             logger.error(f"MCP HTTP operation timeout after {timeout} seconds")
             return {
                 "success": False,
                 "error": f"Request timeout after {timeout} seconds",
-                "operation": operation
+                "operation": operation,
             }
         except httpx.RequestError as e:
             logger.error(f"MCP HTTP request error: {e}")
-            return {
-                "success": False,
-                "error": f"Request error: {str(e)}",
-                "operation": operation
-            }
-    
+            return {"success": False, "error": f"Request error: {str(e)}", "operation": operation}
+
     def _build_mcp_request(
-        self,
-        operation: str,
-        inputs: Dict[str, Any],
-        request_id: str
+        self, operation: str, inputs: Dict[str, Any], request_id: str
     ) -> Dict[str, Any]:
         """Build MCP protocol request"""
         # MCP uses JSON-RPC 2.0 format
-        request = {
-            "jsonrpc": "2.0",
-            "id": request_id
-        }
-        
+        request = {"jsonrpc": "2.0", "id": request_id}
+
         if operation == "list_tools":
             request["method"] = "tools/list"
             request["params"] = {}
@@ -381,10 +358,7 @@ class McpExecutor(BaseTask):
                 raise ValueError("tool_name is required for call_tool operation")
             arguments = inputs.get("arguments", {})
             request["method"] = "tools/call"
-            request["params"] = {
-                "name": tool_name,
-                "arguments": arguments
-            }
+            request["params"] = {"name": tool_name, "arguments": arguments}
         elif operation == "list_resources":
             request["method"] = "resources/list"
             request["params"] = {}
@@ -393,75 +367,140 @@ class McpExecutor(BaseTask):
             if not resource_uri:
                 raise ValueError("resource_uri is required for read_resource operation")
             request["method"] = "resources/read"
-            request["params"] = {
-                "uri": resource_uri
-            }
+            request["params"] = {"uri": resource_uri}
         else:
             raise ValueError(f"Unsupported operation: {operation}")
-        
+
         return request
-    
+
     def get_input_schema(self) -> Dict[str, Any]:
-        """Return input parameter schema"""
+        """
+        Get input schema for McpExecutor execution inputs
+
+        Returns:
+            JSON Schema describing the input structure
+        """
         return {
             "type": "object",
             "properties": {
                 "transport": {
                     "type": "string",
                     "enum": ["stdio", "http"],
-                    "description": "Transport mode: 'stdio' for local processes, 'http' for remote servers"
+                    "description": "Transport mode - 'stdio' or 'http' (required)",
                 },
                 "operation": {
                     "type": "string",
                     "enum": ["list_tools", "call_tool", "list_resources", "read_resource"],
-                    "description": "MCP operation type"
+                    "description": "MCP operation type (required)",
+                },
+                "timeout": {
+                    "type": "number",
+                    "description": "Optional timeout in seconds (default: 30.0)",
+                    "default": 30.0,
                 },
                 "command": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Command to run MCP server (required for stdio transport)"
-                },
-                "url": {
-                    "type": "string",
-                    "description": "MCP server URL (required for http transport)"
-                },
-                "headers": {
-                    "type": "object",
-                    "description": "HTTP headers (optional, for http transport)"
+                    "description": "Command to run MCP server for stdio transport (list of strings, required for stdio)",
                 },
                 "env": {
                     "type": "object",
-                    "description": "Environment variables (optional, for stdio transport)"
+                    "description": "Optional environment variables dict for stdio transport",
+                    "additionalProperties": {"type": "string"},
                 },
                 "cwd": {
                     "type": "string",
-                    "description": "Working directory (optional, for stdio transport)"
+                    "description": "Optional working directory for stdio transport",
+                },
+                "url": {
+                    "type": "string",
+                    "description": "MCP server URL for http transport (required for http)",
+                },
+                "headers": {
+                    "type": "object",
+                    "description": "Optional HTTP headers dict for http transport",
+                    "additionalProperties": {"type": "string"},
                 },
                 "tool_name": {
                     "type": "string",
-                    "description": "Name of tool to call (required for call_tool operation)"
+                    "description": "Name of tool to call (required for call_tool operation)",
                 },
                 "arguments": {
                     "type": "object",
-                    "description": "Tool arguments (required for call_tool operation)"
+                    "description": "Tool arguments dict (required for call_tool operation)",
+                    "additionalProperties": True,
                 },
                 "resource_uri": {
                     "type": "string",
-                    "description": "Resource URI (required for read_resource operation)"
+                    "description": "Resource URI (required for read_resource operation)",
                 },
-                "timeout": {
-                    "type": "number",
-                    "description": "Operation timeout in seconds (default: 30.0)"
-                }
             },
-            "required": ["transport", "operation"]
+            "required": ["transport", "operation"],
         }
-    
+
+    def get_output_schema(self) -> Dict[str, Any]:
+        """
+        Get output schema for McpExecutor execution results
+
+        Returns:
+            JSON Schema describing the output structure
+        """
+        return {
+            "type": "object",
+            "properties": {
+                "success": {
+                    "type": "boolean",
+                    "description": "Whether the MCP operation was successful",
+                },
+                "error": {
+                    "type": "string",
+                    "description": "Error message (only present on failure)",
+                },
+                "error_code": {
+                    "type": "integer",
+                    "description": "MCP error code (optional, only for MCP protocol errors)",
+                },
+                "error_data": {
+                    "type": "object",
+                    "description": "MCP error data (optional, only for MCP protocol errors)",
+                },
+                "status_code": {
+                    "type": "integer",
+                    "description": "HTTP status code (optional, only for HTTP transport errors)",
+                },
+                "return_code": {
+                    "type": "integer",
+                    "description": "Process return code (optional, only for stdio transport errors)",
+                },
+                "stderr": {
+                    "type": "string",
+                    "description": "Process stderr output (optional, only for stdio transport errors)",
+                },
+                "raw_response": {
+                    "type": "string",
+                    "description": "Raw response text (optional, only for JSON parsing errors)",
+                },
+                "result": {
+                    "type": "object",
+                    "description": "MCP operation result (only present on success)",
+                },
+                "operation": {
+                    "type": "string",
+                    "description": "The MCP operation that was performed",
+                },
+                "transport": {
+                    "type": "string",
+                    "description": "The transport mode used (stdio or http)",
+                },
+            },
+            "required": ["success", "operation", "transport"],
+        }
+
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo MCP operation result"""
         operation = inputs.get("operation", "list_tools")
         transport = inputs.get("transport", "stdio")
-        
+
         if operation == "list_tools":
             return {
                 "tools": [
@@ -470,15 +509,13 @@ class McpExecutor(BaseTask):
                         "description": "Demo MCP tool",
                         "inputSchema": {
                             "type": "object",
-                            "properties": {
-                                "input": {"type": "string"}
-                            }
-                        }
+                            "properties": {"input": {"type": "string"}},
+                        },
                     }
                 ],
                 "transport": transport,
                 "success": True,
-                "_demo_sleep": 0.15  # Simulate MCP protocol communication latency
+                "_demo_sleep": 0.15,  # Simulate MCP protocol communication latency
             }
         elif operation == "call_tool":
             tool_name = inputs.get("tool_name", "demo_tool")
@@ -486,13 +523,10 @@ class McpExecutor(BaseTask):
             return {
                 "tool": tool_name,
                 "arguments": arguments,
-                "result": {
-                    "output": "Demo tool execution result",
-                    "success": True
-                },
+                "result": {"output": "Demo tool execution result", "success": True},
                 "transport": transport,
                 "success": True,
-                "_demo_sleep": 0.2  # Simulate tool execution time
+                "_demo_sleep": 0.2,  # Simulate tool execution time
             }
         elif operation == "list_resources":
             return {
@@ -501,27 +535,23 @@ class McpExecutor(BaseTask):
                         "uri": "demo://resource/1",
                         "name": "Demo Resource",
                         "description": "A demo resource",
-                        "mimeType": "text/plain"
+                        "mimeType": "text/plain",
                     }
                 ],
                 "transport": transport,
                 "success": True,
-                "_demo_sleep": 0.15  # Simulate MCP protocol communication latency
+                "_demo_sleep": 0.15,  # Simulate MCP protocol communication latency
             }
         elif operation == "read_resource":
             resource_uri = inputs.get("resource_uri", "demo://resource/1")
             return {
                 "uri": resource_uri,
                 "contents": [
-                    {
-                        "uri": resource_uri,
-                        "mimeType": "text/plain",
-                        "text": "Demo resource content"
-                    }
+                    {"uri": resource_uri, "mimeType": "text/plain", "text": "Demo resource content"}
                 ],
                 "transport": transport,
                 "success": True,
-                "_demo_sleep": 0.15  # Simulate resource read latency
+                "_demo_sleep": 0.15,  # Simulate resource read latency
             }
         else:
             return {
@@ -529,6 +559,5 @@ class McpExecutor(BaseTask):
                 "transport": transport,
                 "result": "Demo MCP operation completed",
                 "success": True,
-                "_demo_sleep": 0.15  # Simulate MCP protocol communication latency
+                "_demo_sleep": 0.15,  # Simulate MCP protocol communication latency
             }
-

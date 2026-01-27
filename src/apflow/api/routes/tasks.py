@@ -1088,7 +1088,7 @@ class TaskRoutes(BaseRouteHandler):
 
     async def handle_task_create(
         self, params: dict | list, request: Request, request_id: str
-    ) -> dict|list:
+    ) -> dict | list:
         """
         Handle task creation
 
@@ -1317,7 +1317,9 @@ class TaskRoutes(BaseRouteHandler):
                         )
                     if "completed_at" in params:
                         await task_repository.update_task(
-                            task_id=task_id, status=task.status, completed_at=params.get("completed_at")
+                            task_id=task_id,
+                            status=task.status,
+                            completed_at=params.get("completed_at"),
                         )
 
                 # Update other fields
@@ -1416,12 +1418,16 @@ class TaskRoutes(BaseRouteHandler):
 
         try:
             # Check 2: Validate all dependency references exist in the same task tree
-            await validate_dependency_references(task.id, new_dependencies, task_repository, task.user_id)
+            await validate_dependency_references(
+                task.id, new_dependencies, task_repository, task.user_id
+            )
 
             # Check 3: Detect circular dependencies
             root_task = await task_repository.get_root_task(task)
             all_tasks_in_tree = await task_repository.get_all_tasks_in_tree(root_task)
-            detect_circular_dependencies(tasks=all_tasks_in_tree, task_id = task.id, new_dependencies=new_dependencies)
+            detect_circular_dependencies(
+                tasks=all_tasks_in_tree, task_id=task.id, new_dependencies=new_dependencies
+            )
 
             # Check 4: Check if any dependent tasks are executing
             executing_dependents = await check_dependent_tasks_executing(task.id, task_repository)
@@ -1508,7 +1514,10 @@ class TaskRoutes(BaseRouteHandler):
 
                 # has_references: check if any other tasks depend on this task
                 from apflow.core.storage.sqlalchemy.models import TaskOriginType
-                has_references = await task_repository.task_has_references(task_id, TaskOriginType.link)
+
+                has_references = await task_repository.task_has_references(
+                    task_id, TaskOriginType.link
+                )
 
                 # Build error message if deletion is not allowed
                 error_parts = []
@@ -1531,13 +1540,13 @@ class TaskRoutes(BaseRouteHandler):
                         main_task_status = next(
                             t["status"] for t in non_pending_tasks if t["task_id"] == task_id
                         )
-                        error_parts.append(f"task status is '{main_task_status}' (must be 'pending')")
+                        error_parts.append(
+                            f"task status is '{main_task_status}' (must be 'pending')"
+                        )
 
                 # Check for dependent tasks
                 if has_references:
-                    error_parts.append(
-                        "task has dependent tasks and cannot be deleted"
-                    )
+                    error_parts.append("task has dependent tasks and cannot be deleted")
 
                 # If there are any errors, raise exception
                 if error_parts:
@@ -1576,7 +1585,9 @@ class TaskRoutes(BaseRouteHandler):
             logger.error(f"Error deleting task: {str(e)}", exc_info=True)
             raise
 
-    async def handle_task_clone(self, params: dict, request: Request, request_id: str) -> dict|list:
+    async def handle_task_clone(
+        self, params: dict, request: Request, request_id: str
+    ) -> dict | list:
         """
         Handle task clone
 
@@ -1603,13 +1614,15 @@ class TaskRoutes(BaseRouteHandler):
             link_task_ids = params.get("link_task_ids")
             reset_fields = params.get("reset_fields", {})
             save = params.get("save", True)
-            
+
             if recursive is None:
                 recursive = True
-            
+
             # Validate parameters
             if origin_type not in ("copy", "link", "archive", "mixed"):
-                raise ValueError(f"Invalid origin_type '{origin_type}'. Must be 'copy', 'link', 'archive', or 'mixed'")
+                raise ValueError(
+                    f"Invalid origin_type '{origin_type}'. Must be 'copy', 'link', 'archive', or 'mixed'"
+                )
             if origin_type == "mixed" and not link_task_ids:
                 raise ValueError("link_task_ids is required when origin_type='mixed'")
 
@@ -1638,14 +1651,14 @@ class TaskRoutes(BaseRouteHandler):
                         _original_task=original_task,
                         _save=save,
                         _recursive=recursive,
-                        **reset_fields
+                        **reset_fields,
                     )
                 elif origin_type == "archive":
                     result = await task_creator.from_archive(
                         _original_task=original_task,
                         _save=save,
                         _recursive=recursive,
-                        **reset_fields
+                        **reset_fields,
                     )
                 elif origin_type == "mixed":
                     result = await task_creator.from_mixed(
@@ -1653,7 +1666,7 @@ class TaskRoutes(BaseRouteHandler):
                         _save=save,
                         _recursive=recursive,
                         _link_task_ids=link_task_ids,
-                        **reset_fields
+                        **reset_fields,
                     )
                 else:
                     # Default: copy mode
@@ -1661,7 +1674,7 @@ class TaskRoutes(BaseRouteHandler):
                         _original_task=original_task,
                         _save=save,
                         _recursive=recursive,
-                        **reset_fields
+                        **reset_fields,
                     )
 
                 # Handle result based on save parameter
@@ -1677,7 +1690,7 @@ class TaskRoutes(BaseRouteHandler):
                         f"Generated task copy preview for {task_id}: {task_count} tasks (not saved)"
                     )
                 if task_count == 1:
-                    response = response[0]  # Return single task dict if only one task  
+                    response = response[0]  # Return single task dict if only one task
                 return response
 
         except Exception as e:
@@ -1728,7 +1741,9 @@ class TaskRoutes(BaseRouteHandler):
                 if user_id:
                     logger.debug(f"Extracted user_id '{user_id}' from request (JWT token)")
                 else:
-                    logger.debug("No user_id found in request (no JWT token or verify_token_func not available)")
+                    logger.debug(
+                        "No user_id found in request (no JWT token or verify_token_func not available)"
+                    )
 
             if user_id:
                 # Check permission for specified user_id
@@ -1741,12 +1756,12 @@ class TaskRoutes(BaseRouteHandler):
             # Check if LLM API key is available
             # Priority: context (from X-LLM-API-KEY header) > environment variables
             from apflow.core.utils.llm_key_context import get_llm_key_from_header
-            
+
             api_key = get_llm_key_from_header()
             if not api_key:
                 # Fall back to environment variables
                 api_key = os.getenv("OPENAI_API_KEY") or os.getenv("ANTHROPIC_API_KEY")
-            
+
             if not api_key:
                 raise ValueError(
                     "LLM API key not found. Please provide X-LLM-API-KEY header, or set "
@@ -1761,7 +1776,9 @@ class TaskRoutes(BaseRouteHandler):
 
             # Get database session and create repository
             async with create_pooled_session() as db_session:
-                task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
+                task_repository = TaskRepository(
+                    db_session, task_model_class=get_task_model_class()
+                )
 
                 # Create generate task
                 # Use user_id from request (or None) - don't default to "api_user"
@@ -1821,11 +1838,13 @@ class TaskRoutes(BaseRouteHandler):
                 save = params.get("save", False)
                 if save:
                     task_creator = TaskCreator(db_session)
-                    final_task_tree = await task_creator.create_task_tree_from_array(generated_tasks)
+                    final_task_tree = await task_creator.create_task_tree_from_array(
+                        generated_tasks
+                    )
                     response["root_task_id"] = final_task_tree.task.id
-                    response[
-                        "message"
-                    ] += f" and saved to database (root_task_id: {final_task_tree.task.id})"
+                    response["message"] += (
+                        f" and saved to database (root_task_id: {final_task_tree.task.id})"
+                    )
 
             logger.info(
                 f"Generated {len(generated_tasks)} task(s) from requirement: {requirement[:100]}..."
@@ -1848,7 +1867,6 @@ class TaskRoutes(BaseRouteHandler):
         except Exception as e:
             logger.error(f"Error generating task tree: {str(e)}", exc_info=True)
             raise ValueError(f"Failed to generate task tree: {str(e)}")
-
 
     async def _run_background_execution(
         self,
@@ -1889,9 +1907,7 @@ class TaskRoutes(BaseRouteHandler):
             if streaming_context:
                 # Try to report error to streaming context
                 try:
-                    await streaming_context.put(
-                        {"type": "error", "error": str(e), "final": True}
-                    )
+                    await streaming_context.put({"type": "error", "error": str(e), "final": True})
                 except Exception:
                     pass
         finally:
@@ -1958,11 +1974,11 @@ class TaskRoutes(BaseRouteHandler):
             - Subsequent events contain real-time progress updates
             - Final event indicates completion
         Handle task execution request
-        
+
         Supports two modes:
         1. Execute by task_id: {"task_id": "..."}
         2. Execute by tasks array: {"tasks": [...]}
-        
+
         Supports streaming (SSE) and webhook callbacks.
         """
         try:
@@ -1976,7 +1992,7 @@ class TaskRoutes(BaseRouteHandler):
                 # Dict with options
                 task_id = params.get("task_id")
                 tasks = params.get("tasks")
-                
+
                 if task_id:
                     execution_mode = "task_id"
                 elif tasks:
@@ -1991,6 +2007,7 @@ class TaskRoutes(BaseRouteHandler):
 
             # Get TaskExecutor
             from apflow.core.execution.task_executor import TaskExecutor
+
             task_executor = TaskExecutor()
 
             # Execution setup variables
@@ -1998,7 +2015,7 @@ class TaskRoutes(BaseRouteHandler):
             execution_tasks = None
             root_task_id = None
             original_task_id = None
-            
+
             # Preparation phase (Foreground)
             async with create_pooled_session() as db_session:
                 if execution_mode == "task_id":
@@ -2014,6 +2031,7 @@ class TaskRoutes(BaseRouteHandler):
 
                     # Check if task is already running
                     from apflow.core.execution.task_tracker import TaskTracker
+
                     task_tracker = TaskTracker()
                     if task_tracker.is_task_running(task_id):
                         return {
@@ -2031,14 +2049,14 @@ class TaskRoutes(BaseRouteHandler):
                 elif execution_mode == "tasks_array":
                     # Mode 2: Execute by tasks array
                     execution_tasks = tasks
-                    
+
                     # Check permission for first task if available
                     if tasks and len(tasks) > 0:
                         first_task = tasks[0]
                         user_id = first_task.get("user_id")
                         if user_id:
                             self._check_permission(request, user_id, "execute")
-                    
+
                     # For tasks array, we don't have a root_task_id yet
                     # Use a temporary ID for streaming context initialization
                     root_task_id = str(uuid.uuid4())
@@ -2055,15 +2073,17 @@ class TaskRoutes(BaseRouteHandler):
             # Execution phase
             if use_streaming or webhook_config:
                 # Background execution
-                asyncio.create_task(self._run_background_execution(
-                    task_executor=task_executor,
-                    execution_mode=execution_mode,
-                    streaming_context=streaming_context,
-                    session_factory=create_pooled_session,
-                    task_id=execution_task_id,
-                    tasks=execution_tasks,
-                    use_demo=use_demo
-                ))
+                asyncio.create_task(
+                    self._run_background_execution(
+                        task_executor=task_executor,
+                        execution_mode=execution_mode,
+                        streaming_context=streaming_context,
+                        session_factory=create_pooled_session,
+                        task_id=execution_task_id,
+                        tasks=execution_tasks,
+                        use_demo=use_demo,
+                    )
+                )
             else:
                 # Foreground execution (awaiting background wrapper)
                 # Note: We pass None as streaming_context here as we are not streaming
@@ -2074,9 +2094,9 @@ class TaskRoutes(BaseRouteHandler):
                     session_factory=create_pooled_session,
                     task_id=execution_task_id,
                     tasks=execution_tasks,
-                    use_demo=use_demo
+                    use_demo=use_demo,
                 )
-                
+
                 # Update root_task_id from result if available (especially for tasks_array mode)
                 if execution_result and "root_task_id" in execution_result:
                     root_task_id = execution_result["root_task_id"]
@@ -2131,11 +2151,11 @@ class TaskRoutes(BaseRouteHandler):
 
                                 last_event_count = len(events)
 
-                                # Check if final event (task completed or failed)
-                                if events and events[-1].get("final", False):
-                                    # Send final event and close connection
-                                    yield f"data: {json.dumps({'type': 'stream_end', 'task_id': root_task_id}, ensure_ascii=False)}\n\n"
-                                    break
+                            # Check if final event (task completed or failed) - check after sending all events
+                            if events and events[-1].get("final", False):
+                                # Send final event and close connection
+                                yield f"data: {json.dumps({'type': 'stream_end', 'task_id': root_task_id}, ensure_ascii=False)}\n\n"
+                                break
 
                             # Wait before checking again
                             await asyncio.sleep(check_interval)
@@ -2154,7 +2174,6 @@ class TaskRoutes(BaseRouteHandler):
 
                     except asyncio.CancelledError:
                         # Client disconnected
-                        logger.debug(f"SSE connection closed for task {root_task_id}")
                         await streaming_context.close()
                         raise
                     except Exception as e:
@@ -2195,16 +2214,16 @@ class TaskRoutes(BaseRouteHandler):
                     ),
                     "webhook_url": webhook_config.get("url"),
                 }
-                
+
                 return response
 
             else:
                 # Response mode 3: Regular POST without webhook
                 logger.info(f"Task execution started (root: {root_task_id})")
-                
+
                 # Use execution_result if available (it should be for foreground execution)
                 status = "started"
-                if 'execution_result' in locals() and execution_result:
+                if "execution_result" in locals() and execution_result:
                     status = execution_result.get("status", "started")
 
                 response = {
@@ -2215,7 +2234,7 @@ class TaskRoutes(BaseRouteHandler):
                     "status": status,
                     "message": "Task execution started",
                 }
-                
+
                 return response
 
         except Exception as e:

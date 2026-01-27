@@ -7,13 +7,13 @@ modify task fields and use the hook context to access the database session.
 Key questions answered:
 1. Can hooks modify task.inputs and have it auto-persisted?
    Answer: YES - TaskManager detects changes to task.inputs and auto-saves them
-   
+
 2. Can hooks modify other task fields (status, name, priority, etc.)?
    Answer: YES - but requires explicit call to repository.update_task_* methods
-   
+
 3. Do hooks share the same session as TaskManager?
    Answer: YES - get_hook_repository() returns the same repository/session instance
-   
+
 4. Can hooks query other tasks using the shared session?
    Answer: YES - fully supported via get_hook_repository()
 """
@@ -132,21 +132,26 @@ async def test_post_hook_modifies_task_after_execution(sync_db_session):
     @register_post_hook
     async def modify_after_execution_hook(task, inputs, result):
         """Post-hook modifies task using repository"""
-        hook_calls.append({
-            "task_id": task.id,
-            "task_status": task.status,
-            "result": result,
-        })
+        hook_calls.append(
+            {
+                "task_id": task.id,
+                "task_status": task.status,
+                "result": result,
+            }
+        )
 
         # Get repository from hook context
         repo = get_hook_repository()
         assert repo is not None
 
         # Add metadata to task params
-        await repo.update_task(task.id, params={
-            "post_hook_executed": True,
-            "execution_result": result,
-        })
+        await repo.update_task(
+            task.id,
+            params={
+                "post_hook_executed": True,
+                "execution_result": result,
+            },
+        )
 
     try:
         repo = TaskRepository(sync_db_session)
@@ -155,8 +160,7 @@ async def test_post_hook_modifies_task_after_execution(sync_db_session):
         task = await repo.create_task(
             name="Test Task",
             user_id="test-user",
-            type="stdio.command",
-            params={"command": "echo test"},
+            params={"resource": "cpu", "executor_id": "system_info_executor"},
         )
         task_id = task.id
 

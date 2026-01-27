@@ -30,16 +30,16 @@ except ImportError:
 @pytest.mark.skipif(TaskExecutor is None, reason="TaskExecutor not available")
 class TestTaskExecutorToolsIntegration:
     """Integration tests for TaskExecutor with tools"""
-    
+
     @pytest.mark.asyncio
     @pytest.mark.skipif(
         not os.getenv("OPENAI_API_KEY"),
-        reason="OPENAI_API_KEY is not set - skipping integration test"
+        reason="OPENAI_API_KEY is not set - skipping integration test",
     )
     async def test_task_executor_with_limited_scrape_website_tool(self, use_test_db_session):
         """
         Test TaskExecutor execution with LimitedScrapeWebsiteTool
-        
+
         This test verifies:
         1. Tools are auto-imported when extensions are imported
         2. TaskExecutor can execute tasks using tools through CrewaiExecutor
@@ -49,26 +49,28 @@ class TestTaskExecutorToolsIntegration:
         openai_key = os.getenv("OPENAI_API_KEY")
         if not openai_key:
             pytest.skip("OPENAI_API_KEY is not set")
-        
+
         # TaskExecutor automatically imports extensions (which auto-imports tools)
         # So tools should already be registered when TaskExecutor is imported
         # Verify tool is registered
         try:
             from apflow.core.tools import get_tool_registry
+
             registry = get_tool_registry()
-            
+
             # Verify tool is registered (should be auto-registered via TaskExecutor import)
             if "LimitedScrapeWebsiteTool" not in registry.list_tools():
                 pytest.skip("LimitedScrapeWebsiteTool not registered (may be missing dependencies)")
         except ImportError:
             pytest.skip("Extensions or tools module not available")
-        
+
         # Create task tree that uses CrewaiExecutor with LimitedScrapeWebsiteTool
         # This simulates how users would actually use the system
         # Note: method="crewai_executor" (CrewaiExecutor's id) is sufficient, type is optional
         # works should be in params, not inputs
         # Use unique task ID to avoid conflicts with other tests
         import uuid
+
         task_id = f"test_scrape_{uuid.uuid4().hex[:8]}"
         tasks = [
             {
@@ -89,41 +91,40 @@ class TestTaskExecutorToolsIntegration:
                                 "verbose": False,
                                 "allow_delegation": False,
                                 "llm": "openai/gpt-3.5-turbo",
-                                "tools": ["LimitedScrapeWebsiteTool()"]
+                                "tools": ["LimitedScrapeWebsiteTool()"],
                             }
                         },
                         "tasks": {
                             "scrape_and_summarize": {
                                 "description": "Use the LimitedScrapeWebsiteTool to scrape https://www.spacex.com and provide a brief summary (2-3 sentences) of what the website is about. Focus on the main purpose and key information.",
                                 "expected_output": "A brief 2-3 sentence summary of the SpaceX website content",
-                                "agent": "web_analyzer"
+                                "agent": "web_analyzer",
                             }
-                        }
-                    }
-                }
+                        },
+                    },
+                },
             }
         ]
-        
+
         # Execute using TaskExecutor (the actual entry point users would use)
         task_executor = TaskExecutor()
         result = await task_executor.execute_tasks(
-            tasks=tasks,
-            root_task_id=None,
-            use_streaming=False
+            tasks=tasks, root_task_id=None, use_streaming=False
         )
-        
+
         print("=== TaskExecutor result: ===")
         import json
+
         print(json.dumps(result, indent=2, default=str))
-        
+
         # Verify result structure
         assert result["status"] in ["completed", "failed"]
-        
+
         if result["status"] == "completed":
             # Verify success result
             assert "root_task_id" in result
             assert "progress" in result
-            
+
             # The result should contain information about SpaceX
             # Extract result from task execution
             root_task_id = result["root_task_id"]
@@ -136,19 +137,21 @@ class TestTaskExecutorToolsIntegration:
             # Log the error for debugging
             print(f"Task execution failed: {result.get('error', result.get('progress'))}")
             # Don't fail the test if it's a network error (website might be down)
-            error_str = str(result.get('error', result.get('progress', ''))).lower()
+            error_str = str(result.get("error", result.get("progress", ""))).lower()
             if "network" not in error_str and "timeout" not in error_str:
-                raise AssertionError(f"Unexpected error: {result.get('error', result.get('progress'))}")
-    
+                raise AssertionError(
+                    f"Unexpected error: {result.get('error', result.get('progress'))}"
+                )
+
     @pytest.mark.asyncio
     @pytest.mark.skipif(
         not os.getenv("OPENAI_API_KEY"),
-        reason="OPENAI_API_KEY is not set - skipping integration test"
+        reason="OPENAI_API_KEY is not set - skipping integration test",
     )
     async def test_task_executor_with_custom_tool(self, use_test_db_session):
         """
         Test TaskExecutor execution with a custom tool registered using @tool_register decorator
-        
+
         This test verifies:
         1. Custom tools can be registered with @tool_register
         2. TaskExecutor can execute tasks using custom tools
@@ -158,26 +161,35 @@ class TestTaskExecutorToolsIntegration:
         openai_key = os.getenv("OPENAI_API_KEY")
         if not openai_key:
             pytest.skip("OPENAI_API_KEY is not set")
-        
+
+        # Check if crewai_executor is available
         try:
-            from apflow.core.tools import tool_register, get_tool_registry, BaseTool
-            from pydantic import BaseModel, Field
-            from typing import Type
+            from apflow.core.extensions.registry import get_extension_registry
+
+            registry = get_extension_registry()
+            if not registry.is_registered("crewai_executor"):
+                pytest.skip("crewai_executor not available (CrewAI not installed)")
         except ImportError:
-            pytest.skip("CrewAI tools module not available")
-        
+            pytest.skip("Extension registry not available")
+
         # Define a custom tool with @tool_register decorator
         class TextProcessorInputSchema(BaseModel):
             text: str = Field(..., description="The text to process")
-            operation: str = Field(default="uppercase", description="Operation to perform: uppercase, lowercase, reverse, or word_count")
-        
+            operation: str = Field(
+                default="uppercase",
+                description="Operation to perform: uppercase, lowercase, reverse, or word_count",
+            )
+
         @tool_register()
         class TextProcessorTool(BaseTool):
             """A custom tool for text processing operations"""
+
             name: str = "Text Processor"
-            description: str = "Process text with various operations: uppercase, lowercase, reverse, or word_count"
+            description: str = (
+                "Process text with various operations: uppercase, lowercase, reverse, or word_count"
+            )
             args_schema: Type[BaseModel] = TextProcessorInputSchema
-            
+
             def _run(self, text: str, operation: str = "uppercase") -> str:
                 """Process text based on the operation"""
                 if operation == "uppercase":
@@ -190,16 +202,19 @@ class TestTaskExecutorToolsIntegration:
                     return str(len(text.split()))
                 else:
                     return f"Unknown operation: {operation}"
-        
+
         # Verify tool is registered
         registry = get_tool_registry()
-        assert "TextProcessorTool" in registry.list_tools(), "TextProcessorTool should be registered"
-        
+        assert (
+            "TextProcessorTool" in registry.list_tools()
+        ), "TextProcessorTool should be registered"
+
         # Create task tree that uses CrewaiExecutor with TextProcessorTool
         # Note: method="crewai_executor" (CrewaiExecutor's id) is sufficient, type is optional
         # works should be in params, not inputs
         # Use unique task ID to avoid conflicts with other tests
         import uuid
+
         task_id = f"test_text_{uuid.uuid4().hex[:8]}"
         tasks = [
             {
@@ -220,36 +235,35 @@ class TestTaskExecutorToolsIntegration:
                                 "verbose": False,
                                 "allow_delegation": False,
                                 "llm": "openai/gpt-3.5-turbo",
-                                "tools": ["TextProcessorTool()"]
+                                "tools": ["TextProcessorTool()"],
                             }
                         },
                         "tasks": {
                             "process_text": {
                                 "description": "Use the TextProcessorTool to process the text 'Hello World' with the 'uppercase' operation, then use 'word_count' operation on the result. Provide a summary of what operations were performed.",
                                 "expected_output": "A summary of the text processing operations performed",
-                                "agent": "text_processor"
+                                "agent": "text_processor",
                             }
-                        }
-                    }
-                }
+                        },
+                    },
+                },
             }
         ]
-        
+
         # Execute using TaskExecutor
         task_executor = TaskExecutor()
         result = await task_executor.execute_tasks(
-            tasks=tasks,
-            root_task_id=None,
-            use_streaming=False
+            tasks=tasks, root_task_id=None, use_streaming=False
         )
-        
+
         print("=== TaskExecutor result: ===")
         import json
+
         print(json.dumps(result, indent=2, default=str))
-        
+
         # Verify result structure
         assert result["status"] in ["completed", "failed"]
-        
+
         if result["status"] == "completed":
             # Verify success result
             assert "root_task_id" in result
@@ -261,4 +275,3 @@ class TestTaskExecutorToolsIntegration:
             assert "error" in result or "progress" in result
             print(f"Text processing failed: {result.get('error', result.get('progress'))}")
             raise AssertionError(f"Unexpected error: {result.get('error', result.get('progress'))}")
-
