@@ -13,16 +13,7 @@ Extensions are automatically registered when imported via type-specific decorato
 - @hook_register() for hooks
 """
 
-# Auto-import tools extension to register all tools when extensions module is imported
-# This ensures tools are available for use across all extensions (e.g., CrewaiExecutor)
-try:
-    import apflow.extensions.tools  # noqa: F401
-except ImportError:
-    # Tools extension may not be installed, that's okay
-    pass
-except Exception:
-    # Other errors (syntax errors, etc.) should not break import
-    pass
+# Tools are imported lazily when needed (not auto-imported for performance)
 
 # Auto-import storage extensions to trigger registration
 try:
@@ -45,26 +36,11 @@ except ImportError:
     # Hook extensions may not be available, that's okay
     pass
 
-# Auto-import core built-in executors to trigger registration
-try:
-    from apflow.extensions.core import aggregate_results_executor  # noqa: F401
-except ImportError:
-    # Core extensions may not be available, that's okay
-    pass
-
-
-# Auto-import llm extension to trigger registration
-try:
-    from apflow.extensions.llm import llm_executor  # noqa: F401
-except ImportError:
-    # LLM extension may not be available (missing litellm), that's okay
-    pass
-
-# Auto-import crewai extension to trigger registration
-try:
-    from apflow.extensions.crewai import crewai_executor  # noqa: F401
-except ImportError:
-    # CrewAI extension may not be available (missing crewai), that's okay
-    pass
+# NOTE: Executors are NO LONGER auto-imported here
+# They are now auto-discovered via AST scanning (see scanner.py)
+# and loaded lazily only when actually executed (lazy loading architecture)
+#
+# This eliminates the need to maintain manual imports and dramatically
+# improves CLI startup performance by avoiding heavy dependency imports
 
 __all__ = []

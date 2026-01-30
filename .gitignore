@@ -60,3 +60,6 @@ logs/
 .DS_Store
 Thumbs.db
 
+# Extension scanner cache
+.executor_cache.json
+

@@ -2,143 +2,41 @@
 Extension management for apflow
 
 This module handles initialization and configuration of optional extensions.
-Extensions are automatically detected based on installed dependencies.
+Extensions are automatically detected using AST-based scanning (no imports).
 """
 
 import os
 from typing import Any, Optional, Dict
 from apflow.core.execution.errors import ExecutorError
+from apflow.core.extensions.scanner import ExtensionScanner
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Extension configuration: maps extension names to their dependencies and module paths
-# This aligns with pyproject.toml optional-dependencies
-EXTENSION_CONFIG: dict[str, dict[str, Any]] = {
-    "core": {
-        "dependencies": [],  # Core extension, always available
-        "module": "apflow.extensions.core",
-        "classes": [("AggregateResultsExecutor", "aggregate_results_executor")],
-        "always_available": True,
-    },
-    "stdio": {
-        "dependencies": [],  # Always available (stdlib)
-        "module": "apflow.extensions.stdio",
-        "classes": [
-            ("SystemInfoExecutor", "system_info_executor"),
-            ("CommandExecutor", "command_executor"),
-        ],
-        "always_available": True,
-    },
-    "crewai": {
-        "dependencies": ["crewai"],  # From [crewai] extra
-        "module": "apflow.extensions.crewai",
-        "classes": [("CrewaiExecutor", "crewai_executor")],
-    },
-    "http": {
-        "dependencies": ["httpx"],  # From [a2a] extra
-        "module": "apflow.extensions.http",
-        "classes": [("RestExecutor", "rest_executor")],
-    },
-    "ssh": {
-        "dependencies": ["asyncssh"],  # From [ssh] extra
-        "module": "apflow.extensions.ssh",
-        "classes": [("SshExecutor", "ssh_executor")],
-    },
-    "docker": {
-        "dependencies": ["docker"],  # From [docker] extra
-        "module": "apflow.extensions.docker",
-        "classes": [("DockerExecutor", "docker_executor")],
-    },
-    "grpc": {
-        "dependencies": ["grpclib"],  # From [grpc] extra (pure-Python backend)
-        "module": "apflow.extensions.grpc",
-        "classes": [("GrpcExecutor", "grpc_executor")],
-    },
-    "websocket": {
-        "dependencies": ["websockets"],  # From [a2a] extra
-        "module": "apflow.extensions.websocket",
-        "classes": [("WebSocketExecutor", "websocket_executor")],
-    },
-    "apflow": {
-        "dependencies": [],  # Core extension, always available
-        "module": "apflow.extensions.apflow",
-        "classes": [("ApFlowApiExecutor", "apflow_api_executor")],
-        "always_available": True,
-    },
-    "mcp": {
-        "dependencies": [],  # Uses stdlib, always available
-        "module": "apflow.extensions.mcp",
-        "classes": [("McpExecutor", "mcp_executor")],
-        "always_available": True,
-    },
-    "scrape": {
-        "dependencies": ["bs4", "trafilatura", "requests"],  # From [scrape] extra
-        "module": "apflow.extensions.scrape",
-        "classes": [("ScrapeExecutor", "scrape_executor")],
-    },
-}
 
+# DEPRECATED: EXTENSION_CONFIG is no longer used
+# Extensions are now auto-discovered via ExtensionScanner
+# This is kept for backward compatibility (will be removed in future version)
+EXTENSION_CONFIG: dict[str, dict[str, Any]] = {}
 
-# Build mapping from executor_id to extension_name
-# This allows loading a specific extension when an executor is requested
+# DEPRECATED: EXECUTOR_ID_TO_EXTENSION is no longer used
+# Use ExtensionScanner.get_executor_metadata() instead
 EXECUTOR_ID_TO_EXTENSION: dict[str, str] = {}
-for ext_name, ext_config in EXTENSION_CONFIG.items():
-    for _, executor_id in ext_config.get("classes", []):
-        EXECUTOR_ID_TO_EXTENSION[executor_id] = ext_name
 
 
 def _is_package_installed(package_name: str) -> bool:
     """
-    Check if a package is installed using importlib.metadata
+    Check if a package is installed WITHOUT importing it (lazy loading safe)
 
-    For standard library packages, this function tries to import them directly.
-    For third-party packages, it checks installed distributions.
-
-    This function handles various import-related errors, including:
-    - ImportError: Package not installed
-    - ModuleNotFoundError: Package not found (Python 3.6+)
-    - AttributeError: Dependency chain version incompatibility (e.g., pycares/aiodns)
-    - Other exceptions: Unexpected errors during import
+    Uses importlib.metadata to check installed distributions without importing.
+    This is critical for CLI --help performance and lazy loading architecture.
 
     Args:
-        package_name: Package name to check (e.g., "crewai", "httpx", "os")
+        package_name: Package name to check (e.g., "httpx", "docker")
 
     Returns:
-        True if package is installed/available, False otherwise
+        True if package is installed, False otherwise
     """
-    # First, try importing directly (works for stdlib and installed packages)
-    try:
-        __import__(package_name)
-        return True
-    except (ImportError, ModuleNotFoundError):
-        # If direct import fails, check installed distributions
-        # This handles cases where package name differs from import name
-        pass
-    except (AttributeError, TypeError, ValueError) as e:
-        # Handle dependency chain errors:
-        # - AttributeError: Version incompatibility in dependency chain
-        #   (e.g., pycares 5.0.0 removed ares_query_a_result, breaking aiodns)
-        # - TypeError/ValueError: Other dependency-related errors
-        # Log the issue but continue to check installed distributions
-        # The package may be installed but not importable due to dependency issues
-        logger.debug(
-            f"Package {package_name} has dependency issues during import: {e}. "
-            f"Will check installed distributions."
-        )
-        # Continue to check installed distributions below
-        pass
-    except Exception as e:
-        # Catch-all for any other unexpected errors during import
-        # This is defensive programming - we don't want package detection to crash
-        logger.debug(
-            f"Unexpected error importing package {package_name}: {e}. "
-            f"Will check installed distributions."
-        )
-        # Continue to check installed distributions below
-        pass
-
-    # Check installed distributions for third-party packages
     try:
         # Python 3.8+ has importlib.metadata in stdlib
         from importlib.metadata import distributions
@@ -149,7 +47,7 @@ def _is_package_installed(package_name: str) -> bool:
         except ImportError:
             return False
 
-    # Check all installed distributions
+    # Check all installed distributions WITHOUT importing
     for dist in distributions():
         # Normalize package name (handle case differences, hyphens vs underscores)
         dist_name = dist.metadata.get("Name", "").lower().replace("-", "_")
@@ -161,7 +59,7 @@ def _is_package_installed(package_name: str) -> bool:
     return False
 
 
-def get_extension_env() ->Optional[str]:
+def get_extension_env() -> Optional[str]:
     """
     Get the value of the APFLOW_EXTENSIONS environment variable
 
@@ -175,49 +73,39 @@ def get_allowed_executor_ids() -> Optional[set[str]]:
     """
     Get the set of allowed executor IDs from environment configuration
 
-    If APFLOW_EXTENSIONS is set, only executors from those extensions are allowed.
+    If APFLOW_EXTENSIONS is set, only those executor IDs are allowed.
     This provides security control to restrict which executors users can access.
 
     Returns:
         Set of allowed executor IDs, or None if no restrictions (allow all)
 
     Example:
-        APFLOW_EXTENSIONS=stdio,http -> Only stdio and http executors allowed
+        APFLOW_EXTENSIONS=rest_executor,command_executor -> Only these executors allowed
         APFLOW_EXTENSIONS not set -> All executors allowed (no restrictions)
     """
     extensions_env = get_extension_env()
     if extensions_env is None:
-        return None  # No restrictions
-    
+        return None
+
     extensions_env = extensions_env.strip()
-    # Parse enabled extensions
-    enabled_extensions = [e.strip().lower() for e in extensions_env.split(",") if e.strip()]
-    
-    if not enabled_extensions:
-        return None  # Empty or whitespace-only treated as no restrictions
+    enabled_ids = [e.strip() for e in extensions_env.split(",") if e.strip()]
 
-    # Collect executor IDs from enabled extensions
-    allowed_executor_ids: set[str] = set()
-    for ext_name in enabled_extensions:
-        ext_config = EXTENSION_CONFIG.get(ext_name)
-        if ext_config:
-            # Get executor IDs from this extension
-            for _, executor_id in ext_config.get("classes", []):
-                allowed_executor_ids.add(executor_id)
+    if not enabled_ids:
+        return None
 
-    return allowed_executor_ids
+    return set(enabled_ids)
 
 
 # Track whether all extensions have been loaded
 _all_extensions_loaded = False
 
 _loaded_extensions: Dict[str, bool] = {}  # Track which extensions have been loaded
-    
+
 
 def load_extension_by_name(extension_name: str) -> None:
     """
     Load a specific extension by name.
-    
+
     Args:
         extension_name: Name of the extension to load
     """
@@ -225,49 +113,57 @@ def load_extension_by_name(extension_name: str) -> None:
     ext_config = EXTENSION_CONFIG.get(extension_name)
     if not ext_config:
         raise ValueError(f"Unknown extension: {extension_name}")
-    
+
     # Check dependencies if not always available
     if not ext_config.get("always_available", False):
         dependencies = ext_config.get("dependencies", [])
         missing_deps = [dep for dep in dependencies if not _is_package_installed(dep)]
         if missing_deps:
-            logger.warning(f"Extension '{extension_name}' skipped: missing dependencies {missing_deps}")
+            logger.warning(
+                f"Extension '{extension_name}' skipped: missing dependencies {missing_deps}"
+            )
             return
-    
+
     module_path = ext_config["module"]
     classes = ext_config["classes"]
-    
+
     # Check if executors are already registered (in case registry was cleared)
     from apflow.core.extensions import get_registry
+
     registry = get_registry()
     all_registered = True
     for _, executor_id in classes:
         if not registry.is_registered(executor_id):
             all_registered = False
             break
-    
+
     # If already loaded and all executors registered, nothing to do
     if _loaded_extensions.get(extension_name) and all_registered:
         return
-    
+
     # Load the module (this will trigger decorator registration if not already imported)
     try:
         module = __import__(module_path, fromlist=[cls[0] for cls in classes])
         logger.debug(f"Loaded extension '{extension_name}', module: {module.__name__}")
-        
+
         # If module was already imported but executors not registered, manually register them
         if _loaded_extensions.get(extension_name) and not all_registered:
             from apflow.core.extensions.decorators import _register_extension
             from apflow.core.extensions.types import ExtensionCategory
+
             for class_name, executor_id in classes:
                 if not registry.is_registered(executor_id):
                     try:
                         executor_class = getattr(module, class_name)
-                        _register_extension(executor_class, ExtensionCategory.EXECUTOR, override=True)
-                        logger.debug(f"Manually re-registered executor '{executor_id}' from extension '{extension_name}'")
+                        _register_extension(
+                            executor_class, ExtensionCategory.EXECUTOR, override=True
+                        )
+                        logger.debug(
+                            f"Manually re-registered executor '{executor_id}' from extension '{extension_name}'"
+                        )
                     except (AttributeError, Exception) as e:
                         logger.warning(f"Failed to re-register executor '{executor_id}': {e}")
-        
+
         _loaded_extensions[extension_name] = True
     except Exception as e:
         logger.warning(f"Failed to load extension {extension_name}: {e}")
@@ -275,108 +171,126 @@ def load_extension_by_name(extension_name: str) -> None:
 
 def load_extension_by_id(executor_id: str) -> None:
     """
-    Load extension for a specific executor ID.
-    
-    This is used when executing a task - loads only the extension needed
-    for that executor, avoiding unnecessary loading of all extensions.
-    
+    Load extension for a specific executor ID (LAZY - imports only when called)
+
+    This is called ONLY when actually executing a task with that executor.
+    CLI --help or listing executors does NOT trigger this function.
+
+    Uses ExtensionScanner to get metadata (no import), then imports only
+    the specific executor module when dependencies are satisfied.
+
     Args:
         executor_id: Executor ID (e.g., "system_info_executor", "rest_executor")
+
+    Raises:
+        ExecutorError: If executor not found or dependencies missing
     """
-    ext_name = EXECUTOR_ID_TO_EXTENSION.get(executor_id)
-    if ext_name:
-        load_extension_by_name(ext_name)
-    else:
+    metadata = ExtensionScanner.get_executor_metadata(executor_id)
+
+    if not metadata:
         raise ExecutorError(f"Unknown executor: {executor_id}")
 
+    from apflow.core.extensions import get_registry
+
+    registry = get_registry()
+    if registry.is_registered(executor_id):
+        logger.debug(f"Executor '{executor_id}' already loaded")
+        return
+
+    if not metadata.always_available:
+        missing_deps = [dep for dep in metadata.dependencies if not _is_package_installed(dep)]
+        if missing_deps:
+            raise ExecutorError(f"Executor '{executor_id}' requires: {', '.join(missing_deps)}")
+
+    logger.debug(f"Lazy loading executor '{executor_id}' from {metadata.module_path}")
+
+    try:
+        module = __import__(metadata.module_path, fromlist=[metadata.class_name])
+
+        if not registry.is_registered(executor_id):
+            executor_class = getattr(module, metadata.class_name)
+            from apflow.core.extensions.decorators import _register_extension
+            from apflow.core.extensions.types import ExtensionCategory
+
+            _register_extension(executor_class, ExtensionCategory.EXECUTOR, override=True)
+
+        logger.info(f"Loaded executor '{executor_id}'")
+
+    except Exception as e:
+        logger.error(f"Failed to load executor '{executor_id}': {e}")
+        raise ExecutorError(f"Failed to load executor '{executor_id}': {e}")
 
 
 def _load_all_extensions() -> None:
     """
-    Dynamically load all extension modules to register executors.
-    
+    Load all available extensions (LAZY - only on-demand)
+
+    Scans extensions directory using AST (no imports) and loads executors
+    based on APFLOW_EXTENSIONS environment variable.
+
     This function is called when listing available executors to ensure
-    the registry contains all available executors. Extensions are loaded
-    on-demand rather than at startup to minimize startup time.
-    
-    Respects APFLOW_EXTENSIONS environment variable - if set, only loads
-    specified extensions for security and performance reasons.
-    
-    This function checks the current APFLOW_EXTENSIONS setting each time
-    and only loads extensions that haven't been loaded yet. This ensures
-    that changes to APFLOW_EXTENSIONS are respected.
+    the registry contains all available executors.
     """
-    # Check if APFLOW_EXTENSIONS is set - if so, only load specified extensions
+    ExtensionScanner.scan_builtin_executors()
+
     extensions_env = get_extension_env()
     if extensions_env:
-        # Parse enabled extensions from environment
-        enabled_extensions = [e.strip().lower() for e in extensions_env.split(",") if e.strip()]
-        extensions_to_load = [ext_name for ext_name in EXTENSION_CONFIG.keys() 
-                            if ext_name.lower() in enabled_extensions]
-        logger.debug(f"APFLOW_EXTENSIONS set, loading only specified extensions: {extensions_to_load}")
+        enabled_ids = [e.strip() for e in extensions_env.split(",") if e.strip()]
+        executor_ids_to_load = enabled_ids
+        logger.debug(f"APFLOW_EXTENSIONS set, loading: {executor_ids_to_load}")
     else:
-        # Load all extensions if no restrictions
-        extensions_to_load = list(EXTENSION_CONFIG.keys())
-        logger.debug("No APFLOW_EXTENSIONS restriction, loading all extensions")
-    
-    # Load extensions that haven't been loaded yet or need re-registration
-    # load_extension_by_name() will check if executors are registered and
-    # re-register them if needed (e.g., after registry was cleared)
-    for ext_name in extensions_to_load:
-        load_extension_by_name(ext_name)
+        executor_ids_to_load = ExtensionScanner.get_all_executor_ids()
+        logger.debug(f"Loading all {len(executor_ids_to_load)} discovered executors")
+
+    for executor_id in executor_ids_to_load:
+        try:
+            load_extension_by_id(executor_id)
+        except ExecutorError as e:
+            logger.warning(f"Skipped executor '{executor_id}': {e}")
 
 
 def get_available_executors() -> dict[str, Any]:
     """
-    Get list of available executors based on APFLOW_EXTENSIONS configuration
+    Get list of available executors (NO IMPORTS - fast)
 
-    This function returns metadata for all executors that are currently accessible,
-    considering APFLOW_EXTENSIONS restrictions. Used by API/CLI to show users
-    which executors they can use.
+    This function returns metadata for all executors without importing them.
+    Used by CLI --help and API listing endpoints for fast startup.
 
     Returns:
         Dictionary with:
             - executors: List of available executor metadata
             - restricted: Boolean indicating if access is restricted by APFLOW_EXTENSIONS
             - allowed_ids: List of allowed executor IDs (if restricted)
-
-    Example:
-        {
-            "executors": [
-                {"id": "system_info_executor", "name": "System Info", ...},
-                {"id": "command_executor", "name": "Command", ...}
-            ],
-            "restricted": True,
-            "allowed_ids": ["system_info_executor", "command_executor"]
-        }
     """
-    from apflow.core.extensions import get_all_executor_metadata
+    ExtensionScanner.scan_builtin_executors()
 
-    # Load all extensions to populate registry
-    _load_all_extensions()
+    all_executor_ids = ExtensionScanner.get_all_executor_ids()
 
-    # Get all executor metadata from registry
-    all_metadata = get_all_executor_metadata()
-
-    # Check if access is restricted
     allowed_executor_ids = get_allowed_executor_ids()
     is_restricted = allowed_executor_ids is not None
 
-    # Filter executors based on restrictions
     if is_restricted:
-        available_metadata = {
-            executor_id: metadata
-            for executor_id, metadata in all_metadata.items()
-            if executor_id in allowed_executor_ids
-        }
+        available_ids = [
+            eid for eid in all_executor_ids if allowed_executor_ids and eid in allowed_executor_ids
+        ]
     else:
-        available_metadata = all_metadata
+        available_ids = all_executor_ids
 
-    # Convert to list format
-    executors_list = [
-        {"id": executor_id, **metadata}
-        for executor_id, metadata in available_metadata.items()
-    ]
+    executors_list = []
+    for executor_id in available_ids:
+        metadata = ExtensionScanner.get_executor_metadata(executor_id)
+        if metadata:
+            executors_list.append(
+                {
+                    "id": metadata.id,
+                    "name": metadata.name,
+                    "description": metadata.description,
+                    "tags": metadata.tags,
+                    "dependencies": metadata.dependencies,
+                    "available": metadata.always_available
+                    or all(_is_package_installed(dep) for dep in metadata.dependencies),
+                }
+            )
 
     result = {
         "executors": executors_list,
@@ -384,7 +298,7 @@ def get_available_executors() -> dict[str, Any]:
         "restricted": is_restricted,
     }
 
-    if is_restricted:
+    if is_restricted and allowed_executor_ids:
         result["allowed_ids"] = sorted(allowed_executor_ids)
 
     return result
@@ -440,7 +354,6 @@ def _load_custom_task_model() -> None:
             logger.warning(f"Failed to load custom TaskModel from {task_model_class_path}: {e}")
 
 
-
 def initialize_extensions() -> None:
     """
     Initialize apflow extensions intelligently
@@ -453,4 +366,3 @@ def initialize_extensions() -> None:
     _load_custom_task_model()
 
     logger.info("Extension initialization completed")
-
