@@ -143,13 +143,15 @@ APFLOW_CORS_ALLOW_ALL=true
 
 | Variable | Type | Default | Description |
 |----------|------|---------|-------------|
-| `APFLOW_EXTENSIONS` | string | - | Comma-separated extension names to load (also restricts available executors for security) |
+| `APFLOW_EXTENSIONS` | string | - | Comma-separated extensions by directory name to load (also restricts available executors for security) |
+| `APFLOW_EXTENSIONS_IDS` | string | - | Comma-separated extension IDs to load (also restricts available executors for security) |
 | `APFLOW_LLM_PROVIDER` | string | - | LLM provider for AI extensions |
 
 **Example:**
 ```bash
 # Load only stdio and http extensions (security: only these executors are accessible)
 APFLOW_EXTENSIONS=stdio,http
+APFLOW_EXTENSIONS_IDS=system_info_executor,rest_executor
 APFLOW_LLM_PROVIDER=openai
 ```
 
