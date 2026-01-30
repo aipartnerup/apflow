@@ -9,6 +9,11 @@
 - More comprehensive failure handling tests for TaskManager, including all error types and re-execution (tests/core/execution/test_task_failure_handling.py).
 - Tests for hook context modification and persistence in pre_hook and post_hook scenarios (tests/core/storage/test_hook_modify_task_with_context.py).
 - Integration tests for TaskExecutor with custom and built-in tools (tests/core/execution/test_task_executor_tools_integration.py).
+- New `ScrapeExecutor` (`scrape_executor`) for web content extraction and data scraping capabilities
+- Extension scanner module (`src/apflow/core/extensions/scanner.py`) for AST-based scanning of extension files
+- Test coverage for extension scanner functionality (tests/core/test_extension_scanner.py)
+- New `APFLOW_EXTENSIONS_IDS` environment variable for fine-grained control over extension ID-based access restrictions
+- Documentation section on task data fields to clarify distinction between inputs, params, and result fields
 
 ### Changed
 - Refactored WebSocketExecutor to provide full input/output schema, error handling, and cancellation support (src/apflow/extensions/websocket/websocket_executor.py).
@@ -18,6 +23,12 @@
 - Improved hook context usage and persistence in hook modification tests (tests/core/storage/test_hook_modify_task_with_context.py).
 - Expanded demo mode tests to cover more edge cases and sleep scaling (tests/core/test_demo_mode.py).
 - Improved schema-based execution tests for dependency mapping and fallback logic (tests/integration/test_schema_based_execution.py).
+- Enhanced extension management system with AST-based scanning and detailed configuration options
+- Improved extension loading control with executor ID-based restrictions for enhanced security
+- Enhanced documentation for CLI command extensions, overrides, and library usage patterns
+
+### Fixed
+- Task failure handling and demo mode functionality improvements with enhanced error tracking and recovery mechanisms
 
 ## [0.12.1] 2026-01-25
 
