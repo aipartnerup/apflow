@@ -29,7 +29,7 @@ def _is_package_installed(package_name: str) -> bool:
     Check if a package is installed WITHOUT importing it (lazy loading safe)
 
     Uses importlib.metadata to check installed distributions without importing.
-    This is critical for CLI --help performance and lazy loading architecture.
+    Also detects stdlib/builtins via module spec resolution.
 
     Args:
         package_name: Package name to check (e.g., "httpx", "docker")
@@ -37,6 +37,23 @@ def _is_package_installed(package_name: str) -> bool:
     Returns:
         True if package is installed, False otherwise
     """
+    # Fast path for stdlib/builtins without importing
+    try:
+        import sys
+        import importlib.util
+
+        normalized = package_name.split(".")[0]
+        if normalized in sys.builtin_module_names:
+            return True
+
+        if hasattr(sys, "stdlib_module_names") and normalized in sys.stdlib_module_names:
+            return True
+
+        if importlib.util.find_spec(normalized) is not None:
+            return True
+    except Exception:
+        pass
+
     try:
         # Python 3.8+ has importlib.metadata in stdlib
         from importlib.metadata import distributions
@@ -48,10 +65,10 @@ def _is_package_installed(package_name: str) -> bool:
             return False
 
     # Check all installed distributions WITHOUT importing
+    package_normalized = package_name.lower().replace("-", "_")
     for dist in distributions():
         # Normalize package name (handle case differences, hyphens vs underscores)
         dist_name = dist.metadata.get("Name", "").lower().replace("-", "_")
-        package_normalized = package_name.lower().replace("-", "_")
 
         if dist_name == package_normalized:
             return True
@@ -73,27 +90,56 @@ def get_allowed_executor_ids() -> Optional[set[str]]:
     """
     Get the set of allowed executor IDs from environment configuration
 
-    If APFLOW_EXTENSIONS is set, only those executor IDs are allowed.
+    Supports two environment variables:
+    - APFLOW_EXTENSIONS: Extension directory names (e.g., "stdio", "http", "crewai")
+    - APFLOW_EXTENSIONS_IDS: Specific executor IDs (e.g., "system_info_executor", "rest_executor")
+
+    If either is set, only those executor IDs are allowed.
     This provides security control to restrict which executors users can access.
 
     Returns:
         Set of allowed executor IDs, or None if no restrictions (allow all)
 
-    Example:
-        APFLOW_EXTENSIONS=rest_executor,command_executor -> Only these executors allowed
-        APFLOW_EXTENSIONS not set -> All executors allowed (no restrictions)
+    Examples:
+        APFLOW_EXTENSIONS=stdio,http -> All executors from stdio and http extensions
+        APFLOW_EXTENSIONS_IDS=system_info_executor,rest_executor -> Only these specific executors
+        Both set -> Union of executors from extensions + specific IDs
+        Neither set -> All executors allowed (no restrictions)
     """
     extensions_env = get_extension_env()
-    if extensions_env is None:
+    extensions_ids_env = os.environ.get("APFLOW_EXTENSIONS_IDS")
+
+    # If neither is set, allow all
+    if not extensions_env and not extensions_ids_env:
         return None
 
-    extensions_env = extensions_env.strip()
-    enabled_ids = [e.strip() for e in extensions_env.split(",") if e.strip()]
+    allowed_ids: set[str] = set()
 
-    if not enabled_ids:
-        return None
+    # Process APFLOW_EXTENSIONS (extension directory names)
+    if extensions_env:
+        extensions_env = extensions_env.strip()
+        extension_names = [e.strip() for e in extensions_env.split(",") if e.strip()]
 
-    return set(enabled_ids)
+        for extension_name in extension_names:
+            extension_executor_ids = ExtensionScanner.get_executor_ids_by_extension(extension_name)
+            if extension_executor_ids:
+                allowed_ids.update(extension_executor_ids)
+            else:
+                logger.warning(f"Unknown extension in APFLOW_EXTENSIONS: '{extension_name}'")
+
+    # Process APFLOW_EXTENSIONS_IDS (specific executor IDs)
+    if extensions_ids_env:
+        extensions_ids_env = extensions_ids_env.strip()
+        executor_ids = [e.strip() for e in extensions_ids_env.split(",") if e.strip()]
+
+        all_executor_ids = set(ExtensionScanner.get_all_executor_ids())
+        for executor_id in executor_ids:
+            if executor_id in all_executor_ids:
+                allowed_ids.add(executor_id)
+            else:
+                logger.warning(f"Unknown executor ID in APFLOW_EXTENSIONS_IDS: '{executor_id}'")
+
+    return allowed_ids if allowed_ids else None
 
 
 # Track whether all extensions have been loaded
@@ -104,69 +150,40 @@ _loaded_extensions: Dict[str, bool] = {}  # Track which extensions have been loa
 
 def load_extension_by_name(extension_name: str) -> None:
     """
-    Load a specific extension by name.
+    Load all executors from a specific extension by directory name
 
     Args:
-        extension_name: Name of the extension to load
+        extension_name: Extension directory name (e.g., "stdio", "http", "core")
+
+    Raises:
+        ValueError: If extension directory is unknown
+
+    Example:
+        load_extension_by_name("stdio")  # Loads system_info_executor, command_executor
+        load_extension_by_name("core")   # Loads aggregate_results_executor
     """
     global _loaded_extensions
-    ext_config = EXTENSION_CONFIG.get(extension_name)
-    if not ext_config:
-        raise ValueError(f"Unknown extension: {extension_name}")
 
-    # Check dependencies if not always available
-    if not ext_config.get("always_available", False):
-        dependencies = ext_config.get("dependencies", [])
-        missing_deps = [dep for dep in dependencies if not _is_package_installed(dep)]
-        if missing_deps:
-            logger.warning(
-                f"Extension '{extension_name}' skipped: missing dependencies {missing_deps}"
-            )
-            return
+    # Get all executor IDs in this extension
+    executor_ids = ExtensionScanner.get_executor_ids_by_extension(extension_name)
 
-    module_path = ext_config["module"]
-    classes = ext_config["classes"]
-
-    # Check if executors are already registered (in case registry was cleared)
-    from apflow.core.extensions import get_registry
-
-    registry = get_registry()
-    all_registered = True
-    for _, executor_id in classes:
-        if not registry.is_registered(executor_id):
-            all_registered = False
-            break
-
-    # If already loaded and all executors registered, nothing to do
-    if _loaded_extensions.get(extension_name) and all_registered:
+    if not executor_ids:
+        # Check if it's a known extension directory but has no executors
+        # This should rarely happen, but handle gracefully
+        logger.warning(f"Extension '{extension_name}' has no executors or is unknown")
         return
 
-    # Load the module (this will trigger decorator registration if not already imported)
-    try:
-        module = __import__(module_path, fromlist=[cls[0] for cls in classes])
-        logger.debug(f"Loaded extension '{extension_name}', module: {module.__name__}")
+    # Load each executor in the extension
+    loaded_count = 0
+    for executor_id in executor_ids:
+        try:
+            load_extension_by_id(executor_id)
+            loaded_count += 1
+        except ExecutorError as e:
+            logger.warning(f"Skipped executor '{executor_id}' in extension '{extension_name}': {e}")
 
-        # If module was already imported but executors not registered, manually register them
-        if _loaded_extensions.get(extension_name) and not all_registered:
-            from apflow.core.extensions.decorators import _register_extension
-            from apflow.core.extensions.types import ExtensionCategory
-
-            for class_name, executor_id in classes:
-                if not registry.is_registered(executor_id):
-                    try:
-                        executor_class = getattr(module, class_name)
-                        _register_extension(
-                            executor_class, ExtensionCategory.EXECUTOR, override=True
-                        )
-                        logger.debug(
-                            f"Manually re-registered executor '{executor_id}' from extension '{extension_name}'"
-                        )
-                    except (AttributeError, Exception) as e:
-                        logger.warning(f"Failed to re-register executor '{executor_id}': {e}")
-
-        _loaded_extensions[extension_name] = True
-    except Exception as e:
-        logger.warning(f"Failed to load extension {extension_name}: {e}")
+    _loaded_extensions[extension_name] = True
+    logger.debug(f"Loaded {loaded_count}/{len(executor_ids)} executors from extension '{extension_name}'")
 
 
 def load_extension_by_id(executor_id: str) -> None:

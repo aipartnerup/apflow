@@ -202,28 +202,40 @@ class ExtensionScanner:
                 tags = []
 
                 for item in node.body:
-                    if isinstance(item, ast.Assign):
-                        for target in item.targets:
-                            if isinstance(target, ast.Name):
-                                attr_name = target.id
+                    targets: list[ast.expr] = []
+                    value_node: Optional[ast.expr] = None
 
-                                if attr_name == "id" and isinstance(item.value, ast.Constant):
-                                    executor_id = item.value.value
-                                elif attr_name == "name" and isinstance(item.value, ast.Constant):
-                                    executor_name = item.value.value
-                                elif attr_name == "description":
-                                    # Handle both simple strings and multi-line strings
-                                    if isinstance(item.value, ast.Constant):
-                                        description = item.value.value
-                                    elif isinstance(item.value, (ast.Str, ast.JoinedStr)):
-                                        # Handle f-strings or complex string expressions
-                                        description = ""  # Skip complex expressions
-                                elif attr_name == "tags" and isinstance(item.value, ast.List):
-                                    tags = [
-                                        elt.value
-                                        for elt in item.value.elts
-                                        if isinstance(elt, ast.Constant)
-                                    ]
+                    if isinstance(item, ast.Assign):
+                        targets = list(item.targets)
+                        value_node = item.value
+                    elif isinstance(item, ast.AnnAssign):
+                        targets = [item.target]
+                        value_node = item.value
+
+                    if not targets or value_node is None:
+                        continue
+
+                    for target in targets:
+                        if isinstance(target, ast.Name):
+                            attr_name = target.id
+
+                            if attr_name == "id" and isinstance(value_node, ast.Constant):
+                                executor_id = value_node.value
+                            elif attr_name == "name" and isinstance(value_node, ast.Constant):
+                                executor_name = value_node.value
+                            elif attr_name == "description":
+                                # Handle both simple strings and multi-line strings
+                                if isinstance(value_node, ast.Constant):
+                                    description = value_node.value
+                                elif isinstance(value_node, (ast.Str, ast.JoinedStr)):
+                                    # Handle f-strings or complex string expressions
+                                    description = ""  # Skip complex expressions
+                            elif attr_name == "tags" and isinstance(value_node, ast.List):
+                                tags = [
+                                    elt.value
+                                    for elt in value_node.elts
+                                    if isinstance(elt, ast.Constant)
+                                ]
 
                 # Skip if no executor ID found
                 if not executor_id:
@@ -492,6 +504,34 @@ class ExtensionScanner:
         if not cls._scanned:
             cls.scan_builtin_executors()
         return cls._metadata_cache.copy()
+
+    @classmethod
+    def get_executor_ids_by_extension(cls, extension_name: str) -> List[str]:
+        """
+        Get all executor IDs belonging to a specific extension (by directory name)
+
+        Args:
+            extension_name: Extension directory name (e.g., "stdio", "http", "crewai")
+
+        Returns:
+            List of executor IDs belonging to the extension
+
+        Example:
+            >>> ids = ExtensionScanner.get_executor_ids_by_extension("stdio")
+            >>> print(ids)
+            ['system_info_executor', 'command_executor']
+        """
+        if not cls._scanned:
+            cls.scan_builtin_executors()
+
+        result = []
+        for executor_id, metadata in cls._metadata_cache.items():
+            # Check if the extension name is in the module path
+            # e.g., "apflow.extensions.stdio.system_info_executor" contains "stdio"
+            if f".{extension_name}." in metadata.module_path or metadata.module_path.endswith(f".{extension_name}"):
+                result.append(executor_id)
+
+        return result
 
     @classmethod
     def clear_cache(cls) -> None:
