@@ -32,6 +32,10 @@
 - New `APFLOW_EXTENSIONS_IDS` environment variable for fine-grained control over extension ID-based access restrictions
 - Documentation section on task data fields to clarify distinction between inputs, params, and result fields
 
+- **CrewAI Dependency Data Injection Improvements**
+  - `CrewaiExecutor` now injects dependency outputs directly into CrewAI task templates and input variables, preventing missing-template-variable errors in complex workflows
+  - TaskManager executor instantiation path has been extended to pass structured dependency data into CrewAI-based executors for more reliable multi-phase generation
+
 ### Changed
 
 - **GenerateExecutor Improvements**
@@ -52,6 +56,9 @@
 - Improved extension loading control with executor ID-based restrictions for enhanced security
 - Enhanced documentation for CLI command extensions, overrides, and library usage patterns
 
+- Improved CrewAI-based generation dependency handling in TaskManager and `CrewaiExecutor`, ensuring dependency data is consistently available for CrewAI tasks and multi-phase generation flows
+- Enhanced `GenerateExecutor` and `SchemaFormatter` with executor exclusion support and lazy loading of multi-phase CrewAI components, reducing overhead when advanced generation features are not used
+
 ### Fixed
 
 - Fixed LLM-generated task trees not respecting executor schemas - now validates all inputs match schema definitions
@@ -59,6 +66,7 @@
 - Fixed outdated documentation in prompts - now uses runtime schemas instead of static markdown docs
 - Fixed single-shot LLM quality inconsistencies - added multi-phase mode with specialized crews for complex requirements
 - Task failure handling and demo mode functionality improvements with enhanced error tracking and recovery mechanisms
+- Improved `ExtensionScanner` path handling for nested project layouts and ensured multi-phase CrewAI tests are skipped cleanly when CrewAI is not installed, including corrected import paths for `MultiPhaseGenerationCrew`
 
 ## [0.12.1] 2026-01-25
 
