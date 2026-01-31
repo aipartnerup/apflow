@@ -53,7 +53,7 @@ class TestGenerateExecutorEnhanced:
     async def test_multi_phase_mode_execution(self, executor):
         """Test multi-phase mode with CrewAI"""
         with patch(
-            "apflow.extensions.generate.generate_executor.MultiPhaseGenerationCrew"
+            "apflow.extensions.generate.multi_phase_crew.MultiPhaseGenerationCrew"
         ) as mock_crew_class:
             mock_crew = Mock()
             mock_crew.generate = AsyncMock(
