@@ -487,60 +487,94 @@ class CrewaiExecutor(BaseTask):
         return None
 
     def _inject_dependency_template_variables(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Inject dependency results as template variables for CrewAI tasks.
-        
-        When a CrewAI task depends on other tasks, dependency results are stored in inputs
-        with task IDs as keys (e.g., {'task-uuid': {"result": "content"}}). However, CrewAI
-        task descriptions use template variables like {content}, {data} which won't match
-        task IDs.
-        
-        This method detects dependency results and injects them as common template variable
-        names, allowing CrewAI tasks to reference them naturally.
-        
+        """Inject dependency results as template variables for CrewAI tasks.
+
+        When a CrewAI task depends on other tasks, dependency results are merged into
+        the ``inputs`` dictionary by :class:`TaskManager`. Those results may be stored
+        either under the *dependency task id* (e.g. ``{"scrape-task": "..."}``) or
+        under a UUID key. CrewAI task descriptions, however, use template variables like
+        ``{content}``, ``{data}``, etc. which do not match these keys directly.
+
+        This helper makes that bridge by detecting dependency results and exposing
+        them under a set of common template variable names so that CrewAI can
+        interpolate them safely.
+
+        The resolution order is:
+
+        1. Prefer explicit task dependencies from ``self.task.dependencies``
+           (works for both human-readable ids like ``"scrape-task"`` and UUIDs).
+        2. Fallback to the older heuristic that scans for UUID-like keys in
+           ``inputs`` (for backward compatibility with existing flows).
+
         Args:
-            inputs: Input dictionary potentially containing dependency results
-            
+            inputs: Input dictionary potentially containing dependency results.
+
         Returns:
-            Updated inputs dictionary with injected template variables
+            Updated inputs dictionary with injected template variables.
         """
         # Common template variable names that CrewAI tasks might use
         template_var_names = ["content", "data", "result", "output", "text"]
-        
-        # Look for dependency results (dict values that look like executor results)
-        # These are typically stored with UUID keys
-        import re
-        uuid_pattern = re.compile(
-            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
-            re.IGNORECASE
-        )
-        
-        for key, value in list(inputs.items()):
-            # Check if this looks like a dependency result (UUID key)
-            if uuid_pattern.match(key):
-                # Extract the actual content
-                if isinstance(value, dict) and "result" in value:
-                    content = value["result"]
-                    logger.debug(
-                        f"Found dependency result under key '{key}': "
-                        f"{content[:100] if isinstance(content, str) else type(content)}"
+
+        # Helper to inject a single content value under the common variable names
+        def _inject_from_content(source_key: str, content: Any) -> None:
+            for var_name in template_var_names:
+                if var_name not in inputs:
+                    inputs[var_name] = content
+                    logger.info(
+                        "Injected template variable '%s' from dependency '%s' for CrewAI task",
+                        var_name,
+                        source_key,
                     )
-                else:
-                    content = value
-                
-                # Inject as common template variables (only if not already present)
-                for var_name in template_var_names:
-                    if var_name not in inputs:
-                        inputs[var_name] = content
-                        logger.info(
-                            f"Injected template variable '{var_name}' from dependency '{key}' "
-                            f"for CrewAI task"
-                        )
-                
-                # Break after first dependency to avoid overwriting with multiple deps
-                # If there are multiple dependencies, they should be accessed by their IDs
-                break
-        
+
+        # 1) Primary path – use explicit dependency metadata when available
+        if getattr(self, "task", None) is not None and getattr(self.task, "dependencies", None):
+            for dep in self.task.dependencies:
+                dep_id = dep.get("id") if isinstance(dep, dict) else str(dep)
+                if not dep_id:
+                    continue
+
+                if dep_id in inputs:
+                    value = inputs[dep_id]
+
+                    # Extract actual content from common result shapes
+                    if isinstance(value, dict) and "result" in value:
+                        content = value["result"]
+                    else:
+                        content = value
+
+                    logger.debug(
+                        "Using dependency '%s' as content source for template variables", dep_id
+                    )
+                    _inject_from_content(dep_id, content)
+                    # Only use the first resolved dependency as the generic content
+                    return inputs
+
+        # 2) Fallback – legacy heuristic: look for UUID-like keys in inputs
+        import re
+
+        uuid_pattern = re.compile(
+            r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            re.IGNORECASE,
+        )
+
+        for key, value in list(inputs.items()):
+            if not isinstance(key, str) or not uuid_pattern.match(key):
+                continue
+
+            if isinstance(value, dict) and "result" in value:
+                content = value["result"]
+                logger.debug(
+                    "Found dependency result under key '%s': %s",
+                    key,
+                    content[:100] if isinstance(content, str) else type(content),
+                )
+            else:
+                content = value
+
+            _inject_from_content(key, content)
+            # Break after first dependency to avoid overwriting with multiple deps
+            break
+
         return inputs
 
     def _inject_dependency_data_into_tasks(self) -> None:

@@ -15,14 +15,23 @@ specific template substitution requirements.
 import pytest
 import os
 import json
-from apflow import TaskManager, create_session
+from apflow import TaskManager
 from apflow.core.execution.task_creator import TaskCreator
+
+# Import executors to ensure they're registered
+try:
+    from apflow.extensions.crewai import CrewaiExecutor  # noqa: F401
+    from apflow.extensions.http import RestExecutor  # noqa: F401
+    CREWAI_AVAILABLE = True
+except ImportError:
+    CREWAI_AVAILABLE = False
 
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(120)
+@pytest.mark.skipif(not CREWAI_AVAILABLE, reason="CrewAI not available")
 @pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set")
-async def test_crewai_dependency_schema_based_mapping():
+async def test_crewai_dependency_schema_based_mapping(sync_db_session):
     """
     Test that CrewAI executor correctly injects dependency results as template variables.
     
@@ -94,16 +103,14 @@ async def test_crewai_dependency_schema_based_mapping():
     print("\nNote: This task deliberately uses {content} template variable")
     print("      crewai_executor should auto-inject it from the scrape task result")
     
-    # Create and execute
-    db = create_session()
-    
+    # Create and execute using the test database session
     try:
-        task_creator = TaskCreator(db)
+        task_creator = TaskCreator(sync_db_session)
         task_tree = await task_creator.create_task_tree_from_array(tasks_array)
         
         print(f"\n✓ Task tree created: {task_tree.task.id}")
         
-        task_manager = TaskManager(db)
+        task_manager = TaskManager(sync_db_session)
         await task_manager.distribute_task_tree(task_tree)
         
         print("\n✓ Task tree executed")
@@ -141,4 +148,5 @@ async def test_crewai_dependency_schema_based_mapping():
         print("="*80)
         
     finally:
-        db.close()
+        # Session cleanup is handled by the fixture
+        pass

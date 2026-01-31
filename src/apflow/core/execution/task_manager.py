@@ -1803,17 +1803,58 @@ class TaskManager:
         """
         try:
             registry = get_registry()
-            executor_class = registry.get_by_type(
-                ExtensionCategory.EXECUTOR, task.schemas.get("method")
-            )
-            if executor_class:
-                # Create executor instance for schema discovery
-                return executor_class(
-                    task=task, inputs=task.inputs, user_id=task.user_id, task_id=task.id
+
+            # Preferred lookup: use executor *ID* from schemas["method"].
+            # Task schemas conventionally store the executor id in "method"
+            # (e.g. "crewai_executor", "scrape_executor").
+            method_id: Optional[str] = None
+            if getattr(task, "schemas", None):
+                method_id = task.schemas.get("method")
+
+            executor_instance: Optional[Any] = None
+
+            if method_id:
+                executor_instance = registry.create_executor_instance(
+                    method_id,
+                    inputs=task.inputs or {},
+                    task=task,
+                    task_id=task.id,
+                    user_id=task.user_id,
                 )
-        except Exception as e:
+
+            # Fallback: if lookup by id failed but a type is present in schemas,
+            # try resolving by type for backward compatibility.
+            if not executor_instance and getattr(task, "schemas", None):
+                ext_type = task.schemas.get("type")
+                if ext_type:
+                    template = registry.get_by_type(ExtensionCategory.EXECUTOR, ext_type)
+                    if template is not None:
+                        executor_class = template.__class__
+                        # Handle CategoryOverride wrapper used in decorators
+                        if hasattr(template, "_wrapped"):
+                            executor_class = template._wrapped.__class__
+
+                        try:
+                            executor_instance = executor_class(
+                                task=task,
+                                inputs=task.inputs,
+                                user_id=task.user_id,
+                                task_id=task.id,
+                            )
+                        except Exception as e:  # pragma: no cover - defensive
+                            logger.warning(
+                                "Failed to instantiate executor '%s' for task %s via type '%s': %s",
+                                executor_class.__name__,
+                                task.id,
+                                ext_type,
+                                e,
+                                exc_info=True,
+                            )
+
+            return executor_instance
+        except Exception as e:  # pragma: no cover - defensive
             logger.warning(f"Failed to get executor for task {task.id}: {e}", exc_info=True)
-        return None
+            return None
 
     def _perform_schema_based_mapping(
         self,
