@@ -215,8 +215,10 @@ class GenerateExecutor(BaseTask):
             Complete prompt string optimized for the specific requirement
         """
         schema_formatter = SchemaFormatter()
+        # Exclude generate_executor itself to prevent recursion
+        # Current system does NOT support recursive task generation
         executors_info = schema_formatter.format_for_requirement(
-            requirement, max_executors=15, include_examples=True
+            requirement, max_executors=15, include_examples=True, exclude_executors=["generate_executor"]
         )
 
         principles = PrinciplesExtractor.build_complete_principles_section()
@@ -224,6 +226,12 @@ class GenerateExecutor(BaseTask):
         prompt_parts = [
             "You are an expert task tree generator for the apflow framework.",
             "Your goal is to understand the business requirement and generate a valid, practical task tree JSON array.",
+            "",
+            "🚫 CRITICAL LIMITATION: RECURSIVE GENERATION NOT SUPPORTED",
+            "- generate_executor is NOT available in the executor list below",
+            "- The system does NOT support recursive task generation (generate → execute → generate)",
+            "- You MUST use concrete executors only (scrape_executor, rest_executor, system_info_executor, etc.)",
+            "- Do NOT try to decompose simple tasks - use the appropriate executor directly",
             "",
             "=== PRIORITY 1: Available Executors (USE THESE SCHEMAS) ===",
             executors_info,
@@ -243,40 +251,49 @@ class GenerateExecutor(BaseTask):
             "",
             "=== Executor Selection Guidelines (CRITICAL - READ CAREFULLY) ===",
             "",
-            "⚠️ SECURITY WARNING:",
-            "- command_executor is DISABLED BY DEFAULT for security (executes shell commands)",
-            "- DO NOT use command_executor unless user explicitly requests shell command execution",
-            "- For web scraping, ALWAYS use scrape_executor instead",
+            "⚠️ FUNDAMENTAL RULE: Use DIRECT executors for simple, single-purpose tasks",
+            "DO NOT decompose simple tasks that can be done by one executor!",
             "",
-            "□ For scraping/extracting website content → ALWAYS use 'scrape_executor'",
-            "  ❌ WRONG: {\"method\": \"command_executor\", \"inputs\": {\"command\": \"curl https://...\"}}",
-            "  ❌ WRONG: {\"method\": \"generate_executor\", \"inputs\": {\"requirement\": \"scrape https://...\"}}",
+            "🎯 DIRECT EXECUTION (Use these for simple tasks):",
+            "",
+            "□ For scraping/extracting website content → ALWAYS use 'scrape_executor' DIRECTLY",
             "  ✓ RIGHT: {\"method\": \"scrape_executor\", \"inputs\": {\"url\": \"https://...\"}}",
-            "  Why: scrape_executor is safe, purpose-built, and always enabled",
+            "  ❌ WRONG: {\"method\": \"generate_executor\", \"inputs\": {\"requirement\": \"scrape https://...\"}}",
+            "  ❌ WRONG: {\"method\": \"command_executor\", \"inputs\": {\"command\": \"curl https://...\"}}",
+            "  Why: scrape_executor is purpose-built, safe, and always enabled",
             "",
-            "□ For AI analysis with multiple agents/tasks → use 'crewai_executor'",
-            "  Example: Content analysis, report generation, multi-step AI workflows",
+            "□ For REST API calls → ALWAYS use 'rest_executor' DIRECTLY",
+            "  ✓ RIGHT: {\"method\": \"rest_executor\", \"inputs\": {\"url\": \"https://api...\", \"method\": \"GET\"}}",
+            "  ❌ WRONG: {\"method\": \"generate_executor\", \"inputs\": {\"requirement\": \"fetch from API...\"}}",
+            "  Example: GET/POST/PUT/DELETE requests, webhook calls, API interactions",
             "",
-            "□ For REST API calls → use 'rest_executor'",
-            "  Example: Calling external APIs, fetching JSON data",
+            "□ For system monitoring → ALWAYS use 'system_info_executor' DIRECTLY",
+            "  ✓ RIGHT: {\"method\": \"system_info_executor\", \"inputs\": {\"resource\": \"cpu\"}}",
+            "  ❌ WRONG: {\"method\": \"generate_executor\", \"inputs\": {\"requirement\": \"check CPU...\"}}",
+            "  Example: CPU, memory, disk, network usage",
             "",
-            "□ For breaking down COMPLEX workflows into sub-tasks → use 'generate_executor'",
-            "  ⚠️ generate_executor is a META-EXECUTOR for task generation only",
-            "  ❌ DO NOT use for direct execution (scraping, API calls, analysis)",
-            "  ✓ ONLY use when requirement is too complex and needs decomposition",
-            "  Example: Multi-stage workflows requiring different specialized executors",
-            "  IMPORTANT: If using generate_executor, set llm_provider to 'openai' or 'anthropic'",
-            "    ❌ WRONG: 'llm_provider': 'OPENAI_API_KEY' (this is env var name, not provider)",
-            "    ✓ RIGHT: 'llm_provider': 'openai' OR omit it entirely (uses default)",
+            "□ For AI analysis with multiple agents → use 'crewai_executor' DIRECTLY",
+            "  ✓ RIGHT: Define agents and tasks in crewai_executor inputs",
+            "  ❌ WRONG: {\"method\": \"generate_executor\", \"inputs\": {\"requirement\": \"analyze with AI...\"}}",
+            "  Example: Content analysis, report generation, research tasks",
             "",
-            "□ For aggregating results from 2+ different executors → root must be 'aggregate_results_executor'",
+            "🚫 RECURSIVE GENERATION: NOT SUPPORTED",
+            "  ❌ generate_executor is NOT AVAILABLE (excluded to prevent recursion)",
+            "  ❌ DO NOT try to use generate_executor in generated tasks",
+            "  ✓ Use concrete executors directly: scrape_executor, rest_executor, crewai_executor, etc.",
+            "  Why: Current system only supports single-pass generation (generate → execute)",
+            "  Future: Recursive generation with evaluation/termination may be supported later",
+            "",
+            "🚫 WHEN TO NEVER USE command_executor:",
+            "🚫 WHEN TO NEVER USE command_executor:",
+            "  ❌ Web scraping → use scrape_executor instead",
+            "  ❌ API calls → use rest_executor instead",
+            "  ⚠️ command_executor is DISABLED BY DEFAULT (requires APFLOW_STDIO_ALLOW_COMMAND=1)",
+            "  ⚠️ SECURITY RISK: Only use if user explicitly requests shell command execution",
+            "",
+            "□ For aggregating results from 2+ different executor types → root must be 'aggregate_results_executor'",
             "  Example: Combining results from scrape_executor and crewai_executor",
-            "",
-            "❌ NEVER use these executors for web scraping:",
-            "  - command_executor: disabled by default, requires APFLOW_STDIO_ALLOW_COMMAND=1",
-            "  - system_info_executor: for system hardware info (CPU/memory/disk), NOT websites",
-            "  - generate_executor: meta-executor for task decomposition, NOT direct execution",
-            "  ✓ ALWAYS use scrape_executor for website content extraction",
+            "  Note: Multiple tasks of SAME executor can share parent without aggregator",
             "",
             "=== Validation Checklist (VERIFY BEFORE RETURNING) ===",
             "□ Single root task (no parent_id)",
@@ -369,77 +386,155 @@ class GenerateExecutor(BaseTask):
             "The prompt field should specify output format: 'Return as JSON: {...}' or 'Return as text: ...'",
             "The crew's result is determined by the task prompts - not by executor schema.",
             "",
-            "=== Example: Sequential Chain (Fetch → Process → Notify) ===",
+            "=== Example 1: Simple System Monitoring (Single Executor) ===",
             json.dumps(
                 [
                     {
                         "id": "550e8400-e29b-41d4-a716-446655440000",
-                        "name": "Fetch API Data",
+                        "name": "Check CPU Usage",
+                        "schemas": {"method": "system_info_executor"},
+                        "inputs": {"resource": "cpu"},
+                    }
+                ],
+                indent=2,
+            ),
+            "",
+            "=== Example 2: Parallel Data Collection with Aggregation ===",
+            json.dumps(
+                [
+                    {
+                        "id": "root-aggregate",
+                        "name": "System Health Report",
+                        "schemas": {"method": "aggregate_results_executor"},
+                        "inputs": {},
+                        "dependencies": [
+                            {"id": "cpu-check", "required": True},
+                            {"id": "memory-check", "required": True},
+                            {"id": "disk-check", "required": True}
+                        ],
+                    },
+                    {
+                        "id": "cpu-check",
+                        "name": "Check CPU",
+                        "parent_id": "root-aggregate",
+                        "schemas": {"method": "system_info_executor"},
+                        "inputs": {"resource": "cpu"},
+                    },
+                    {
+                        "id": "memory-check",
+                        "name": "Check Memory",
+                        "parent_id": "root-aggregate",
+                        "schemas": {"method": "system_info_executor"},
+                        "inputs": {"resource": "memory"},
+                    },
+                    {
+                        "id": "disk-check",
+                        "name": "Check Disk",
+                        "parent_id": "root-aggregate",
+                        "schemas": {"method": "system_info_executor"},
+                        "inputs": {"resource": "disk"},
+                    },
+                ],
+                indent=2,
+            ),
+            "",
+            "=== Example 3: Sequential API Workflow (REST → Process → Notify) ===",
+            json.dumps(
+                [
+                    {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "name": "Fetch Weather Data",
                         "schemas": {"method": "rest_executor"},
-                        "inputs": {"url": "https://api.example.com/data", "method": "GET"},
+                        "inputs": {
+                            "url": "https://api.weather.com/v1/current",
+                            "method": "GET",
+                            "params": {"location": "Beijing"}
+                        },
                     },
                     {
                         "id": "660e8400-e29b-41d4-a716-446655440001",
-                        "name": "Process Data",
-                        "schemas": {"method": "command_executor"},
+                        "name": "Transform Data",
+                        "schemas": {"method": "rest_executor"},
                         "parent_id": "550e8400-e29b-41d4-a716-446655440000",
                         "dependencies": [
                             {"id": "550e8400-e29b-41d4-a716-446655440000", "required": True}
                         ],
-                        "inputs": {"command": "python process_data.py --input data.json"},
+                        "inputs": {
+                            "url": "https://api.internal.com/transform",
+                            "method": "POST",
+                            "headers": {"Content-Type": "application/json"}
+                        },
                     },
                     {
                         "id": "770e8400-e29b-41d4-a716-446655440002",
-                        "name": "Notify Completion",
+                        "name": "Send Notification",
                         "schemas": {"method": "rest_executor"},
                         "parent_id": "660e8400-e29b-41d4-a716-446655440001",
                         "dependencies": [
                             {"id": "660e8400-e29b-41d4-a716-446655440001", "required": True}
                         ],
                         "inputs": {
-                            "url": "https://api.example.com/notify",
+                            "url": "https://hooks.slack.com/services/XXX",
                             "method": "POST",
-                            "data": {"status": "completed"},
+                            "data": {"text": "Weather update processed"}
                         },
                     },
                 ],
                 indent=2,
             ),
             "",
-            "=== Example: CrewAI Executor (Multi-agent Analysis) ===",
+            "=== Example 4: Web Scraping Only (No AI Analysis) ===",
             json.dumps(
                 [
                     {
                         "id": "550e8400-e29b-41d4-a716-446655440000",
-                        "name": "Analyze Data with AI Crew",
+                        "name": "Scrape Product Prices",
+                        "schemas": {"method": "scrape_executor"},
+                        "inputs": {
+                            "url": "https://example.com/products",
+                            "extract": "prices",
+                            "selector": ".product-price"
+                        },
+                    }
+                ],
+                indent=2,
+            ),
+            "",
+            "=== Example 5: CrewAI for Complex Multi-Agent Analysis ===",
+            "Use crewai_executor ONLY when you need multiple AI agents collaborating:",
+            json.dumps(
+                [
+                    {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "name": "Multi-Agent Market Research",
                         "schemas": {"method": "crewai_executor"},
                         "inputs": {
                             "works": {
                                 "agents": {
-                                    "analyst": {
-                                        "role": "Senior Data Analyst",
-                                        "goal": "Analyze and extract key insights from data",
-                                        "backstory": "Expert data analyst with 10 years of experience in pattern recognition",
+                                    "researcher": {
+                                        "role": "Market Researcher",
+                                        "goal": "Gather and analyze market trends",
+                                        "backstory": "Expert researcher with 15 years in market analysis",
                                         "llm": "gpt-4",
                                     },
-                                    "reporter": {
+                                    "writer": {
                                         "role": "Report Writer",
-                                        "goal": "Create comprehensive reports",
-                                        "backstory": "Professional technical writer specialized in data analysis reports",
+                                        "goal": "Create professional reports",
+                                        "backstory": "Technical writer specialized in business reports",
                                         "llm": "gpt-4",
                                     },
                                 },
                                 "tasks": {
-                                    "analyze": {
-                                        "description": "Analyze the provided data for patterns and insights",
-                                        "agent": "analyst",
-                                        "prompt": "Analyze the data and return as JSON: {patterns: [], insights: string, score: number}",
-                                        "expected_output": "JSON with analysis results",
+                                    "research": {
+                                        "description": "Research market trends in electric vehicles",
+                                        "agent": "researcher",
+                                        "prompt": "Return JSON: {trends: [], market_size: string, growth_rate: number}",
+                                        "expected_output": "JSON with market analysis",
                                     },
                                     "report": {
-                                        "description": "Create final report based on analysis",
-                                        "agent": "reporter",
-                                        "prompt": "Generate a professional report in markdown format with sections: Summary, Key Findings, Recommendations",
+                                        "description": "Create executive summary report",
+                                        "agent": "writer",
+                                        "prompt": "Generate markdown report with sections: Executive Summary, Key Trends, Recommendations",
                                         "expected_output": "Markdown-formatted report",
                                     },
                                 },
@@ -450,53 +545,41 @@ class GenerateExecutor(BaseTask):
                 indent=2,
             ),
             "",
-            "=== Example: Multi-Executor Workflow with Aggregator Root (CRITICAL PATTERN) ===",
-            "When using 2+ different executors, root MUST be aggregate_results_executor:",
+            "=== Example 6: Scrape + Aggregate (NO AI) ===",
+            "For simple data collection without AI analysis, use scrape + aggregate:",
             json.dumps(
                 [
                     {
                         "id": "root-aggregate",
-                        "name": "Website Analysis Results",
+                        "name": "Competitor Price Comparison",
                         "schemas": {"method": "aggregate_results_executor"},
                         "inputs": {},
                         "dependencies": [
-                            {"id": "scrape-task", "required": True},
-                            {"id": "analyze-task", "required": True}
+                            {"id": "site-a", "required": True},
+                            {"id": "site-b", "required": True},
+                            {"id": "site-c", "required": True}
                         ],
                     },
                     {
-                        "id": "scrape-task",
-                        "name": "Scrape Website Content",
+                        "id": "site-a",
+                        "name": "Scrape Site A Prices",
                         "parent_id": "root-aggregate",
                         "schemas": {"method": "scrape_executor"},
-                        "inputs": {"url": "https://example.com", "extract": "main_content"},
+                        "inputs": {"url": "https://competitor-a.com/product", "extract": "price"},
                     },
                     {
-                        "id": "analyze-task",
-                        "name": "Analyze Content with AI",
+                        "id": "site-b",
+                        "name": "Scrape Site B Prices",
                         "parent_id": "root-aggregate",
-                        "dependencies": [{"id": "scrape-task", "required": True}],
-                        "schemas": {"method": "crewai_executor"},
-                        "inputs": {
-                            "works": {
-                                "agents": {
-                                    "analyst": {
-                                        "role": "Content Analyst",
-                                        "goal": "Analyze scraped website content and extract insights",
-                                        "backstory": "Expert web content analyst with deep understanding of digital content",
-                                        "llm": "gpt-4",
-                                    }
-                                },
-                                "tasks": {
-                                    "analysis": {
-                                        "description": "Analyze the website content and identify key themes",
-                                        "agent": "analyst",
-                                        "prompt": "Analyze the content and return JSON with structure: {insights: string, key_topics: [], recommendations: []}",
-                                        "expected_output": "JSON object with insights, topics, and recommendations",
-                                    },
-                                },
-                            }
-                        },
+                        "schemas": {"method": "scrape_executor"},
+                        "inputs": {"url": "https://competitor-b.com/product", "extract": "price"},
+                    },
+                    {
+                        "id": "site-c",
+                        "name": "Scrape Site C Prices",
+                        "parent_id": "root-aggregate",
+                        "schemas": {"method": "scrape_executor"},
+                        "inputs": {"url": "https://competitor-c.com/product", "extract": "price"},
                     },
                 ],
                 indent=2,

@@ -322,7 +322,7 @@ async def test_end_to_end_generate_and_execute_website_analysis():
     
     try:
         task_tree = await task_creator.create_task_tree_from_array(tasks_array)
-        print(f"✅ Task tree created successfully")
+        print("✅ Task tree created successfully")
         print(f"Root task ID: {task_tree.task.id}")
         print(f"Root task name: {task_tree.task.name}")
         
@@ -415,9 +415,415 @@ async def test_end_to_end_generate_and_execute_website_analysis():
         
         # Final validation: Check that we had meaningful execution
         assert completed_count > 0, "At least some tasks should have completed"
-        print(f"\n✅ End-to-end test completed successfully!")
+        print("\n✅ End-to-end test completed successfully!")
         print(f"   {completed_count}/{total_tasks} tasks completed")
         
     finally:
         db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(180)
+@pytest.mark.slow
+@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set in environment")
+async def test_generate_system_monitoring_workflow():
+    """
+    Real scenario: Generate system monitoring workflow with parallel task execution.
+    
+    Requirement: "Check system health by monitoring CPU, memory, and disk usage in parallel"
+    Expected: Multiple system_info_executor tasks with aggregate_results_executor as root
+    """
+    print(f"\n{'='*80}")
+    print("SCENARIO: System Monitoring Workflow")
+    print(f"{'='*80}\n")
+    
+    executor = GenerateExecutor(user_id="test_user")
+    requirement = "Check system health by monitoring CPU, memory, and disk usage in parallel"
+    
+    print(f"Requirement: {requirement}\n")
+    
+    result = await executor.execute({
+        "requirement": requirement,
+        "user_id": "test_user",
+        "generation_mode": "single_shot",
+    })
+    
+    print("=== Generated Task Tree ===")
+    print(json.dumps(result, indent=2))
+    
+    assert result["status"] == "completed", f"Generation failed: {result.get('error')}"
+    
+    tasks = result["tasks"]
+    assert len(tasks) >= 3, "Should generate at least 3 tasks (CPU, memory, disk)"
+    
+    # Count system_info_executor usage
+    system_info_tasks = [
+        t for t in tasks 
+        if t.get("schemas", {}).get("method") == "system_info_executor"
+    ]
+    
+    print(f"\n✅ Generated {len(system_info_tasks)} system_info_executor tasks")
+    
+    # Verify parallel structure (all should share same parent)
+    if len(system_info_tasks) > 1:
+        parent_ids = {t.get("parent_id") for t in system_info_tasks}
+        if len(parent_ids) == 1:
+            print(f"✅ Parallel structure detected: all tasks share parent {parent_ids.pop()}")
+    
+    # Validate task tree
+    validation = executor._validate_tasks_array(tasks)
+    assert validation["valid"], f"Task tree should be valid: {validation['error']}"
+    print("✅ Task tree passes validation")
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(180)
+@pytest.mark.slow
+@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set in environment")
+async def test_generate_api_data_pipeline():
+    """
+    Real scenario: Generate API data pipeline with sequential processing.
+    
+    Requirement: "Fetch weather data from API, transform it, then send to webhook"
+    Expected: Sequential rest_executor tasks
+    """
+    print(f"\n{'='*80}")
+    print("SCENARIO: API Data Pipeline")
+    print(f"{'='*80}\n")
+    
+    executor = GenerateExecutor(user_id="test_user")
+    requirement = (
+        "Fetch weather data from api.weather.com, "
+        "transform the data format, "
+        "then send the result to a webhook"
+    )
+    
+    print(f"Requirement: {requirement}\n")
+    
+    result = await executor.execute({
+        "requirement": requirement,
+        "user_id": "test_user",
+        "generation_mode": "single_shot",
+    })
+    
+    print("=== Generated Task Tree ===")
+    print(json.dumps(result, indent=2))
+    
+    assert result["status"] == "completed", f"Generation failed: {result.get('error')}"
+    
+    tasks = result["tasks"]
+    assert len(tasks) >= 2, "Should generate at least 2 tasks"
+    
+    # Count rest_executor usage
+    rest_tasks = [
+        t for t in tasks 
+        if t.get("schemas", {}).get("method") == "rest_executor"
+    ]
+    
+    # Count generate_executor usage (should be minimal for simple API pipeline)
+    generate_tasks = [
+        t for t in tasks 
+        if t.get("schemas", {}).get("method") == "generate_executor"
+    ]
+    
+    print(f"\n✅ Generated {len(rest_tasks)} rest_executor tasks")
+    print(f"   Generated {len(generate_tasks)} generate_executor tasks")
+    
+    # For simple API pipeline, should prefer direct executors over generate_executor
+    # However, we allow some flexibility as LLM might decompose slightly
+    if len(generate_tasks) > 0:
+        print("   ⚠️  Note: Using generate_executor for simple tasks is not optimal")
+    
+    # Verify sequential dependencies
+    tasks_with_deps = [t for t in tasks if t.get("dependencies")]
+    if tasks_with_deps:
+        print(f"✅ Sequential structure: {len(tasks_with_deps)} tasks have dependencies")
+    
+    # Validate task tree
+    validation = executor._validate_tasks_array(tasks)
+    assert validation["valid"], f"Task tree should be valid: {validation['error']}"
+    print("✅ Task tree passes validation")
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(180)
+@pytest.mark.slow
+@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set in environment")
+async def test_generate_multi_source_data_aggregation():
+    """
+    Real scenario: Scrape multiple websites and aggregate results (no AI).
+    
+    Requirement: "Scrape product prices from 3 competitor websites and compare them"
+    Expected: Multiple scrape_executor tasks with aggregate_results_executor root
+    """
+    print(f"\n{'='*80}")
+    print("SCENARIO: Multi-Source Data Aggregation (No AI)")
+    print(f"{'='*80}\n")
+    
+    executor = GenerateExecutor(user_id="test_user")
+    requirement = (
+        "Scrape product prices from amazon.com, ebay.com, and walmart.com "
+        "for iPhone 15 Pro and compare the prices"
+    )
+    
+    print(f"Requirement: {requirement}\n")
+    
+    result = await executor.execute({
+        "requirement": requirement,
+        "user_id": "test_user",
+        "generation_mode": "single_shot",
+    })
+    
+    print("=== Generated Task Tree ===")
+    print(json.dumps(result, indent=2))
+    
+    assert result["status"] == "completed", f"Generation failed: {result.get('error')}"
+    
+    tasks = result["tasks"]
+    
+    # Count scrape_executor usage
+    scrape_tasks = [
+        t for t in tasks 
+        if t.get("schemas", {}).get("method") == "scrape_executor"
+    ]
+    
+    print(f"\n✅ Generated {len(scrape_tasks)} scrape_executor tasks")
+    assert len(scrape_tasks) >= 2, "Should have multiple scraping tasks"
+    
+    # Check for aggregator root (multiple executors or multiple scrape tasks)
+    root_tasks = [t for t in tasks if not t.get("parent_id")]
+    if len(root_tasks) == 1:
+        root_executor = root_tasks[0].get("schemas", {}).get("method", "")
+        if len(scrape_tasks) > 1:
+            print(f"Root executor: {root_executor}")
+            # With multiple scrape tasks, should use aggregator
+            if "aggregate" in root_executor.lower():
+                print("✅ Using aggregator for multiple data sources")
+    
+    # Should NOT use crewai_executor for simple price comparison
+    crewai_tasks = [
+        t for t in tasks 
+        if t.get("schemas", {}).get("method") == "crewai_executor"
+    ]
+    print(f"CrewAI tasks: {len(crewai_tasks)} (should be 0 for simple data collection)")
+    
+    # Validate task tree
+    validation = executor._validate_tasks_array(tasks)
+    assert validation["valid"], f"Task tree should be valid: {validation['error']}"
+    print("✅ Task tree passes validation")
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(180)
+@pytest.mark.slow
+@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set in environment")
+async def test_generate_simple_query_single_executor():
+    """
+    Real scenario: Simple single-executor query.
+    
+    Requirement: "Check CPU usage"
+    Expected: Single system_info_executor task (no aggregator needed)
+    """
+    print(f"\n{'='*80}")
+    print("SCENARIO: Simple Single Executor Query")
+    print(f"{'='*80}\n")
+    
+    executor = GenerateExecutor(user_id="test_user")
+    requirement = "Check current CPU usage percentage"
+    
+    print(f"Requirement: {requirement}\n")
+    
+    result = await executor.execute({
+        "requirement": requirement,
+        "user_id": "test_user",
+        "generation_mode": "single_shot",
+    })
+    
+    print("=== Generated Task Tree ===")
+    print(json.dumps(result, indent=2))
+    
+    assert result["status"] == "completed", f"Generation failed: {result.get('error')}"
+    
+    tasks = result["tasks"]
+    
+    # For simple query, should generate minimal tasks
+    print(f"\nGenerated {len(tasks)} task(s)")
+    
+    # Check that it uses appropriate executor
+    if len(tasks) >= 1:
+        main_task = tasks[0] if not tasks[0].get("parent_id") else tasks[-1]
+        executor_type = main_task.get("schemas", {}).get("method", "")
+        print(f"Executor type: {executor_type}")
+        
+        # Should use system_info_executor for CPU query
+        assert "system_info" in executor_type.lower(), (
+            f"Should use system_info_executor for CPU query, got {executor_type}"
+        )
+        print("✅ Correct executor selected")
+    
+    # Should NOT need aggregator for single query
+    aggregate_tasks = [
+        t for t in tasks 
+        if "aggregate" in t.get("schemas", {}).get("method", "").lower()
+    ]
+    if len(tasks) == 1:
+        assert len(aggregate_tasks) == 0, "Single query shouldn't need aggregator"
+        print("✅ No unnecessary aggregator for simple query")
+    
+    # Validate task tree
+    validation = executor._validate_tasks_array(tasks)
+    assert validation["valid"], f"Task tree should be valid: {validation['error']}"
+    print("✅ Task tree passes validation")
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(180)
+@pytest.mark.slow
+@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set in environment")
+async def test_generate_complex_ai_analysis():
+    """
+    Real scenario: Complex AI analysis requiring multiple agents.
+    
+    Requirement: "Research market trends for electric vehicles and create detailed report"
+    Expected: crewai_executor with multiple agents (researcher, analyst, writer)
+    """
+    print(f"\n{'='*80}")
+    print("SCENARIO: Complex AI Multi-Agent Analysis")
+    print(f"{'='*80}\n")
+    
+    executor = GenerateExecutor(user_id="test_user")
+    requirement = (
+        "Research current market trends for electric vehicles in China, "
+        "analyze the competitive landscape, "
+        "and create a comprehensive business report with recommendations"
+    )
+    
+    print(f"Requirement: {requirement}\n")
+    
+    result = await executor.execute({
+        "requirement": requirement,
+        "user_id": "test_user",
+        "generation_mode": "single_shot",
+    })
+    
+    print("=== Generated Task Tree ===")
+    print(json.dumps(result, indent=2))
+    
+    assert result["status"] == "completed", f"Generation failed: {result.get('error')}"
+    
+    tasks = result["tasks"]
+    
+    # Check for crewai_executor usage
+    crewai_tasks = [
+        t for t in tasks 
+        if t.get("schemas", {}).get("method") == "crewai_executor"
+    ]
+    
+    print(f"\n✅ Generated {len(crewai_tasks)} crewai_executor task(s)")
+    
+    if crewai_tasks:
+        # Validate crewai structure
+        for task in crewai_tasks:
+            works = task.get("inputs", {}).get("works", {})
+            agents = works.get("agents", {})
+            crew_tasks = works.get("tasks", {})
+            
+            print(f"\nCrewAI task: {task.get('name')}")
+            print(f"  Agents: {len(agents)}")
+            print(f"  Tasks: {len(crew_tasks)}")
+            
+            assert len(agents) >= 1, "Should have at least 1 agent"
+            assert len(crew_tasks) >= 1, "Should have at least 1 task"
+            
+            # Verify agent structure
+            for agent_name, agent_config in agents.items():
+                assert "role" in agent_config, f"Agent {agent_name} missing 'role'"
+                assert "goal" in agent_config, f"Agent {agent_name} missing 'goal'"
+                assert "backstory" in agent_config, f"Agent {agent_name} missing 'backstory'"
+                assert "llm" in agent_config, f"Agent {agent_name} missing 'llm'"
+            
+            print("  ✅ All agents have required fields")
+    
+    # Validate task tree
+    validation = executor._validate_tasks_array(tasks)
+    assert validation["valid"], f"Task tree should be valid: {validation['error']}"
+    print("✅ Task tree passes validation")
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(180)
+@pytest.mark.slow
+@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set in environment")
+async def test_generate_hybrid_workflow_scrape_and_api():
+    """
+    Real scenario: Hybrid workflow combining scraping and API calls (no AI).
+    
+    Requirement: "Scrape news headlines from website then post summary to Slack"
+    Expected: scrape_executor + rest_executor (sequential)
+    """
+    print(f"\n{'='*80}")
+    print("SCENARIO: Hybrid Workflow (Scrape + API)")
+    print(f"{'='*80}\n")
+    
+    executor = GenerateExecutor(user_id="test_user")
+    requirement = (
+        "Scrape the latest technology news headlines from techcrunch.com "
+        "and post a summary to Slack webhook"
+    )
+    
+    print(f"Requirement: {requirement}\n")
+    
+    result = await executor.execute({
+        "requirement": requirement,
+        "user_id": "test_user",
+        "generation_mode": "single_shot",
+    })
+    
+    print("=== Generated Task Tree ===")
+    print(json.dumps(result, indent=2))
+    
+    assert result["status"] == "completed", f"Generation failed: {result.get('error')}"
+    
+    tasks = result["tasks"]
+    
+    # Count executor types
+    executor_types = {}
+    for task in tasks:
+        executor_id = task.get("schemas", {}).get("method", "")
+        if executor_id:
+            executor_types[executor_id] = executor_types.get(executor_id, 0) + 1
+    
+    print("\n=== Executor Usage ===")
+    for executor_id, count in executor_types.items():
+        print(f"  {executor_id}: {count}")
+    
+    # Should use scrape_executor for scraping
+    assert any("scrape" in e.lower() for e in executor_types.keys()), \
+        f"Should use scrape_executor for web scraping. Got executors: {list(executor_types.keys())}"
+    
+    # Should use rest_executor for Slack webhook OR allow generate_executor decomposition
+    has_rest = any("rest" in e.lower() for e in executor_types.keys())
+    has_generate = any("generate" in e.lower() for e in executor_types.keys())
+    
+    if has_rest:
+        print("✅ Correct executors selected (scrape + rest)")
+    elif has_generate:
+        print("⚠️  Using generate_executor for decomposition (not optimal but acceptable)")
+    else:
+        # Check if it used other valid executors
+        print(f"⚠️  Unexpected executor selection: {executor_types}")
+    
+    # Should NOT use command_executor (security)
+    assert not any("command" in e.lower() for e in executor_types.keys()), \
+        "Should NOT use command_executor for web scraping"
+    
+    # Verify sequential structure
+    tasks_with_deps = [t for t in tasks if t.get("dependencies")]
+    if tasks_with_deps:
+        print(f"✅ Sequential dependencies: {len(tasks_with_deps)} tasks")
+    
+    # Validate task tree
+    validation = executor._validate_tasks_array(tasks)
+    assert validation["valid"], f"Task tree should be valid: {validation['error']}"
+    print("✅ Task tree passes validation")
 

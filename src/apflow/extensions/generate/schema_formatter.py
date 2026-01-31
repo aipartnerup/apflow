@@ -30,7 +30,7 @@ class SchemaFormatter:
         self._llm_client = None
 
     def format_for_requirement(
-        self, requirement: str, max_executors: int = 15, include_examples: bool = True
+        self, requirement: str, max_executors: int = 15, include_examples: bool = True, exclude_executors: Optional[List[str]] = None
     ) -> str:
         """
         Format executor schemas relevant to the requirement
@@ -39,6 +39,7 @@ class SchemaFormatter:
             requirement: User's natural language requirement
             max_executors: Maximum number of executors to include
             include_examples: Whether to include usage examples
+            exclude_executors: List of executor IDs to exclude (e.g., ["generate_executor"])
 
         Returns:
             Formatted string with executor schemas and examples
@@ -47,7 +48,7 @@ class SchemaFormatter:
         all_executors = self.registry.list_executors()
         
         # Filter out disabled executors (e.g., command_executor when not enabled)
-        available_executors = self._filter_disabled_executors(all_executors)
+        available_executors = self._filter_disabled_executors(all_executors, exclude_executors=exclude_executors)
 
         # Filter by relevance
         relevant_executors = self._filter_relevant_executors(
@@ -75,26 +76,33 @@ class SchemaFormatter:
 
         return "\n".join(output)
     
-    def _filter_disabled_executors(self, executors: List[Any]) -> List[Any]:
+    def _filter_disabled_executors(self, executors: List[Any], exclude_executors: Optional[List[str]] = None) -> List[Any]:
         """
         Filter out executors that are disabled or not available
         
         Args:
             executors: List of all executors
+            exclude_executors: List of executor IDs to explicitly exclude
             
         Returns:
-            List of available executors (disabled ones removed)
+            List of available executors (disabled and excluded ones removed)
         """
         import os
         
+        exclude_executors = exclude_executors or []
         available = []
         for executor in executors:
             executor_id = getattr(executor, "id", "")
             
+            # Check if executor is in exclusion list
+            if executor_id in exclude_executors:
+                logger.info(f"Excluding {executor_id} from available executors (explicitly excluded)")
+                continue
+            
             # Special check for command_executor - requires APFLOW_STDIO_ALLOW_COMMAND=1
             if executor_id == "command_executor":
                 if not os.getenv("APFLOW_STDIO_ALLOW_COMMAND") == "1":
-                    logger.info(f"Skipping command_executor: not enabled (requires APFLOW_STDIO_ALLOW_COMMAND=1)")
+                    logger.info("Skipping command_executor: not enabled (requires APFLOW_STDIO_ALLOW_COMMAND=1)")
                     continue
             
             # Add more executor-specific checks here if needed
@@ -125,7 +133,7 @@ class SchemaFormatter:
                 
                 # Check if we're already in an event loop
                 try:
-                    loop = asyncio.get_running_loop()
+                    asyncio.get_running_loop()
                     # We're in an async context, but this is a sync method
                     # For now, fall back to keyword matching
                     # TODO: Make this method async to support async LLM calls
@@ -601,11 +609,6 @@ Do NOT include any explanation, just the JSON array."""
                 "This is the CORRECT executor for web scraping",
                 "Do NOT use command_executor with curl/wget for websites",
                 "Always provide full URL including protocol (https://)",
-            ],
-            "command_executor": [
-                "Not providing full command with arguments",
-                "Forgetting to specify working directory for relative paths",
-                "Not handling command failures or checking exit codes",
             ],
             "aggregate_results_executor": [
                 "Using rest_executor instead of aggregate_results_executor for web content",
