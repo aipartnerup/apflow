@@ -1148,6 +1148,8 @@ async def test_crewai_json_result_format_validation():
     3. Aggregator results contain properly structured data
     4. Better user experience: results are ready to use
     """
+    pytest.importorskip("crewai")
+    
     print("\n" + "="*80)
     print("TEST: CrewAI JSON Result Format - Verify Auto-Parse")
     print("="*80 + "\n")
