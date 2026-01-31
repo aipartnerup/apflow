@@ -7,6 +7,10 @@ Tests the 4-phase generation flow with mocked CrewAI calls.
 import pytest
 import json
 from unittest.mock import Mock, patch
+
+# Skip entire module if crewai is not installed
+pytest.importorskip("crewai")
+
 from apflow.extensions.generate.multi_phase_crew import MultiPhaseGenerationCrew
 
 
