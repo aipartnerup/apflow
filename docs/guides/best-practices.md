@@ -922,6 +922,115 @@ def validate_config():
 validate_config()
 ```
 
+## Generate Executor Best Practices
+
+### When to Use Generation Modes
+
+**Use Single-Shot Mode (default) when:**
+- Building prototypes or testing workflows
+- Requirements are simple and straightforward
+- Single executor or simple sequential workflows
+- Speed is more important than structure quality
+
+**Use Multi-Phase Mode when:**
+- Building production workflows
+- Requirements are complex with multiple steps
+- Multi-executor workflows (scrape + analyze, fetch + process + save)
+- Structure quality is critical
+- You need aggregator-root patterns enforced
+
+### Example: Good Requirements
+
+**Good requirements are specific and mention patterns:**
+
+```python
+# Good: Specific with clear pattern
+requirement = "Scrape data from https://api.example.com, analyze the content using LLM, then aggregate both results into a final report"
+
+# Good: Mentions execution pattern
+requirement = "Fetch user data and order data in parallel, then merge the results and save to database"
+
+# Bad: Too vague
+requirement = "Get some data and do something with it"
+```
+
+### Schema Definition for Custom Executors
+
+**Always implement `get_input_schema()` for validation:**
+
+```python
+@executor_register()
+class MyCustomExecutor(ExecutableTask):
+    def get_input_schema(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "url": {
+                    "type": "string",
+                    "description": "API endpoint to call",
+                    "pattern": "^https?://"
+                },
+                "method": {
+                    "type": "string",
+                    "enum": ["GET", "POST"],
+                    "default": "GET"
+                }
+            },
+            "required": ["url"]
+        }
+```
+
+**Benefits:**
+- Generate executor validates inputs automatically
+- Auto-completion in IDEs
+- Better error messages
+- Documentation for LLM
+
+### Task Tree Structure
+
+**Follow aggregator-root pattern for multi-executor workflows:**
+
+```python
+# Good: Aggregator root pattern
+[
+    {
+        "id": "root",
+        "schemas": {"method": "aggregate_results_executor"},  # Aggregator root
+        "dependencies": [{"id": "fetch"}, {"id": "process"}]
+    },
+    {
+        "id": "fetch",
+        "parent_id": "root",
+        "schemas": {"method": "fetch_executor"}
+    },
+    {
+        "id": "process", 
+        "parent_id": "root",
+        "dependencies": [{"id": "fetch"}],
+        "schemas": {"method": "llm_executor"}
+    }
+]
+
+# Bad: Non-aggregator root with children
+[
+    {
+        "id": "root",
+        "schemas": {"method": "fetch_executor"}  # Wrong! Has children but isn't aggregator
+    },
+    {
+        "id": "process",
+        "parent_id": "root",
+        "schemas": {"method": "llm_executor"}
+    }
+]
+```
+
+**Why aggregator-root matters:**
+- User sees all child task statuses
+- Better failure visibility
+- Proper result aggregation
+- Framework best practice
+
 ## Summary
 
 **Key Takeaways:**
@@ -933,11 +1042,14 @@ validate_config()
 5. **Code**: Organize by domain, use utilities, document well
 6. **Testing**: Unit test executors, integration test workflows, mock dependencies
 7. **Production**: Log, monitor, timeout, validate config
+8. **Generate Executor**: Use multi-phase for complex workflows, implement `get_input_schema()`, follow aggregator-root pattern
 
 ## Next Steps
 
 - **[Task Orchestration Guide](task-orchestration.md)** - Learn orchestration patterns
 - **[Custom Tasks Guide](custom-tasks.md)** - Create custom executors
+- **[Generate Executor Guide](../examples/generate-executor.md)** - Task tree generation
+- **[Generate Executor Improvements](../development/generate-executor-improvements.md)** - Technical details
 - **[Examples](../examples/basic_task.md)** - See practical examples
 - **[API Reference](../api/python.md)** - Complete API documentation
 

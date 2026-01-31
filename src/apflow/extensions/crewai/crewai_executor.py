@@ -93,26 +93,31 @@ class CrewaiExecutor(BaseTask):
             self.llm = model
             logger.debug(f"CrewaiExecutor initialized with model from kwargs: {model}")
 
-        # Process works parameter (required)
-        if not works:
-            raise ValueError("works parameter is required")
-
-        if not isinstance(works, dict):
-            raise ValueError("works must be a dictionary")
-
-        if "agents" not in works or "tasks" not in works:
-            raise ValueError("works must contain agents and tasks")
-
-        # Store works as instance attribute for later use (e.g., in execute method)
+        # Store works as instance attribute (can be None for schema/validation purposes)
         self.works = works
 
-        # Create agents and tasks from works
-        self.create_agents(works["agents"])
-        self.create_tasks(works["tasks"])
+        # Only initialize crew if works is provided (skip during validation/schema discovery)
+        if works:
+            if not isinstance(works, dict):
+                raise ValueError("works must be a dictionary")
 
-        # Initialize CrewAI crew
-        self.crew = None
-        self._initialize_crew()
+            if "agents" not in works or "tasks" not in works:
+                raise ValueError("works must contain agents and tasks")
+
+            # Create agents and tasks from works
+            self.create_agents(works["agents"])
+            self.create_tasks(works["tasks"])
+
+            # Initialize CrewAI crew
+            self.crew = None
+            self._initialize_crew()
+            # Create agents and tasks from works
+            self.create_agents(works["agents"])
+            self.create_tasks(works["tasks"])
+
+            # Initialize CrewAI crew
+            self.crew = None
+            self._initialize_crew()
 
     def create_agents(self, agents: Optional[Dict[str, Any]] = None) -> Dict[str, Agent]:
         """
@@ -277,9 +282,84 @@ class CrewaiExecutor(BaseTask):
 
         Returns:
             Dictionary containing parameter metadata
+            
+        Note:
+            CrewaiExecutor requires 'works' parameter which defines the crew structure:
+            - agents: Dict of agent configurations (role, goal, tools, llm, etc.)
+            - tasks: Dict of task configurations (description, agent, prompt, expected_output, etc.)
+            
+            The output result format is determined by the 'prompt' field in each task config.
         """
-        # Default implementation
-        return {}
+        return {
+            "type": "object",
+            "properties": {
+                "works": {
+                    "type": "object",
+                    "description": "Crew configuration with agents and tasks definitions",
+                    "properties": {
+                        "agents": {
+                            "type": "object",
+                            "description": "Dictionary of agent configurations: {agent_name: {role, goal, llm, tools, ...}}",
+                            "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                    "role": {
+                                        "type": "string",
+                                        "description": "Agent's role/title",
+                                    },
+                                    "goal": {
+                                        "type": "string",
+                                        "description": "Agent's primary goal",
+                                    },
+                                    "llm": {
+                                        "type": "string",
+                                        "description": "LLM model name (e.g., 'gpt-4', 'claude-3-opus')",
+                                    },
+                                    "tools": {
+                                        "type": "array",
+                                        "description": "List of tool names or objects",
+                                        "items": {"type": "string"},
+                                    },
+                                },
+                                "required": ["role", "goal"],
+                            },
+                        },
+                        "tasks": {
+                            "type": "object",
+                            "description": "Dictionary of task configurations: {task_name: {description, agent, prompt, expected_output, ...}}",
+                            "additionalProperties": {
+                                "type": "object",
+                                "properties": {
+                                    "description": {
+                                        "type": "string",
+                                        "description": "Task description",
+                                    },
+                                    "agent": {
+                                        "type": "string",
+                                        "description": "Agent name (must exist in agents dict)",
+                                    },
+                                    "prompt": {
+                                        "type": "string",
+                                        "description": "Detailed task prompt that defines output format (JSON, text, structured, etc.)",
+                                    },
+                                    "expected_output": {
+                                        "type": "string",
+                                        "description": "Description of expected output format",
+                                    },
+                                },
+                                "required": ["description", "agent"],
+                            },
+                        },
+                    },
+                    "required": ["agents", "tasks"],
+                },
+                "user_id": {
+                    "type": "string",
+                    "description": "Optional user ID for LLM key context",
+                },
+            },
+            "required": ["works"],
+        }
 
     def get_output_schema(self) -> Dict[str, Any]:
         """
@@ -287,6 +367,19 @@ class CrewaiExecutor(BaseTask):
 
         Returns:
             Dictionary containing output result metadata
+            
+        Note:
+            IMPORTANT: The 'result' format is DYNAMIC and determined by the task prompts in works.tasks:
+            - Each task's 'prompt' field defines what format the task will output
+            - Common formats: JSON object, JSON array, text summary, structured data, etc.
+            - When generating crewai_executor tasks, the prompt should clearly specify the output format
+            
+            For example:
+            - prompt: "Analyze and return as JSON: {analysis: string, score: number, items: []}"
+            - prompt: "Generate a CSV-formatted report with columns: name, value, status"
+            - prompt: "Return a markdown-formatted summary"
+            
+            The crew's final result is aggregated from all tasks' outputs.
         """
         return {
             "type": "object",
@@ -296,7 +389,14 @@ class CrewaiExecutor(BaseTask):
                     "enum": ["success", "failed", "cancelled"],
                     "description": "Execution status",
                 },
-                "result": {"description": "Execution result (processed crew output)"},
+                "result": {
+                    "type": ["string", "object", "array"],
+                    "description": (
+                        "Crew execution result - format determined by works.tasks[*].prompt fields. "
+                        "Usually JSON object, JSON array, or formatted text. "
+                        "The prompt in each task definition specifies the output format."
+                    ),
+                },
                 "error": {
                     "type": "string",
                     "description": "Error message (only present on failure)",
@@ -470,6 +570,13 @@ class CrewaiExecutor(BaseTask):
             but TaskManager will detect the cancellation after execution and mark the task as cancelled.
             Token usage will still be preserved even if cancelled.
         """
+        # Check if works is available (required for execution)
+        if not self.works:
+            return {
+                "status": "failed",
+                "error": "works parameter is required for execution. Expected format: {\"works\": {\"agents\": {...}, \"tasks\": {...}}}",
+            }
+
         # Get LLM API key with unified priority order and inject into environment
         # This allows CrewAI/LiteLLM to automatically use the key
         from apflow.core.utils.llm_key_context import get_llm_key, get_llm_provider_from_header

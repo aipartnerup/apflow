@@ -3,6 +3,23 @@
 ## [Unreleased]
 
 ### Added
+
+- **GenerateExecutor Enhancements - Advanced Task Tree Generation System**
+  - Dual-mode generation system: `single_shot` (fast) and `multi_phase` (high-quality) modes
+  - Multi-phase CrewAI-based task generation with 4-phase specialization:
+    - Phase 1: Requirement analysis - understand goals and constraints
+    - Phase 2: Structure design - design correct task hierarchies with proper parent-child relationships
+    - Phase 3: Input generation - fill task inputs matching executor schemas exactly
+    - Phase 4: Review and validation - validate and auto-fix common issues
+  - Schema formatter module (`schema_formatter.py`) - provides accurate runtime executor schemas instead of outdated static documentation
+  - Principles extractor module (`principles_extractor.py`) - extracts framework principles without code examples to guide LLM generation
+  - Enhanced validation system addressing three critical issues:
+    - Schema compliance: validates all task inputs match executor schema definitions (required fields, types, constraints)
+    - Root task patterns: enforces correct task hierarchy (multi-executor trees must have aggregator root)
+    - Auto-fix mechanisms: automatically corrects multiple roots, invalid parent IDs, and schema mismatches
+  - Comprehensive test coverage: 359 tests for GenerateExecutor features, multi-phase crew, schema formatting, and principles extraction
+  - Documentation: detailed development guide (`docs/development/generate-executor-improvements.md`) and enhanced examples
+
 - Integration tests for schema-based task tree execution and generation, covering scrape_executor + llm_executor, scrape_executor + crewai_executor, and generate_executor flows (tests/integration/test_schema_based_execution.py).
 - Improved demo mode test coverage, including custom demo results, sleep scaling, and fallback logic (tests/core/test_demo_mode.py).
 - Enhanced TaskBuilder tests for input/output schema handling and multi-level dependencies (tests/core/test_task_builder.py).
@@ -16,6 +33,14 @@
 - Documentation section on task data fields to clarify distinction between inputs, params, and result fields
 
 ### Changed
+
+- **GenerateExecutor Improvements**
+  - Refactored task tree generation to use runtime executor schemas instead of static documentation, ensuring schema accuracy
+  - Moved from single-shot generation to intelligent prompt building with principle extraction and schema formatting
+  - Enhanced post-processing to ensure correct user_id handling and UUID validation
+  - Improved error handling and validation with detailed logging for debugging
+  - Added `generation_mode` parameter to executor inputs for selecting between fast (single_shot) and high-quality (multi_phase) generation
+
 - Refactored WebSocketExecutor to provide full input/output schema, error handling, and cancellation support (src/apflow/extensions/websocket/websocket_executor.py).
 - Refactored and cleaned up JSON-RPC API tests for clarity, conciseness, and modern style (tests/api/a2a/test_http_json_rpc.py).
 - Improved dummy executor and related test coverage for TaskBuilder (tests/core/test_task_builder.py).
@@ -28,6 +53,11 @@
 - Enhanced documentation for CLI command extensions, overrides, and library usage patterns
 
 ### Fixed
+
+- Fixed LLM-generated task trees not respecting executor schemas - now validates all inputs match schema definitions
+- Fixed poor task tree structure issues - ensures correct root task patterns for multi-executor scenarios
+- Fixed outdated documentation in prompts - now uses runtime schemas instead of static markdown docs
+- Fixed single-shot LLM quality inconsistencies - added multi-phase mode with specialized crews for complex requirements
 - Task failure handling and demo mode functionality improvements with enhanced error tracking and recovery mechanisms
 
 ## [0.12.1] 2026-01-25

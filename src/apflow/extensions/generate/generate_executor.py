@@ -13,9 +13,10 @@ from typing import Dict, Any, List, Optional, Set
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.logger import get_logger
-from apflow.extensions.generate.executor_info import format_executors_for_llm
-from apflow.extensions.generate.docs_loader import load_relevant_docs_for_requirement
 from apflow.extensions.generate.llm_client import create_llm_client
+from apflow.extensions.generate.schema_formatter import SchemaFormatter
+from apflow.extensions.generate.principles_extractor import PrinciplesExtractor
+from apflow.extensions.generate.multi_phase_crew import MultiPhaseGenerationCrew
 
 logger = get_logger(__name__)
 
@@ -64,6 +65,7 @@ class GenerateExecutor(BaseTask):
             inputs: Dictionary containing:
                 - requirement: Natural language requirement (required)
                 - user_id: User ID for generated tasks (optional)
+                - generation_mode: "single_shot" or "multi_phase" (optional, default "single_shot")
                 - llm_provider: LLM provider ("openai" or "anthropic", optional)
                 - model: Model name (optional)
                 - temperature: LLM temperature (optional, default 0.7)
@@ -84,81 +86,114 @@ class GenerateExecutor(BaseTask):
                     "tasks": [],
                 }
 
-            # Get user_id from task context (via self.user_id property) or fallback to inputs
-            # self.user_id property automatically gets from task.user_id if task is available
             user_id = self.user_id or inputs.get("user_id")
+            generation_mode = inputs.get("generation_mode", "single_shot")
             llm_provider = inputs.get("llm_provider")
             model = inputs.get("model")
             temperature = inputs.get("temperature", 0.7)
             max_tokens = inputs.get("max_tokens", 4000)
 
-            # Get LLM API key with unified priority order:
-            # API context: header -> LLMKeyConfigManager -> env
-            # CLI context: params -> LLMKeyConfigManager -> env
             from apflow.core.utils.llm_key_context import get_llm_key
 
-            api_key = inputs.get("api_key")  # First check inputs (CLI params)
+            api_key = inputs.get("api_key")
             if not api_key:
-                # Get from unified context (header/config/env)
                 api_key = get_llm_key(user_id=user_id, provider=llm_provider, context="auto")
 
-            # Create LLM client
-            try:
-                llm_client = create_llm_client(
-                    provider=llm_provider,
-                    api_key=api_key,  # Pass API key if available
-                    model=model,
-                )
-            except Exception as e:
-                logger.error(f"Failed to create LLM client: {e}")
-                return {
-                    "status": "failed",
-                    "error": f"Failed to create LLM client: {str(e)}",
-                    "tasks": [],
-                }
+            if generation_mode == "multi_phase":
+                logger.info(f"Using multi-phase generation for: {requirement[:100]}...")
+                try:
+                    crew = MultiPhaseGenerationCrew(
+                        llm_provider=llm_provider, model=model, api_key=api_key
+                    )
+                    result = await crew.generate(requirement, user_id)
 
-            # Build prompt
-            prompt = self._build_llm_prompt(requirement, user_id)
+                    if not result.get("success"):
+                        return {
+                            "status": "failed",
+                            "error": result.get("error", "Multi-phase generation failed"),
+                            "tasks": [],
+                        }
 
-            # Generate response
-            logger.info(f"Generating task tree for requirement: {requirement[:100]}...")
-            try:
-                response = await llm_client.generate(
-                    prompt, temperature=temperature, max_tokens=max_tokens
-                )
-            except Exception as e:
-                logger.error(f"LLM generation error: {e}")
-                return {
-                    "status": "failed",
-                    "error": f"LLM generation failed: {str(e)}",
-                    "tasks": [],
-                }
+                    tasks = result.get("tasks", [])
+                except Exception as e:
+                    logger.error(f"Multi-phase generation error: {e}", exc_info=True)
+                    return {
+                        "status": "failed",
+                        "error": f"Multi-phase generation failed: {str(e)}",
+                        "tasks": [],
+                    }
+            else:
+                logger.info(f"Using single-shot generation for: {requirement[:100]}...")
+                try:
+                    llm_client = create_llm_client(
+                        provider=llm_provider,
+                        api_key=api_key,
+                        model=model,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to create LLM client: {e}")
+                    return {
+                        "status": "failed",
+                        "error": f"Failed to create LLM client: {str(e)}",
+                        "tasks": [],
+                    }
 
-            # Parse response
-            try:
-                tasks = self._parse_llm_response(response)
-            except Exception as e:
-                logger.error(f"Failed to parse LLM response: {e}")
-                return {
-                    "status": "failed",
-                    "error": f"Failed to parse LLM response: {str(e)}",
-                    "tasks": [],
-                }
+                prompt = self._build_llm_prompt(requirement, user_id)
 
-            # Post-process tasks: ensure UUID format IDs and correct user_id
+                try:
+                    response = await llm_client.generate(
+                        prompt, temperature=temperature, max_tokens=max_tokens
+                    )
+                except Exception as e:
+                    logger.error(f"LLM generation error: {e}")
+                    return {
+                        "status": "failed",
+                        "error": f"LLM generation failed: {str(e)}",
+                        "tasks": [],
+                    }
+
+                try:
+                    tasks = self._parse_llm_response(response)
+                except Exception as e:
+                    logger.error(f"Failed to parse LLM response: {e}")
+                    return {
+                        "status": "failed",
+                        "error": f"Failed to parse LLM response: {str(e)}",
+                        "tasks": [],
+                    }
+
             tasks = self._post_process_tasks(tasks, user_id=user_id)
 
-            # Validate tasks
             validation_result = self._validate_tasks_array(tasks)
             if not validation_result["valid"]:
-                return {
-                    "status": "failed",
-                    "error": f"Validation failed: {validation_result['error']}",
-                    "tasks": tasks,  # Return tasks anyway for debugging
-                }
+                logger.warning(f"Validation failed: {validation_result['error']}")
 
-            logger.info(f"Successfully generated {len(tasks)} tasks")
-            return {"status": "completed", "tasks": tasks, "count": len(tasks)}
+                fixed_tasks = self._attempt_auto_fix(tasks, validation_result["error"])
+                if fixed_tasks:
+                    tasks = fixed_tasks
+                    revalidation = self._validate_tasks_array(tasks)
+                    if revalidation["valid"]:
+                        logger.info("Auto-fix succeeded, tasks now valid")
+                    else:
+                        return {
+                            "status": "failed",
+                            "error": f"Validation failed after auto-fix: {revalidation['error']}",
+                            "tasks": tasks,
+                        }
+                else:
+                    return {
+                        "status": "failed",
+                        "error": f"Validation failed: {validation_result['error']}",
+                        "tasks": tasks,
+                    }
+
+            logger.info(f"Successfully generated {len(tasks)} tasks (mode: {generation_mode})")
+            return {
+                "status": "completed",
+                "tasks": tasks,
+                "count": len(tasks),
+                "generation_mode": generation_mode,
+            }
 
         except Exception as e:
             logger.error(f"Unexpected error in generate_executor: {e}", exc_info=True)
@@ -175,165 +210,91 @@ class GenerateExecutor(BaseTask):
         Returns:
             Complete prompt string optimized for the specific requirement
         """
-        # Load relevant documentation based on requirement keywords
-        docs = load_relevant_docs_for_requirement(requirement, max_chars_per_section=2000)
+        schema_formatter = SchemaFormatter()
+        executors_info = schema_formatter.format_for_requirement(
+            requirement, max_executors=15, include_examples=True
+        )
 
-        # Get executor information (limited but relevant)
-        executors_info = format_executors_for_llm(max_executors=15, max_schema_props=3)
+        principles = PrinciplesExtractor.build_complete_principles_section()
 
-        # Build intelligent, requirement-focused prompt
         prompt_parts = [
             "You are an expert task tree generator for the apflow framework.",
             "Your goal is to understand the business requirement and generate a valid, practical task tree JSON array.",
             "",
-            "=== Special Rule for Web Content Extraction ===",
-            "If the requirement involves extracting main text or metadata from a website (such as analyzing, summarizing, or evaluating website content), you MUST use 'scrape_executor' as the executor for fetching the website content. Do NOT use 'rest_executor' or 'command_executor' for this purpose. Only use 'rest_executor' for raw HTTP APIs, and 'command_executor' for unrelated shell commands.",
+            "=== PRIORITY 1: Available Executors (USE THESE SCHEMAS) ===",
+            executors_info,
             "",
-            "=== Your Task ===",
-            "Analyze the requirement below and generate a task tree that:",
-            "1. Fulfills the business need described in the requirement",
-            "2. Uses appropriate executors from the available list",
-            "3. Sets correct dependencies to ensure proper execution order",
-            "4. Includes complete, realistic input parameters",
-            "5. Follows framework best practices and patterns",
+            "=== PRIORITY 2: Framework Principles (FOLLOW THESE RULES) ===",
+            principles,
             "",
-            "=== Critical Framework Rules ===",
-            "⚠️ IMPORTANT: Understand these concepts correctly:",
-            "",
-            "1. parent_id vs dependencies:",
-            "   - parent_id: REQUIRED for tree structure - ensures all tasks form a single tree",
-            "   - dependencies: Controls EXECUTION ORDER - tasks wait for dependencies to complete",
-            "   - CRITICAL: If a task has dependencies, it MUST have a parent_id (usually the first dependency)",
-            "   - Example: Task B depends on Task A → Task B must have parent_id='task_a' AND dependencies=[{'id': 'task_a'}]",
-            "",
-            "2. Task identification:",
-            "   - ALL tasks MUST have 'id' field with UUID format (e.g., '550e8400-e29b-41d4-a716-446655440000')",
-            "   - Task IDs must be valid UUIDs (36 characters: 8-4-4-4-12 format)",
-            "   - All references (parent_id, dependencies) must use 'id'",
-            "   - Generate unique UUIDs for each task using UUID v4 format",
-            "",
-            "3. Tree structure (CRITICAL):",
-            "   - Exactly ONE root task (task with no parent_id and no dependencies)",
-            "   - All other tasks MUST have a parent_id to form a single tree",
-            "   - If a task depends on multiple tasks, set parent_id to the FIRST dependency",
-            "   - For sequential tasks (A → B → C), each task's parent_id should be the previous task",
-            "   - All tasks must be reachable from the root via parent_id chain",
-            "   - No circular dependencies",
-            "",
-            "4. Executor matching (CRITICAL):",
-            "   - Task 'schemas.method' field MUST exactly match an available executor ID from the extensions registry",
-            "   - The 'name' field is a descriptive task name (e.g., 'Get System Info', 'Process Data'), NOT the executor ID",
-            "   - Input parameters MUST match the executor's input schema",
-            "",
-            "=== Task Object Structure ===",
-            "{",
-            '  "name": "Get System Information",  // REQUIRED: Descriptive task name (human-readable, NOT executor ID)',
-            '  "id": "550e8400-e29b-41d4-a716-446655440000",  // REQUIRED: UUID v4 format (36 chars)',
-            '  "user_id": "user123",         // REQUIRED: User identifier (use the provided user_id)',
-            '  "priority": 1,                // OPTIONAL: 0=urgent, 1=high, 2=normal, 3=low (default: 1)',
-            '  "inputs": {                   // OPTIONAL: Executor-specific input parameters',
-            '    "resource": "cpu"           // Must match executor input schema',
-            "  },",
-            '  "schemas": {                  // REQUIRED: Task schemas (must include method field)',
-            '    "method": "system_info_executor"  // REQUIRED: Must exactly match executor ID from extensions registry',
-            "  },",
-            '  "parent_id": "task_0",        // OPTIONAL: For organization only (like folders)',
-            '  "dependencies": [             // OPTIONAL: Controls execution order',
-            '    {"id": "task_0", "required": true}  // Task waits for task_0 to complete',
-            "  ]",
-            "}",
-            "",
-            "=== Framework Documentation (Relevant to Your Requirement) ===",
-            docs[:2500] if len(docs) > 2500 else docs,
-            "",
-            "=== Available Executors ===",
-            executors_info[:3500] if len(executors_info) > 3500 else executors_info,
-            "",
-            "=== Business Requirement ===",
+            "=== PRIORITY 3: Business Requirement (YOUR TASK) ===",
             requirement,
             "",
-            "=== Analysis & Generation Instructions ===",
-            "1. UNDERSTAND the requirement:",
-            "   - What is the business goal?",
-            "   - What steps are needed to achieve it?",
-            "   - What data flows between steps?",
+            "=== Output Requirements ===",
+            "Generate a valid JSON array of task objects that:",
+            "1. Fulfills the business requirement",
+            "2. Uses ONLY executors listed in PRIORITY 1 section",
+            "3. Follows ALL rules from PRIORITY 2 section",
+            "4. Has complete, realistic input parameters matching executor schemas",
             "",
-            "2. DESIGN the task tree:",
-            "   - Identify the root task (starting point - no parent_id, no dependencies)",
-            "   - Map business steps to executor tasks",
-            "   - Determine execution order (use dependencies)",
-            "   - Set parent_id for ALL non-root tasks to form a single tree:",
-            "     * For sequential tasks: each task's parent_id = previous task",
-            "     * For tasks with multiple dependencies: parent_id = first dependency",
-            "     * For parallel tasks: choose one as root, others as its children",
+            "=== Validation Checklist (VERIFY BEFORE RETURNING) ===",
+            "□ Single root task (no parent_id)",
+            "□ All other tasks have parent_id",
+            "□ All schemas.method values match available executors",
+            "□ All inputs match executor schemas (check required fields)",
+            "□ All UUIDs valid format (8-4-4-4-12)",
+            "□ No circular dependencies",
+            "□ All references valid",
             "",
-            "3. SELECT executors:",
-            "   - Match each step to an appropriate executor from the available executors list",
-            "   - Set schemas.method to the executor's ID (e.g., 'system_info_executor', 'command_executor', 'rest_executor')",
-            "   - Check executor input schemas to understand required parameters",
-            "   - Ensure all required parameters are provided in the inputs field",
+            "=== IMPORTANT: CrewAI Executor Special Format ===",
+            "When using 'crewai_executor', the inputs MUST contain 'works' field:",
+            "  inputs: {",
+            "    works: {",
+            "      agents: {",
+            "        agent_name: {",
+            "          role: string,      // Agent's role",
+            "          goal: string,      // Agent's goal",
+            "          llm: string,       // Model name (gpt-4, claude-3-opus, etc.)",
+            "          tools: [strings]   // Optional tool names",
+            "        }",
+            "      },",
+            "      tasks: {",
+            "        task_name: {",
+            "          description: string,     // What the task does",
+            "          agent: string,          // Agent name (must be in agents)",
+            "          prompt: string,         // Detailed prompt defining output format",
+            "          expected_output: string // Description of expected format",
+            "        }",
+            "      }",
+            "    }",
+            "  }",
+            "The prompt field should specify output format: 'Return as JSON: {...}' or 'Return as text: ...'",
+            "The crew's result is determined by the task prompts - not by executor schema.",
             "",
-            "4. CONFIGURE tasks:",
-            "   - Set a descriptive 'name' field for each task (e.g., 'Get System Info', 'Process Data', 'Send Notification')",
-            "   - Set 'schemas.method' to the executor ID (e.g., 'system_info_executor', 'command_executor', 'rest_executor')",
-            "   - Set complete, realistic input parameters matching the executor's input schema",
-            "   - For command_executor: use full commands with arguments (e.g., 'python script.py --input file.json')",
-            "   - For rest_executor: use complete URLs and proper HTTP methods",
-            "   - Set dependencies to ensure correct execution order",
-            "   - Set parent_id for ALL non-root tasks (REQUIRED for tree structure):",
-            "     * If task has dependencies, set parent_id to the FIRST dependency",
-            "     * For sequential chain: parent_id = previous task in chain",
-            "     * This ensures all tasks form a single tree with one root",
-            "",
-            "5. VALIDATE:",
-            "   - Single root task",
-            "   - All references valid",
-            "   - No circular dependencies",
-            "   - All schemas.method values match available executor IDs from extensions registry",
-            "   - All input parameters match executor schemas",
-            "   - Each task has a descriptive 'name' field (not executor ID) and correct 'schemas.method' field (executor ID)",
-            "",
-            "=== Output Format ===",
-            "Return ONLY a valid JSON array of task objects.",
-            "No markdown code blocks, no explanations, no comments.",
-            "The JSON should be directly parseable.",
-            "",
-            "Example output structure:",
+            "=== Example: Sequential Chain (Fetch → Process → Notify) ===",
             json.dumps(
                 [
                     {
                         "id": "550e8400-e29b-41d4-a716-446655440000",
                         "name": "Fetch API Data",
-                        "user_id": "user123",
                         "schemas": {"method": "rest_executor"},
-                        "inputs": {
-                            "url": "https://api.example.com/data",
-                            "method": "GET",
-                            "headers": {"Accept": "application/json"},
-                        },
-                        "priority": 1,
-                        # No parent_id = root task
+                        "inputs": {"url": "https://api.example.com/data", "method": "GET"},
                     },
                     {
                         "id": "660e8400-e29b-41d4-a716-446655440001",
                         "name": "Process Data",
-                        "user_id": "user123",
                         "schemas": {"method": "command_executor"},
-                        "parent_id": "550e8400-e29b-41d4-a716-446655440000",  # REQUIRED: parent_id = first dependency
+                        "parent_id": "550e8400-e29b-41d4-a716-446655440000",
                         "dependencies": [
                             {"id": "550e8400-e29b-41d4-a716-446655440000", "required": True}
                         ],
-                        "inputs": {
-                            "command": "python process_data.py --input /tmp/api_response.json --output /tmp/processed.json"
-                        },
-                        "priority": 2,
+                        "inputs": {"command": "python process_data.py --input data.json"},
                     },
                     {
                         "id": "770e8400-e29b-41d4-a716-446655440002",
                         "name": "Notify Completion",
-                        "user_id": "user123",
                         "schemas": {"method": "rest_executor"},
-                        "parent_id": "660e8400-e29b-41d4-a716-446655440001",  # REQUIRED: parent_id = previous task in chain
+                        "parent_id": "660e8400-e29b-41d4-a716-446655440001",
                         "dependencies": [
                             {"id": "660e8400-e29b-41d4-a716-446655440001", "required": True}
                         ],
@@ -342,21 +303,109 @@ class GenerateExecutor(BaseTask):
                             "method": "POST",
                             "data": {"status": "completed"},
                         },
-                        "priority": 2,
                     },
                 ],
                 indent=2,
             ),
             "",
-            "=== CRITICAL: parent_id Rules ===",
-            "1. Root task: NO parent_id (only one root task allowed)",
-            "2. Sequential tasks: parent_id = previous task in the chain",
-            "3. Tasks with dependencies: parent_id = FIRST dependency",
-            "4. Parallel tasks: Choose one as root, others have parent_id = root",
-            "5. Example: If Task B depends on [Task A, Task C], then:",
-            "   - Task B.parent_id = '550e8400-e29b-41d4-a716-446655440000' (first dependency's UUID)",
-            "   - Task B.dependencies = [{'id': '550e8400-e29b-41d4-a716-446655440000'}, {'id': '660e8400-e29b-41d4-a716-446655440001'}]",
+            "=== Example: CrewAI Executor (Multi-agent Analysis) ===",
+            json.dumps(
+                [
+                    {
+                        "id": "550e8400-e29b-41d4-a716-446655440000",
+                        "name": "Analyze Data with AI Crew",
+                        "schemas": {"method": "crewai_executor"},
+                        "inputs": {
+                            "works": {
+                                "agents": {
+                                    "analyst": {
+                                        "role": "Senior Data Analyst",
+                                        "goal": "Analyze and extract key insights from data",
+                                        "llm": "gpt-4",
+                                    },
+                                    "reporter": {
+                                        "role": "Report Writer",
+                                        "goal": "Create comprehensive reports",
+                                        "llm": "gpt-4",
+                                    },
+                                },
+                                "tasks": {
+                                    "analyze": {
+                                        "description": "Analyze the provided data for patterns and insights",
+                                        "agent": "analyst",
+                                        "prompt": "Analyze the data and return as JSON: {patterns: [], insights: string, score: number}",
+                                        "expected_output": "JSON with analysis results",
+                                    },
+                                    "report": {
+                                        "description": "Create final report based on analysis",
+                                        "agent": "reporter",
+                                        "prompt": "Generate a professional report in markdown format with sections: Summary, Key Findings, Recommendations",
+                                        "expected_output": "Markdown-formatted report",
+                                    },
+                                },
+                            }
+                        },
+                    }
+                ],
+                indent=2,
+            ),
             "",
+            "=== Example: Multi-Executor Workflow with Aggregator Root (CRITICAL PATTERN) ===",
+            "When using 2+ different executors, root MUST be aggregate_results_executor:",
+            json.dumps(
+                [
+                    {
+                        "id": "root-aggregate",
+                        "name": "Website Analysis Results",
+                        "schemas": {"method": "aggregate_results_executor"},
+                        "inputs": {},
+                        "dependencies": [
+                            {"id": "scrape-task", "required": True},
+                            {"id": "analyze-task", "required": True}
+                        ],
+                    },
+                    {
+                        "id": "scrape-task",
+                        "name": "Scrape Website Content",
+                        "parent_id": "root-aggregate",
+                        "schemas": {"method": "scrape_executor"},
+                        "inputs": {"url": "https://example.com", "extract": "main_content"},
+                    },
+                    {
+                        "id": "analyze-task",
+                        "name": "Analyze Content with AI",
+                        "parent_id": "root-aggregate",
+                        "dependencies": [{"id": "scrape-task", "required": True}],
+                        "schemas": {"method": "crewai_executor"},
+                        "inputs": {
+                            "works": {
+                                "agents": {
+                                    "analyst": {
+                                        "role": "Content Analyst",
+                                        "goal": "Analyze website content quality",
+                                        "llm": "gpt-4",
+                                    }
+                                },
+                                "tasks": {
+                                    "analyze": {
+                                        "description": "Analyze scraped content",
+                                        "agent": "analyst",
+                                        "prompt": "Return analysis as JSON: {quality_score: number, insights: string}",
+                                        "expected_output": "JSON analysis results",
+                                    }
+                                },
+                            }
+                        },
+                    },
+                ],
+                indent=2,
+            ),
+            "IMPORTANT: Root aggregator task MUST have 'dependencies' field listing all direct child task IDs.",
+            "This tells the aggregator which tasks' results to collect and merge into the final result.",
+            "Without dependencies, the aggregator won't know what to aggregate!",
+            "",
+            "=== Output Format ===",
+            "Return ONLY a valid JSON array. No markdown, no explanations.",
         ]
 
         if user_id:
@@ -368,6 +417,93 @@ class GenerateExecutor(BaseTask):
         prompt_parts.append("Now generate the task tree JSON array based on the requirement above.")
 
         return "\n".join(prompt_parts)
+
+    def _attempt_json_repair(self, response: str) -> Optional[str]:
+        """
+        Attempt to repair truncated or malformed JSON
+
+        This method tries to fix common issues with LLM-generated JSON:
+        1. Truncated responses (incomplete objects/arrays)
+        2. Missing closing brackets
+        3. Trailing commas
+
+        Args:
+            response: Potentially malformed JSON string
+
+        Returns:
+            Repaired JSON string, or None if repair failed
+        """
+        try:
+            # Strategy: Parse incrementally and keep only complete objects
+            repaired = response.strip()
+
+            # If it starts with '[', we expect a JSON array
+            if repaired.startswith("["):
+                # Try to extract complete objects from the array
+                # Find all complete objects (those with matching braces)
+                complete_objects = []
+                depth = 0
+                in_string = False
+                escape_next = False
+                current_obj_start = None
+
+                for i, char in enumerate(repaired):
+                    if escape_next:
+                        escape_next = False
+                        continue
+
+                    if char == "\\":
+                        escape_next = True
+                        continue
+
+                    if char == '"' and not escape_next:
+                        in_string = not in_string
+                        continue
+
+                    if in_string:
+                        continue
+
+                    if char == "{":
+                        if depth == 0:
+                            current_obj_start = i
+                        depth += 1
+                    elif char == "}":
+                        depth -= 1
+                        if depth == 0 and current_obj_start is not None:
+                            # We have a complete object
+                            obj_str = repaired[current_obj_start : i + 1]
+                            try:
+                                json.loads(obj_str)
+                                complete_objects.append(obj_str)
+                            except json.JSONDecodeError:
+                                # Skip malformed objects
+                                pass
+                            current_obj_start = None
+
+                if complete_objects:
+                    # Build a valid JSON array from complete objects
+                    repaired = "[" + ", ".join(complete_objects) + "]"
+                    json.loads(repaired)  # Validate
+                    return repaired
+
+            # Fallback: Try simple bracket matching
+            open_braces = response.count("{")
+            close_braces = response.count("}")
+            open_brackets = response.count("[")
+            close_brackets = response.count("]")
+
+            repaired = response
+            if close_braces < open_braces:
+                repaired += "}" * (open_braces - close_braces)
+            if close_brackets < open_brackets:
+                repaired += "]" * (open_brackets - close_brackets)
+
+            json.loads(repaired)
+            return repaired
+
+        except Exception as e:
+            logger.debug(f"JSON repair attempt failed: {e}")
+            return None
 
     def _parse_llm_response(self, response: str) -> List[Dict[str, Any]]:
         """
@@ -399,9 +535,22 @@ class GenerateExecutor(BaseTask):
         try:
             tasks = json.loads(response)
         except json.JSONDecodeError as e:
-            raise ValueError(
-                f"Failed to parse JSON from LLM response: {e}. Response: {response[:500]}"
-            )
+            # Try to repair truncated JSON by attempting to parse partial content
+            repaired_response = self._attempt_json_repair(response)
+            if repaired_response:
+                try:
+                    tasks = json.loads(repaired_response)
+                    logger.warning(
+                        f"Repaired truncated JSON response. Original error: {e}"
+                    )
+                except json.JSONDecodeError:
+                    raise ValueError(
+                        f"Failed to parse JSON from LLM response: {e}. Response: {response[:500]}"
+                    )
+            else:
+                raise ValueError(
+                    f"Failed to parse JSON from LLM response: {e}. Response: {response[:500]}"
+                )
 
         # Validate it's a list
         if not isinstance(tasks, list):
@@ -710,7 +859,421 @@ class GenerateExecutor(BaseTask):
                     "error": f"Tasks not reachable from root: {[identifier_to_task[id].get('name', id) for id in unreachable]}",
                 }
 
+        schema_validation = self._validate_schema_compliance(tasks)
+        if not schema_validation["valid"]:
+            return schema_validation
+
+        root_pattern_validation = self._validate_root_task_pattern(tasks)
+        if not root_pattern_validation["valid"]:
+            return root_pattern_validation
+
         return {"valid": True, "error": None}
+
+    def _validate_schema_compliance(self, tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Validate that task inputs match executor schemas
+
+        Args:
+            tasks: List of task dictionaries
+
+        Returns:
+            Dictionary with valid flag and error message
+        """
+        from apflow.core.extensions.registry import get_registry
+
+        registry = get_registry()
+
+        for i, task in enumerate(tasks):
+            task_name = task.get("name", f"task_{i}")
+            schemas = task.get("schemas", {})
+            executor_id = schemas.get("method")
+
+            if not executor_id:
+                return {"valid": False, "error": f"Task '{task_name}' missing schemas.method field"}
+
+            # Special handling for crewai_executor: validate works parameter directly
+            if executor_id == "crewai_executor":
+                task_inputs = task.get("inputs", {})
+                if "works" not in task_inputs:
+                    return {
+                        "valid": False,
+                        "error": (
+                            f"Task '{task_name}' using executor 'crewai_executor' "
+                            f"is missing required field 'works'. "
+                            f"Expected: inputs.works = {{\"agents\": {{...}}, \"tasks\": {{...}}}}"
+                        ),
+                    }
+                works = task_inputs.get("works", {})
+                if not isinstance(works, dict):
+                    return {
+                        "valid": False,
+                        "error": (
+                            f"Task '{task_name}' field 'works' must be object/dict, "
+                            f"got {self._get_json_type(works)}"
+                        ),
+                    }
+                if "agents" not in works or "tasks" not in works:
+                    return {
+                        "valid": False,
+                        "error": (
+                            f"Task '{task_name}' field 'works' must contain 'agents' and 'tasks' keys"
+                        ),
+                    }
+                # Validate that agents and tasks are dicts
+                if not isinstance(works.get("agents"), dict):
+                    return {
+                        "valid": False,
+                        "error": f"Task '{task_name}' field 'works.agents' must be object/dict",
+                    }
+                if not isinstance(works.get("tasks"), dict):
+                    return {
+                        "valid": False,
+                        "error": f"Task '{task_name}' field 'works.tasks' must be object/dict",
+                    }
+                # Validate each agent has role and goal
+                agents = works.get("agents", {})
+                for agent_name, agent_config in agents.items():
+                    if not isinstance(agent_config, dict):
+                        return {
+                            "valid": False,
+                            "error": f"Task '{task_name}' agent '{agent_name}' must be object/dict",
+                        }
+                    if "role" not in agent_config or "goal" not in agent_config:
+                        return {
+                            "valid": False,
+                            "error": (
+                                f"Task '{task_name}' agent '{agent_name}' must have 'role' and 'goal' fields"
+                            ),
+                        }
+                # Validate each task has description and agent
+                tasks_config = works.get("tasks", {})
+                for task_key, task_config in tasks_config.items():
+                    if not isinstance(task_config, dict):
+                        return {
+                            "valid": False,
+                            "error": f"Task '{task_name}' crew task '{task_key}' must be object/dict",
+                        }
+                    if "description" not in task_config or "agent" not in task_config:
+                        return {
+                            "valid": False,
+                            "error": (
+                                f"Task '{task_name}' crew task '{task_key}' must have 'description' and 'agent' fields"
+                            ),
+                        }
+                    agent_ref = task_config.get("agent")
+                    if agent_ref not in agents:
+                        return {
+                            "valid": False,
+                            "error": (
+                                f"Task '{task_name}' crew task '{task_key}' references unknown agent '{agent_ref}'"
+                            ),
+                        }
+                continue
+
+            try:
+                executor = registry.create_executor_instance(executor_id, inputs={})
+            except Exception as e:
+                return {
+                    "valid": False,
+                    "error": f"Task '{task_name}' uses unknown executor '{executor_id}': {str(e)}",
+                }
+
+            if not hasattr(executor, "get_input_schema"):
+                continue
+
+            try:
+                schema = executor.get_input_schema()
+            except Exception:
+                continue
+
+            if not schema or not isinstance(schema, dict):
+                continue
+
+            task_inputs = task.get("inputs", {})
+            required_fields = schema.get("required", [])
+            properties = schema.get("properties", {})
+
+            for required_field in required_fields:
+                if required_field not in task_inputs:
+                    return {
+                        "valid": False,
+                        "error": (
+                            f"Task '{task_name}' using executor '{executor_id}' "
+                            f"is missing required field '{required_field}'"
+                        ),
+                    }
+
+            for field_name, field_value in task_inputs.items():
+                if field_name not in properties:
+                    continue
+
+                expected_type = properties[field_name].get("type")
+                if not expected_type:
+                    continue
+
+                actual_type = self._get_json_type(field_value)
+                if not self._is_compatible_type(actual_type, expected_type):
+                    return {
+                        "valid": False,
+                        "error": (
+                            f"Task '{task_name}' field '{field_name}' has type '{actual_type}' "
+                            f"but executor '{executor_id}' expects type '{expected_type}'"
+                        ),
+                    }
+
+        return {"valid": True, "error": None}
+
+    def _get_json_type(self, value: Any) -> str:
+        """Map Python type to JSON Schema type"""
+        if value is None:
+            return "null"
+        if isinstance(value, bool):
+            return "boolean"
+        if isinstance(value, int):
+            return "integer"
+        if isinstance(value, float):
+            return "number"
+        if isinstance(value, str):
+            return "string"
+        if isinstance(value, list):
+            return "array"
+        if isinstance(value, dict):
+            return "object"
+        return "unknown"
+
+    def _is_compatible_type(self, actual: str, expected: str) -> bool:
+        """Check if actual type is compatible with expected type"""
+        if actual == expected:
+            return True
+
+        if expected == "number" and actual == "integer":
+            return True
+
+        if expected in ["string", "number", "integer", "boolean", "array", "object"]:
+            return actual == expected
+
+        return False
+
+    def _validate_root_task_pattern(self, tasks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Validate root task pattern: if 2+ executors, root should be aggregator
+        """
+        if len(tasks) < 2:
+            return {"valid": True, "error": None}
+
+        root_tasks = [task for task in tasks if not task.get("parent_id")]
+        if len(root_tasks) != 1:
+            return {"valid": True, "error": None}
+
+        root_task = root_tasks[0]
+        root_executor = root_task.get("schemas", {}).get("method", "")
+
+        non_aggregator_executors = set()
+        for task in tasks:
+            executor_id = task.get("schemas", {}).get("method", "")
+            if executor_id and "aggregate" not in executor_id.lower():
+                non_aggregator_executors.add(executor_id)
+
+        if len(non_aggregator_executors) >= 2:
+            if "aggregate" not in root_executor.lower():
+                return {
+                    "valid": False,
+                    "error": (
+                        f"Task tree uses {len(non_aggregator_executors)} different executors "
+                        f"but root task uses '{root_executor}'. "
+                        f"When multiple executors are needed, root should use an aggregator executor "
+                        f"(e.g., 'aggregate_results_executor') to collect results from child tasks."
+                    ),
+                }
+
+        return {"valid": True, "error": None}
+
+    def _attempt_auto_fix(
+        self, tasks: List[Dict[str, Any]], error_message: str
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Attempt to automatically fix common validation errors
+
+        Args:
+            tasks: List of task dictionaries
+            error_message: Validation error message
+
+        Returns:
+            Fixed tasks if successful, None if unable to fix
+        """
+        if "Multiple root tasks" in error_message:
+            logger.info("Auto-fix: Multiple root tasks detected, attempting fix...")
+            return self._fix_multiple_roots(tasks)
+
+        if "parent_id" in error_message.lower() and "not in the tasks array" in error_message:
+            logger.info("Auto-fix: Invalid parent_id references, attempting fix...")
+            return self._fix_invalid_parent_ids(tasks)
+
+        if "not reachable from root" in error_message:
+            logger.info("Auto-fix: Unreachable tasks detected, attempting fix...")
+            return self._fix_invalid_parent_ids(tasks)
+
+        if "different executors" in error_message and "root should use an aggregator" in error_message:
+            logger.info("Auto-fix: Multiple executors detected, converting root to aggregator...")
+            return self._fix_root_executor_to_aggregator(tasks)
+
+        logger.warning(f"No auto-fix available for error: {error_message}")
+        return None
+
+    def _fix_multiple_roots(self, tasks: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
+        """
+        Fix multiple root tasks by adding an aggregator root
+        """
+        try:
+            root_tasks = [task for task in tasks if not task.get("parent_id")]
+
+            if len(root_tasks) <= 1:
+                return None
+
+            logger.info(f"Found {len(root_tasks)} root tasks, creating aggregator root")
+
+            aggregator_id = str(uuid.uuid4())
+            aggregator_task = {
+                "id": aggregator_id,
+                "name": "Aggregate Results",
+                "schemas": {"method": "aggregate_results_executor"},
+                "inputs": {},
+            }
+
+            for root_task in root_tasks:
+                root_task["parent_id"] = aggregator_id
+
+            fixed_tasks = [aggregator_task] + tasks
+            logger.info(f"Created aggregator root with ID: {aggregator_id}")
+
+            return fixed_tasks
+
+        except Exception as e:
+            logger.error(f"Failed to fix multiple roots: {e}")
+            return None
+
+    def _fix_invalid_parent_ids(
+        self, tasks: List[Dict[str, Any]]
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Fix invalid parent_id references by setting to first valid task or root
+        """
+        try:
+            task_ids = {task.get("id") for task in tasks if task.get("id")}
+
+            if not task_ids:
+                return None
+
+            root_tasks = [task for task in tasks if not task.get("parent_id")]
+            root_id = root_tasks[0].get("id") if root_tasks else None
+
+            fixed_count = 0
+            for task in tasks:
+                parent_id = task.get("parent_id")
+                if parent_id and parent_id not in task_ids:
+                    logger.warning(f"Task {task.get('name')} has invalid parent_id: {parent_id}")
+
+                    dependencies = task.get("dependencies", [])
+                    if dependencies:
+                        first_dep_id = (
+                            dependencies[0].get("id")
+                            if isinstance(dependencies[0], dict)
+                            else dependencies[0]
+                        )
+                        if first_dep_id in task_ids:
+                            task["parent_id"] = first_dep_id
+                            fixed_count += 1
+                            logger.info(f"Fixed parent_id for {task.get('name')}: {first_dep_id}")
+                            continue
+
+                    if root_id and task.get("id") != root_id:
+                        task["parent_id"] = root_id
+                        fixed_count += 1
+                        logger.info(f"Set parent_id to root for {task.get('name')}: {root_id}")
+                    else:
+                        task.pop("parent_id", None)
+                        fixed_count += 1
+                        logger.info(f"Removed invalid parent_id from {task.get('name')}")
+
+            logger.info(f"Fixed {fixed_count} invalid parent_id references")
+            return tasks if fixed_count > 0 else None
+
+        except Exception as e:
+            logger.error(f"Failed to fix invalid parent_ids: {e}")
+            return None
+
+    def _fix_root_executor_to_aggregator(
+        self, tasks: List[Dict[str, Any]]
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        Fix root task executor when multiple different executors are used.
+        Converts root task to use an aggregator executor or inserts a new aggregator root.
+
+        Args:
+            tasks: List of task dictionaries
+
+        Returns:
+            Fixed tasks if successful, None if unable to fix
+        """
+        try:
+            root_tasks = [task for task in tasks if not task.get("parent_id")]
+            if len(root_tasks) != 1:
+                return None
+
+            root_task = root_tasks[0]
+            root_executor = root_task.get("schemas", {}).get("method", "")
+
+            # Check if root already uses aggregator
+            if "aggregate" in root_executor.lower():
+                return None
+
+            # Count non-aggregator executors
+            non_aggregator_executors = set()
+            for task in tasks:
+                executor_id = task.get("schemas", {}).get("method", "")
+                if executor_id and "aggregate" not in executor_id.lower():
+                    non_aggregator_executors.add(executor_id)
+
+            # Only fix if we have 2+ different executors
+            if len(non_aggregator_executors) < 2:
+                return None
+
+            logger.info(f"Detected {len(non_aggregator_executors)} different executors, "
+                       f"converting root from '{root_executor}' to aggregator")
+
+            # Strategy: Convert the root task to use aggregate_results_executor
+            # and make all direct children of the root point to it
+            root_task["schemas"]["method"] = "aggregate_results_executor"
+            
+            # Clear root task inputs if they are specific to the old executor
+            # Keep only generic fields that aggregator can use
+            old_inputs = root_task.get("inputs", {})
+            root_task["inputs"] = {}
+            
+            # Preserve user_id if present
+            if "user_id" in old_inputs:
+                root_task["inputs"]["user_id"] = old_inputs["user_id"]
+
+            # Add dependencies for all direct child tasks
+            # aggregate_results_executor needs dependencies to know which tasks to aggregate
+            root_id = root_task.get("id")
+            child_tasks = [t for t in tasks if t.get("parent_id") == root_id]
+            
+            if child_tasks:
+                root_task["dependencies"] = [
+                    {"id": child["id"], "required": True}
+                    for child in child_tasks
+                ]
+                logger.info(f"Added {len(child_tasks)} dependencies to root aggregator: "
+                           f"{[c['id'] for c in child_tasks]}")
+
+            logger.info(f"Converted root task '{root_task.get('name')}' to use 'aggregate_results_executor'")
+            
+            return tasks
+
+        except Exception as e:
+            logger.error(f"Failed to fix root executor: {e}")
+            return None
 
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo generated task tree"""
@@ -756,6 +1319,12 @@ class GenerateExecutor(BaseTask):
                 "user_id": {
                     "type": "string",
                     "description": "User ID for generated tasks (optional)",
+                },
+                "generation_mode": {
+                    "type": "string",
+                    "enum": ["single_shot", "multi_phase"],
+                    "description": "Generation mode: 'single_shot' (default, faster) or 'multi_phase' (more accurate)",
+                    "default": "single_shot",
                 },
                 "llm_provider": {
                     "type": "string",
