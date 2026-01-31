@@ -111,13 +111,6 @@ class CrewaiExecutor(BaseTask):
             # Initialize CrewAI crew
             self.crew = None
             self._initialize_crew()
-            # Create agents and tasks from works
-            self.create_agents(works["agents"])
-            self.create_tasks(works["tasks"])
-
-            # Initialize CrewAI crew
-            self.crew = None
-            self._initialize_crew()
 
     def create_agents(self, agents: Optional[Dict[str, Any]] = None) -> Dict[str, Agent]:
         """

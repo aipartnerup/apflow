@@ -4,6 +4,7 @@ from apflow.extensions.generate.generate_executor import GenerateExecutor
 
 
 @pytest.mark.asyncio
+@pytest.mark.manual
 @pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set in environment")
 async def test_llm_generate_uses_scrape_executor():
     """
@@ -11,6 +12,7 @@ async def test_llm_generate_uses_scrape_executor():
     Requires a valid OPENAI_API_KEY in environment.
 
     Note: Uses multi_phase mode for better quality task generation.
+    This is a MANUAL test that makes real API calls and should not run in CI.
     """
     executor = GenerateExecutor()
     requirement = "Please analyze aipartnerup.com and provide an evaluation."

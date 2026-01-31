@@ -16,7 +16,6 @@ from apflow.logger import get_logger
 from apflow.extensions.generate.llm_client import create_llm_client
 from apflow.extensions.generate.schema_formatter import SchemaFormatter
 from apflow.extensions.generate.principles_extractor import PrinciplesExtractor
-from apflow.extensions.generate.multi_phase_crew import MultiPhaseGenerationCrew
 
 logger = get_logger(__name__)
 
@@ -102,6 +101,11 @@ class GenerateExecutor(BaseTask):
             if generation_mode == "multi_phase":
                 logger.info(f"Using multi-phase generation for: {requirement[:100]}...")
                 try:
+                    # Lazy import to avoid requiring crewai when not using multi-phase mode
+                    from apflow.extensions.generate.multi_phase_crew import (
+                        MultiPhaseGenerationCrew,
+                    )
+
                     crew = MultiPhaseGenerationCrew(
                         llm_provider=llm_provider, model=model, api_key=api_key
                     )
