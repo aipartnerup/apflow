@@ -52,6 +52,9 @@ class TestGenerateExecutorEnhanced:
     @pytest.mark.asyncio
     async def test_multi_phase_mode_execution(self, executor):
         """Test multi-phase mode with CrewAI"""
+        # Skip if crewai is not installed (required for multi-phase mode)
+        pytest.importorskip("crewai")
+        
         with patch(
             "apflow.extensions.generate.multi_phase_crew.MultiPhaseGenerationCrew"
         ) as mock_crew_class:

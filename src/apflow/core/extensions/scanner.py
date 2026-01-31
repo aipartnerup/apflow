@@ -289,13 +289,16 @@ class ExtensionScanner:
         parts = file_path.parts
 
         try:
-            apflow_index = parts.index("apflow")
-
-            if apflow_index + 1 < len(parts) and parts[apflow_index + 1] == "src":
-                apflow_index += 1
-                if apflow_index + 1 < len(parts) and parts[apflow_index + 1] == "apflow":
-                    apflow_index += 1
-
+            # Find the last occurrence of "apflow" in the path to handle nested apflow directories
+            # e.g., /path/to/apflow/src/apflow/extensions/... -> start from the last "apflow"
+            apflow_indices = [i for i, part in enumerate(parts) if part == "apflow"]
+            
+            if not apflow_indices:
+                raise ValueError("No 'apflow' in path")
+            
+            # Use the last occurrence of "apflow" as the start
+            apflow_index = apflow_indices[-1]
+            
             module_parts = parts[apflow_index:-1] + (file_path.stem,)
             return ".".join(module_parts)
         except ValueError:
