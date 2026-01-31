@@ -312,6 +312,39 @@ async def test_end_to_end_generate_and_execute_website_analysis():
     print("\n=== Generated Task Tree ===")
     print(json.dumps(tasks_array, indent=2))
     
+    # VALIDATION: Check for template variable issues in CrewAI tasks
+    print("\n=== Validating CrewAI Tasks for Template Variables ===")
+    crewai_tasks = [t for t in tasks_array if t.get("schemas", {}).get("method") == "crewai_executor"]
+    
+    if crewai_tasks:
+        print(f"Found {len(crewai_tasks)} CrewAI task(s), validating...")
+        
+        problematic_vars = [
+            "{content}", "{data}", "{website_content}", "{scraped_content}",
+            "{text}", "{html}", "{result}", "{scraped_data}"
+        ]
+        
+        for crewai_task in crewai_tasks:
+            task_name = crewai_task.get("name", "Unknown")
+            works = crewai_task.get("inputs", {}).get("works", {})
+            crew_tasks = works.get("tasks", {})
+            
+            for crew_task_name, crew_task_def in crew_tasks.items():
+                description = crew_task_def.get("description", "")
+                
+                found_vars = [var for var in problematic_vars if var in description]
+                if found_vars:
+                    print(f"  ❌ Task '{task_name}' -> '{crew_task_name}' uses problematic variables: {found_vars}")
+                    print(f"     Description: {description}")
+                    pytest.fail(
+                        f"CrewAI task contains template variables that will cause runtime error. "
+                        f"This indicates the LLM prompt fix is not working correctly."
+                    )
+        
+        print(f"  ✓ All CrewAI tasks validated - no problematic template variables")
+    else:
+        print("  No CrewAI tasks in tree - skipping validation")
+    
     # Step 2: Create task tree in database
     print("\n" + "="*80)
     print("Step 2: Creating task tree in database...")
@@ -826,4 +859,143 @@ async def test_generate_hybrid_workflow_scrape_and_api():
     validation = executor._validate_tasks_array(tasks)
     assert validation["valid"], f"Task tree should be valid: {validation['error']}"
     print("✅ Task tree passes validation")
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(180)
+@pytest.mark.slow
+@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set in environment")
+async def test_scrape_crewai_template_variable_validation():
+    """
+    Critical test: Verify CrewAI tasks don't use template variables for dependency data.
+    
+    This test specifically validates the fix for the bug where CrewAI tasks would fail with:
+    "Missing required template variable 'content' not found in inputs dictionary"
+    
+    The issue: LLM was generating CrewAI task descriptions like:
+        'description': 'Analyze this website content: {content}'
+    
+    But the framework stores dependency results as:
+        {'task-id-uuid': result}
+    
+    So {content} doesn't exist, causing CrewAI.kickoff() to fail.
+    
+    Fix: Updated prompt to instruct LLM NOT to use template variables for dependency data.
+    """
+    print(f"\n{'='*80}")
+    print("CRITICAL TEST: Scrape + CrewAI Template Variable Validation")
+    print(f"{'='*80}\n")
+    
+    executor = GenerateExecutor(user_id="test_user")
+    requirement = "Scrape aipartnerup.com and analyze the content with AI to generate a report"
+    
+    print(f"Requirement: {requirement}\n")
+    
+    result = await executor.execute({
+        "requirement": requirement,
+        "user_id": "test_user",
+        "generation_mode": "single_shot",
+    })
+    
+    print("=== Generated Task Tree ===")
+    print(json.dumps(result, indent=2))
+    
+    assert result["status"] == "completed", f"Generation failed: {result.get('error')}"
+    
+    tasks = result["tasks"]
+    assert len(tasks) >= 2, "Should generate at least scrape + analysis tasks"
+    
+    # Find scrape and crewai tasks
+    scrape_task = None
+    crewai_task = None
+    
+    for task in tasks:
+        method = task.get("schemas", {}).get("method", "")
+        if method == "scrape_executor":
+            scrape_task = task
+        elif method == "crewai_executor":
+            crewai_task = task
+    
+    print(f"\n=== Task Analysis ===")
+    print(f"Scrape task: {'✓ Found' if scrape_task else '✗ Missing'}")
+    print(f"CrewAI task: {'✓ Found' if crewai_task else '✗ Missing'}")
+    
+    # If we have both, validate the CrewAI task
+    if scrape_task and crewai_task:
+        print(f"\n✓ Both tasks found, validating CrewAI task structure...")
+        
+        # Check dependency relationship
+        crewai_deps = crewai_task.get("dependencies", [])
+        scrape_task_id = scrape_task["id"]
+        depends_on_scrape = any(
+            dep.get("id") == scrape_task_id if isinstance(dep, dict) else dep == scrape_task_id
+            for dep in crewai_deps
+        )
+        
+        assert depends_on_scrape, "CrewAI task should depend on scrape task"
+        print(f"✓ CrewAI task correctly depends on scrape task")
+        
+        # CRITICAL: Validate task descriptions don't use problematic template variables
+        works = crewai_task.get("inputs", {}).get("works", {})
+        crewai_tasks_def = works.get("tasks", {})
+        
+        print(f"\n=== Validating CrewAI Task Descriptions ===")
+        print(f"Found {len(crewai_tasks_def)} CrewAI task(s) to validate\n")
+        
+        # These template variables will cause runtime errors because dependency results
+        # are stored with task IDs as keys, not semantic names
+        problematic_vars = [
+            "{content}", "{data}", "{website_content}", "{scraped_content}",
+            "{text}", "{html}", "{result}", "{scraped_data}", "{website_data}"
+        ]
+        
+        validation_passed = True
+        for task_name, task_def in crewai_tasks_def.items():
+            description = task_def.get("description", "")
+            prompt = task_def.get("prompt", "")
+            
+            print(f"Task: {task_name}")
+            print(f"  Description: {description[:100]}...")
+            
+            # Check for problematic variables in description
+            found_vars = []
+            for var in problematic_vars:
+                if var in description:
+                    found_vars.append(var)
+            
+            if found_vars:
+                validation_passed = False
+                print(f"  ❌ FAIL: Found problematic template variables: {found_vars}")
+                print(f"     These variables won't exist at runtime because dependency results")
+                print(f"     are stored with task IDs as keys: {{'{scrape_task_id}': result}}")
+                print(f"     This will cause: 'Template variable not found' error in CrewAI.kickoff()")
+            else:
+                print(f"  ✓ PASS: No problematic template variables")
+            
+            # Also check prompt for guidance
+            if prompt:
+                print(f"  Prompt: {prompt[:80]}...")
+        
+        assert validation_passed, (
+            f"CrewAI task descriptions contain problematic template variables that will cause "
+            f"runtime errors. See details above. This indicates the LLM is not following the "
+            f"updated prompt guidance about NOT using template variables for dependency data."
+        )
+        
+        print(f"\n✅ All validations passed!")
+        print(f"   - CrewAI task correctly depends on scrape task")
+        print(f"   - Task descriptions don't use problematic template variables")
+        print(f"   - Generated tasks should execute without 'Template variable not found' errors")
+    
+    elif crewai_task and not scrape_task:
+        print(f"\n⚠️  CrewAI task found but no scrape task - checking for alternative structure")
+        # This is acceptable if the requirement is fulfilled differently
+    else:
+        print(f"\n⚠️  No CrewAI task generated - may have used alternative approach")
+        # This is also acceptable as long as the requirement is fulfilled
+    
+    # Always validate the final task tree
+    validation = executor._validate_tasks_array(tasks)
+    assert validation["valid"], f"Task tree should be valid: {validation['error']}"
+    print(f"\n✅ Task tree structure validation passed")
 

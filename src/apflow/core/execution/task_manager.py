@@ -1795,6 +1795,11 @@ class TaskManager:
 
         Returns:
             Executor instance or None if not found
+            
+        Note:
+            This creates a lightweight executor instance for schema discovery only.
+            The instance may not be fully initialized (e.g., crew not created for crewai_executor),
+            but should still provide get_input_schema() and get_output_schema() methods.
         """
         try:
             registry = get_registry()
@@ -1802,12 +1807,12 @@ class TaskManager:
                 ExtensionCategory.EXECUTOR, task.schemas.get("method")
             )
             if executor_class:
-                # Create executor instance with task context
+                # Create executor instance for schema discovery
                 return executor_class(
                     task=task, inputs=task.inputs, user_id=task.user_id, task_id=task.id
                 )
         except Exception as e:
-            logger.warning(f"Failed to get executor for task {task.id}: {e}")
+            logger.warning(f"Failed to get executor for task {task.id}: {e}", exc_info=True)
         return None
 
     def _perform_schema_based_mapping(

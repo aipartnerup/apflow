@@ -482,6 +482,63 @@ class CrewaiExecutor(BaseTask):
             }
         return None
 
+    def _inject_dependency_template_variables(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Inject dependency results as template variables for CrewAI tasks.
+        
+        When a CrewAI task depends on other tasks, dependency results are stored in inputs
+        with task IDs as keys (e.g., {'task-uuid': {"result": "content"}}). However, CrewAI
+        task descriptions use template variables like {content}, {data} which won't match
+        task IDs.
+        
+        This method detects dependency results and injects them as common template variable
+        names, allowing CrewAI tasks to reference them naturally.
+        
+        Args:
+            inputs: Input dictionary potentially containing dependency results
+            
+        Returns:
+            Updated inputs dictionary with injected template variables
+        """
+        # Common template variable names that CrewAI tasks might use
+        template_var_names = ["content", "data", "result", "output", "text"]
+        
+        # Look for dependency results (dict values that look like executor results)
+        # These are typically stored with UUID keys
+        import re
+        uuid_pattern = re.compile(
+            r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+            re.IGNORECASE
+        )
+        
+        for key, value in list(inputs.items()):
+            # Check if this looks like a dependency result (UUID key)
+            if uuid_pattern.match(key):
+                # Extract the actual content
+                if isinstance(value, dict) and "result" in value:
+                    content = value["result"]
+                    logger.debug(
+                        f"Found dependency result under key '{key}': "
+                        f"{content[:100] if isinstance(content, str) else type(content)}"
+                    )
+                else:
+                    content = value
+                
+                # Inject as common template variables (only if not already present)
+                for var_name in template_var_names:
+                    if var_name not in inputs:
+                        inputs[var_name] = content
+                        logger.info(
+                            f"Injected template variable '{var_name}' from dependency '{key}' "
+                            f"for CrewAI task"
+                        )
+                
+                # Break after first dependency to avoid overwriting with multiple deps
+                # If there are multiple dependencies, they should be accessed by their IDs
+                break
+        
+        return inputs
+
     def _execute_crew_sync(self) -> Any:
         """
         Execute crew synchronously (CrewAI doesn't support async yet)
@@ -617,6 +674,10 @@ class CrewaiExecutor(BaseTask):
                 return cancellation_result
 
             if inputs:
+                # Inject dependency results as template variables before setting inputs
+                # This allows CrewAI tasks to use template variables like {content}, {data}
+                # even when dependency results are stored with task IDs as keys
+                inputs = self._inject_dependency_template_variables(inputs)
                 self.set_inputs(inputs)
 
             # Execute crew synchronously
