@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 # Skip entire module if crewai is not installed
 pytest.importorskip("crewai")
 
-from apflow.extensions.generate.multi_phase_crew import MultiPhaseGenerationCrew
+from apflow.extensions.generate.multi_phase_crew import MultiPhaseGenerationCrew  # noqa: E402
 
 
 class TestMultiPhaseGenerationCrew:
@@ -46,7 +46,7 @@ class TestMultiPhaseGenerationCrew:
             "execution_pattern": "sequential",
         }
 
-        with patch("apflow.extensions.generate.multi_phase_crew.Crew") as mock_crew_class:
+        with patch("crewai.Crew") as mock_crew_class:
             mock_crew_instance = Mock()
             mock_crew_instance.kickoff = Mock(return_value=mock_crew_result(analysis_data))
             mock_crew_class.return_value = mock_crew_instance
@@ -96,7 +96,7 @@ class TestMultiPhaseGenerationCrew:
             "executors_needed": ["scrape_executor", "llm_executor"],
         }
 
-        with patch("apflow.extensions.generate.multi_phase_crew.Crew") as mock_crew_class:
+        with patch("crewai.Crew") as mock_crew_class:
             mock_crew_instance = Mock()
             mock_crew_instance.kickoff = Mock(return_value=mock_crew_result(structure_data))
             mock_crew_class.return_value = mock_crew_instance
@@ -158,7 +158,7 @@ class TestMultiPhaseGenerationCrew:
             },
         ]
 
-        with patch("apflow.extensions.generate.multi_phase_crew.Crew") as mock_crew_class:
+        with patch("crewai.Crew") as mock_crew_class:
             mock_crew_instance = Mock()
             mock_crew_instance.kickoff = Mock(return_value=mock_crew_result(tasks_with_inputs))
             mock_crew_class.return_value = mock_crew_instance
@@ -200,7 +200,7 @@ class TestMultiPhaseGenerationCrew:
             }
         ]
 
-        with patch("apflow.extensions.generate.multi_phase_crew.Crew") as mock_crew_class:
+        with patch("crewai.Crew") as mock_crew_class:
             mock_crew_instance = Mock()
             mock_crew_instance.kickoff = Mock(return_value=mock_crew_result(validated_tasks))
             mock_crew_class.return_value = mock_crew_instance
@@ -286,7 +286,7 @@ class TestMultiPhaseGenerationCrew:
         # Phase 4 result (same as phase 3 - validation passed)
         validated_tasks = tasks_with_inputs
 
-        with patch("apflow.extensions.generate.multi_phase_crew.Crew") as mock_crew_class:
+        with patch("crewai.Crew") as mock_crew_class:
             # Mock all 4 phases
             mock_crew_instance = Mock()
             mock_crew_instance.kickoff = Mock(
@@ -334,7 +334,7 @@ class TestMultiPhaseGenerationCrew:
     @pytest.mark.asyncio
     async def test_generation_handles_phase_failure(self, crew):
         """Test that generation handles phase failures gracefully"""
-        with patch("apflow.extensions.generate.multi_phase_crew.Crew") as mock_crew_class:
+        with patch("crewai.Crew") as mock_crew_class:
             mock_crew_instance = Mock()
             # Phase 1 fails
             mock_crew_instance.kickoff = Mock(side_effect=Exception("Phase 1 failed"))

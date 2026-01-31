@@ -10,7 +10,6 @@ Implements 4-phase generation approach:
 
 import json
 from typing import Dict, Any, List, Optional
-from crewai import Agent, Task, Crew, Process
 from apflow.logger import get_logger
 from apflow.extensions.generate.schema_formatter import SchemaFormatter
 from apflow.extensions.generate.principles_extractor import PrinciplesExtractor
@@ -31,6 +30,11 @@ class MultiPhaseGenerationCrew:
         self.model = model
         self.api_key = api_key
         self.schema_formatter = SchemaFormatter()
+
+    def _import_crewai(self):
+        """Lazy import crewai to avoid slow module-level imports"""
+        from crewai import Agent, Task, Crew, Process
+        return Agent, Task, Crew, Process
 
     async def generate(self, requirement: str, user_id: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -110,6 +114,7 @@ class MultiPhaseGenerationCrew:
         """
         Phase 1: Analyze requirement and identify needed executors
         """
+        Agent, Task, Crew, Process = self._import_crewai()
         try:
             agent = Agent(
                 role="Requirement Analyzer",
@@ -169,6 +174,7 @@ Return ONLY valid JSON, no markdown, no explanations.
         """
         Phase 2: Design tree structure with correct parent_id relationships
         """
+        Agent, Task, Crew, Process = self._import_crewai()
         try:
             agent = Agent(
                 role="Structure Designer",
@@ -251,6 +257,7 @@ Return ONLY valid JSON array, no markdown.
         """
         Phase 3: Fill inputs for each task matching executor schemas
         """
+        Agent, Task, Crew, Process = self._import_crewai()
         try:
             agent = Agent(
                 role="Schema Validator",
@@ -329,6 +336,7 @@ Return ONLY valid JSON array, no markdown.
         """
         Phase 4: Final validation and auto-fix issues
         """
+        Agent, Task, Crew, Process = self._import_crewai()
         try:
             agent = Agent(
                 role="Quality Reviewer",

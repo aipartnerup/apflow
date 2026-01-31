@@ -28,6 +28,7 @@ HEAVY_DEPENDENCIES = {
 ALLOWED_HEAVY_IMPORT_PATTERNS = [
     "src/apflow/extensions/llm/llm_executor.py",  # LLM executor needs litellm
     "src/apflow/extensions/crewai/",  # CrewAI extension needs crewai
+    "src/apflow/core/tools/base.py",  # Tools base uses try-except for optional crewai
     "test_",  # Test files
     "conftest.py",  # Pytest config
 ]
