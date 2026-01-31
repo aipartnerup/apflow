@@ -111,7 +111,7 @@ async def test_crewai_dependency_schema_based_mapping():
         # Check results
         analyze_task = await task_manager.task_repository.get_task_by_id("analyze-task")
         
-        print(f"\n=== Analyze Task Status ===")
+        print("\n=== Analyze Task Status ===")
         print(f"Status: {analyze_task.status}")
         
         if analyze_task.status == "failed":
@@ -130,8 +130,8 @@ async def test_crewai_dependency_schema_based_mapping():
                 print(f"⚠️  Task failed with different error (acceptable for this test): {analyze_task.error[:200]}")
                 print("    The key point is it didn't fail with 'Template variable not found' error")
         else:
-            print(f"✅ Task completed successfully!")
-            print(f"   This confirms crewai_executor correctly injected template variables")
+            print("✅ Task completed successfully!")
+            print("   This confirms crewai_executor correctly injected template variables")
             if analyze_task.result:
                 result_preview = json.dumps(analyze_task.result, indent=2)[:300]
                 print(f"\nResult preview:\n{result_preview}...")

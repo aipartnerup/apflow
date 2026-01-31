@@ -72,7 +72,7 @@ async def test_generated_crewai_task_no_template_variables_for_dependencies():
     )
     assert depends_on_scrape, "CrewAI task should depend on scrape task"
     
-    print(f"✓ CrewAI task depends on scrape task")
+    print("✓ CrewAI task depends on scrape task")
     
     # Check CrewAI task structure
     works = crewai_task.get("inputs", {}).get("works", {})
@@ -102,7 +102,7 @@ async def test_generated_crewai_task_no_template_variables_for_dependencies():
                     f"Description: {description}"
                 )
         
-        print(f"  ✓ No problematic template variables found")
+        print("  ✓ No problematic template variables found")
     
     print("\n✅ All CrewAI task descriptions are correctly formatted")
     print("✅ Test passed - generated tasks should execute without template variable errors")

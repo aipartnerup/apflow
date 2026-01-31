@@ -337,11 +337,11 @@ async def test_end_to_end_generate_and_execute_website_analysis():
                     print(f"  ❌ Task '{task_name}' -> '{crew_task_name}' uses problematic variables: {found_vars}")
                     print(f"     Description: {description}")
                     pytest.fail(
-                        f"CrewAI task contains template variables that will cause runtime error. "
-                        f"This indicates the LLM prompt fix is not working correctly."
+                        "CrewAI task contains template variables that will cause runtime error. "
+                        "This indicates the LLM prompt fix is not working correctly."
                     )
         
-        print(f"  ✓ All CrewAI tasks validated - no problematic template variables")
+        print("  ✓ All CrewAI tasks validated - no problematic template variables")
     else:
         print("  No CrewAI tasks in tree - skipping validation")
     
@@ -450,6 +450,129 @@ async def test_end_to_end_generate_and_execute_website_analysis():
         assert completed_count > 0, "At least some tasks should have completed"
         print("\n✅ End-to-end test completed successfully!")
         print(f"   {completed_count}/{total_tasks} tasks completed")
+        
+        # ADDITIONAL VALIDATION: Check dependency data transmission and result format
+        print("\n" + "="*80)
+        print("VALIDATION: Checking Dependency Data & Result Format")
+        print("="*80 + "\n")
+        
+        # Find scrape and CrewAI tasks to validate data flow
+        scrape_tasks = []
+        crewai_tasks = []
+        
+        for task_id in all_task_ids:
+            task = await task_manager.task_repository.get_task_by_id(task_id)
+            executor_type = task.schemas.get('method', '') if task.schemas else ''
+            
+            if executor_type == 'scrape_executor':
+                scrape_tasks.append(task)
+            elif executor_type == 'crewai_executor':
+                crewai_tasks.append(task)
+        
+        print(f"Found {len(scrape_tasks)} scrape task(s) and {len(crewai_tasks)} CrewAI task(s)")
+        
+        # Validate scrape task results
+        for scrape_task in scrape_tasks:
+            print(f"\n=== Scrape Task: {scrape_task.name} ===")
+            print(f"  Status: {scrape_task.status}")
+            
+            if scrape_task.status == 'completed' and scrape_task.result:
+                result_content = scrape_task.result.get('result', '') if isinstance(scrape_task.result, dict) else str(scrape_task.result)
+                content_preview = result_content[:200] if isinstance(result_content, str) else str(result_content)[:200]
+                print(f"  Result preview: {content_preview}...")
+                print(f"  Result length: {len(str(result_content))} chars")
+                
+                # Check if result contains meaningful content
+                if len(str(result_content)) < 100:
+                    print("  ⚠️  WARNING: Scrape result seems too short")
+                else:
+                    print("  ✓ Scrape result has sufficient content")
+        
+        # Validate CrewAI tasks receive dependency data
+        for crewai_task in crewai_tasks:
+            print(f"\n=== CrewAI Task: {crewai_task.name} ===")
+            print(f"  Status: {crewai_task.status}")
+            print(f"  Dependencies: {crewai_task.dependencies}")
+            
+            # Check inputs for dependency data
+            if crewai_task.inputs:
+                print(f"  Input keys: {list(crewai_task.inputs.keys())}")
+                
+                # Check if dependency results are in inputs
+                has_dependency_data = False
+                for dep in crewai_task.dependencies:
+                    dep_id = dep.get('id') if isinstance(dep, dict) else dep
+                    if dep_id in crewai_task.inputs:
+                        dep_data = crewai_task.inputs[dep_id]
+                        dep_preview = str(dep_data)[:200]
+                        print(f"  Dependency {dep_id[:8]}... data: {dep_preview}...")
+                        print(f"  Dependency data length: {len(str(dep_data))} chars")
+                        has_dependency_data = True
+                
+                if not has_dependency_data:
+                    print("  ❌ ISSUE: No dependency data found in inputs!")
+                    print("  This will cause CrewAI to say it doesn't have the content to analyze")
+                else:
+                    print("  ✓ Dependency data present in inputs")
+            
+            # Check result format and content quality
+            if crewai_task.status == 'completed' and crewai_task.result:
+                if isinstance(crewai_task.result, dict):
+                    nested_result = crewai_task.result.get('result')
+                    
+                    if nested_result:
+                        print(f"  Result type: {type(nested_result).__name__}")
+                        result_preview = str(nested_result)[:200]
+                        print(f"  Result preview: {result_preview}...")
+                        
+                        # Check for "no content" errors
+                        error_indicators = [
+                            "without said content",
+                            "need the specific website content",
+                            "please provide the website content",
+                            "no content to analyze",
+                            "content is missing"
+                        ]
+                        
+                        result_str = str(nested_result).lower()
+                        if any(indicator in result_str for indicator in error_indicators):
+                            print("  ❌ CRITICAL: CrewAI didn't receive dependency data!")
+                            print("  The agent says it doesn't have the content to analyze")
+                            print("  This indicates dependency data injection is not working")
+                            
+                            # This is a critical failure - dependency system broken
+                            pytest.fail(
+                                "CrewAI task failed to receive dependency data. "
+                                f"Result indicates missing content: '{result_preview}...'. "
+                                "Check dependency data injection in CrewAI executor."
+                            )
+                        
+                        # Check if it's a JSON string that should be parsed
+                        if isinstance(nested_result, str):
+                            if nested_result.strip().startswith(('{', '[')):
+                                try:
+                                    json.loads(nested_result)
+                                    print("  ❌ ISSUE: Result is JSON string, should be parsed dict/list")
+                                    pytest.fail(
+                                        "CrewAI task result is JSON string instead of parsed object. "
+                                        "Expected: dict/list, Got: str"
+                                    )
+                                except json.JSONDecodeError:
+                                    pass
+                        elif isinstance(nested_result, (dict, list)):
+                            print(f"  ✅ Result is properly parsed as {type(nested_result).__name__}")
+                            
+                            # Validate result has meaningful content
+                            if isinstance(nested_result, dict):
+                                if len(nested_result) == 0:
+                                    print("  ⚠️  WARNING: Result dict is empty")
+                                else:
+                                    print(f"  ✓ Result has {len(nested_result)} keys")
+        
+        print(f"\n{'='*80}")
+        print("Validation Summary:")
+        print("  All dependency data checks completed")
+        print(f"{'='*80}")
         
     finally:
         db.close()
@@ -916,13 +1039,13 @@ async def test_scrape_crewai_template_variable_validation():
         elif method == "crewai_executor":
             crewai_task = task
     
-    print(f"\n=== Task Analysis ===")
+    print("\n=== Task Analysis ===")
     print(f"Scrape task: {'✓ Found' if scrape_task else '✗ Missing'}")
     print(f"CrewAI task: {'✓ Found' if crewai_task else '✗ Missing'}")
     
     # If we have both, validate the CrewAI task
     if scrape_task and crewai_task:
-        print(f"\n✓ Both tasks found, validating CrewAI task structure...")
+        print("\n✓ Both tasks found, validating CrewAI task structure...")
         
         # Check dependency relationship
         crewai_deps = crewai_task.get("dependencies", [])
@@ -933,13 +1056,13 @@ async def test_scrape_crewai_template_variable_validation():
         )
         
         assert depends_on_scrape, "CrewAI task should depend on scrape task"
-        print(f"✓ CrewAI task correctly depends on scrape task")
+        print("✓ CrewAI task correctly depends on scrape task")
         
         # CRITICAL: Validate task descriptions don't use problematic template variables
         works = crewai_task.get("inputs", {}).get("works", {})
         crewai_tasks_def = works.get("tasks", {})
         
-        print(f"\n=== Validating CrewAI Task Descriptions ===")
+        print("\n=== Validating CrewAI Task Descriptions ===")
         print(f"Found {len(crewai_tasks_def)} CrewAI task(s) to validate\n")
         
         # These template variables will cause runtime errors because dependency results
@@ -966,36 +1089,335 @@ async def test_scrape_crewai_template_variable_validation():
             if found_vars:
                 validation_passed = False
                 print(f"  ❌ FAIL: Found problematic template variables: {found_vars}")
-                print(f"     These variables won't exist at runtime because dependency results")
+                print("     These variables won't exist at runtime because dependency results")
                 print(f"     are stored with task IDs as keys: {{'{scrape_task_id}': result}}")
-                print(f"     This will cause: 'Template variable not found' error in CrewAI.kickoff()")
+                print("     This will cause: 'Template variable not found' error in CrewAI.kickoff()")
             else:
-                print(f"  ✓ PASS: No problematic template variables")
+                print("  ✓ PASS: No problematic template variables")
             
             # Also check prompt for guidance
             if prompt:
                 print(f"  Prompt: {prompt[:80]}...")
         
         assert validation_passed, (
-            f"CrewAI task descriptions contain problematic template variables that will cause "
-            f"runtime errors. See details above. This indicates the LLM is not following the "
-            f"updated prompt guidance about NOT using template variables for dependency data."
+            "CrewAI task descriptions contain problematic template variables that will cause "
+            "runtime errors. See details above. This indicates the LLM is not following the "
+            "updated prompt guidance about NOT using template variables for dependency data."
         )
         
-        print(f"\n✅ All validations passed!")
-        print(f"   - CrewAI task correctly depends on scrape task")
-        print(f"   - Task descriptions don't use problematic template variables")
-        print(f"   - Generated tasks should execute without 'Template variable not found' errors")
+        print("\n✅ All validations passed!")
+        print("   - CrewAI task correctly depends on scrape task")
+        print("   - Task descriptions don't use problematic template variables")
+        print("   - Generated tasks should execute without 'Template variable not found' errors")
     
     elif crewai_task and not scrape_task:
-        print(f"\n⚠️  CrewAI task found but no scrape task - checking for alternative structure")
+        print("\n⚠️  CrewAI task found but no scrape task - checking for alternative structure")
         # This is acceptable if the requirement is fulfilled differently
     else:
-        print(f"\n⚠️  No CrewAI task generated - may have used alternative approach")
+        print("\n⚠️  No CrewAI task generated - may have used alternative approach")
         # This is also acceptable as long as the requirement is fulfilled
     
     # Always validate the final task tree
     validation = executor._validate_tasks_array(tasks)
     assert validation["valid"], f"Task tree should be valid: {validation['error']}"
-    print(f"\n✅ Task tree structure validation passed")
+    print("\n✅ Task tree structure validation passed")
+
+
+@pytest.mark.asyncio
+async def test_crewai_json_result_format_validation():
+    """
+    Unit test: Verify CrewAI executor returns parsed JSON, not JSON string.
+    
+    This test validates that CrewAI tasks with JSON output format
+    return results as parsed dict/list objects, not JSON strings.
+    
+    Expected behavior (after fix):
+        result = {
+            "status": "success",
+            "result": {"key": "value"}  # ✅ Parsed JSON object
+        }
+    
+    The fix in crewai_executor.py's process_result() method:
+    - Detects when result.raw is a JSON string
+    - Automatically parses it to dict/list
+    - Falls back to returning raw string if parsing fails
+    
+    Why this matters:
+    1. Downstream tasks can use results directly without parsing
+    2. Type checking works correctly (expects dict, gets dict)
+    3. Aggregator results contain properly structured data
+    4. Better user experience: results are ready to use
+    """
+    print("\n" + "="*80)
+    print("TEST: CrewAI JSON Result Format - Verify Auto-Parse")
+    print("="*80 + "\n")
+    
+    # Import the executor to test the fix
+    from apflow.extensions.crewai.crewai_executor import CrewaiExecutor
+    
+    # Create a mock CrewAI result object (simulating what CrewAI returns)
+    class MockCrewAIResult:
+        def __init__(self, raw_value):
+            self.raw = raw_value
+            self.token_usage = None
+    
+    executor = CrewaiExecutor()
+    
+    # Test Case 1: JSON string should be parsed
+    print("Test Case 1: JSON Object String")
+    json_string = '{\n    "Insights": {\n        "Content Quality": "Good"\n    },\n    "URL": "https://example.com"\n}'
+    mock_result = MockCrewAIResult(json_string)
+    
+    processed = executor.process_result(mock_result)
+    print("  Input type: str (JSON)")
+    print(f"  Output type: {type(processed).__name__}")
+    print(f"  Output value: {processed}")
+    
+    assert isinstance(processed, dict), f"Expected dict, got {type(processed)}"
+    assert "Insights" in processed, "Parsed dict should contain 'Insights' key"
+    assert "URL" in processed, "Parsed dict should contain 'URL' key"
+    print("  ✅ PASS: JSON string correctly parsed to dict\n")
+    
+    # Test Case 2: JSON array string should be parsed
+    print("Test Case 2: JSON Array String")
+    json_array = '[{"id": 1, "name": "test"}, {"id": 2, "name": "test2"}]'
+    mock_result_array = MockCrewAIResult(json_array)
+    
+    processed_array = executor.process_result(mock_result_array)
+    print("  Input type: str (JSON array)")
+    print(f"  Output type: {type(processed_array).__name__}")
+    print(f"  Output value: {processed_array}")
+    
+    assert isinstance(processed_array, list), f"Expected list, got {type(processed_array)}"
+    assert len(processed_array) == 2, "Array should have 2 elements"
+    print("  ✅ PASS: JSON array string correctly parsed to list\n")
+    
+    # Test Case 3: Plain text should remain as string
+    print("Test Case 3: Plain Text (No JSON)")
+    plain_text = "This is a simple text response without JSON structure"
+    mock_result_text = MockCrewAIResult(plain_text)
+    
+    processed_text = executor.process_result(mock_result_text)
+    print("  Input type: str (plain text)")
+    print(f"  Output type: {type(processed_text).__name__}")
+    print(f"  Output value: {processed_text[:50]}...")
+    
+    assert isinstance(processed_text, str), f"Expected str, got {type(processed_text)}"
+    assert processed_text == plain_text, "Plain text should be unchanged"
+    print("  ✅ PASS: Plain text remains as string\n")
+    
+    # Test Case 4: Invalid JSON should remain as string
+    print("Test Case 4: Invalid JSON String")
+    invalid_json = '{"key": invalid value}'
+    mock_result_invalid = MockCrewAIResult(invalid_json)
+    
+    processed_invalid = executor.process_result(mock_result_invalid)
+    print("  Input type: str (invalid JSON)")
+    print(f"  Output type: {type(processed_invalid).__name__}")
+    
+    assert isinstance(processed_invalid, str), "Invalid JSON should remain as string"
+    print("  ✅ PASS: Invalid JSON safely handled as string\n")
+    
+    # Test Case 5: Already parsed dict should pass through
+    print("Test Case 5: Already Parsed Dict")
+    dict_result = {"key": "value", "nested": {"data": "test"}}
+    mock_result_dict = MockCrewAIResult(dict_result)
+    
+    processed_dict = executor.process_result(mock_result_dict)
+    print("  Input type: dict")
+    print(f"  Output type: {type(processed_dict).__name__}")
+    
+    assert isinstance(processed_dict, dict), "Dict should remain as dict"
+    assert processed_dict == dict_result, "Dict should be unchanged"
+    print("  ✅ PASS: Dict passes through unchanged\n")
+    
+    print("="*80)
+    print("ALL TESTS PASSED!")
+    print("CrewAI executor correctly auto-parses JSON strings to objects")
+    print("="*80)
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(180)
+@pytest.mark.slow
+@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set in environment")
+async def test_crewai_dependency_data_injection_fix():
+    """
+    Integration test: Verify CrewAI receives dependency data after fix.
+    
+    This test creates a manual scrape + crewai workflow to verify that:
+    1. Scrape task successfully extracts content
+    2. CrewAI task receives the scraped content (via description injection)
+    3. CrewAI agent can analyze the content (not say "content is missing")
+    4. Results are properly formatted (JSON parsing works)
+    
+    This validates the fix in crewai_executor.py's create_task() method
+    where dependency data is injected directly into task descriptions.
+    """
+    print(f"\n{'='*80}")
+    print("INTEGRATION TEST: CrewAI Dependency Data Injection (Post-Fix)")
+    print(f"{'='*80}\n")
+    
+    # Generate unique IDs for this test run
+    import uuid
+    root_id = str(uuid.uuid4())
+    scrape_id = str(uuid.uuid4())
+    analyze_id = str(uuid.uuid4())
+    
+    # Create a realistic task tree
+    tasks_array = [
+        {
+            "id": root_id,
+            "name": "Website Analysis Report",
+            "schemas": {"method": "aggregate_results_executor"},
+            "inputs": {},
+            "dependencies": [
+                {"id": scrape_id, "required": True},
+                {"id": analyze_id, "required": True}
+            ],
+            "user_id": "demo_user_91c0194805d17ad1"
+        },
+        {
+            "id": scrape_id,
+            "name": "Scrape AI Partner Up",
+            "parent_id": root_id,
+            "schemas": {"method": "scrape_executor"},
+            "inputs": {
+                "url": "https://aipartnerup.com",
+                "max_chars": 3000
+            },
+            "user_id": "demo_user_91c0194805d17ad1"
+        },
+        {
+            "id": analyze_id,
+            "name": "AI Analysis of Content",
+            "parent_id": root_id,
+            "schemas": {"method": "crewai_executor"},
+            "inputs": {
+                "works": {
+                    "agents": {
+                        "analyst": {
+                            "role": "Website Content Analyst",
+                            "goal": "Analyze website content and provide structured insights",
+                            "backstory": "Expert analyst specializing in web content evaluation",
+                            "llm": "gpt-4"
+                        }
+                    },
+                    "tasks": {
+                        "analyze": {
+                            "description": "Analyze the website content from the scraping task",
+                            "agent": "analyst",
+                            "prompt": "Provide analysis with: insights, strengths, improvements. Return as JSON.",
+                            "expected_output": "JSON with insights, strengths, and improvements"
+                        }
+                    }
+                }
+            },
+            "dependencies": [{"id": scrape_id, "required": True}],
+            "user_id": "demo_user_91c0194805d17ad1"
+        }
+    ]
+    
+    print("=== Task Tree ===")
+    print(f"Total tasks: {len(tasks_array)}")
+    for task in tasks_array:
+        print(f"  {task['name']} ({task.get('schemas', {}).get('method', 'N/A')})")
+    print()
+    
+    # Execute
+    db = create_session()
+    task_creator = TaskCreator(db)
+    
+    try:
+        print("Creating and executing task tree...")
+        task_tree = await task_creator.create_task_tree_from_array(tasks_array)
+        task_manager = TaskManager(db)
+        await task_manager.distribute_task_tree(task_tree)
+        print("✅ Execution completed\n")
+        
+        # Collect results
+        async def get_all_task_ids(node):
+            task_ids = [node.task.id]
+            for child in node.children:
+                task_ids.extend(await get_all_task_ids(child))
+            return task_ids
+        
+        all_task_ids = await get_all_task_ids(task_tree)
+        
+        print("="*80)
+        print("VALIDATION")
+        print("="*80 + "\n")
+        
+        scrape_task = None
+        crewai_task = None
+        
+        for task_id in all_task_ids:
+            task = await task_manager.task_repository.get_task_by_id(task_id)
+            executor_type = task.schemas.get('method', '') if task.schemas else ''
+            
+            if executor_type == 'scrape_executor':
+                scrape_task = task
+            elif executor_type == 'crewai_executor':
+                crewai_task = task
+        
+        # Validate scrape task
+        assert scrape_task is not None, "Scrape task should exist"
+        assert scrape_task.status == "completed", f"Scrape should complete, got: {scrape_task.status}"
+        
+        scrape_content = scrape_task.result.get('result', '') if isinstance(scrape_task.result, dict) else str(scrape_task.result)
+        print(f"✅ Scrape task completed: {len(scrape_content)} chars")
+        print(f"   Preview: {scrape_content[:100]}...\n")
+        
+        # Validate CrewAI task - THIS IS THE KEY TEST
+        assert crewai_task is not None, "CrewAI task should exist"
+        print(f"CrewAI Task Status: {crewai_task.status}")
+        
+        if crewai_task.status == "failed":
+            pytest.fail(f"CrewAI task failed: {crewai_task.error}")
+        
+        assert crewai_task.status == "completed", f"CrewAI should complete, got: {crewai_task.status}"
+        
+        # Check result content
+        result_data = crewai_task.result.get('result') if isinstance(crewai_task.result, dict) else crewai_task.result
+        result_str = str(result_data)
+        
+        print(f"CrewAI Result Preview: {result_str[:200]}...\n")
+        
+        # KEY VALIDATION: Check if agent says "no content"
+        error_indicators = [
+            "without said content",
+            "need the specific website content",
+            "please provide the website content",
+            "no content to analyze",
+            "content is missing",
+            "don't have the content"
+        ]
+        
+        has_content_error = any(indicator in result_str.lower() for indicator in error_indicators)
+        
+        if has_content_error:
+            print("❌ CRITICAL FAILURE: CrewAI agent says it doesn't have the content!")
+            print(f"   Result: {result_str[:300]}")
+            pytest.fail(
+                "CrewAI dependency injection fix FAILED. "
+                "Agent still says it doesn't have the content to analyze."
+            )
+        
+        print("✅ SUCCESS: CrewAI agent received and analyzed the content!")
+        print("   The dependency data injection fix is working correctly.\n")
+        
+        # Bonus: Check JSON parsing
+        if isinstance(result_data, dict):
+            print(f"✅ BONUS: Result properly parsed as dict with {len(result_data)} keys")
+        elif isinstance(result_data, str) and result_data.strip().startswith('{'):
+            print("⚠️  Note: Result is JSON string (minor issue, not critical)")
+        
+        print("\n" + "="*80)
+        print("✅ ALL VALIDATIONS PASSED!")
+        print("="*80)
+        
+    finally:
+        db.close()
+
+
 
