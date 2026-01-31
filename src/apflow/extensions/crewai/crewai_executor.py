@@ -278,7 +278,7 @@ class CrewaiExecutor(BaseTask):
             
         Note:
             CrewaiExecutor requires 'works' parameter which defines the crew structure:
-            - agents: Dict of agent configurations (role, goal, tools, llm, etc.)
+            - agents: Dict of agent configurations (role, goal, backstory, llm are REQUIRED; tools optional)
             - tasks: Dict of task configurations (description, agent, prompt, expected_output, etc.)
             
             The output result format is determined by the 'prompt' field in each task config.
@@ -292,29 +292,33 @@ class CrewaiExecutor(BaseTask):
                     "properties": {
                         "agents": {
                             "type": "object",
-                            "description": "Dictionary of agent configurations: {agent_name: {role, goal, llm, tools, ...}}",
+                            "description": "Dictionary of agent configurations: {agent_name: {role, goal, backstory, llm, tools, ...}}",
                             "additionalProperties": {
                                 "type": "object",
                                 "properties": {
                                     "role": {
                                         "type": "string",
-                                        "description": "Agent's role/title",
+                                        "description": "Agent's role/title (REQUIRED)",
                                     },
                                     "goal": {
                                         "type": "string",
-                                        "description": "Agent's primary goal",
+                                        "description": "Agent's primary goal (REQUIRED)",
+                                    },
+                                    "backstory": {
+                                        "type": "string",
+                                        "description": "Agent's background and expertise (REQUIRED)",
                                     },
                                     "llm": {
                                         "type": "string",
-                                        "description": "LLM model name (e.g., 'gpt-4', 'claude-3-opus')",
+                                        "description": "LLM model name (e.g., 'gpt-4', 'claude-3-opus') (REQUIRED)",
                                     },
                                     "tools": {
                                         "type": "array",
-                                        "description": "List of tool names or objects",
+                                        "description": "List of tool names or objects (optional)",
                                         "items": {"type": "string"},
                                     },
                                 },
-                                "required": ["role", "goal"],
+                                "required": ["role", "goal", "backstory", "llm"],
                             },
                         },
                         "tasks": {
@@ -874,7 +878,14 @@ class CrewaiExecutor(BaseTask):
         # If still no works, use default demo structure
         if not works:
             works = {
-                "agents": {"demo_agent": {"role": "Demo Agent", "goal": "Complete demo tasks"}},
+                "agents": {
+                    "demo_agent": {
+                        "role": "Demo Agent",
+                        "goal": "Complete demo tasks",
+                        "backstory": "Expert demo agent with extensive experience",
+                        "llm": "gpt-4",
+                    }
+                },
                 "tasks": {"demo_task": {"description": "Execute demo task", "agent": "demo_agent"}},
             }
 

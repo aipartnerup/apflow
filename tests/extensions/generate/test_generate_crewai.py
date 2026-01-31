@@ -186,11 +186,13 @@ async def test_generate_executor_validates_crewai_tasks():
                     "analyst": {
                         "role": "Data Analyst",
                         "goal": "Analyze data comprehensively",
+                        "backstory": "Expert data analyst with years of experience",
                         "llm": "gpt-4",
                     },
                     "reporter": {
                         "role": "Report Writer",
                         "goal": "Create professional reports",
+                        "backstory": "Professional technical writer",
                         "llm": "gpt-4",
                     }
                 },

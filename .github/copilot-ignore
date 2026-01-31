@@ -1,7 +1,6 @@
 # Environment variables (sensitive data)
 .env
-.env.*
-*.env
+.data
 
 # Secrets
 secrets/

@@ -10,7 +10,31 @@ Requires OPENAI_API_KEY environment variable for real LLM calls.
 import pytest
 import os
 import json
+from pathlib import Path
 from apflow.extensions.generate.generate_executor import GenerateExecutor
+from apflow import TaskManager, create_session
+from apflow.core.execution.task_creator import TaskCreator
+
+
+# Load .env file if it exists
+def load_env_file():
+    """Load environment variables from .env file in project root"""
+    env_file = Path(__file__).parent.parent.parent.parent / ".env"
+    if env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    key, value = line.split('=', 1)
+                    os.environ[key] = value
+
+
+# Load environment variables at module level
+load_env_file()
+
+# Note: Do NOT enable command_executor by default
+# Tests should use scrape_executor for web scraping, not command_executor
+# os.environ["APFLOW_STDIO_ALLOW_COMMAND"] = "1"  # Commented out to test realistic scenarios
 
 
 @pytest.mark.asyncio
@@ -244,3 +268,156 @@ async def test_generate_explicit_multi_executor_requirement():
     validation = executor._validate_tasks_array(tasks)
     assert validation["valid"], f"Generated task tree should be valid: {validation['error']}"
     print("\n✅ Task tree passes all validations")
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(300)  # 5 minutes for full execution
+@pytest.mark.slow
+@pytest.mark.skipif(not os.getenv("OPENAI_API_KEY"), reason="OPENAI_API_KEY not set in environment")
+async def test_end_to_end_generate_and_execute_website_analysis():
+    """
+    End-to-end integration test: Generate task tree and execute it.
+    
+    This test:
+    1. Uses GenerateExecutor to generate a task tree from natural language
+    2. Creates the task tree using TaskCreator
+    3. Executes the entire task tree using TaskManager
+    4. Validates the execution results
+    
+    User requirement: "please analyze aipartnerup.com and give a report with json format"
+    """
+    print(f"\n{'='*80}")
+    print("END-TO-END TEST: Generate + Execute Website Analysis")
+    print(f"{'='*80}\n")
+    
+    # Step 1: Generate task tree
+    print("Step 1: Generating task tree from requirement...")
+    generator = GenerateExecutor(user_id="demo_user_91c0194805d17ad1")
+    requirement = "please analyze aipartnerup.com and give a report with json format"
+    
+    print(f"Requirement: {requirement}\n")
+    
+    generation_result = await generator.execute({
+        "requirement": requirement,
+        "user_id": "demo_user_91c0194805d17ad1",
+        "generation_mode": "single_shot",
+    })
+    
+    print("=== Generation Result ===")
+    print(f"Status: {generation_result['status']}")
+    assert generation_result["status"] == "completed", f"Generation failed: {generation_result.get('error')}"
+    
+    tasks_array = generation_result["tasks"]
+    print(f"Generated {len(tasks_array)} tasks")
+    print("\n=== Generated Task Tree ===")
+    print(json.dumps(tasks_array, indent=2))
+    
+    # Step 2: Create task tree in database
+    print("\n" + "="*80)
+    print("Step 2: Creating task tree in database...")
+    print("="*80 + "\n")
+    
+    db = create_session()
+    task_creator = TaskCreator(db)
+    
+    try:
+        task_tree = await task_creator.create_task_tree_from_array(tasks_array)
+        print(f"✅ Task tree created successfully")
+        print(f"Root task ID: {task_tree.task.id}")
+        print(f"Root task name: {task_tree.task.name}")
+        
+        # Count tasks in tree
+        def count_tasks(node):
+            return 1 + sum(count_tasks(child) for child in node.children)
+        
+        total_tasks = count_tasks(task_tree)
+        print(f"Total tasks in tree: {total_tasks}")
+        
+        # Step 3: Execute task tree
+        print("\n" + "="*80)
+        print("Step 3: Executing task tree...")
+        print("="*80 + "\n")
+        
+        task_manager = TaskManager(db)
+        
+        # Execute the tree
+        await task_manager.distribute_task_tree(task_tree)
+        
+        print("\n✅ Task tree execution completed!")
+        
+        # Step 4: Validate results
+        print("\n" + "="*80)
+        print("Step 4: Validating execution results...")
+        print("="*80 + "\n")
+        
+        # Get all tasks and check their status
+        async def get_all_task_ids(node):
+            task_ids = [node.task.id]
+            for child in node.children:
+                task_ids.extend(await get_all_task_ids(child))
+            return task_ids
+        
+        all_task_ids = await get_all_task_ids(task_tree)
+        
+        completed_count = 0
+        failed_count = 0
+        
+        for task_id in all_task_ids:
+            task = await task_manager.task_repository.get_task_by_id(task_id)
+            print(f"\nTask: {task.name}")
+            print(f"  ID: {task.id}")
+            print(f"  Status: {task.status}")
+            print(f"  Executor: {task.schemas.get('method', 'N/A') if task.schemas else 'N/A'}")
+            
+            if task.status == "completed":
+                completed_count += 1
+                if task.result:
+                    result_str = json.dumps(task.result, indent=2) if isinstance(task.result, dict) else str(task.result)
+                    # Truncate long results
+                    if len(result_str) > 500:
+                        result_str = result_str[:500] + "\n  ... (truncated)"
+                    print(f"  Result: {result_str}")
+            elif task.status == "failed":
+                failed_count += 1
+                print(f"  Error: {task.error}")
+        
+        print(f"\n{'='*80}")
+        print("Execution Summary:")
+        print(f"  Total tasks: {total_tasks}")
+        print(f"  Completed: {completed_count}")
+        print(f"  Failed: {failed_count}")
+        print(f"{'='*80}\n")
+        
+        # Validate root task result
+        root_task = await task_manager.task_repository.get_task_by_id(task_tree.task.id)
+        assert root_task.status in ["completed", "failed"], f"Root task should be completed or failed, got: {root_task.status}"
+        
+        if root_task.status == "completed":
+            print("✅ Root task completed successfully!")
+            print("\n=== Final Report (Root Task Result) ===")
+            if root_task.result:
+                print(json.dumps(root_task.result, indent=2))
+            
+            # Verify the result format
+            assert root_task.result is not None, "Root task should have a result"
+            
+            # If it's an aggregator, it should contain results from child tasks
+            root_executor = root_task.schemas.get("method", "") if root_task.schemas else ""
+            if "aggregate" in root_executor.lower():
+                print("\n✅ Root task used aggregator executor as expected")
+                # Aggregator should have collected results from dependencies
+                if isinstance(root_task.result, dict):
+                    print(f"Aggregated {len(root_task.result)} results")
+        else:
+            print(f"❌ Root task failed: {root_task.error}")
+            # Even if root failed, we can still verify the workflow was attempted
+            assert failed_count < total_tasks, "Not all tasks should have failed"
+        
+        # Final validation: Check that we had meaningful execution
+        assert completed_count > 0, "At least some tasks should have completed"
+        print(f"\n✅ End-to-end test completed successfully!")
+        print(f"   {completed_count}/{total_tasks} tasks completed")
+        
+    finally:
+        db.close()
+

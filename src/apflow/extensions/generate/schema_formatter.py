@@ -8,6 +8,8 @@ Prioritizes runtime schemas over static documentation for accuracy.
 from typing import Dict, Any, List, Optional
 from apflow.core.extensions.registry import get_registry
 from apflow.logger import get_logger
+from apflow.extensions.generate.llm_client import create_llm_client
+import json
 
 logger = get_logger(__name__)
 
@@ -15,8 +17,17 @@ logger = get_logger(__name__)
 class SchemaFormatter:
     """Formats executor schemas for LLM consumption"""
 
-    def __init__(self):
+    def __init__(self, use_llm_filter: bool = True):
+        """
+        Initialize SchemaFormatter
+        
+        Args:
+            use_llm_filter: Whether to use LLM for semantic executor filtering.
+                           Falls back to keyword matching if LLM is unavailable or fails.
+        """
         self.registry = get_registry()
+        self.use_llm_filter = use_llm_filter
+        self._llm_client = None
 
     def format_for_requirement(
         self, requirement: str, max_executors: int = 15, include_examples: bool = True
@@ -34,10 +45,13 @@ class SchemaFormatter:
         """
         # Get all executors
         all_executors = self.registry.list_executors()
+        
+        # Filter out disabled executors (e.g., command_executor when not enabled)
+        available_executors = self._filter_disabled_executors(all_executors)
 
         # Filter by relevance
         relevant_executors = self._filter_relevant_executors(
-            requirement, all_executors, max_executors
+            requirement, available_executors, max_executors
         )
 
         # Format each executor
@@ -60,18 +74,168 @@ class SchemaFormatter:
         output.extend(formatted_sections)
 
         return "\n".join(output)
+    
+    def _filter_disabled_executors(self, executors: List[Any]) -> List[Any]:
+        """
+        Filter out executors that are disabled or not available
+        
+        Args:
+            executors: List of all executors
+            
+        Returns:
+            List of available executors (disabled ones removed)
+        """
+        import os
+        
+        available = []
+        for executor in executors:
+            executor_id = getattr(executor, "id", "")
+            
+            # Special check for command_executor - requires APFLOW_STDIO_ALLOW_COMMAND=1
+            if executor_id == "command_executor":
+                if not os.getenv("APFLOW_STDIO_ALLOW_COMMAND") == "1":
+                    logger.info(f"Skipping command_executor: not enabled (requires APFLOW_STDIO_ALLOW_COMMAND=1)")
+                    continue
+            
+            # Add more executor-specific checks here if needed
+            # For example, checking if required dependencies are installed
+            
+            available.append(executor)
+        
+        return available
 
     def _filter_relevant_executors(
         self, requirement: str, executors: List[Any], max_count: int
     ) -> List[Any]:
         """
-        Filter executors by relevance to requirement using keyword matching
-
+        Filter executors by relevance to requirement using LLM semantic matching
+        
         Args:
             requirement: User's requirement
             executors: List of executor extensions
             max_count: Maximum executors to return
+            
+        Returns:
+            List of relevant executors sorted by relevance score
+        """
+        # Try LLM-based filtering first
+        if self.use_llm_filter:
+            try:
+                import asyncio
+                
+                # Check if we're already in an event loop
+                try:
+                    loop = asyncio.get_running_loop()
+                    # We're in an async context, but this is a sync method
+                    # For now, fall back to keyword matching
+                    # TODO: Make this method async to support async LLM calls
+                    logger.info("Already in event loop, using keyword matching for now")
+                    raise RuntimeError("Cannot use LLM filtering from async context yet")
+                except RuntimeError:
+                    # No event loop running, we can create one
+                    result = asyncio.run(self._llm_filter_executors(requirement, executors, max_count))
+                    if result:
+                        logger.info(f"LLM filtering selected {len(result)} executors")
+                        return result
+            except Exception as e:
+                logger.warning(f"LLM filtering failed, falling back to keyword matching: {e}")
+        
+        # Fallback to keyword-based filtering
+        logger.info("Using keyword-based executor filtering")
+        return self._keyword_filter_executors(requirement, executors, max_count)
+    
+    async def _llm_filter_executors(
+        self, requirement: str, executors: List[Any], max_count: int
+    ) -> Optional[List[Any]]:
+        """
+        Use LLM to semantically match executors to requirement
+        
+        Args:
+            requirement: User's requirement
+            executors: List of executor extensions
+            max_count: Maximum executors to return
+            
+        Returns:
+            List of relevant executors or None if LLM filtering fails
+        """
+        if not self._llm_client:
+            self._llm_client = create_llm_client()
+        
+        # Build executor summary for LLM
+        executor_summaries = []
+        for idx, executor in enumerate(executors):
+            executor_summaries.append({
+                "index": idx,
+                "id": getattr(executor, "id", "unknown"),
+                "name": getattr(executor, "name", "Unknown"),
+                "description": getattr(executor, "description", "")[:200],  # Truncate long descriptions
+                "tags": getattr(executor, "tags", [])
+            })
+        
+        prompt = f"""Given this user requirement:
+"{requirement}"
 
+Select the TOP {max_count} most relevant executors from the list below. Consider:
+1. Semantic similarity between requirement and executor purpose
+2. Executor capabilities matching the task needs
+3. Common workflow patterns (e.g., scrape → analyze, fetch → process)
+
+Available executors:
+{json.dumps(executor_summaries, indent=2)}
+
+Return ONLY a JSON array of executor indices (integers), ordered by relevance (most relevant first).
+Example: [5, 12, 3, 18]
+
+Do NOT include any explanation, just the JSON array."""
+
+        response = await self._llm_client.generate(
+            prompt,
+            temperature=0.3,  # Low temperature for consistent results
+            max_tokens=200
+        )
+        
+        # Parse LLM response
+        try:
+            # Extract JSON array from response
+            response_clean = response.strip()
+            if response_clean.startswith("```"):
+                # Remove markdown code blocks
+                response_clean = response_clean.split("```")[1]
+                if response_clean.startswith("json"):
+                    response_clean = response_clean[4:]
+            
+            selected_indices = json.loads(response_clean)
+            
+            if not isinstance(selected_indices, list):
+                logger.warning(f"LLM returned non-list response: {response}")
+                return None
+            
+            # Map indices back to executors
+            selected_executors = []
+            for idx in selected_indices:
+                if isinstance(idx, int) and 0 <= idx < len(executors):
+                    selected_executors.append(executors[idx])
+                    if len(selected_executors) >= max_count:
+                        break
+            
+            logger.info(f"LLM selected executors: {[getattr(e, 'id', '?') for e in selected_executors]}")
+            return selected_executors if selected_executors else None
+            
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse LLM response as JSON: {response[:100]}... Error: {e}")
+            return None
+    
+    def _keyword_filter_executors(
+        self, requirement: str, executors: List[Any], max_count: int
+    ) -> List[Any]:
+        """
+        Filter executors using keyword matching (fallback method)
+        
+        Args:
+            requirement: User's requirement
+            executors: List of executor extensions
+            max_count: Maximum executors to return
+            
         Returns:
             List of relevant executors sorted by relevance score
         """
@@ -117,11 +281,15 @@ class SchemaFormatter:
                 "extract",
                 "parse",
                 "html",
+                "http://",
+                "https://",
+                "www.",
             ],
             "database": ["database", "db", "sql", "query", "store", "save", "insert", "update"],
-            "file": ["file", "read", "write", "download", "upload", "csv", "json", "xml"],
-            "crewai": ["crewai", "crew", "agent", "llm", "ai", "analyze", "generate", "chat"],
-            "system": ["system", "info", "cpu", "memory", "disk", "monitor"],
+            "file": ["file", "read", "write", "download", "upload", "csv", "xml"],
+            "crewai": ["crewai", "crew", "agent", "llm", "ai", "chat"],
+            "analyze": ["analyze", "analysis", "report", "insight", "summary"],  # Separate analyze category
+            "system": ["system", "info", "cpu", "memory", "disk", "monitor", "hardware"],
             "docker": ["docker", "container", "image", "containerize"],
             "ssh": ["ssh", "remote", "server", "connect"],
             "mcp": ["mcp", "protocol", "tool", "context"],
@@ -172,13 +340,34 @@ class SchemaFormatter:
         common_words = requirement_words & executor_words
         score += len(common_words) * 2.0
 
-        # Priority executors (commonly used)
+        # Special handling for web scraping scenarios
+        web_indicators = [".com", ".org", ".net", "http://", "https://", "www.", "website", "webpage"]
+        is_web_request = any(indicator in requirement for indicator in web_indicators)
+        
+        if is_web_request:
+            # Boost scrape_executor for web requests
+            if "scrape" in executor_id:
+                score += 20.0  # Strong boost for scrape_executor
+            # Penalize wrong executors for web requests
+            elif "command" in executor_id:
+                score -= 15.0  # Significant penalty to discourage command_executor for web scraping
+            elif "generate" in executor_id:
+                score -= 10.0  # generate_executor should not directly scrape websites
+            elif "system_info" in executor_id or "system" in executor_id:
+                score -= 20.0  # system_info_executor is for system info, NOT web scraping!
+        
+        # Penalize generate_executor for concrete execution tasks
+        # generate_executor is for meta-tasks (generating other tasks), not direct execution
+        concrete_task_indicators = ["scrape", "fetch", "download", "get", "retrieve", "call", "execute"]
+        if any(indicator in requirement for indicator in concrete_task_indicators):
+            if "generate" in executor_id:
+                score -= 15.0  # Strong penalty for using generate_executor for concrete tasks
+        
+        # Priority executors (commonly used) - but not command_executor for web tasks
         priority_executors = [
             "rest_executor",
-            "command_executor",
             "scrape_executor",
             "crewai_executor",
-            "system_info_executor",
             "generate_executor",
         ]
         if executor_id in priority_executors:
@@ -401,6 +590,17 @@ class SchemaFormatter:
                 "Forgetting to set 'method' field (GET, POST, etc.)",
                 "Missing required headers for authenticated endpoints",
                 "Using http:// instead of https:// for production APIs",
+            ],
+            "command_executor": [
+                "⚠️ SECURITY: Command execution is DISABLED BY DEFAULT",
+                "Never use for web scraping - use scrape_executor instead",
+                "Only use when user explicitly requests shell command execution",
+                "Requires APFLOW_STDIO_ALLOW_COMMAND=1 environment variable",
+            ],
+            "scrape_executor": [
+                "This is the CORRECT executor for web scraping",
+                "Do NOT use command_executor with curl/wget for websites",
+                "Always provide full URL including protocol (https://)",
             ],
             "command_executor": [
                 "Not providing full command with arguments",
