@@ -45,7 +45,8 @@ check_tag_exists() {
 
 check_pypi_uploaded() {
     # Check if version exists on PyPI (simple check via pip)
-    pip index versions "${PROJECT_NAME}" 2>/dev/null | grep -q "${VERSION}" && return 0 || return 1
+    # Use grep -w for exact word match to avoid partial matches like "0.13.0-dev"
+    pip index versions "${PROJECT_NAME}" 2>/dev/null | grep -w "${VERSION}" > /dev/null 2>&1 && return 0 || return 1
 }
 
 check_release_exists() {
@@ -179,7 +180,8 @@ step2_check_status() {
     
     # Check PyPI (optional, may fail if not installed)
     if command -v pip &> /dev/null; then
-        if pip index versions "${PROJECT_NAME}" 2>/dev/null | grep -q "${VERSION}"; then
+        # Use grep -w for exact word match to avoid partial matches like "0.13.0-dev"
+        if pip index versions "${PROJECT_NAME}" 2>/dev/null | grep -w "${VERSION}" > /dev/null 2>&1; then
             STATUS_PYPI="${GREEN}✅${NC}"
             echo -e "  PyPI Upload:      ${STATUS_PYPI} Version ${VERSION} found on PyPI"
         else
@@ -614,7 +616,9 @@ step7_upload_pypi() {
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     
     if command -v pip &> /dev/null; then
-        if pip index versions "${PROJECT_NAME}" 2>/dev/null | grep -q "${VERSION}"; then
+        # Use pip index versions and extract exact version match
+        # grep -w ensures word boundary, preventing partial matches like "0.13.0-dev"
+        if pip index versions "${PROJECT_NAME}" 2>/dev/null | grep -w "${VERSION}" > /dev/null 2>&1; then
             echo -e "${GREEN}✅ Version ${VERSION} already exists on PyPI${NC}"
             if ! ask_yn "Upload anyway? (will fail if version exists)" "n"; then
                 SKIP_PYPI=true
@@ -622,9 +626,11 @@ step7_upload_pypi() {
                 SKIP_PYPI=false
             fi
         else
+            echo -e "${YELLOW}Version ${VERSION} not found on PyPI (or unable to verify)${NC}"
             SKIP_PYPI=false
         fi
     else
+        echo -e "${YELLOW}pip not available, cannot verify PyPI status${NC}"
         SKIP_PYPI=false
     fi
     
@@ -679,7 +685,7 @@ step_summary() {
         echo -e "  ${YELLOW}⚠️${NC}  Package: Not built"
     fi
     
-    if command -v pip &> /dev/null && pip index versions "${PROJECT_NAME}" 2>/dev/null | grep -q "${VERSION}"; then
+    if command -v pip &> /dev/null && pip index versions "${PROJECT_NAME}" 2>/dev/null | grep -w "${VERSION}" > /dev/null 2>&1; then
         echo -e "  ${GREEN}✅${NC} PyPI: https://pypi.org/project/${PROJECT_NAME}/${VERSION}/"
     else
         echo -e "  ${YELLOW}⚠️${NC}  PyPI: Not uploaded yet"
