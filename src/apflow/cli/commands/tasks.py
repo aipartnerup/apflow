@@ -22,6 +22,8 @@ logger = get_logger(__name__)
 
 
 app = typer.Typer(name="tasks", help="Manage and query tasks")
+scheduled_app = typer.Typer(name="scheduled", help="Manage scheduled tasks (for external schedulers)")
+app.add_typer(scheduled_app, name="scheduled")
 console = Console()
 
 # --- Added: history subcommand ---
@@ -777,33 +779,66 @@ def update(
     inputs: Optional[str] = typer.Option(None, "--inputs", help="Update task inputs (JSON string)"),
     params: Optional[str] = typer.Option(None, "--params", help="Update task params (JSON string)"),
     schemas: Optional[str] = typer.Option(None, "--schemas", help="Update task schemas (JSON string)"),
+    # Scheduling options
+    schedule_type: Optional[str] = typer.Option(
+        None, "--schedule-type",
+        help="Schedule type: once, interval, cron, daily, weekly, monthly"
+    ),
+    schedule_expression: Optional[str] = typer.Option(
+        None, "--schedule-expression",
+        help="Schedule expression (format depends on schedule_type)"
+    ),
+    schedule_enabled: Optional[bool] = typer.Option(
+        None, "--schedule-enabled/--schedule-disabled",
+        help="Enable or disable scheduling"
+    ),
+    schedule_start_at: Optional[str] = typer.Option(
+        None, "--schedule-start-at",
+        help="Schedule start time (ISO datetime)"
+    ),
+    schedule_end_at: Optional[str] = typer.Option(
+        None, "--schedule-end-at",
+        help="Schedule end time (ISO datetime)"
+    ),
+    max_runs: Optional[int] = typer.Option(
+        None, "--max-runs",
+        help="Maximum number of scheduled runs"
+    ),
 ):
     """
     Update task fields (equivalent to tasks.update API)
-    
-    Args:
-        task_id: Task ID to update
-        name: Update task name
-        status: Update task status
-        progress: Update task progress (0.0-1.0)
-        error: Update task error message
-        result: Update task result (JSON string)
-        priority: Update task priority
-        inputs: Update task inputs (JSON string)
-        params: Update task params (JSON string)
-        schemas: Update task schemas (JSON string)
+
+    Supports both basic task fields and scheduling configuration.
+
+    Scheduling Expression Formats:
+      - once: ISO datetime (e.g., "2024-01-15T09:00:00Z")
+      - interval: Seconds (e.g., "3600" for 1 hour)
+      - cron: Cron expression (e.g., "0 9 * * 1-5")
+      - daily: HH:MM (e.g., "09:00")
+      - weekly: "days HH:MM" where days=1-7 (e.g., "1,3,5 09:00")
+      - monthly: "dates HH:MM" where dates=1-31 (e.g., "1,15 09:00")
+
+    Note: Execution mode (tree vs single) is automatically determined based on
+    whether the task has children. Tasks with children execute in tree mode,
+    tasks without children execute in single mode.
+
+    Examples:
+      apflow tasks update TASK_ID --schedule-type daily --schedule-expression "09:00" --schedule-enabled
+      apflow tasks update TASK_ID --schedule-disabled
+      apflow tasks update TASK_ID --max-runs 10
     """
     try:
         from apflow.core.storage import get_default_session
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         from apflow.core.config import get_task_model_class
-        
+        from datetime import datetime
+
         using_api = should_use_api()
         log_api_usage("update", using_api)
-        
+
         db_session = get_default_session()
         task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
-        
+
         # Build update params
         update_params = {}
         if name is not None:
@@ -824,7 +859,25 @@ def update(
             update_params["params"] = json.loads(params)
         if schemas is not None:
             update_params["schemas"] = json.loads(schemas)
-        
+
+        # Scheduling parameters
+        if schedule_type is not None:
+            update_params["schedule_type"] = schedule_type
+        if schedule_expression is not None:
+            update_params["schedule_expression"] = schedule_expression
+        if schedule_enabled is not None:
+            update_params["schedule_enabled"] = schedule_enabled
+        if schedule_start_at is not None:
+            update_params["schedule_start_at"] = datetime.fromisoformat(
+                schedule_start_at.replace('Z', '+00:00')
+            )
+        if schedule_end_at is not None:
+            update_params["schedule_end_at"] = datetime.fromisoformat(
+                schedule_end_at.replace('Z', '+00:00')
+            )
+        if max_runs is not None:
+            update_params["max_runs"] = max_runs
+
         if not update_params:
             typer.echo("Error: At least one field must be specified for update", err=True)
             raise typer.Exit(1)
@@ -1324,9 +1377,360 @@ def watch(
                             break
         except KeyboardInterrupt:
             typer.echo("\nStopped watching")
-            
+
     except Exception as e:
         typer.echo(f"Error: {str(e)}", err=True)
         logger.exception("Error watching tasks")
         raise typer.Exit(1)
 
+
+# ========== Scheduled Task Commands (for external schedulers) ==========
+
+@scheduled_app.command("list")
+def scheduled_list(
+    enabled_only: bool = typer.Option(
+        True, "--enabled-only/--all",
+        help="Only show enabled schedules (default: enabled only)"
+    ),
+    user_id: Optional[str] = typer.Option(
+        None, "--user-id", "-u",
+        help="Filter by user ID"
+    ),
+    schedule_type: Optional[str] = typer.Option(
+        None, "--type", "-t",
+        help="Filter by schedule type (once, interval, cron, daily, weekly, monthly)"
+    ),
+    limit: int = typer.Option(
+        100, "--limit", "-l",
+        help="Maximum number of tasks"
+    ),
+    output_format: str = typer.Option(
+        "table", "--format", "-f",
+        help="Output format: json or table"
+    ),
+):
+    """
+    List all scheduled tasks.
+
+    Shows tasks that have scheduling configured. Use this to monitor
+    all scheduled tasks in the system.
+
+    Examples:
+        apflow tasks scheduled list
+        apflow tasks scheduled list --all
+        apflow tasks scheduled list --type daily
+        apflow tasks scheduled list -f json
+    """
+    try:
+        from apflow.core.storage import get_default_session
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.config import get_task_model_class
+
+        using_api = should_use_api()
+        log_api_usage("scheduled.list", using_api)
+
+        async def get_scheduled_tasks():
+            async with get_api_client_if_configured() as client:
+                if client:
+                    return await client.call_method(
+                        "tasks.scheduled.list",
+                        enabled_only=enabled_only,
+                        user_id=user_id,
+                        schedule_type=schedule_type,
+                        limit=limit,
+                    )
+
+            db_session = get_default_session()
+            task_repository = TaskRepository(
+                db_session,
+                task_model_class=get_task_model_class(),
+            )
+
+            tasks = await task_repository.get_scheduled_tasks(
+                enabled_only=enabled_only,
+                user_id=user_id,
+                schedule_type=schedule_type,
+                limit=limit,
+            )
+
+            return [task.output() for task in tasks]
+
+        tasks = run_async_safe(get_scheduled_tasks())
+
+        if output_format == "json":
+            typer.echo(json.dumps(tasks, indent=2))
+        else:
+            _print_scheduled_tasks_table(tasks)
+
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error listing scheduled tasks")
+        raise typer.Exit(1)
+
+
+def _print_scheduled_tasks_table(tasks: list):
+    """Print scheduled tasks as a formatted table"""
+    table = Table(title="Scheduled Tasks")
+    table.add_column("ID", style="cyan", no_wrap=True, max_width=12)
+    table.add_column("Name", style="white", max_width=25)
+    table.add_column("Type", style="magenta")
+    table.add_column("Expression", style="yellow")
+    table.add_column("Enabled", style="green")
+    table.add_column("Next Run", style="blue")
+    table.add_column("Runs", style="dim")
+
+    for task in tasks:
+        task_id = task.get("id", "")[:10] + "..."
+        name = task.get("name", "")
+        if len(name) > 23:
+            name = name[:20] + "..."
+
+        schedule_type = task.get("schedule_type") or "-"
+        expression = task.get("schedule_expression") or "-"
+        if len(expression) > 15:
+            expression = expression[:12] + "..."
+
+        enabled = "✓" if task.get("schedule_enabled") else "✗"
+        enabled_style = "green" if task.get("schedule_enabled") else "red"
+
+        next_run = task.get("next_run_at")
+        if next_run:
+            # Parse and format datetime
+            if isinstance(next_run, str) and len(next_run) > 16:
+                next_run = next_run[:16].replace("T", " ")
+        else:
+            next_run = "-"
+
+        run_count = task.get("run_count", 0)
+        max_runs = task.get("max_runs")
+        runs = f"{run_count}" + (f"/{max_runs}" if max_runs else "")
+
+        table.add_row(
+            task_id,
+            name,
+            schedule_type,
+            expression,
+            f"[{enabled_style}]{enabled}[/{enabled_style}]",
+            next_run,
+            runs,
+        )
+
+    console.print(table)
+    console.print(f"\nTotal: {len(tasks)} scheduled task(s)")
+
+
+@scheduled_app.command("due")
+def scheduled_due(
+    user_id: Optional[str] = typer.Option(
+        None, "--user-id", "-u",
+        help="Filter by user ID"
+    ),
+    limit: int = typer.Option(
+        100, "--limit", "-l",
+        help="Maximum number of tasks"
+    ),
+    output_format: str = typer.Option(
+        "json", "--format", "-f",
+        help="Output format: json or table"
+    ),
+):
+    """
+    Get scheduled tasks that are due for execution.
+
+    Returns tasks where next_run_at <= now and schedule is enabled.
+    This is the primary command for external schedulers to poll for
+    tasks that need to be executed.
+
+    Examples:
+        apflow tasks scheduled due
+        apflow tasks scheduled due --limit 10
+        apflow tasks scheduled due -f table
+    """
+    try:
+        from apflow.core.storage import get_default_session
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.config import get_task_model_class
+
+        using_api = should_use_api()
+        log_api_usage("scheduled.due", using_api)
+
+        async def get_due_tasks():
+            async with get_api_client_if_configured() as client:
+                if client:
+                    return await client.call_method(
+                        "tasks.scheduled.due",
+                        user_id=user_id,
+                        limit=limit,
+                    )
+
+            db_session = get_default_session()
+            task_repository = TaskRepository(
+                db_session,
+                task_model_class=get_task_model_class(),
+            )
+
+            tasks = await task_repository.get_due_scheduled_tasks(
+                user_id=user_id,
+                limit=limit,
+            )
+
+            return [task.output() for task in tasks]
+
+        tasks = run_async_safe(get_due_tasks())
+
+        if output_format == "json":
+            typer.echo(json.dumps(tasks, indent=2))
+        else:
+            if tasks:
+                _print_scheduled_tasks_table(tasks)
+            else:
+                typer.echo("No tasks due for execution")
+
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error getting due scheduled tasks")
+        raise typer.Exit(1)
+
+
+@scheduled_app.command("init")
+def scheduled_init(
+    task_id: str = typer.Argument(..., help="Task ID to initialize schedule for"),
+):
+    """
+    Initialize or recalculate next_run_at for a scheduled task.
+
+    Call this after setting schedule_type and schedule_expression
+    to calculate the first execution time.
+
+    Examples:
+        apflow tasks scheduled init TASK_ID
+    """
+    try:
+        from apflow.core.storage import get_default_session
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.config import get_task_model_class
+
+        using_api = should_use_api()
+        log_api_usage("scheduled.init", using_api)
+
+        async def init_schedule():
+            async with get_api_client_if_configured() as client:
+                if client:
+                    return await client.call_method(
+                        "tasks.scheduled.init",
+                        task_id=task_id,
+                    )
+
+            db_session = get_default_session()
+            task_repository = TaskRepository(
+                db_session,
+                task_model_class=get_task_model_class(),
+            )
+
+            task = await task_repository.initialize_schedule(task_id)
+            if not task:
+                raise ValueError(f"Task {task_id} not found")
+
+            return task.output()
+
+        result = run_async_safe(init_schedule())
+        typer.echo(json.dumps(result, indent=2))
+
+        next_run = result.get("next_run_at")
+        if next_run:
+            typer.echo(f"\n✓ Schedule initialized: next_run_at = {next_run}")
+        else:
+            typer.echo("\n⚠ Warning: next_run_at could not be calculated")
+
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error initializing schedule")
+        raise typer.Exit(1)
+
+
+@scheduled_app.command("complete")
+def scheduled_complete(
+    task_id: str = typer.Argument(..., help="Task ID that completed execution"),
+    success: bool = typer.Option(
+        True, "--success/--failed",
+        help="Whether execution succeeded"
+    ),
+    result: Optional[str] = typer.Option(
+        None, "--result", "-r",
+        help="Result data (JSON string)"
+    ),
+    error: Optional[str] = typer.Option(
+        None, "--error", "-e",
+        help="Error message (if failed)"
+    ),
+):
+    """
+    Complete a scheduled task run and prepare for next execution.
+
+    Call this after executing a scheduled task. Updates last_run_at,
+    increments run_count, and calculates next_run_at.
+
+    Examples:
+        apflow tasks scheduled complete TASK_ID
+        apflow tasks scheduled complete TASK_ID --failed --error "Connection timeout"
+        apflow tasks scheduled complete TASK_ID --result '{"processed": 100}'
+    """
+    try:
+        from apflow.core.storage import get_default_session
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+        from apflow.core.config import get_task_model_class
+
+        using_api = should_use_api()
+        log_api_usage("scheduled.complete", using_api)
+
+        result_data = None
+        if result:
+            result_data = json.loads(result)
+
+        async def complete_run():
+            async with get_api_client_if_configured() as client:
+                if client:
+                    return await client.call_method(
+                        "tasks.scheduled.complete",
+                        task_id=task_id,
+                        success=success,
+                        result=result_data,
+                        error=error,
+                    )
+
+            db_session = get_default_session()
+            task_repository = TaskRepository(
+                db_session,
+                task_model_class=get_task_model_class(),
+            )
+
+            task = await task_repository.complete_scheduled_run(
+                task_id=task_id,
+                success=success,
+                result=result_data,
+                error=error,
+            )
+
+            if not task:
+                raise ValueError(f"Task {task_id} not found")
+
+            return task.output()
+
+        updated = run_async_safe(complete_run())
+        typer.echo(json.dumps(updated, indent=2))
+
+        run_count = updated.get("run_count", 0)
+        next_run = updated.get("next_run_at")
+        enabled = updated.get("schedule_enabled")
+
+        if enabled and next_run:
+            typer.echo(f"\n✓ Run #{run_count} completed. Next run: {next_run}")
+        elif not enabled:
+            typer.echo(f"\n✓ Run #{run_count} completed. Schedule disabled (max_runs reached or expired)")
+        else:
+            typer.echo(f"\n✓ Run #{run_count} completed.")
+
+    except Exception as e:
+        typer.echo(f"Error: {str(e)}", err=True)
+        logger.exception("Error completing scheduled run")
+        raise typer.Exit(1)

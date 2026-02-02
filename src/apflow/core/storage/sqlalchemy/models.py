@@ -27,6 +27,16 @@ class TaskOriginType(StrEnum):
     copy = auto()   # Task copied from another (can be modified)
     archive = auto()  # Task archived from another (can not be modified)
 
+
+class ScheduleType(StrEnum):
+    """Schedule type for recurring tasks"""
+    once = auto()      # Single execution at a specific datetime
+    interval = auto()  # Recurring at fixed intervals (in seconds)
+    cron = auto()      # Cron expression scheduling
+    daily = auto()     # Daily at specific time
+    weekly = auto()    # Weekly on specific days
+    monthly = auto()   # Monthly on specific dates
+
 class TaskModel(Base):
     """
     Task Definition Model - Handles task orchestration and definition
@@ -124,6 +134,41 @@ class TaskModel(Base):
         Boolean, default=False, index=True
     )  # Whether this task is referenced/copied by others
 
+    # === Scheduling Configuration ===
+    schedule_type = Column(
+        String(20), nullable=True, index=True
+    )  # Schedule type: ScheduleType (once, interval, cron, daily, weekly, monthly)
+    schedule_expression = Column(
+        String(100), nullable=True
+    )  # Schedule expression (format depends on schedule_type)
+    schedule_enabled = Column(
+        Boolean, default=False, index=True
+    )  # Whether scheduling is enabled for this task
+
+    # === Schedule Boundaries ===
+    schedule_start_at = Column(
+        DateTime(timezone=True), nullable=True
+    )  # Earliest time the schedule can trigger
+    schedule_end_at = Column(
+        DateTime(timezone=True), nullable=True
+    )  # Latest time the schedule can trigger (after this, schedule is disabled)
+
+    # === Schedule State ===
+    next_run_at = Column(
+        DateTime(timezone=True), nullable=True, index=True
+    )  # Next scheduled execution time (calculated field)
+    last_run_at = Column(
+        DateTime(timezone=True), nullable=True
+    )  # Last time this scheduled task was executed
+
+    # === Execution Control ===
+    max_runs = Column(
+        Integer, nullable=True
+    )  # Maximum number of scheduled runs (null = unlimited)
+    run_count = Column(
+        Integer, default=0
+    )  # Number of times this scheduled task has been executed
+
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert model to dictionary"""
@@ -160,6 +205,19 @@ class TaskModel(Base):
             "original_task_id": self.original_task_id,
             "origin_type": self.origin_type.value if isinstance(self.origin_type, TaskOriginType) else self.origin_type,
             "has_references": self.has_references,
+            # Scheduling configuration
+            "schedule_type": self.schedule_type.value if isinstance(self.schedule_type, ScheduleType) else self.schedule_type,
+            "schedule_expression": self.schedule_expression,
+            "schedule_enabled": self.schedule_enabled,
+            # Schedule boundaries
+            "schedule_start_at": self.schedule_start_at,
+            "schedule_end_at": self.schedule_end_at,
+            # Schedule state
+            "next_run_at": self.next_run_at,
+            "last_run_at": self.last_run_at,
+            # Execution control
+            "max_runs": self.max_runs,
+            "run_count": self.run_count,
         }
     
 
@@ -170,6 +228,11 @@ class TaskModel(Base):
         data["started_at"] = self.started_at.isoformat() if self.started_at else None
         data["updated_at"] = self.updated_at.isoformat() if self.updated_at else None
         data["completed_at"] = self.completed_at.isoformat() if self.completed_at else None
+        # Schedule datetime fields
+        data["schedule_start_at"] = self.schedule_start_at.isoformat() if self.schedule_start_at else None
+        data["schedule_end_at"] = self.schedule_end_at.isoformat() if self.schedule_end_at else None
+        data["next_run_at"] = self.next_run_at.isoformat() if self.next_run_at else None
+        data["last_run_at"] = self.last_run_at.isoformat() if self.last_run_at else None
         return data
     
     def copy(self, override: Optional[Dict[str, Any]] = None) -> TaskModelType:
@@ -215,6 +278,16 @@ class TaskModel(Base):
             "origin_type": TaskOriginType.create,
             "task_tree_id": None,
             "has_references": False,
+            # Scheduling defaults
+            "schedule_type": None,
+            "schedule_expression": None,
+            "schedule_enabled": False,
+            "schedule_start_at": None,
+            "schedule_end_at": None,
+            "next_run_at": None,
+            "last_run_at": None,
+            "max_runs": None,
+            "run_count": 0,
         }
     
     @classmethod

@@ -418,6 +418,18 @@ class TaskRoutes(BaseRouteHandler):
                     if isinstance(response, StreamingResponse):
                         return response
                     result = response
+                # Scheduled task operations (for external schedulers)
+                elif method == "tasks.scheduled.list":
+                    result = await self.handle_scheduled_tasks_list(params, request, request_id)
+                elif method == "tasks.scheduled.due":
+                    result = await self.handle_scheduled_tasks_due(params, request, request_id)
+                elif method == "tasks.scheduled.init":
+                    result = await self.handle_scheduled_task_init(params, request, request_id)
+                elif method == "tasks.scheduled.complete":
+                    result = await self.handle_scheduled_task_complete(params, request, request_id)
+                # Webhook trigger for external schedulers
+                elif method == "tasks.webhook.trigger":
+                    result = await self.handle_webhook_trigger(params, request, request_id)
                 else:
                     return JSONResponse(
                         status_code=400,
@@ -1115,6 +1127,14 @@ class TaskRoutes(BaseRouteHandler):
             - inputs: Execution-time input parameters (optional)
             - schemas: Task schemas (optional)
             - params: Task parameters (optional)
+
+            Scheduling fields (optional):
+            - schedule_type: Schedule type (once, interval, cron, daily, weekly, monthly)
+            - schedule_expression: Schedule expression (format depends on type)
+            - schedule_enabled: Whether scheduling is enabled (default: false)
+            - schedule_start_at: Schedule start time (ISO datetime)
+            - schedule_end_at: Schedule end time (ISO datetime)
+            - max_runs: Maximum number of scheduled runs
             - ... (any custom fields)
 
         Returns:
@@ -1243,6 +1263,30 @@ class TaskRoutes(BaseRouteHandler):
 
         Critical fields (parent_id, user_id, dependencies) are validated strictly.
         All other fields can be updated freely without status restrictions.
+
+        Params:
+            task_id: Task ID to update (required)
+            name: Task name
+            status: Task status
+            progress: Task progress (0.0-1.0)
+            error: Error message
+            result: Task result (JSON)
+            priority: Task priority
+            inputs: Task inputs (JSON)
+            params: Task params (JSON)
+            schemas: Task schemas (JSON)
+            dependencies: Task dependencies (list)
+
+            Scheduling fields:
+            schedule_type: Schedule type (once, interval, cron, daily, weekly, monthly)
+            schedule_expression: Schedule expression (format depends on type)
+            schedule_enabled: Whether scheduling is enabled (bool)
+            schedule_start_at: Schedule start time (ISO datetime)
+            schedule_end_at: Schedule end time (ISO datetime)
+            next_run_at: Next scheduled run time (ISO datetime)
+            last_run_at: Last run time (ISO datetime)
+            max_runs: Maximum number of runs (int)
+            run_count: Current run count (int)
         """
         try:
             task_id = params.get("task_id")
@@ -1340,6 +1384,30 @@ class TaskRoutes(BaseRouteHandler):
 
                 if "schemas" in params:
                     await task_repository.update_task(task_id, schemas=params["schemas"])
+
+                # Scheduling fields
+                scheduling_fields = {}
+                if "schedule_type" in params:
+                    scheduling_fields["schedule_type"] = params["schedule_type"]
+                if "schedule_expression" in params:
+                    scheduling_fields["schedule_expression"] = params["schedule_expression"]
+                if "schedule_enabled" in params:
+                    scheduling_fields["schedule_enabled"] = params["schedule_enabled"]
+                if "schedule_start_at" in params:
+                    scheduling_fields["schedule_start_at"] = params["schedule_start_at"]
+                if "schedule_end_at" in params:
+                    scheduling_fields["schedule_end_at"] = params["schedule_end_at"]
+                if "next_run_at" in params:
+                    scheduling_fields["next_run_at"] = params["next_run_at"]
+                if "last_run_at" in params:
+                    scheduling_fields["last_run_at"] = params["last_run_at"]
+                if "max_runs" in params:
+                    scheduling_fields["max_runs"] = params["max_runs"]
+                if "run_count" in params:
+                    scheduling_fields["run_count"] = params["run_count"]
+
+                if scheduling_fields:
+                    await task_repository.update_task(task_id, **scheduling_fields)
 
                 # Refresh task to get updated values
                 updated_task = await task_repository.get_task_by_id(task_id)
@@ -2239,4 +2307,297 @@ class TaskRoutes(BaseRouteHandler):
 
         except Exception as e:
             logger.error(f"Error executing task: {str(e)}", exc_info=True)
+            raise
+
+    # ========== Scheduled Task Handlers (for external schedulers) ==========
+
+    async def handle_scheduled_tasks_list(
+        self, params: dict, request: Request, request_id: str
+    ) -> List[dict]:
+        """
+        List all scheduled tasks.
+
+        This endpoint is for monitoring scheduled tasks. Returns tasks that have
+        scheduling configured (schedule_type is not null).
+
+        Params:
+            enabled_only: If true, only return enabled schedules (default: true)
+            user_id: Optional filter by user ID
+            schedule_type: Optional filter by schedule type
+            limit: Maximum number of tasks (default: 100)
+            offset: Pagination offset (default: 0)
+
+        Returns:
+            List of scheduled task dictionaries
+        """
+        try:
+            enabled_only = params.get("enabled_only", True)
+            user_id = params.get("user_id")
+            schedule_type = params.get("schedule_type")
+            limit = params.get("limit", 100)
+            offset = params.get("offset", 0)
+
+            # Check permission if user_id specified
+            if user_id:
+                self._check_permission(request, user_id, "list scheduled tasks for")
+
+            async with create_pooled_session() as db_session:
+                task_repository = self._get_task_repository(db_session)
+
+                tasks = await task_repository.get_scheduled_tasks(
+                    enabled_only=enabled_only,
+                    user_id=user_id,
+                    schedule_type=schedule_type,
+                    limit=limit,
+                    offset=offset,
+                )
+
+                return [task.output() for task in tasks]
+
+        except Exception as e:
+            logger.error(f"Error listing scheduled tasks: {str(e)}", exc_info=True)
+            raise
+
+    async def handle_scheduled_tasks_due(
+        self, params: dict, request: Request, request_id: str
+    ) -> List[dict]:
+        """
+        Get scheduled tasks that are due for execution.
+
+        This is the primary endpoint for external schedulers to poll for tasks
+        that need to be executed. Returns tasks where:
+        - schedule_enabled is true
+        - next_run_at <= now (or specified time)
+        - status is 'pending'
+        - max_runs not reached
+        - schedule_end_at not passed
+
+        Params:
+            before: ISO datetime - get tasks due before this time (default: now)
+            user_id: Optional filter by user ID
+            limit: Maximum number of tasks (default: 100)
+
+        Returns:
+            List of due task dictionaries, ordered by next_run_at (earliest first)
+        """
+        try:
+            from datetime import datetime, timezone
+
+            before = params.get("before")
+            if before:
+                if isinstance(before, str):
+                    before = datetime.fromisoformat(before.replace('Z', '+00:00'))
+            else:
+                before = datetime.now(timezone.utc)
+
+            user_id = params.get("user_id")
+            limit = params.get("limit", 100)
+
+            # Check permission if user_id specified
+            if user_id:
+                self._check_permission(request, user_id, "get due tasks for")
+
+            async with create_pooled_session() as db_session:
+                task_repository = self._get_task_repository(db_session)
+
+                tasks = await task_repository.get_due_scheduled_tasks(
+                    before=before,
+                    user_id=user_id,
+                    limit=limit,
+                )
+
+                return [task.output() for task in tasks]
+
+        except Exception as e:
+            logger.error(f"Error getting due scheduled tasks: {str(e)}", exc_info=True)
+            raise
+
+    async def handle_scheduled_task_init(
+        self, params: dict, request: Request, request_id: str
+    ) -> dict:
+        """
+        Initialize or recalculate next_run_at for a scheduled task.
+
+        Call this after creating/updating a task's schedule configuration
+        to calculate the first (or next) execution time.
+
+        Params:
+            task_id: Task ID to initialize (required)
+            from_time: Reference time for calculation (default: now)
+
+        Returns:
+            Updated task dictionary with next_run_at calculated
+        """
+        try:
+            from datetime import datetime
+
+            task_id = params.get("task_id")
+            if not task_id:
+                raise ValueError("task_id is required")
+
+            from_time = params.get("from_time")
+            if from_time and isinstance(from_time, str):
+                from_time = datetime.fromisoformat(from_time.replace('Z', '+00:00'))
+
+            async with create_pooled_session() as db_session:
+                task_repository = self._get_task_repository(db_session)
+
+                # Get task first to check permission
+                task = await task_repository.get_task_by_id(task_id)
+                if not task:
+                    raise ValueError(f"Task {task_id} not found")
+
+                self._check_permission(request, task.user_id, "initialize schedule for")
+
+                updated_task = await task_repository.initialize_schedule(
+                    task_id=task_id,
+                    from_time=from_time,
+                )
+
+                if not updated_task:
+                    raise ValueError(f"Failed to initialize schedule for task {task_id}")
+
+                return updated_task.output()
+
+        except Exception as e:
+            logger.error(f"Error initializing scheduled task: {str(e)}", exc_info=True)
+            raise
+
+    async def handle_scheduled_task_complete(
+        self, params: dict, request: Request, request_id: str
+    ) -> dict:
+        """
+        Complete a scheduled task run and prepare for next execution.
+
+        Call this after executing a scheduled task. Updates:
+        - last_run_at to current time
+        - run_count incremented
+        - next_run_at calculated for next execution
+        - status reset to 'pending' (or 'completed' if schedule ends)
+        - schedule_enabled to false if max_runs reached or expired
+
+        Params:
+            task_id: Task ID that completed (required)
+            success: Whether execution succeeded (default: true)
+            result: Optional result data
+            error: Optional error message
+            calculate_next_run: Calculate next_run_at (default: true)
+
+        Returns:
+            Updated task dictionary with new scheduling state
+        """
+        try:
+            task_id = params.get("task_id")
+            if not task_id:
+                raise ValueError("task_id is required")
+
+            success = params.get("success", True)
+            result = params.get("result")
+            error = params.get("error")
+            calculate_next_run = params.get("calculate_next_run", True)
+
+            async with create_pooled_session() as db_session:
+                task_repository = self._get_task_repository(db_session)
+
+                # Get task first to check permission
+                task = await task_repository.get_task_by_id(task_id)
+                if not task:
+                    raise ValueError(f"Task {task_id} not found")
+
+                self._check_permission(request, task.user_id, "complete scheduled run for")
+
+                updated_task = await task_repository.complete_scheduled_run(
+                    task_id=task_id,
+                    success=success,
+                    result=result,
+                    error=error,
+                    calculate_next_run=calculate_next_run,
+                )
+
+                if not updated_task:
+                    raise ValueError(f"Failed to complete scheduled run for task {task_id}")
+
+                return updated_task.output()
+
+        except Exception as e:
+            logger.error(f"Error completing scheduled task: {str(e)}", exc_info=True)
+            raise
+
+    async def handle_webhook_trigger(
+        self, params: dict, request: Request, request_id: str
+    ) -> dict:
+        """
+        Handle webhook trigger for external schedulers.
+
+        This endpoint allows external schedulers (cron, Kubernetes CronJob, etc.)
+        to trigger task execution via HTTP. Supports signature validation for security.
+
+        Params:
+            task_id: Task ID to trigger (required)
+            signature: Optional HMAC signature for request validation
+            timestamp: Optional timestamp for replay protection
+            async_execution: Execute in background (default: true)
+
+        Returns:
+            Trigger result with task status
+        """
+        try:
+            task_id = params.get("task_id")
+            if not task_id:
+                raise ValueError("task_id is required")
+
+            signature = params.get("signature")
+            timestamp = params.get("timestamp")
+            async_execution = params.get("async_execution", True)
+
+            # Get client IP for validation
+            client_ip = request.client.host if request.client else "unknown"
+
+            # Import and use WebhookGateway
+            from apflow.scheduler.gateway.webhook import WebhookGateway, WebhookConfig
+
+            # Get webhook config from environment or use defaults
+            import os
+            secret_key = os.getenv("APFLOW_WEBHOOK_SECRET")
+            allowed_ips_str = os.getenv("APFLOW_WEBHOOK_ALLOWED_IPS")
+            allowed_ips = allowed_ips_str.split(",") if allowed_ips_str else None
+            rate_limit = int(os.getenv("APFLOW_WEBHOOK_RATE_LIMIT", "0"))
+
+            config = WebhookConfig(
+                secret_key=secret_key,
+                allowed_ips=allowed_ips,
+                rate_limit=rate_limit,
+                async_execution=async_execution,
+            )
+
+            gateway = WebhookGateway(config)
+
+            # Validate request
+            validation = await gateway.validate_request(
+                client_ip=client_ip,
+                signature=signature,
+                timestamp=timestamp,
+            )
+
+            if not validation.get("valid"):
+                return {
+                    "success": False,
+                    "error": validation.get("error", "Request validation failed"),
+                    "task_id": task_id,
+                }
+
+            # Get user_id from JWT if available
+            user_id, _ = self._get_user_info(request)
+
+            # Trigger task execution
+            result = await gateway.trigger_task(
+                task_id=task_id,
+                user_id=user_id,
+                execute_async=async_execution,
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(f"Error handling webhook trigger: {str(e)}", exc_info=True)
             raise

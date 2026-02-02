@@ -67,12 +67,18 @@ class LLMAPIKeyMiddleware(BaseHTTPMiddleware):
 
 class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
     """Middleware to verify JWT tokens for authenticated requests (optional)"""
-    
+
     # Public endpoints that don't require authentication
     PUBLIC_ENDPOINTS = [
         AGENT_CARD_WELL_KNOWN_PATH,
         EXTENDED_AGENT_CARD_PATH,
         PREV_AGENT_CARD_WELL_KNOWN_PATH,
+    ]
+
+    # Path prefixes that bypass JWT authentication
+    # These paths use their own authentication mechanisms (e.g., webhook signature)
+    PUBLIC_PATH_PREFIXES = [
+        "/webhook/",  # Webhook endpoints use APFLOW_WEBHOOK_SECRET for authentication
     ]
     
     def __init__(self, app, verify_token_func=None):
@@ -106,7 +112,12 @@ class JWTAuthenticationMiddleware(BaseHTTPMiddleware):
         # Skip authentication for public endpoints
         if request.url.path in self.PUBLIC_ENDPOINTS:
             return await call_next(request)
-        
+
+        # Skip authentication for public path prefixes (e.g., /webhook/)
+        for prefix in self.PUBLIC_PATH_PREFIXES:
+            if request.url.path.startswith(prefix):
+                return await call_next(request)
+
         # If no verify function provided, skip JWT authentication
         if not self.verify_token_func:
             return await call_next(request)
@@ -425,6 +436,13 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
                 methods=['POST'],
                 name='system_handler',
             ),
+            # Webhook trigger route for external schedulers (REST-style endpoint)
+            Route(
+                "/webhook/trigger/{task_id}",
+                self._handle_webhook_trigger,
+                methods=['POST'],
+                name='webhook_trigger',
+            ),
         ]
         
         # Add documentation routes if enabled
@@ -458,4 +476,66 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
     async def _handle_system_requests(self, request: Request) -> JSONResponse:
         """Handle system operations through /system endpoint"""
         return await self.system_routes.handle_system_requests(request)
+
+    async def _handle_webhook_trigger(self, request: Request) -> JSONResponse:
+        """
+        Handle webhook trigger requests for external schedulers.
+
+        REST-style endpoint: POST /webhook/trigger/{task_id}
+
+        This allows external schedulers (cron, Kubernetes CronJob, etc.) to
+        trigger task execution via a simple HTTP POST request.
+
+        Headers:
+            X-Webhook-Signature: Optional HMAC signature for request validation
+            X-Webhook-Timestamp: Optional timestamp for replay protection
+
+        Query params:
+            async: Whether to execute asynchronously (default: true)
+
+        Returns:
+            JSON response with trigger result
+        """
+        try:
+            # Get task_id from path
+            task_id = request.path_params.get("task_id")
+            if not task_id:
+                return JSONResponse(
+                    status_code=400,
+                    content={"success": False, "error": "task_id is required"},
+                )
+
+            # Get optional parameters
+            signature = request.headers.get("X-Webhook-Signature")
+            timestamp = request.headers.get("X-Webhook-Timestamp")
+            async_param = request.query_params.get("async", "true").lower()
+            async_execution = async_param in ("true", "1", "yes")
+
+            # Build params for the handler
+            params = {
+                "task_id": task_id,
+                "signature": signature,
+                "timestamp": timestamp,
+                "async_execution": async_execution,
+            }
+
+            # Use the existing webhook trigger handler
+            import uuid
+            request_id = str(uuid.uuid4())
+            result = await self.task_routes.handle_webhook_trigger(params, request, request_id)
+
+            # Return appropriate status code
+            if result.get("success"):
+                return JSONResponse(content=result)
+            else:
+                return JSONResponse(status_code=400, content=result)
+
+        except Exception as e:
+            from apflow.logger import get_logger
+            logger = get_logger(__name__)
+            logger.error(f"Error handling webhook trigger: {str(e)}", exc_info=True)
+            return JSONResponse(
+                status_code=500,
+                content={"success": False, "error": str(e)},
+            )
 

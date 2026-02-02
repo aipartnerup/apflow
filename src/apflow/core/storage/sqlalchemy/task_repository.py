@@ -6,6 +6,7 @@ for tasks. TaskManager should use TaskRepository instead of directly operating o
 """
 
 from asyncio import Task
+from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -527,11 +528,334 @@ class TaskRepository():
             tasks = result.scalars().all()
             
             return list(tasks)
-            
+
         except Exception as e:
             logger.error(f"Error querying tasks: {str(e)}")
             return []
-    
+
+    # ========== Scheduling Methods (for external schedulers) ==========
+
+    async def get_due_scheduled_tasks(
+        self,
+        before: Optional[datetime] = None,
+        user_id: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[TaskModelType]:
+        """
+        Get scheduled tasks that are due for execution.
+
+        This method is designed for external schedulers to query tasks that need
+        to be executed. A task is considered "due" when:
+        - schedule_enabled is True
+        - next_run_at is not None and <= before (default: now)
+        - status is 'pending' (not already running)
+        - max_runs is None or run_count < max_runs
+        - schedule_end_at is None or schedule_end_at > now
+
+        Args:
+            before: Get tasks due before this time (default: current time)
+            user_id: Optional filter by user ID
+            limit: Maximum number of tasks to return (default: 100)
+
+        Returns:
+            List of TaskModel instances that are due for execution,
+            ordered by next_run_at ascending (earliest first)
+        """
+        from datetime import timezone as tz
+
+        try:
+            if before is None:
+                before = datetime.now(tz.utc)
+
+            # Build query for due scheduled tasks
+            stmt = select(self.task_model_class).filter(
+                self.task_model_class.schedule_enabled == True,  # noqa: E712
+                self.task_model_class.next_run_at.isnot(None),
+                self.task_model_class.next_run_at <= before,
+                self.task_model_class.status == "pending",
+            )
+
+            # Filter by max_runs (if set, run_count must be less)
+            # Note: SQLAlchemy doesn't have direct "or null" in filter,
+            # so we use or_ for max_runs check
+            from sqlalchemy import or_
+            stmt = stmt.filter(
+                or_(
+                    self.task_model_class.max_runs.is_(None),
+                    self.task_model_class.run_count < self.task_model_class.max_runs
+                )
+            )
+
+            # Filter by schedule_end_at (if set, must be in future)
+            stmt = stmt.filter(
+                or_(
+                    self.task_model_class.schedule_end_at.is_(None),
+                    self.task_model_class.schedule_end_at > before
+                )
+            )
+
+            # Optional user_id filter
+            if user_id is not None:
+                stmt = stmt.filter(self.task_model_class.user_id == user_id)
+
+            # Order by next_run_at ascending (earliest first)
+            stmt = stmt.order_by(self.task_model_class.next_run_at.asc())
+
+            # Apply limit
+            stmt = stmt.limit(limit)
+
+            result = await self.db.execute(stmt)
+            tasks = result.scalars().all()
+
+            return list(tasks)
+
+        except Exception as e:
+            logger.error(f"Error getting due scheduled tasks: {str(e)}")
+            return []
+
+    async def get_scheduled_tasks(
+        self,
+        enabled_only: bool = True,
+        user_id: Optional[str] = None,
+        schedule_type: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> List[TaskModelType]:
+        """
+        Get all scheduled tasks (for listing/monitoring).
+
+        Args:
+            enabled_only: If True, only return enabled schedules (default: True)
+            user_id: Optional filter by user ID
+            schedule_type: Optional filter by schedule type
+            limit: Maximum number of tasks to return (default: 100)
+            offset: Number of tasks to skip (default: 0)
+
+        Returns:
+            List of TaskModel instances with scheduling configured,
+            ordered by next_run_at ascending
+        """
+        try:
+            # Build query - must have schedule_type set
+            stmt = select(self.task_model_class).filter(
+                self.task_model_class.schedule_type.isnot(None)
+            )
+
+            if enabled_only:
+                stmt = stmt.filter(self.task_model_class.schedule_enabled == True)  # noqa: E712
+
+            if user_id is not None:
+                stmt = stmt.filter(self.task_model_class.user_id == user_id)
+
+            if schedule_type is not None:
+                stmt = stmt.filter(self.task_model_class.schedule_type == schedule_type)
+
+            # Order by next_run_at ascending (nulls last)
+            from sqlalchemy import nullslast
+            stmt = stmt.order_by(nullslast(self.task_model_class.next_run_at.asc()))
+
+            # Apply pagination
+            stmt = stmt.offset(offset).limit(limit)
+
+            result = await self.db.execute(stmt)
+            tasks = result.scalars().all()
+
+            return list(tasks)
+
+        except Exception as e:
+            logger.error(f"Error getting scheduled tasks: {str(e)}")
+            return []
+
+    async def mark_scheduled_task_running(self, task_id: str) -> Optional[TaskModelType]:
+        """
+        Mark a scheduled task as running (in_progress).
+
+        This is called by the scheduler before executing a task.
+        Updates status to 'in_progress' and sets started_at.
+
+        Args:
+            task_id: Task ID to mark as running
+
+        Returns:
+            Updated task, or None if task not found
+        """
+        try:
+            task = await self.get_task_by_id(task_id)
+            if not task:
+                return None
+
+            from datetime import timezone as tz
+            now = datetime.now(tz.utc)
+
+            task.status = "in_progress"
+            task.started_at = now
+
+            await self.db.commit()
+            await self.db.refresh(task)
+
+            logger.info(f"Marked scheduled task {task_id} as running")
+            return task
+
+        except Exception as e:
+            logger.error(f"Error marking scheduled task running: {str(e)}")
+            await self.db.rollback()
+            return None
+
+    async def complete_scheduled_run(
+        self,
+        task_id: str,
+        success: bool = True,
+        result: Optional[Any] = None,
+        error: Optional[str] = None,
+        calculate_next_run: bool = True,
+    ) -> Optional[TaskModelType]:
+        """
+        Complete a scheduled task run and prepare for next execution.
+
+        This method should be called after a scheduled task execution completes.
+        It updates:
+        - status back to 'pending' (for next run) or 'completed'/'failed'
+        - last_run_at to current time
+        - run_count incremented by 1
+        - next_run_at calculated for next execution (if calculate_next_run=True)
+        - result/error fields
+        - schedule_enabled to False if max_runs reached or schedule expired
+
+        Args:
+            task_id: Task ID that completed
+            success: Whether the execution was successful
+            result: Optional result data
+            error: Optional error message (if failed)
+            calculate_next_run: If True, calculate and set next_run_at
+
+        Returns:
+            Updated task, or None if task not found
+        """
+        try:
+            task = await self.get_task_by_id(task_id)
+            if not task:
+                return None
+
+            from datetime import timezone as tz
+            now = datetime.now(tz.utc)
+
+            # Update execution tracking
+            task.last_run_at = now
+            task.run_count = (task.run_count or 0) + 1
+            task.completed_at = now
+
+            # Set result/error
+            if result is not None:
+                task.result = result
+            if error is not None:
+                task.error = error
+
+            # Check if schedule should be disabled
+            should_disable = False
+
+            # Check max_runs limit
+            if task.max_runs is not None and task.run_count >= task.max_runs:
+                should_disable = True
+                logger.info(f"Task {task_id} reached max_runs ({task.max_runs})")
+
+            # Check schedule_end_at
+            if task.schedule_end_at is not None and now >= task.schedule_end_at:
+                should_disable = True
+                logger.info(f"Task {task_id} passed schedule_end_at")
+
+            # For 'once' type, disable after first run
+            if task.schedule_type == "once":
+                should_disable = True
+
+            if should_disable:
+                task.schedule_enabled = False
+                task.next_run_at = None
+                task.status = "completed" if success else "failed"
+            else:
+                # Calculate next run time
+                if calculate_next_run and task.schedule_type and task.schedule_expression:
+                    from apflow.core.storage.sqlalchemy.schedule_calculator import ScheduleCalculator
+                    next_run = ScheduleCalculator.calculate_next_run(
+                        task.schedule_type,
+                        task.schedule_expression,
+                        from_time=now,
+                    )
+                    task.next_run_at = next_run
+
+                # Reset status to pending for next run
+                task.status = "pending"
+                task.started_at = None
+                task.error = None  # Clear previous error for next run
+
+            await self.db.commit()
+            await self.db.refresh(task)
+
+            logger.info(
+                f"Completed scheduled run for task {task_id}: "
+                f"run_count={task.run_count}, next_run_at={task.next_run_at}, "
+                f"schedule_enabled={task.schedule_enabled}"
+            )
+            return task
+
+        except Exception as e:
+            logger.error(f"Error completing scheduled run: {str(e)}")
+            await self.db.rollback()
+            return None
+
+    async def initialize_schedule(
+        self,
+        task_id: str,
+        from_time: Optional[datetime] = None,
+    ) -> Optional[TaskModelType]:
+        """
+        Initialize or recalculate next_run_at for a scheduled task.
+
+        Call this after setting schedule_type/expression to calculate
+        the first (or next) run time.
+
+        Args:
+            task_id: Task ID to initialize
+            from_time: Reference time for calculation (default: now)
+
+        Returns:
+            Updated task with next_run_at set, or None if error
+        """
+        try:
+            task = await self.get_task_by_id(task_id)
+            if not task:
+                return None
+
+            if not task.schedule_type or not task.schedule_expression:
+                logger.warning(f"Task {task_id} missing schedule_type or schedule_expression")
+                return task
+
+            from datetime import timezone as tz
+            if from_time is None:
+                from_time = datetime.now(tz.utc)
+
+            # Check schedule_start_at boundary
+            if task.schedule_start_at and from_time < task.schedule_start_at:
+                from_time = task.schedule_start_at
+
+            from apflow.core.storage.sqlalchemy.schedule_calculator import ScheduleCalculator
+            next_run = ScheduleCalculator.calculate_next_run(
+                task.schedule_type,
+                task.schedule_expression,
+                from_time=from_time,
+            )
+
+            task.next_run_at = next_run
+
+            await self.db.commit()
+            await self.db.refresh(task)
+
+            logger.info(f"Initialized schedule for task {task_id}: next_run_at={next_run}")
+            return task
+
+        except Exception as e:
+            logger.error(f"Error initializing schedule: {str(e)}")
+            await self.db.rollback()
+            return None
 
     async def _set_original_task_has_reference_to_true(self, original_task_id: str) -> Optional[TaskModelType]:
         """Update original task's has_references flag to True"""

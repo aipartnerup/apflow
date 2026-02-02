@@ -1,5 +1,60 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Task Scheduling System**
+  - Added `ScheduleType` enum supporting six schedule types: `once`, `interval`, `cron`, `daily`, `weekly`, `monthly`
+  - Added 9 scheduling fields to `TaskModel`: `schedule_type`, `schedule_expression`, `schedule_enabled`, `schedule_start_at`, `schedule_end_at`, `next_run_at`, `last_run_at`, `max_runs`, `run_count`
+  - Created `ScheduleCalculator` module for next execution time calculation across all schedule types
+  - Database migration `002_add_scheduling_fields.py` for adding scheduling columns and indexes
+  - Automatic execution mode detection: tasks with children execute in tree mode, tasks without children execute in single mode
+
+- **Internal Scheduler**
+  - Built-in asyncio-based scheduler (`InternalScheduler`) for standalone deployment
+  - Configurable poll interval, max concurrent tasks, task timeout, and user filtering
+  - Scheduler lifecycle management: start, stop, pause, resume
+  - Task completion callbacks for monitoring and integration
+
+- **External Scheduler Gateway**
+  - `WebhookGateway` for HTTP webhook integration with external schedulers
+  - HMAC signature validation, IP filtering, and rate limiting
+  - Helper functions for generating cron entries and Kubernetes CronJob manifests
+  - Support for cron, Kubernetes CronJob, APScheduler, Temporal integration
+
+- **Calendar Integration**
+  - `ICalExporter` for exporting scheduled tasks in iCalendar format
+  - RRULE support for recurring events (daily, weekly, monthly, interval)
+  - Calendar feed URL generation for subscription in Google Calendar, Outlook, etc.
+
+- **Scheduler CLI Commands**
+  - `apflow scheduler start` - Start internal scheduler (foreground or background)
+  - `apflow scheduler stop` - Stop running scheduler
+  - `apflow scheduler status` - Show scheduler status
+  - `apflow scheduler trigger` - Manually trigger a task
+  - `apflow scheduler export-ical` - Export tasks to iCal format
+  - `apflow scheduler webhook-url` - Generate webhook URL for external schedulers
+
+- **Scheduling API Endpoints**
+  - `tasks.scheduled.list` - List all scheduled tasks
+  - `tasks.scheduled.due` - Get tasks due for execution
+  - `tasks.scheduled.init` - Initialize/recalculate next_run_at
+  - `tasks.scheduled.complete` - Complete scheduled run and calculate next execution
+  - `tasks.webhook.trigger` - Trigger task execution via webhook (JSON-RPC)
+  - `POST /webhook/trigger/{task_id}` - REST endpoint for external schedulers
+
+- **Repository Methods for Scheduling**
+  - `get_due_scheduled_tasks()` - Query tasks ready for execution
+  - `get_scheduled_tasks()` - List scheduled tasks with filters
+  - `mark_scheduled_task_running()` - Mark task as in-progress
+  - `complete_scheduled_run()` - Complete run and update scheduling state
+  - `initialize_schedule()` - Calculate initial next_run_at
+
+- Added `scheduling` optional dependency with `croniter>=1.0.0`
+- Added scheduling to `standard` and `all` installation extras
+- Comprehensive test coverage: 118 tests for scheduling functionality
+
 ## [0.13.0] 2026-01-31
 
 ### Added

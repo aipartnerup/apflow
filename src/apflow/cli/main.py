@@ -78,6 +78,7 @@ class LazyGroup(click.Group):
             "generate": ("apflow.cli.commands.generate", "app", "Generate a task tree from natural language"),
             "config": ("apflow.cli.commands.config", "app", "Manage CLI configuration"),
             "executors": ("apflow.cli.commands.executors", "app", "Query available executors"),
+            "scheduler": ("apflow.cli.commands.scheduler", "app", "Manage task scheduler"),
         }
         # Ensure CLI extensions are loaded (lazy import to avoid circular dependencies)
         self._ensure_extensions_loaded()

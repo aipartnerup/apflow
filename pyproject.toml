@@ -86,6 +86,11 @@ crewai = [
 # LLM Key Configuration Management (multi-user support)
 llm-key-config = []
 
+# Task scheduling (cron-like scheduling)
+scheduling = [
+    "croniter>=1.0.0",
+]
+
 # SSH remote execution
 ssh = [
     "asyncssh>=2.14.0",
@@ -128,9 +133,9 @@ tools = [
 ]
 
 # Standard installation (recommended for most use cases)
-# Includes A2A server, CLI tools, CrewAI, and LLM support
+# Includes A2A server, CLI tools, CrewAI, LLM support, and scheduling
 standard = [
-    "apflow[a2a,cli,crewai,llm,tools]",
+    "apflow[a2a,cli,crewai,llm,tools,scheduling]",
 ]
 
 # Development dependencies
@@ -150,7 +155,7 @@ dev = [
 
 # Full installation (all features)
 all = [
-    "apflow[crewai,a2a,cli,postgres,llm-key-config,ssh,docker,grpc,mcp,llm,tools]",
+    "apflow[crewai,a2a,cli,postgres,llm-key-config,ssh,docker,grpc,mcp,llm,tools,scheduling]",
 ]
 
 [project.scripts]
