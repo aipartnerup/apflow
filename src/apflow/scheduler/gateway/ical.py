@@ -23,7 +23,6 @@ Usage:
     return Response(ical_content, media_type="text/calendar")
 """
 
-import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -231,9 +230,7 @@ class ICalExporter:
         task_id = task.get("id", str(uuid4()))
         task_name = task.get("name", "Unnamed Task")
         schedule_type = task.get("schedule_type")
-        schedule_expression = task.get("schedule_expression")
         next_run_at = task.get("next_run_at")
-        schedule_start_at = task.get("schedule_start_at")
         schedule_end_at = task.get("schedule_end_at")
 
         # Skip tasks without next_run_at

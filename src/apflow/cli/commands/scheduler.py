@@ -334,7 +334,7 @@ def trigger(
         result = asyncio.run(run_trigger())
 
         if result.get("success"):
-            console.print(f"[green]Task triggered successfully[/green]")
+            console.print("[green]Task triggered successfully[/green]")
             if result.get("status"):
                 console.print(f"Status: {result['status']}")
             if result.get("result"):
@@ -467,7 +467,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    from apflow.scheduler import InternalScheduler
     from apflow.scheduler.base import SchedulerConfig
 
     config = SchedulerConfig(

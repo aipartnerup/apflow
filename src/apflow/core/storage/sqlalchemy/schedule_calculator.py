@@ -13,7 +13,7 @@ Expression Formats:
 - monthly: "dates HH:MM" format where dates are 1-31, e.g., "1,15 09:00"
 """
 
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
 from typing import Optional
 import re
 
@@ -290,7 +290,7 @@ class ScheduleCalculator:
             days = sorted(set(days))
 
             # Get current weekday (1=Monday, 7=Sunday)
-            current_weekday = from_time.isoweekday()
+            from_time.isoweekday()
 
             # Find the next valid day
             for days_ahead in range(8):  # Check up to 7 days ahead

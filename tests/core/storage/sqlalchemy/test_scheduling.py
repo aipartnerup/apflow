@@ -11,7 +11,7 @@ This module tests:
 
 import pytest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from apflow.core.storage.sqlalchemy.models import TaskModel, ScheduleType
 from apflow.core.storage.sqlalchemy.schedule_calculator import ScheduleCalculator
@@ -201,7 +201,6 @@ class TestScheduleCalculatorCron:
 
         with patch.dict('sys.modules', {'croniter': None}):
             # Force reimport to trigger ImportError
-            import importlib
             import apflow.core.storage.sqlalchemy.schedule_calculator as calc_module
 
             # Save original function
@@ -811,7 +810,7 @@ class TestSchedulingRepositoryMethods:
     async def test_get_due_scheduled_tasks(self, sync_db_session):
         """Test getting tasks that are due for execution"""
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timezone
 
         repo = TaskRepository(sync_db_session)
 
@@ -830,7 +829,7 @@ class TestSchedulingRepositoryMethods:
         )
 
         # Create a task not yet due
-        future_task = await repo.create_task(
+        await repo.create_task(
             name="Future Task",
             user_id="test-user",
             schedule_type="daily",
@@ -840,7 +839,7 @@ class TestSchedulingRepositoryMethods:
         )
 
         # Create a disabled task
-        disabled_task = await repo.create_task(
+        await repo.create_task(
             name="Disabled Task",
             user_id="test-user",
             schedule_type="daily",
@@ -860,7 +859,7 @@ class TestSchedulingRepositoryMethods:
     async def test_get_due_scheduled_tasks_max_runs_check(self, sync_db_session):
         """Test that max_runs limit is respected"""
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timezone
 
         repo = TaskRepository(sync_db_session)
 
@@ -868,7 +867,7 @@ class TestSchedulingRepositoryMethods:
         past = now - timedelta(hours=1)
 
         # Create a task that reached max_runs
-        exhausted_task = await repo.create_task(
+        await repo.create_task(
             name="Exhausted Task",
             user_id="test-user",
             schedule_type="daily",
@@ -952,7 +951,6 @@ class TestSchedulingRepositoryMethods:
     async def test_initialize_schedule(self, sync_db_session):
         """Test initializing next_run_at for a task"""
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from datetime import datetime, timezone
 
         repo = TaskRepository(sync_db_session)
 
@@ -977,7 +975,7 @@ class TestSchedulingRepositoryMethods:
     async def test_complete_scheduled_run(self, sync_db_session):
         """Test completing a scheduled run"""
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timezone
 
         repo = TaskRepository(sync_db_session)
 

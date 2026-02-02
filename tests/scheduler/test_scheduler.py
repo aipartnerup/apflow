@@ -9,12 +9,10 @@ Tests cover:
 """
 
 import pytest
-import asyncio
 from datetime import datetime, timezone, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 from apflow.scheduler.base import (
-    BaseScheduler,
     SchedulerConfig,
     SchedulerState,
     SchedulerStats,
@@ -439,7 +437,6 @@ class TestICalHelpers:
 
     def test_format_datetime_with_timezone(self):
         """Test datetime formatting with non-UTC timezone"""
-        from datetime import timedelta
         tz = timezone(timedelta(hours=8))
         dt = datetime(2024, 6, 15, 17, 30, 0, tzinfo=tz)  # 17:30 UTC+8 = 09:30 UTC
         formatted = format_datetime(dt)

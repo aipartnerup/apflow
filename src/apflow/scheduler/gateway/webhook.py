@@ -21,7 +21,6 @@ import hashlib
 import hmac
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from apflow.logger import get_logger
@@ -240,7 +239,6 @@ class WebhookGateway:
         try:
             from apflow.core.storage import create_pooled_session
             from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-            from apflow.core.execution.task_executor import TaskExecutor
 
             # Verify task exists and check permissions
             async with create_pooled_session() as db_session:
