@@ -183,11 +183,14 @@ class InternalScheduler(BaseScheduler):
             logger.warning(f"Task {task_id} is already executing")
             return False
 
+        # Add to active set BEFORE creating task to prevent duplicate triggers
+        self._active_task_ids.add(task_id)
         try:
-            # Execute the task
             asyncio.create_task(self._execute_task(task_id, manual=True))
             return True
         except Exception as e:
+            # Rollback if task creation fails
+            self._active_task_ids.discard(task_id)
             logger.error(f"Failed to trigger task {task_id}: {e}")
             return False
 
@@ -237,8 +240,15 @@ class InternalScheduler(BaseScheduler):
 
                         task_id = task.get("id") or task.id
                         if task_id not in self._active_task_ids:
-                            # Schedule task execution
-                            asyncio.create_task(self._execute_task(task_id))
+                            # Add to active set BEFORE creating task to prevent
+                            # duplicate scheduling during semaphore wait
+                            self._active_task_ids.add(task_id)
+                            try:
+                                asyncio.create_task(self._execute_task(task_id))
+                            except Exception as e:
+                                # Rollback if task creation fails
+                                self._active_task_ids.discard(task_id)
+                                logger.error(f"Failed to schedule task {task_id}: {e}")
 
                 # Wait for next poll interval (or until stopped)
                 try:
@@ -295,109 +305,116 @@ class InternalScheduler(BaseScheduler):
         Args:
             task_id: The task ID to execute
             manual: Whether this is a manual trigger (bypass schedule check)
+
+        Note:
+            task_id must already be in _active_task_ids before calling this method.
+            The caller (poll_loop or trigger) is responsible for adding it.
         """
-        # Acquire semaphore to limit concurrency
-        async with self._semaphore:
-            self._active_task_ids.add(task_id)
-            self.stats.active_tasks = len(self._active_task_ids)
+        success = False
+        result = None
+        error = None
 
-            success = False
-            result = None
-            error = None
+        try:
+            # Acquire semaphore to limit concurrency
+            async with self._semaphore:
+                self.stats.active_tasks = len(self._active_task_ids)
 
-            try:
-                logger.info(f"Executing scheduled task: {task_id}")
-
-                from apflow.core.storage import create_pooled_session
-                from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-                from apflow.core.execution.task_executor import TaskExecutor
-
-                # Mark task as running
-                async with create_pooled_session() as db_session:
-                    task_repository = TaskRepository(db_session)
-                    task = await task_repository.mark_scheduled_task_running(task_id)
-
-                    if not task:
-                        logger.warning(f"Task {task_id} not found or not ready")
-                        return
-
-                # Execute the task
-                task_executor = TaskExecutor()
-
-                async with create_pooled_session() as db_session:
-                    task_repository = TaskRepository(db_session)
-
-                    # Get task to determine execution mode
-                    task = await task_repository.get_task_by_id(task_id)
-                    if not task:
-                        logger.error(f"Task {task_id} not found")
-                        return
-
-                    # Auto-detect execution mode based on has_children
-                    # If task has children, execute full tree; otherwise execute single
-                    if task.has_children:
-                        logger.info(f"Executing task {task_id} in tree mode (has children)")
-                        task_tree = await task_repository.get_task_tree_for_api(task)
-                    else:
-                        logger.info(f"Executing task {task_id} in single mode (no children)")
-                        from apflow.core.types import TaskTreeNode
-                        task_tree = TaskTreeNode(task=task, children=[])
-
-                    # Execute the task tree
-                    await task_executor.execute_task_tree(
-                        task_tree=task_tree,
-                        root_task_id=task_id,
-                        use_streaming=False,
-                        db_session=db_session,
-                    )
-
-                    # Refresh task to get result
-                    task = await task_repository.get_task_by_id(task_id)
-                    if task:
-                        success = task.status == "completed"
-                        result = task.result
-                        if task.error:
-                            error = task.error
-
-                self.stats.tasks_executed += 1
-                if success:
-                    self.stats.tasks_succeeded += 1
-                    logger.info(f"Task {task_id} completed successfully")
-                else:
-                    self.stats.tasks_failed += 1
-                    logger.warning(f"Task {task_id} failed: {error}")
-
-            except Exception as e:
-                success = False
-                error = str(e)
-                self.stats.tasks_executed += 1
-                self.stats.tasks_failed += 1
-                logger.error(f"Error executing task {task_id}: {e}", exc_info=True)
-
-            finally:
-                # Complete the scheduled run (calculate next execution time)
                 try:
+                    logger.info(f"Executing scheduled task: {task_id}")
+
                     from apflow.core.storage import create_pooled_session
                     from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+                    from apflow.core.execution.task_executor import TaskExecutor
+
+                    # Mark task as running
+                    async with create_pooled_session() as db_session:
+                        task_repository = TaskRepository(db_session)
+                        task = await task_repository.mark_scheduled_task_running(task_id)
+
+                        if not task:
+                            logger.warning(f"Task {task_id} not found or not ready")
+                            return
+
+                    # Execute the task
+                    task_executor = TaskExecutor()
 
                     async with create_pooled_session() as db_session:
                         task_repository = TaskRepository(db_session)
-                        await task_repository.complete_scheduled_run(
-                            task_id=task_id,
-                            success=success,
-                            result=result,
-                            error=error,
-                            calculate_next_run=True,
+
+                        # Get task to determine execution mode
+                        task = await task_repository.get_task_by_id(task_id)
+                        if not task:
+                            logger.error(f"Task {task_id} not found")
+                            return
+
+                        # Auto-detect execution mode based on has_children
+                        # If task has children, execute full tree; otherwise execute single
+                        if task.has_children:
+                            logger.info(f"Executing task {task_id} in tree mode (has children)")
+                            task_tree = await task_repository.get_task_tree_for_api(task)
+                        else:
+                            logger.info(f"Executing task {task_id} in single mode (no children)")
+                            from apflow.core.types import TaskTreeNode
+                            task_tree = TaskTreeNode(task=task, children=[])
+
+                        # Execute the task tree
+                        await task_executor.execute_task_tree(
+                            task_tree=task_tree,
+                            root_task_id=task_id,
+                            use_streaming=False,
+                            db_session=db_session,
                         )
+
+                        # Refresh task to get result
+                        task = await task_repository.get_task_by_id(task_id)
+                        if task:
+                            success = task.status == "completed"
+                            result = task.result
+                            if task.error:
+                                error = task.error
+
+                    self.stats.tasks_executed += 1
+                    if success:
+                        self.stats.tasks_succeeded += 1
+                        logger.info(f"Task {task_id} completed successfully")
+                    else:
+                        self.stats.tasks_failed += 1
+                        logger.warning(f"Task {task_id} failed: {error}")
+
                 except Exception as e:
-                    logger.error(f"Failed to complete scheduled run for {task_id}: {e}")
+                    success = False
+                    error = str(e)
+                    self.stats.tasks_executed += 1
+                    self.stats.tasks_failed += 1
+                    logger.error(f"Error executing task {task_id}: {e}", exc_info=True)
 
-                # Remove from active tasks
-                self._active_task_ids.discard(task_id)
-                self.stats.active_tasks = len(self._active_task_ids)
+                finally:
+                    # Complete the scheduled run (calculate next execution time)
+                    try:
+                        from apflow.core.storage import create_pooled_session
+                        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
-                # Notify callbacks
-                self._notify_task_complete(task_id, success, result)
+                        async with create_pooled_session() as db_session:
+                            task_repository = TaskRepository(db_session)
+                            await task_repository.complete_scheduled_run(
+                                task_id=task_id,
+                                success=success,
+                                result=result,
+                                error=error,
+                                calculate_next_run=True,
+                            )
+                    except Exception as e:
+                        logger.error(f"Failed to complete scheduled run for {task_id}: {e}")
+
+                    # Notify callbacks
+                    self._notify_task_complete(task_id, success, result)
+
+        finally:
+            # Always remove from active tasks, even if semaphore wait was cancelled.
+            # This prevents deadlock when task is added to _active_task_ids but
+            # never gets to execute due to cancellation or other errors.
+            self._active_task_ids.discard(task_id)
+            self.stats.active_tasks = len(self._active_task_ids)
 
 
 async def run_scheduler(config: Optional[SchedulerConfig] = None) -> None:

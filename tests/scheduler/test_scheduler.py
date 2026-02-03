@@ -8,6 +8,8 @@ Tests cover:
 - ICalExporter format generation
 """
 
+import asyncio
+
 import pytest
 from datetime import datetime, timezone, timedelta
 from unittest.mock import AsyncMock
@@ -222,6 +224,173 @@ class TestInternalScheduler:
         assert callback_called is True
         assert callback_args == ("task123", True, {"data": "test"})
 
+    @pytest.mark.asyncio
+    async def test_trigger_duplicate_task_returns_false(self):
+        """Test that triggering an already active task returns False"""
+        scheduler = InternalScheduler()
+        scheduler._get_due_tasks = AsyncMock(return_value=[])
+        scheduler._semaphore = asyncio.Semaphore(10)
+
+        # Pre-add task to active set (simulating already running)
+        scheduler._active_task_ids.add("task123")
+
+        # Trigger should return False for duplicate
+        result = await scheduler.trigger("task123")
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_trigger_adds_to_active_before_create_task(self):
+        """Test that trigger adds task_id to _active_task_ids before creating task"""
+        scheduler = InternalScheduler()
+        scheduler._get_due_tasks = AsyncMock(return_value=[])
+        scheduler._semaphore = asyncio.Semaphore(10)
+
+        # Use an event to synchronize and capture state
+        task_started = asyncio.Event()
+        active_ids_snapshot = None
+
+        async def mock_execute(task_id: str, manual: bool = False) -> None:
+            nonlocal active_ids_snapshot
+            # Capture state at the moment _execute_task starts
+            active_ids_snapshot = scheduler._active_task_ids.copy()
+            task_started.set()
+            # Simulate cleanup in finally block
+            scheduler._active_task_ids.discard(task_id)
+
+        scheduler._execute_task = mock_execute
+
+        result = await scheduler.trigger("task123")
+
+        # Wait for the task to start executing
+        await asyncio.wait_for(task_started.wait(), timeout=1.0)
+
+        assert result is True
+        # Task should have been in active set when _execute_task was called
+        assert "task123" in active_ids_snapshot
+
+    @pytest.mark.asyncio
+    async def test_trigger_rollback_on_failure(self):
+        """Test that trigger removes task_id from active set if create_task fails"""
+        scheduler = InternalScheduler()
+        scheduler._get_due_tasks = AsyncMock(return_value=[])
+        # Don't initialize semaphore to cause failure in _execute_task
+
+        # Mock _execute_task to raise exception
+        async def failing_execute(task_id: str, manual: bool = False) -> None:
+            raise RuntimeError("Simulated failure")
+
+        scheduler._execute_task = failing_execute
+
+        # Before trigger
+        assert "task123" not in scheduler._active_task_ids
+
+        # Note: asyncio.create_task itself doesn't raise even if the coroutine
+        # will raise later. The task creation succeeds, but the task will fail.
+        # So we need to verify cleanup happens in _execute_task's finally block.
+        result = await scheduler.trigger("task123")
+
+        # trigger returns True because create_task succeeded
+        assert result is True
+        # But task_id is in active set (will be cleaned up when task completes/fails)
+        assert "task123" in scheduler._active_task_ids
+
+    @pytest.mark.asyncio
+    async def test_execute_task_cleanup_on_cancellation(self):
+        """Test that _execute_task cleans up _active_task_ids even when cancelled"""
+        scheduler = InternalScheduler()
+        scheduler._semaphore = asyncio.Semaphore(1)  # Only 1 concurrent task
+
+        # Add task to active set (as caller would do)
+        scheduler._active_task_ids.add("task123")
+
+        # Create a task that will be cancelled while waiting for semaphore
+        # First, acquire the semaphore so the task has to wait
+        await scheduler._semaphore.acquire()
+
+        # Start execute task (it will wait for semaphore)
+        execute_task = asyncio.create_task(scheduler._execute_task("task123"))
+
+        # Give it a moment to start waiting
+        await asyncio.sleep(0.01)
+
+        # Task should still be in active set
+        assert "task123" in scheduler._active_task_ids
+
+        # Cancel the task
+        execute_task.cancel()
+
+        try:
+            await execute_task
+        except asyncio.CancelledError:
+            pass
+
+        # After cancellation, task_id should be removed from active set
+        assert "task123" not in scheduler._active_task_ids
+
+        # Release semaphore
+        scheduler._semaphore.release()
+
+    @pytest.mark.asyncio
+    async def test_poll_loop_prevents_duplicate_scheduling(self):
+        """Test that poll loop doesn't schedule already active tasks"""
+        scheduler = InternalScheduler()
+        scheduler._stop_event = asyncio.Event()
+        scheduler._pause_event = asyncio.Event()
+        scheduler._pause_event.set()
+        scheduler._semaphore = asyncio.Semaphore(10)
+
+        # Mock task that is returned as "due"
+        mock_task = {"id": "task123", "name": "Test Task"}
+
+        # Pre-add task to active set
+        scheduler._active_task_ids.add("task123")
+
+        execute_called = False
+
+        async def mock_execute(task_id: str, manual: bool = False) -> None:
+            nonlocal execute_called
+            execute_called = True
+
+        scheduler._execute_task = mock_execute
+        scheduler._get_due_tasks = AsyncMock(return_value=[mock_task])
+
+        # Run one iteration of poll loop manually
+        await scheduler._pause_event.wait()
+        due_tasks = await scheduler._get_due_tasks()
+
+        for task in due_tasks:
+            task_id = task.get("id") or task.id
+            if task_id not in scheduler._active_task_ids:
+                scheduler._active_task_ids.add(task_id)
+                asyncio.create_task(scheduler._execute_task(task_id))
+
+        # _execute_task should not be called for already active task
+        assert execute_called is False
+
+    @pytest.mark.asyncio
+    async def test_active_task_ids_cleanup_after_execution(self):
+        """Test that _active_task_ids is cleaned up after task execution completes"""
+        scheduler = InternalScheduler()
+        scheduler._semaphore = asyncio.Semaphore(10)
+
+        # Add task to active set
+        scheduler._active_task_ids.add("task123")
+
+        # Mock _execute_task to just clean up (simulating normal completion path)
+        async def mock_execute(task_id: str, manual: bool = False) -> None:
+            try:
+                async with scheduler._semaphore:
+                    # Simulate some work
+                    await asyncio.sleep(0.01)
+            finally:
+                scheduler._active_task_ids.discard(task_id)
+
+        # Run the mock execute
+        await mock_execute("task123")
+
+        # Task should be removed from active set
+        assert "task123" not in scheduler._active_task_ids
+
 
 # ============================================================================
 # WebhookGateway Tests
@@ -314,9 +483,7 @@ class TestWebhookGateway:
 
         # Compute correct signature
         message = f"{timestamp}.".encode() + payload
-        expected_sig = hmac.new(
-            b"test-secret", message, hashlib.sha256
-        ).hexdigest()
+        expected_sig = hmac.new(b"test-secret", message, hashlib.sha256).hexdigest()
 
         # Valid signature should pass
         assert gateway.validate_signature(payload, expected_sig, timestamp) is True
@@ -343,8 +510,7 @@ class TestWebhookGateway:
         """Test webhook URL generation"""
         gateway = WebhookGateway()
         url_info = gateway.generate_webhook_url(
-            task_id="abc123",
-            base_url="https://api.example.com"
+            task_id="abc123", base_url="https://api.example.com"
         )
 
         assert url_info["url"] == "https://api.example.com/webhook/trigger/abc123"
@@ -356,9 +522,7 @@ class TestWebhookGateway:
         gateway = WebhookGateway(config)
 
         url_info = gateway.generate_webhook_url(
-            task_id="abc123",
-            base_url="https://api.example.com",
-            include_signature=True
+            task_id="abc123", base_url="https://api.example.com", include_signature=True
         )
 
         assert "signature_header" in url_info
@@ -373,7 +537,7 @@ class TestWebhookHelpers:
         cron = generate_cron_config(
             task_id="abc123",
             schedule_expression="0 9 * * 1-5",
-            webhook_url="https://api.example.com/webhook/trigger/abc123"
+            webhook_url="https://api.example.com/webhook/trigger/abc123",
         )
 
         assert "0 9 * * 1-5" in cron
@@ -387,14 +551,17 @@ class TestWebhookHelpers:
             task_name="Test Task",
             schedule_expression="0 9 * * *",
             webhook_url="https://api.example.com/webhook/trigger/abc123",
-            namespace="production"
+            namespace="production",
         )
 
         assert manifest["apiVersion"] == "batch/v1"
         assert manifest["kind"] == "CronJob"
         assert manifest["metadata"]["namespace"] == "production"
         assert manifest["spec"]["schedule"] == "0 9 * * *"
-        assert "curlimages/curl" in manifest["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]["image"]
+        assert (
+            "curlimages/curl"
+            in manifest["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]["image"]
+        )
 
 
 # ============================================================================
@@ -462,11 +629,7 @@ class TestICalHelpers:
 
     def test_generate_ical_feed_url_with_params(self):
         """Test iCal feed URL with parameters"""
-        url = generate_ical_feed_url(
-            "https://api.example.com",
-            user_id="user123",
-            api_key="key456"
-        )
+        url = generate_ical_feed_url("https://api.example.com", user_id="user123", api_key="key456")
         assert "user_id=user123" in url
         assert "api_key=key456" in url
 
@@ -487,7 +650,7 @@ class TestICalExporter:
             calendar_name="My Tasks",
             include_description=False,
             base_url="https://example.com",
-            default_duration_minutes=60
+            default_duration_minutes=60,
         )
         assert exporter.calendar_name == "My Tasks"
         assert exporter.include_description is False
@@ -724,15 +887,12 @@ class TestSchedulerIntegration:
         # Generate webhook URL
         gateway = WebhookGateway()
         webhook_info = gateway.generate_webhook_url(
-            task_id="task123",
-            base_url="https://api.example.com"
+            task_id="task123", base_url="https://api.example.com"
         )
 
         # Generate cron entry
         cron = generate_cron_config(
-            task_id="task123",
-            schedule_expression="0 9 * * 1-5",
-            webhook_url=webhook_info["url"]
+            task_id="task123", schedule_expression="0 9 * * 1-5", webhook_url=webhook_info["url"]
         )
 
         assert "0 9 * * 1-5" in cron

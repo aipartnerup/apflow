@@ -1,9 +1,14 @@
 # Environment variables (sensitive data)
 .env
-.env.*
-*.env
+
 
 # Secrets
 secrets/
 *.pem
 *.key
+
+.data/
+
+.claude/
+CLAUDE.md
+.github/
