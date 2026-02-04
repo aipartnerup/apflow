@@ -105,20 +105,28 @@ curl -X POST http://localhost:8000/ \
 
 **Note:** The method `execute_task_tree` is still supported for backward compatibility, but `tasks.execute` is the recommended standard method name.
 
-### Task Management via A2A Protocol
+### Task Management via API
 
-All task management operations are now fully supported through the A2A Protocol `/` route:
+The API follows a **three-layer architecture**:
 
-- **Task Execution**: `tasks.execute` (or `execute_task_tree` for backward compatibility)
-- **Task CRUD**: `tasks.create`, `tasks.get`, `tasks.update`, `tasks.delete`
-- **Task Query**: `tasks.detail`, `tasks.tree`, `tasks.list`, `tasks.children`
-- **Running Tasks**: `tasks.running.list`, `tasks.running.status`, `tasks.running.count`
-- **Task Control**: `tasks.cancel`, `tasks.clone`
-- **Task Generation**: `tasks.generate` (generate task tree from natural language using LLM)
+1. **A2A Protocol (`POST /`)** — Agent-level actions only:
+   - `tasks.execute` (or `execute_task_tree` for backward compatibility): Execute task tree
+   - `tasks.generate`: Generate task tree from natural language using LLM
+   - `tasks.cancel`: Cancel running task
 
-All methods follow the same A2A Protocol JSON-RPC format and return A2A Protocol Task objects with real-time status updates.
+2. **Native API (`POST /tasks`)** — All task operations via JSON-RPC:
+   - **CRUD**: `tasks.create`, `tasks.get`, `tasks.update`, `tasks.delete`
+   - **Query**: `tasks.detail`, `tasks.tree`, `tasks.list`, `tasks.children`
+   - **Monitoring**: `tasks.running.list`, `tasks.running.status`, `tasks.running.count`
+   - **Actions**: `tasks.execute`, `tasks.generate`, `tasks.cancel`, `tasks.clone`
 
-### Task Management Endpoints (Legacy JSON-RPC)
+3. **Method Discovery (`GET /tasks/methods`)** — Returns all available methods grouped by category with input schemas. Useful for programmatic discovery and client code generation.
+
+> **Note:** CRUD operations (create, get, update, delete, list, etc.) are not supported via A2A `POST /`.
+> Use `POST /tasks` instead. A2A `POST /` is reserved for agent-level actions that benefit from
+> streaming and push notifications.
+
+### Task Management Endpoints (JSON-RPC)
 
 #### Create Tasks
 

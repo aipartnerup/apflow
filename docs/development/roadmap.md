@@ -18,7 +18,7 @@ Core orchestration is stable with 800+ tests. Key capabilities:
 | Feature | Status | Description |
 |---------|--------|-------------|
 | Distributed Core | Planned | Multi-node orchestration with task leasing |
-| Protocol Abstraction | Planned | Unified adapter interface for all protocols |
+| Protocol Abstraction | In Progress | Unified adapter interface for all protocols |
 | GraphQL Adapter | Planned | Query interface for complex task trees |
 
 ### Distributed Core
@@ -32,7 +32,15 @@ Enable multi-node deployments with centralized coordination. See [design doc](di
 
 ### Protocol Abstraction
 
-Unified interface for protocol adapters:
+Unified interface for protocol adapters. **Phase 1 complete:**
+
+- Capabilities registry (`api/capabilities.py`) as single source of truth for all 15 operations
+- A2A adapter simplified to agent-level actions only (execute, generate, cancel)
+- MCP adapter auto-generates 15 tools from the registry
+- Native API (`POST /tasks`) as primary programmatic interface
+- Method discovery endpoint (`GET /tasks/methods`)
+
+**Remaining:**
 
 ```python
 class ProtocolAdapter(Protocol):

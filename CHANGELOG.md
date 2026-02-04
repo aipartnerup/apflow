@@ -2,7 +2,19 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **API Architecture Refactoring — Three-Layer Design**
+  - Introduced unified capabilities registry (`api/capabilities.py`) as single source of truth for all 15 task operations, replacing separate inline definitions in A2A and MCP modules
+  - A2A `POST /` now only handles agent-level actions (`tasks.execute`, `tasks.generate`, `tasks.cancel`); CRUD operations return an error directing clients to `POST /tasks`
+  - MCP adapter auto-generates all 15 tools from the capabilities registry via `call_by_tool_name` routing
+  - Simplified A2A adapter: removed ~300 lines of CRUD bridging code from `agent_executor.py` and `task_routes_adapter.py`
+
 ### Added
+
+- **Method Discovery Endpoint** (`GET /tasks/methods`)
+  - Returns all available task methods grouped by category (`agent_action`, `crud`, `query`, `monitoring`) with input schemas, descriptions, and examples
+  - Driven by the capabilities registry for automatic consistency
 
 - **Task Scheduling System**
   - Added `ScheduleType` enum supporting six schedule types: `once`, `interval`, `cron`, `daily`, `weekly`, `monthly`

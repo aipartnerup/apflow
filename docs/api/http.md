@@ -145,21 +145,12 @@ JSON-RPC 2.0 format:
 
 **Request Parameters:**
 - `jsonrpc` (string, required): JSON-RPC version, must be "2.0"
-- `method` (string, required): Method name. Supports all task management operations:
+- `method` (string, required): Method name. The A2A `POST /` endpoint supports agent-level actions only:
   - `tasks.execute` (recommended) or `execute_task_tree` (backward compatible): Execute a task tree
-  - `tasks.create`: Create new task(s)
-  - `tasks.get`: Get task by ID
-  - `tasks.update`: Update task
-  - `tasks.delete`: Delete task
-  - `tasks.detail`: Get full task details
-  - `tasks.tree`: Get task tree structure
-  - `tasks.list`: List tasks with filters
-  - `tasks.children`: Get child tasks
-  - `tasks.running.list`: List running tasks
-  - `tasks.running.status`: Get running task status
-  - `tasks.running.count`: Count running tasks
+  - `tasks.generate`: Generate task tree from natural language using LLM
   - `tasks.cancel`: Cancel running task(s)
-  - `tasks.clone`: Clone task tree
+
+  > **Note:** CRUD and query operations (`tasks.create`, `tasks.get`, `tasks.update`, `tasks.delete`, `tasks.list`, etc.) should use `POST /tasks` instead. See [Native API](#post-tasks) below.
 - `params` (object, required): Method parameters (varies by method)
   - For `tasks.execute` or `execute_task_tree`: `tasks` (array, required): Array of task objects to execute
 - `id` (string/number, required): Request identifier for matching responses
@@ -541,6 +532,46 @@ JSON-RPC 2.0 response format. The `result` field varies by method.
 **Notes:**
 - All task operations require proper permissions if JWT is enabled
 - Tasks with different `user_id` values cannot be in the same tree
+- This is the **primary endpoint** for CRUD and query operations. A2A `POST /` only handles agent-level actions (execute, generate, cancel).
+
+#### `GET /tasks/methods`
+
+**Description:**
+Method discovery endpoint that returns all available task methods grouped by category, with input schemas and descriptions. Useful for programmatic discovery and client code generation.
+
+**Authentication:**
+Optional (JWT token in `Authorization` header if JWT is enabled)
+
+**Response Format:**
+
+```json
+{
+  "total": 15,
+  "categories": ["agent_action", "crud", "query", "monitoring"],
+  "methods": {
+    "agent_action": [
+      {
+        "method": "tasks.execute",
+        "name": "Execute Task Tree",
+        "description": "Execute a complete task tree with multiple tasks",
+        "category": "agent_action",
+        "tags": ["task", "orchestration", "workflow", "execution"],
+        "input_schema": { "type": "object", "properties": { ... } },
+        "supports_streaming": true,
+        "examples": ["Execute a 3-task workflow"]
+      }
+    ],
+    "crud": [ ... ],
+    "query": [ ... ],
+    "monitoring": [ ... ]
+  }
+}
+```
+
+**Example Request:**
+```bash
+curl http://localhost:8000/tasks/methods
+```
 - The `X-LLM-API-KEY` header can be used to provide LLM API keys for tasks that require them
 - Task operations are atomic and support transaction rollback on errors
 

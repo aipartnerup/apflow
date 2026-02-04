@@ -18,7 +18,9 @@ The apflow architecture consists of four main layers:
 ```mermaid
 flowchart TD
     subgraph APILayer["Unified External API Interface Layer"]
-        A2AServer["A2A Protocol Server<br/>(HTTP/SSE/WebSocket)"]
+        NativeAPI["Native API<br/>POST /tasks (JSON-RPC)"]
+        A2AServer["A2A Protocol Adapter<br/>(execute/generate/cancel)"]
+        MCPServer["MCP Protocol Adapter<br/>(15 tools)"]
         CLI["CLI Tools"]
     end
     
@@ -51,8 +53,9 @@ flowchart TD
 ### Layer Details
 
 **Unified External API Interface Layer**
-- A2A Protocol Server (HTTP/SSE/WebSocket) [a2a]
-  - A2A Protocol is the standard protocol for agent communication
+- Native API (`POST /tasks`): Primary JSON-RPC interface for all 15 task operations
+- A2A Protocol Adapter (`POST /`): Agent-level actions (execute, generate, cancel) with streaming
+- MCP Protocol Adapter: All 15 operations as MCP tools for LLM integration
 - CLI Tools [cli]
 
 ### Protocol Standard
@@ -161,24 +164,27 @@ extensions/http_executor/
 api/                   # Unified API service layer (supports multiple protocols)
 ├── __init__.py        # Unified entry point, backward compatible
 ├── main.py            # CLI entry point (main() function and uvicorn server)
+├── capabilities.py    # Unified operations registry (single source of truth for all 15 operations)
 ├── extensions.py      # Extension management (initialize_extensions, EXTENSION_CONFIG)
 ├── protocols.py       # Protocol management (get_protocol_from_env, check_protocol_dependency)
 ├── app.py             # Application creation (create_app_by_protocol, create_a2a_server, create_mcp_server)
-├── a2a/               # A2A Protocol Server implementation
+├── a2a/               # A2A Protocol Adapter (agent-level actions only)
 │   ├── __init__.py    # A2A module exports
 │   ├── server.py      # A2A server creation
-│   ├── agent_executor.py      # A2A agent executor
+│   ├── agent_executor.py      # A2A agent executor (execute/generate/cancel)
+│   ├── task_routes_adapter.py # Lightweight adapter (method extraction, A2A Task conversion)
 │   ├── custom_starlette_app.py # Custom A2A Starlette application
 │   └── event_queue_bridge.py   # Event queue bridge
-├── mcp/               # MCP (Model Context Protocol) Server implementation
+├── mcp/               # MCP Protocol Adapter (all 15 operations as tools)
 │   ├── __init__.py    # MCP module exports
 │   ├── server.py      # MCP server creation
-│   ├── adapter.py     # TaskRoutes adapter for MCP
+│   ├── adapter.py     # TaskRoutes adapter for MCP (registry-driven routing)
+│   ├── tools.py       # MCP tools registry (auto-generated from capabilities)
 │   └── ...            # Other MCP components
-├── routes/            # Protocol-agnostic route handlers
+├── routes/            # Protocol-agnostic route handlers (shared core)
 │   ├── __init__.py    # Route handlers exports
 │   ├── base.py        # BaseRouteHandler - shared functionality
-│   ├── tasks.py       # TaskRoutes - task management handlers
+│   ├── tasks.py       # TaskRoutes - all 15 task handler methods
 │   └── system.py      # SystemRoutes - system operation handlers
 ```
 
@@ -363,11 +369,14 @@ Task.history           →  Not stored in TaskModel (LLM conversation history, e
 
 #### API (`api/`) [a2a]
 - **Responsibility**: Unified external API service layer supporting multiple network protocols
-- **Current Implementation**: A2A Protocol Server (`api/a2a/`)
-  - **Protocol Standard**: A2A (Agent-to-Agent) Protocol
-  - **Transport Layers**: HTTP, SSE, WebSocket (all implementing A2A Protocol)
-  - **Structure**: A2A implementation organized in `api/a2a/` subdirectory for better code organization
-- **Future Extensions**: May include additional protocols (e.g., REST API in `api/rest/`) for direct HTTP access
+- **Three-Layer Architecture**:
+  1. **TaskRoutes** (`api/routes/tasks.py`): Protocol-agnostic core. All task operations are handler methods on TaskRoutes, shared by all protocols.
+  2. **Native API** (`POST /tasks`): Primary programmatic interface using JSON-RPC. Supports all 15 task methods. Discovery available at `GET /tasks/methods`.
+  3. **Protocol Adapters**: A2A and MCP as interoperability layers.
+     - **A2A** (`api/a2a/`): Agent-level actions only (`tasks.execute`, `tasks.generate`, `tasks.cancel`) via `POST /`. CRUD operations return an error directing to `POST /tasks`.
+     - **MCP** (`api/mcp/`): All 15 operations exposed as MCP tools for LLM tool-use.
+- **Capabilities Registry** (`api/capabilities.py`): Single source of truth defining all 15 operations. Generates A2A AgentSkills and MCP tool definitions from the same registry.
+- **Method Discovery**: `GET /tasks/methods` returns all available methods grouped by category with input schemas.
 
 #### Streaming (`execution/streaming_callbacks.py`)
 - **Responsibility**: Real-time progress updates
