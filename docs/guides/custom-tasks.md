@@ -1377,6 +1377,59 @@ pip install apflow[a2a]  # For HTTP transport
 - Integrate with MCP-compatible services
 - Local and remote MCP server communication
 
+### Email Executor
+
+Send emails via Resend API or SMTP protocol.
+
+**Installation:**
+```bash
+pip install apflow[email]
+```
+
+**Usage (Resend):**
+```python
+{
+    "schemas": {
+        "method": "send_email_executor"
+    },
+    "inputs": {
+        "provider": "resend",
+        "api_key": "re_xxx",
+        "to": ["user@example.com"],
+        "from_email": "noreply@example.com",
+        "subject": "Order Confirmation",
+        "html": "<h1>Thank you for your order!</h1>"
+    }
+}
+```
+
+**Usage (SMTP):**
+```python
+{
+    "schemas": {
+        "method": "send_email_executor"
+    },
+    "inputs": {
+        "provider": "smtp",
+        "smtp_host": "smtp.example.com",
+        "smtp_port": 587,
+        "smtp_username": "user",
+        "smtp_password": "pass",
+        "to": ["user@example.com"],
+        "from_email": "noreply@example.com",
+        "subject": "Hello",
+        "body": "Hello World"
+    }
+}
+```
+
+**Features:**
+- Two providers: Resend (HTTP API) and SMTP
+- Plain text and HTML email support
+- CC, BCC, and reply-to recipients
+- Configurable timeout
+- SMTP STARTTLS support (enabled by default)
+
 ### LLM Executor (`llm_executor`)
 
 Direct LLM interaction via LiteLLM, supporting over 100+ providers including OpenAI, Anthropic, Google Gemini, and many others.

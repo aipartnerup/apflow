@@ -12,6 +12,18 @@
 
 ### Added
 
+- **Email Executor** (`send_email_executor`)
+  - Send emails via Resend HTTP API or SMTP protocol
+  - Provider dispatch: `inputs["provider"]` selects `"resend"` or `"smtp"`
+  - Resend provider: POST to `https://api.resend.com/emails` via `httpx.AsyncClient`, returns message ID and status code
+  - SMTP provider: Uses `aiosmtplib.send()` (optional dependency, guarded import)
+  - Supports plain text and HTML emails, cc/bcc recipients, reply-to address
+  - Input validation for required fields (provider, to, subject, from_email, body/html)
+  - Schema methods (`get_input_schema`, `get_output_schema`) and demo mode support
+  - Added `[email]` optional dependency with `aiosmtplib>=3.0.0`
+  - Added `email` to `[all]` installation extra
+  - Comprehensive test coverage: 26 tests for validation, Resend, SMTP, schemas, and demo results
+
 - **Method Discovery Endpoint** (`GET /tasks/methods`)
   - Returns all available task methods grouped by category (`agent_action`, `crud`, `query`, `monitoring`) with input schemas, descriptions, and examples
   - Driven by the capabilities registry for automatic consistency

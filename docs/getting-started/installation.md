@@ -112,6 +112,16 @@ pip install apflow[grpc]
 - gRPC executor for gRPC service calls
 - Call gRPC services and microservices
 
+### Email Executor
+
+```bash
+pip install apflow[email]
+```
+
+**Includes:**
+- Email executor for sending emails via Resend API or SMTP
+- Send transactional and notification emails from task workflows
+
 ### Everything
 
 ```bash
@@ -119,7 +129,7 @@ pip install apflow[all]
 ```
 
 **Includes:**
-- All optional features (crewai, a2a, cli, postgres, ssh, docker, grpc)
+- All optional features (crewai, a2a, cli, postgres, email, ssh, docker, grpc)
 
 ## Requirements
 

@@ -101,6 +101,16 @@ extensions/core/
 
 **Installation**: Included in core (no extra required)
 
+### [email] - Email Executor
+
+```
+extensions/email/
+├── __init__.py
+└── send_email_executor.py     # SendEmailExecutor - Resend API and SMTP
+```
+
+**Installation**: `pip install apflow[email]`
+
 ### [hooks] - Hook Extensions
 
 ```

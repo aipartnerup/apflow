@@ -91,6 +91,11 @@ scheduling = [
     "croniter>=1.0.0",
 ]
 
+# Email sending (Resend API + SMTP)
+email = [
+    "aiosmtplib>=3.0.0",
+]
+
 # SSH remote execution
 ssh = [
     "asyncssh>=2.14.0",
@@ -155,7 +160,7 @@ dev = [
 
 # Full installation (all features)
 all = [
-    "apflow[crewai,a2a,cli,postgres,llm-key-config,ssh,docker,grpc,mcp,llm,tools,scheduling]",
+    "apflow[crewai,a2a,cli,postgres,llm-key-config,email,ssh,docker,grpc,mcp,llm,tools,scheduling]",
 ]
 
 [project.scripts]
