@@ -2,7 +2,9 @@
 LLM Executor using LiteLLM
 """
 
-from typing import Dict, Any, Optional
+from typing import ClassVar, Dict, Any, Optional
+
+from pydantic import BaseModel, Field
 from apflow.core.base import BaseTask
 from apflow.core.execution.errors import ValidationError
 from apflow.logger import get_logger
@@ -32,6 +34,19 @@ else:
             return cls
 
         return decorator
+
+
+class LLMInputSchema(BaseModel):
+    messages: list[Dict[str, Any]] = Field(description="Chat messages like [{'role': 'user', 'content': '...'}]")
+
+
+class LLMOutputSchema(BaseModel):
+    success: bool = Field(description="Whether the LLM call was successful")
+    content: Optional[str] = Field(default=None, description="LLM generated response content")
+    is_stream: bool = Field(description="Whether the response is a stream")
+    stream: Optional[Any] = Field(default=None, description="Stream generator (only present when is_stream is True)")
+    usage: Optional[Dict[str, Any]] = Field(default=None, description="Token usage information")
+    model: Optional[str] = Field(default=None, description="Model used for the completion")
 
 
 @executor_register()
@@ -67,6 +82,8 @@ class LLMExecutor(BaseTask):
     examples = ["Generate text using GPT-4", "Chat with Claude", "Summarize text"]
 
     cancelable: bool = True
+    inputs_schema: ClassVar[type[BaseModel]] = LLMInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = LLMOutputSchema
 
     @property
     def type(self) -> str:
@@ -222,35 +239,3 @@ class LLMExecutor(BaseTask):
             "model": model,
         }
 
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "messages": {
-                    "type": "array",
-                    "items": {"type": "object"},
-                    "description": "Chat messages like [{'role': 'user', 'content': '...'}]",
-                },
-            },
-            "required": ["messages"],
-        }
-
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Return the output result schema for this executor.
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "success": {
-                    "type": "boolean",
-                    "description": "Whether the LLM call was successful",
-                },
-                "content": {"type": "string", "description": "LLM generated response content"},
-                "is_stream": {"type": "boolean", "description": "Whether the response is a stream"},
-                "stream": {"description": "Stream generator (only present when is_stream is True)"},
-                "usage": {"type": "object", "description": "Token usage information"},
-                "model": {"type": "string", "description": "Model used for the completion"},
-            },
-            "required": ["success", "is_stream"],
-        }

@@ -438,50 +438,42 @@ Create a file `my_executor.py`:
 
 ```python
 from apflow import BaseTask, executor_register
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any, Literal
+from pydantic import BaseModel, Field
+
+# Define input schema as a Pydantic model
+class GreetingInputSchema(BaseModel):
+    """Input schema for greeting task"""
+    name: str = Field(description="Name of the person to greet")
+    language: Literal["en", "es", "fr", "zh"] = Field(
+        default="en", description="Language for the greeting"
+    )
 
 @executor_register()
 class GreetingTask(BaseTask):
     """A simple task that creates personalized greetings"""
-    
+
     id = "greeting_task"
     name = "Greeting Task"
     description = "Creates a personalized greeting message"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = GreetingInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the task"""
         name = inputs.get("name", "Guest")
         language = inputs.get("language", "en")
-        
+
         greetings = {
             "en": f"Hello, {name}!",
             "es": f"¡Hola, {name}!",
             "fr": f"Bonjour, {name}!"
         }
-        
+
         return {
             "greeting": greetings.get(language, greetings["en"]),
             "name": name,
             "language": language
-        }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        """Define input parameters"""
-        return {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Name of the person to greet"
-                },
-                "language": {
-                    "type": "string",
-                    "enum": ["en", "es", "fr", "zh"],
-                    "description": "Language for the greeting",
-                    "default": "en"
-                }
-            },
-            "required": ["name"]
         }
 ```
 

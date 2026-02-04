@@ -63,6 +63,16 @@ class ExecutableTask(Extension, ABC):
         pass
 
     @abstractmethod
+    def get_input_schema(self) -> Dict[str, Any]:
+        """
+        Return input parameter schema (JSON Schema format)
+
+        Returns:
+            JSON Schema dictionary describing input parameter structure
+        """
+        pass
+
+    @abstractmethod
     def get_output_schema(self) -> Dict[str, Any]:
         """
         Return output result schema (JSON Schema format)

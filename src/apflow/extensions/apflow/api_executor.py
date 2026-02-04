@@ -55,12 +55,45 @@ Configuration:
 
 import asyncio
 import httpx
-from typing import Dict, Any, Optional
+from typing import Any, ClassVar, Dict, Literal, Optional
+
+from pydantic import BaseModel, Field
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class ApFlowApiInputSchema(BaseModel):
+    base_url: str = Field(description='apflow API base URL (e.g., "http://localhost:8000") (required)')
+    method: str = Field(description='API method name (e.g., "tasks.execute", "tasks.create") (required)')
+    params: Dict[str, Any] = Field(description="Method parameters dict (required)")
+    auth_token: Optional[str] = Field(default=None, description="Optional JWT token for authentication")
+    use_streaming: bool = Field(default=False, description="Whether to use streaming mode (only for tasks.execute, default: False)")
+    wait_for_completion: bool = Field(default=False, description="Whether to wait for task completion (only for tasks.execute, default: False)")
+    poll_interval: float = Field(default=1.0, description="Polling interval in seconds when waiting for completion (default: 1.0)")
+    timeout: float = Field(default=300.0, description="Total timeout in seconds (default: 300.0)")
+    headers: Optional[Dict[str, str]] = Field(default=None, description="Additional HTTP headers dict (optional)")
+
+
+class ApFlowApiOutputSchema(BaseModel):
+    success: bool = Field(description="Whether the API call was successful")
+    result: Optional[Dict[str, Any]] = Field(default=None, description="API response result data (only present on success)")
+    error: Optional[str] = Field(default=None, description="Error message (only present on failure)")
+    error_code: Optional[int] = Field(default=None, description="JSON-RPC error code (optional, only present for JSON-RPC errors)")
+    error_data: Optional[Dict[str, Any]] = Field(default=None, description="JSON-RPC error data (optional, only present for JSON-RPC errors)")
+    status_code: Optional[int] = Field(default=None, description="HTTP status code (optional, only present for HTTP errors)")
+    response: Optional[str] = Field(default=None, description="Raw HTTP response text (optional, only present for HTTP errors)")
+    base_url: str = Field(description="The apflow API base URL that was called")
+    method: str = Field(description="The API method that was called")
+    task_id: Optional[str] = Field(default=None, description="Task ID (only present when waiting for task completion)")
+    status: Optional[str] = Field(default=None, description="Final task status (only present when waiting for task completion)")
+    task: Optional[Dict[str, Any]] = Field(default=None, description="Complete task data (only present when waiting for task completion)")
+    poll_count: Optional[int] = Field(default=None, description="Number of polling attempts (only present when waiting for task completion)")
+    total_failures: Optional[int] = Field(default=None, description="Total polling failures (only present when waiting for task completion)")
+    consecutive_failures: Optional[int] = Field(default=None, description="Consecutive polling failures (only present in circuit breaker scenarios)")
+    error_type: Optional[Literal["client_error", "circuit_breaker", "max_failures"]] = Field(default=None, description="Type of polling error (only present in specific error scenarios)")
 
 
 @executor_register()
@@ -98,6 +131,9 @@ class ApFlowApiExecutor(BaseTask):
 
     # Cancellation support: Can be cancelled by stopping HTTP request
     cancelable: bool = True
+
+    inputs_schema: ClassVar[type[BaseModel]] = ApFlowApiInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = ApFlowApiOutputSchema
 
     @property
     def type(self) -> str:
@@ -556,134 +592,3 @@ class ApFlowApiExecutor(BaseTask):
                 "_demo_sleep": 0.2,  # Simulate API call latency
             }
 
-    def get_input_schema(self) -> Dict[str, Any]:
-        """
-        Get input schema for ApFlowApiExecutor execution inputs
-
-        Returns:
-            JSON Schema describing the input structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "base_url": {
-                    "type": "string",
-                    "description": 'apflow API base URL (e.g., "http://localhost:8000") (required)',
-                },
-                "method": {
-                    "type": "string",
-                    "description": 'API method name (e.g., "tasks.execute", "tasks.create") (required)',
-                },
-                "params": {
-                    "type": "object",
-                    "description": "Method parameters dict (required)",
-                    "additionalProperties": True,
-                },
-                "auth_token": {
-                    "type": "string",
-                    "description": "Optional JWT token for authentication",
-                },
-                "use_streaming": {
-                    "type": "boolean",
-                    "description": "Whether to use streaming mode (only for tasks.execute, default: False)",
-                    "default": False,
-                },
-                "wait_for_completion": {
-                    "type": "boolean",
-                    "description": "Whether to wait for task completion (only for tasks.execute, default: False)",
-                    "default": False,
-                },
-                "poll_interval": {
-                    "type": "number",
-                    "description": "Polling interval in seconds when waiting for completion (default: 1.0)",
-                    "default": 1.0,
-                },
-                "timeout": {
-                    "type": "number",
-                    "description": "Total timeout in seconds (default: 300.0)",
-                    "default": 300.0,
-                },
-                "headers": {
-                    "type": "object",
-                    "description": "Additional HTTP headers dict (optional)",
-                    "additionalProperties": {"type": "string"},
-                },
-            },
-            "required": ["base_url", "method", "params"],
-        }
-
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Get output schema for ApFlowApiExecutor execution results
-
-        Returns:
-            JSON Schema describing the output structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "success": {
-                    "type": "boolean",
-                    "description": "Whether the API call was successful",
-                },
-                "result": {
-                    "type": "object",
-                    "description": "API response result data (only present on success)",
-                },
-                "error": {
-                    "type": "string",
-                    "description": "Error message (only present on failure)",
-                },
-                "error_code": {
-                    "type": "integer",
-                    "description": "JSON-RPC error code (optional, only present for JSON-RPC errors)",
-                },
-                "error_data": {
-                    "type": "object",
-                    "description": "JSON-RPC error data (optional, only present for JSON-RPC errors)",
-                },
-                "status_code": {
-                    "type": "integer",
-                    "description": "HTTP status code (optional, only present for HTTP errors)",
-                },
-                "response": {
-                    "type": "string",
-                    "description": "Raw HTTP response text (optional, only present for HTTP errors)",
-                },
-                "base_url": {
-                    "type": "string",
-                    "description": "The apflow API base URL that was called",
-                },
-                "method": {"type": "string", "description": "The API method that was called"},
-                "task_id": {
-                    "type": "string",
-                    "description": "Task ID (only present when waiting for task completion)",
-                },
-                "status": {
-                    "type": "string",
-                    "description": "Final task status (only present when waiting for task completion)",
-                },
-                "task": {
-                    "type": "object",
-                    "description": "Complete task data (only present when waiting for task completion)",
-                },
-                "poll_count": {
-                    "type": "integer",
-                    "description": "Number of polling attempts (only present when waiting for task completion)",
-                },
-                "total_failures": {
-                    "type": "integer",
-                    "description": "Total polling failures (only present when waiting for task completion)",
-                },
-                "consecutive_failures": {
-                    "type": "integer",
-                    "description": "Consecutive polling failures (only present in circuit breaker scenarios)",
-                },
-                "error_type": {
-                    "type": "string",
-                    "enum": ["client_error", "circuit_breaker", "max_failures"],
-                    "description": "Type of polling error (only present in specific error scenarios)",
-                },
-            },
-            "required": ["success", "base_url", "method"],
-        }

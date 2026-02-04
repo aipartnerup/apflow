@@ -7,7 +7,8 @@ for real-time bidirectional messaging.
 
 import asyncio
 import json
-from typing import Dict, Any, Optional
+from typing import ClassVar, Dict, Any, Optional, Union
+from pydantic import BaseModel, Field
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.logger import get_logger
@@ -24,6 +25,55 @@ except ImportError:
     logger.warning(
         "websockets is not installed. WebSocket executor will not be available. "
         "Install it with: pip install apflow[a2a] (websockets included in a2a extra)"
+    )
+
+
+class WebSocketInputSchema(BaseModel):
+    url: str = Field(description="WebSocket URL to connect to (ws:// or wss://)")
+    message: Union[str, Dict[str, Any]] = Field(
+        description="Message to send (string or object that will be JSON-encoded)"
+    )
+    wait_response: bool = Field(
+        default=True,
+        description="Whether to wait for a response after sending the message",
+    )
+    timeout: float = Field(
+        default=30.0, description="Connection and response timeout in seconds"
+    )
+    headers: Optional[Dict[str, str]] = Field(
+        default=None,
+        description="Optional HTTP headers to include in the WebSocket handshake",
+    )
+
+
+class WebSocketOutputSchema(BaseModel):
+    success: bool = Field(
+        description="Whether the WebSocket communication was successful"
+    )
+    error: Optional[str] = Field(
+        default=None, description="Error message (only present on failure)"
+    )
+    url: Optional[str] = Field(
+        default=None, description="WebSocket URL that was connected to"
+    )
+    message_sent: Optional[str] = Field(
+        default=None,
+        description="Message that was sent (JSON string if object was sent)",
+    )
+    response: Optional[Any] = Field(
+        default=None,
+        description="Response received (string or parsed JSON object)",
+    )
+    wait_response: Optional[bool] = Field(
+        default=None, description="Whether a response was expected"
+    )
+    code: Optional[int] = Field(
+        default=None,
+        description="WebSocket close code (only present for connection closed errors)",
+    )
+    reason: Optional[str] = Field(
+        default=None,
+        description="WebSocket close reason (only present for connection closed errors)",
     )
 
 
@@ -60,6 +110,9 @@ class WebSocketExecutor(BaseTask):
 
     # Cancellation support: Can be cancelled by closing WebSocket connection
     cancelable: bool = True
+
+    inputs_schema: ClassVar[type[BaseModel]] = WebSocketInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = WebSocketOutputSchema
 
     @property
     def type(self) -> str:
@@ -219,83 +272,3 @@ class WebSocketExecutor(BaseTask):
         result["_demo_sleep"] = 0.2  # Simulate WebSocket connection and message exchange
         return result
 
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Get output schema for WebSocketExecutor execution results
-
-        Returns:
-            JSON Schema describing the output structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "success": {
-                    "type": "boolean",
-                    "description": "Whether the WebSocket communication was successful",
-                },
-                "error": {
-                    "type": "string",
-                    "description": "Error message (only present on failure)",
-                },
-                "url": {"type": "string", "description": "WebSocket URL that was connected to"},
-                "message_sent": {
-                    "type": "string",
-                    "description": "Message that was sent (JSON string if object was sent)",
-                },
-                "response": {
-                    "type": ["string", "object"],
-                    "description": "Response received (string or parsed JSON object)",
-                },
-                "wait_response": {
-                    "type": "boolean",
-                    "description": "Whether a response was expected",
-                },
-                "code": {
-                    "type": "integer",
-                    "description": "WebSocket close code (only present for connection closed errors)",
-                },
-                "reason": {
-                    "type": "string",
-                    "description": "WebSocket close reason (only present for connection closed errors)",
-                },
-            },
-            "required": ["success"],
-        }
-
-    def get_input_schema(self) -> Dict[str, Any]:
-        """
-        Get input schema for WebSocketExecutor execution parameters
-
-        Returns:
-            JSON Schema describing the input structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "WebSocket URL to connect to (ws:// or wss://)",
-                },
-                "message": {
-                    "type": ["string", "object"],
-                    "description": "Message to send (string or object that will be JSON-encoded)",
-                },
-                "wait_response": {
-                    "type": "boolean",
-                    "description": "Whether to wait for a response after sending the message",
-                    "default": True,
-                },
-                "timeout": {
-                    "type": "number",
-                    "description": "Connection and response timeout in seconds",
-                    "default": 30.0,
-                    "minimum": 0.1,
-                },
-                "headers": {
-                    "type": "object",
-                    "description": "Optional HTTP headers to include in the WebSocket handshake",
-                    "additionalProperties": {"type": "string"},
-                },
-            },
-            "required": ["url", "message"],
-        }

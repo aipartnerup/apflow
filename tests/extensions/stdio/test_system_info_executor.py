@@ -85,13 +85,15 @@ class TestSystemInfoExecutor:
 
     @pytest.mark.asyncio
     async def test_invalid_resource(self):
-        """Test that invalid resource raises error"""
+        """Test that invalid resource returns validation error"""
         executor = SystemInfoExecutor()
-        
-        with pytest.raises(ValueError, match="Unknown resource"):
-            await executor.execute({
-                "resource": "invalid_resource"
-            })
+
+        result = await executor.execute({
+            "resource": "invalid_resource"
+        })
+
+        assert "error" in result
+        assert "validation_error" in result
 
     @pytest.mark.asyncio
     async def test_timeout_parameter(self):

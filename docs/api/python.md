@@ -238,25 +238,23 @@ Recommended base class for creating custom executors. Provides automatic registr
 
 ```python
 from apflow import BaseTask, executor_register
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any
+from pydantic import BaseModel, Field
+
+class MyInputSchema(BaseModel):
+    """Input schema for my executor"""
+    param: str = Field(description="Parameter")
 
 @executor_register()
 class MyExecutor(BaseTask):
     id = "my_executor"
     name = "My Executor"
     description = "Does something useful"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = MyInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "completed", "result": "..."}
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "param": {"type": "string", "description": "Parameter"}
-            },
-            "required": ["param"]
-        }
 ```
 
 **See**: `tests/extensions/tools/test_tools_decorator.py` and `docs/guides/custom-tasks.md` for examples.
@@ -271,7 +269,7 @@ Abstract base class for all task executors. Use `BaseTask` for simplicity, or `E
 - `name` (property): Display name
 - `description` (property): Description
 - `execute(inputs)`: Main execution logic (async)
-- `get_input_schema()`: Return JSON Schema for inputs
+- `get_input_schema()`: Return JSON Schema for inputs (automatically provided by BaseTask when `inputs_schema` is set)
 
 ### Optional Methods
 
@@ -717,27 +715,29 @@ print(f"Execution result: {result}")
 
 ```python
 from apflow import BaseTask, executor_register
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any
+from pydantic import BaseModel, Field
+
+class RobustInputSchema(BaseModel):
+    """Input schema for robust executor"""
+    data: str = Field(description="Data to process")
 
 @executor_register()
 class RobustExecutor(BaseTask):
     id = "robust_executor"
     name = "Robust Executor"
     description = "Executor with comprehensive error handling"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = RobustInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         try:
-            # Validate inputs
-            if not inputs.get("data"):
-                return {
-                    "status": "failed",
-                    "error": "data is required",
-                    "error_type": "validation_error"
-                }
-            
+            # Validate inputs against Pydantic schema
+            self.check_input_schema(inputs)
+
             # Process
             result = self._process(inputs["data"])
-            
+
             return {
                 "status": "completed",
                 "result": result
@@ -754,19 +754,10 @@ class RobustExecutor(BaseTask):
                 "error": str(e),
                 "error_type": type(e).__name__
             }
-    
-    def _process(self, data):
+
+    def _process(self, data: str) -> Dict[str, Any]:
         # Your processing logic
         return {"processed": data}
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "data": {"type": "string", "description": "Data to process"}
-            },
-            "required": ["data"]
-        }
 ```
 
 ## A2A Protocol Integration

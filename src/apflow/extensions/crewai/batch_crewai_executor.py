@@ -9,13 +9,35 @@ Simple implementation: Multiple crew tasks executed sequentially and merged.
 No complex workflow - just batch execution with atomic semantics.
 """
 
-from typing import Dict, Any, Optional
+from typing import ClassVar, Dict, Any, Literal, Optional
+
+from pydantic import BaseModel, Field
+
 from apflow.extensions.crewai.types import BatchState
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class BatchCrewaiInputSchema(BaseModel):
+    model_config = {"extra": "allow"}
+
+
+class BatchCrewaiTokenUsage(BaseModel):
+    total_tokens: Optional[int] = Field(default=None, description="Total tokens used across all works")
+    prompt_tokens: Optional[int] = Field(default=None, description="Tokens used for prompts")
+    completion_tokens: Optional[int] = Field(default=None, description="Tokens used for completions")
+    cached_prompt_tokens: Optional[int] = Field(default=None, description="Cached prompt tokens")
+    successful_requests: Optional[int] = Field(default=None, description="Number of successful requests")
+
+
+class BatchCrewaiOutputSchema(BaseModel):
+    status: Literal["success", "failed", "cancelled"] = Field(description="Execution status")
+    result: Optional[Dict[str, Any]] = Field(default=None, description="Dictionary mapping work names to their execution results (only present on success)")
+    error: Optional[str] = Field(default=None, description="Error message (only present on failure or cancellation)")
+    token_usage: Optional[BatchCrewaiTokenUsage] = Field(default=None, description="Aggregated token usage from all works (optional)")
 
 
 @executor_register()
@@ -49,6 +71,9 @@ class BatchCrewaiExecutor(BaseTask):
     # Cancellation support: BatchCrewaiExecutor can be cancelled between works
     cancelable: bool = True
     _cancelled: bool = False  # Internal flag for cancellation
+
+    inputs_schema: ClassVar[type[BaseModel]] = BatchCrewaiInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = BatchCrewaiOutputSchema
 
     @property
     def type(self) -> str:
@@ -97,72 +122,6 @@ class BatchCrewaiExecutor(BaseTask):
         """Set streaming context for progress updates"""
         self.event_queue = event_queue
         self.context = context
-
-    def get_input_schema(self) -> Dict[str, Any]:
-        """
-        Get input schema for BatchCrewaiExecutor execution inputs
-
-        Returns:
-            JSON Schema describing the input structure
-        """
-        return {
-            "type": "object",
-            "description": "Input parameters passed to all works in the batch (optional)",
-            "additionalProperties": True,
-        }
-
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Get output schema for BatchCrewaiExecutor execution results
-
-        Returns:
-            JSON Schema describing the output structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string",
-                    "enum": ["success", "failed", "cancelled"],
-                    "description": "Execution status",
-                },
-                "result": {
-                    "type": "object",
-                    "description": "Dictionary mapping work names to their execution results (only present on success)",
-                },
-                "error": {
-                    "type": "string",
-                    "description": "Error message (only present on failure or cancellation)",
-                },
-                "token_usage": {
-                    "type": "object",
-                    "properties": {
-                        "total_tokens": {
-                            "type": "integer",
-                            "description": "Total tokens used across all works",
-                        },
-                        "prompt_tokens": {
-                            "type": "integer",
-                            "description": "Tokens used for prompts",
-                        },
-                        "completion_tokens": {
-                            "type": "integer",
-                            "description": "Tokens used for completions",
-                        },
-                        "cached_prompt_tokens": {
-                            "type": "integer",
-                            "description": "Cached prompt tokens",
-                        },
-                        "successful_requests": {
-                            "type": "integer",
-                            "description": "Number of successful requests",
-                        },
-                    },
-                    "description": "Aggregated token usage from all works (optional)",
-                },
-            },
-            "required": ["status"],
-        }
 
     def _check_cancellation(self) -> bool:
         """

@@ -7,12 +7,39 @@ for CPU, memory, and disk resources. All commands are predefined and safe.
 
 import asyncio
 import platform
-from typing import Dict, Any, Optional
+from typing import ClassVar, Dict, Any, Literal, Optional, Union
+
+from pydantic import BaseModel, Field
+
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class SystemInfoInputSchema(BaseModel):
+    resource: Literal["cpu", "memory", "disk", "all"] = Field(default="all", description="Resource type to query")
+    timeout: int = Field(default=30, description="Command execution timeout in seconds", ge=1)
+
+
+class SystemInfoOutputSchema(BaseModel):
+    error: Optional[str] = Field(default=None, description="Error message (present on validation errors or execution failures)")
+    validation_error: Optional[str] = Field(default=None, description="Detailed validation error message (present on input validation failures)")
+    system: Optional[str] = Field(default=None, description="Operating system type (Darwin, Linux, Windows, etc.)")
+    brand: Optional[str] = Field(default=None, description="CPU brand/model name (CPU info only)")
+    cores: Optional[Union[int, str]] = Field(default=None, description="Number of CPU cores or processor description")
+    threads: Optional[int] = Field(default=None, description="Number of CPU threads (CPU info only)")
+    total_gb: Optional[float] = Field(default=None, description="Total memory in GB (memory info only)")
+    total_bytes: Optional[int] = Field(default=None, description="Total memory in bytes (memory info only)")
+    total: Optional[str] = Field(default=None, description="Total size (memory or disk info)")
+    used: Optional[str] = Field(default=None, description="Used size (disk info only)")
+    available: Optional[str] = Field(default=None, description="Available size (disk info only)")
+    used_percent: Optional[str] = Field(default=None, description="Used percentage (disk info only)")
+    note: Optional[str] = Field(default=None, description="Additional notes when information is unavailable for the system")
+    cpu: Optional[Dict[str, Any]] = Field(default=None, description="CPU information object (when resource='all')")
+    memory: Optional[Dict[str, Any]] = Field(default=None, description="Memory information object (when resource='all')")
+    disk: Optional[Dict[str, Any]] = Field(default=None, description="Disk information object (when resource='all')")
 
 
 @executor_register()
@@ -47,6 +74,9 @@ class SystemInfoExecutor(BaseTask):
 
     # Cancellation support: Fast execution (< 1 second), cancellation not needed
     cancelable: bool = False
+
+    inputs_schema: ClassVar[type[BaseModel]] = SystemInfoInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = SystemInfoOutputSchema
 
     @property
     def type(self) -> str:
@@ -297,93 +327,3 @@ class SystemInfoExecutor(BaseTask):
 
         return result
 
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Get output schema for SystemInfoExecutor execution results
-
-        Returns:
-            JSON Schema describing the output structure
-        """
-        return {
-            "type": "object",
-            "description": "System resource information or error details",
-            "properties": {
-                "error": {
-                    "type": "string",
-                    "description": "Error message (present on validation errors or execution failures)",
-                },
-                "validation_error": {
-                    "type": "string",
-                    "description": "Detailed validation error message (present on input validation failures)",
-                },
-                "system": {
-                    "type": "string",
-                    "description": "Operating system type (Darwin, Linux, Windows, etc.)",
-                },
-                "brand": {"type": "string", "description": "CPU brand/model name (CPU info only)"},
-                "cores": {
-                    "type": ["integer", "string"],
-                    "description": "Number of CPU cores or processor description",
-                },
-                "threads": {
-                    "type": "integer",
-                    "description": "Number of CPU threads (CPU info only)",
-                },
-                "total_gb": {
-                    "type": "number",
-                    "description": "Total memory in GB (memory info only)",
-                },
-                "total_bytes": {
-                    "type": "integer",
-                    "description": "Total memory in bytes (memory info only)",
-                },
-                "total": {"type": "string", "description": "Total size (memory or disk info)"},
-                "used": {"type": "string", "description": "Used size (disk info only)"},
-                "available": {"type": "string", "description": "Available size (disk info only)"},
-                "used_percent": {
-                    "type": "string",
-                    "description": "Used percentage (disk info only)",
-                },
-                "note": {
-                    "type": "string",
-                    "description": "Additional notes when information is unavailable for the system",
-                },
-                "cpu": {
-                    "type": "object",
-                    "description": "CPU information object (when resource='all')",
-                },
-                "memory": {
-                    "type": "object",
-                    "description": "Memory information object (when resource='all')",
-                },
-                "disk": {
-                    "type": "object",
-                    "description": "Disk information object (when resource='all')",
-                },
-            },
-        }
-
-    def get_input_schema(self) -> Dict[str, Any]:
-        """
-        Get input schema for SystemInfoExecutor execution parameters
-
-        Returns:
-            JSON Schema describing the input structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "resource": {
-                    "type": "string",
-                    "description": "Resource type to query",
-                    "enum": ["cpu", "memory", "disk", "all"],
-                    "default": "all",
-                },
-                "timeout": {
-                    "type": "integer",
-                    "description": "Command execution timeout in seconds",
-                    "default": 30,
-                    "minimum": 1,
-                },
-            },
-        }

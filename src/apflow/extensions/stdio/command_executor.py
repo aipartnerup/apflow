@@ -16,7 +16,9 @@ For production use, consider:
 import asyncio
 import os
 import shlex
-from typing import Dict, Any, Optional, Set
+from typing import ClassVar, Dict, Any, Optional, Set
+
+from pydantic import BaseModel, Field
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.core.execution.errors import ValidationError, ConfigurationError
@@ -41,6 +43,18 @@ if _whitelist_str:
     logger.info(
         f"CommandExecutor: Command whitelist enabled with {len(STDIO_COMMAND_WHITELIST)} commands"
     )
+
+
+class CommandInputSchema(BaseModel):
+    command: str = Field(description="Shell command to execute (requires APFLOW_STDIO_ALLOW_COMMAND=1)")
+    timeout: float = Field(default=30, description="Command timeout in seconds (default: 30)")
+
+
+class CommandOutputSchema(BaseModel):
+    success: bool = Field(description="Whether the command executed successfully")
+    return_code: int = Field(description="Command return code")
+    stdout: str = Field(description="Command stdout output")
+    stderr: str = Field(description="Command stderr output")
 
 
 @executor_register()
@@ -81,6 +95,8 @@ class CommandExecutor(BaseTask):
 
     # Cancellation support: Not implemented (could be added by checking cancellation_checker during execution)
     cancelable: bool = False
+    inputs_schema: ClassVar[type[BaseModel]] = CommandInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = CommandOutputSchema
 
     @property
     def type(self) -> str:
@@ -175,37 +191,3 @@ class CommandExecutor(BaseTask):
             "stderr": "",
         }
 
-    def get_input_schema(self) -> Dict[str, Any]:
-        """Return input parameter schema"""
-        return {
-            "type": "object",
-            "properties": {
-                "command": {
-                    "type": "string",
-                    "description": "Shell command to execute (requires APFLOW_STDIO_ALLOW_COMMAND=1)",
-                },
-                "timeout": {
-                    "type": "number",
-                    "description": "Command timeout in seconds (default: 30)",
-                },
-            },
-            "required": ["command"],
-        }
-
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Return the output result schema for this executor.
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "success": {
-                    "type": "boolean",
-                    "description": "Whether the command executed successfully",
-                },
-                "return_code": {"type": "integer", "description": "Command return code"},
-                "stdout": {"type": "string", "description": "Command stdout output"},
-                "stderr": {"type": "string", "description": "Command stderr output"},
-            },
-            "required": ["success", "return_code", "stdout", "stderr"],
-        }

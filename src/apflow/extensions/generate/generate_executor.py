@@ -9,7 +9,8 @@ TaskCreator.create_task_tree_from_array().
 import json
 import re
 import uuid
-from typing import Dict, Any, List, Optional, Set
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Set
+from pydantic import BaseModel, Field
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.logger import get_logger
@@ -18,6 +19,23 @@ from apflow.extensions.generate.schema_formatter import SchemaFormatter
 from apflow.extensions.generate.principles_extractor import PrinciplesExtractor
 
 logger = get_logger(__name__)
+
+
+class GenerateInputSchema(BaseModel):
+    requirement: str = Field(description="Natural language requirement describing the task tree to generate")
+    user_id: Optional[str] = Field(default=None, description="User ID for generated tasks (optional)")
+    generation_mode: Literal["single_shot", "multi_phase"] = Field(default="single_shot", description="Generation mode: 'single_shot' (default, faster) or 'multi_phase' (more accurate)")
+    llm_provider: Optional[Literal["openai", "anthropic"]] = Field(default=None, description="LLM provider to use (defaults to OPENAI_API_KEY or APFLOW_LLM_PROVIDER env var)")
+    model: Optional[str] = Field(default=None, description="LLM model name (optional, uses provider default)")
+    temperature: float = Field(default=0.7, description="LLM temperature (default: 0.7)")
+    max_tokens: int = Field(default=4000, description="Maximum tokens for LLM response (default: 4000)")
+
+
+class GenerateOutputSchema(BaseModel):
+    status: Literal["completed", "failed"] = Field(description="Execution status")
+    tasks: Optional[list[Dict[str, Any]]] = Field(default=None, description="Generated task array (only present on success)")
+    count: Optional[int] = Field(default=None, description="Number of generated tasks (only present on success)")
+    error: Optional[str] = Field(default=None, description="Error message (only present on failure)")
 
 
 @executor_register()
@@ -50,6 +68,8 @@ class GenerateExecutor(BaseTask):
     ]
 
     cancelable: bool = False
+    inputs_schema: ClassVar[type[BaseModel]] = GenerateInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = GenerateOutputSchema
 
     @property
     def type(self) -> str:
@@ -1499,71 +1519,3 @@ class GenerateExecutor(BaseTask):
             "_demo_sleep": 1.5,  # Simulate LLM generation time (longer for realistic demo)
         }
 
-    def get_input_schema(self) -> Dict[str, Any]:
-        """Return input parameter schema"""
-        return {
-            "type": "object",
-            "properties": {
-                "requirement": {
-                    "type": "string",
-                    "description": "Natural language requirement describing the task tree to generate",
-                },
-                "user_id": {
-                    "type": "string",
-                    "description": "User ID for generated tasks (optional)",
-                },
-                "generation_mode": {
-                    "type": "string",
-                    "enum": ["single_shot", "multi_phase"],
-                    "description": "Generation mode: 'single_shot' (default, faster) or 'multi_phase' (more accurate)",
-                    "default": "single_shot",
-                },
-                "llm_provider": {
-                    "type": "string",
-                    "enum": ["openai", "anthropic"],
-                    "description": "LLM provider to use (defaults to OPENAI_API_KEY or APFLOW_LLM_PROVIDER env var)",
-                },
-                "model": {
-                    "type": "string",
-                    "description": "LLM model name (optional, uses provider default)",
-                },
-                "temperature": {
-                    "type": "number",
-                    "description": "LLM temperature (default: 0.7)",
-                    "default": 0.7,
-                },
-                "max_tokens": {
-                    "type": "integer",
-                    "description": "Maximum tokens for LLM response (default: 4000)",
-                    "default": 4000,
-                },
-            },
-            "required": ["requirement"],
-        }
-
-    def get_output_schema(self) -> Dict[str, Any]:
-        """Return output result schema"""
-        return {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string",
-                    "enum": ["completed", "failed"],
-                    "description": "Execution status",
-                },
-                "tasks": {
-                    "type": "array",
-                    "items": {"type": "object"},
-                    "description": "Generated task array (only present on success)",
-                },
-                "count": {
-                    "type": "integer",
-                    "description": "Number of generated tasks (only present on success)",
-                },
-                "error": {
-                    "type": "string",
-                    "description": "Error message (only present on failure)",
-                },
-            },
-            "required": ["status"],
-        }

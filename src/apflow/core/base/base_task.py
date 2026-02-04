@@ -13,9 +13,9 @@ from pydantic import BaseModel
 
 from apflow.core.interfaces.executable_task import ExecutableTask
 from apflow.core.utils.helpers import (
-    get_input_schema as _get_input_schema,
     validate_input_schema as _validate_input_schema,
     check_input_schema as _check_input_schema,
+    resolve_schema_refs,
 )
 
 
@@ -169,16 +169,39 @@ class BaseTask(ExecutableTask):
         self.event_queue = event_queue
         self.context = context
 
-    def get_output_schema(self) -> Dict[str, Any]:
+    def get_input_schema(self) -> Dict[str, Any]:
         """
-        Get output result schema with metadata (required, type, description, default)
+        Return input parameter schema (JSON Schema format)
+
+        Supports both Pydantic BaseModel classes and raw dict schemas.
+        When a Pydantic BaseModel is used, model_json_schema() is called
+        and $ref references are resolved inline via resolve_schema_refs().
 
         Returns:
-            Dictionary of result metadata, or empty dict if no schema defined
+            JSON Schema dictionary, or empty dict if no schema defined
         """
-        if self.outputs_schema:
-            return _get_input_schema(self.outputs_schema)  # Reuse the helper, assuming it's similar
-        return {}
+        if self.inputs_schema is None:
+            return {}
+        if isinstance(self.inputs_schema, dict):
+            return self.inputs_schema
+        return resolve_schema_refs(self.inputs_schema.model_json_schema())
+
+    def get_output_schema(self) -> Dict[str, Any]:
+        """
+        Return output result schema (JSON Schema format)
+
+        Supports both Pydantic BaseModel classes and raw dict schemas.
+        When a Pydantic BaseModel is used, model_json_schema() is called
+        and $ref references are resolved inline via resolve_schema_refs().
+
+        Returns:
+            JSON Schema dictionary, or empty dict if no schema defined
+        """
+        if self.outputs_schema is None:
+            return {}
+        if isinstance(self.outputs_schema, dict):
+            return self.outputs_schema
+        return resolve_schema_refs(self.outputs_schema.model_json_schema())
 
     def validate_input_schema(self, parameters: Dict[str, Any]) -> bool:
         """

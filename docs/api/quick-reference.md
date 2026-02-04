@@ -195,26 +195,24 @@ apflow executors list --verbose
 
 ```python
 from apflow import BaseTask, executor_register
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any
+from pydantic import BaseModel, Field
+
+class MyInputSchema(BaseModel):
+    """Input schema for my executor"""
+    param: str = Field(description="Parameter")
 
 @executor_register()
 class MyExecutor(BaseTask):
     id = "my_executor"
     name = "My Executor"
     description = "Does something"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = MyInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         # Your logic here
         return {"status": "completed", "result": "..."}
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "param": {"type": "string", "description": "Parameter"}
-            },
-            "required": ["param"]
-        }
 ```
 
 ### Use Custom Executor
@@ -796,65 +794,42 @@ apflow tasks status task_123
 apflow tasks watch --task-id task_123
 ```
 
-## Common Input Schema Patterns
+## Common Input Schema Patterns (Pydantic)
+
+Define input schemas as Pydantic BaseModel classes and set them as `inputs_schema: ClassVar[type[BaseModel]]` on the executor.
 
 ### String with Validation
 
 ```python
-{
-    "type": "string",
-    "description": "URL",
-    "minLength": 1,
-    "maxLength": 2048,
-    "pattern": "^https?://"
-}
+url: str = Field(description="URL", min_length=1, max_length=2048, pattern=r"^https?://")
 ```
 
 ### Number with Range
 
 ```python
-{
-    "type": "integer",
-    "description": "Timeout in seconds",
-    "minimum": 1,
-    "maximum": 300,
-    "default": 30
-}
+timeout: int = Field(default=30, description="Timeout in seconds", ge=1, le=300)
 ```
 
 ### Enum
 
 ```python
-{
-    "type": "string",
-    "enum": ["option1", "option2", "option3"],
-    "description": "Select option",
-    "default": "option1"
-}
+from typing import Literal
+
+option: Literal["option1", "option2", "option3"] = Field(
+    default="option1", description="Select option"
+)
 ```
 
 ### Array
 
 ```python
-{
-    "type": "array",
-    "items": {"type": "string"},
-    "description": "List of items",
-    "minItems": 1
-}
+items: list[str] = Field(description="List of items", min_length=1)
 ```
 
 ### Object
 
 ```python
-{
-    "type": "object",
-    "properties": {
-        "key": {"type": "string"},
-        "value": {"type": "string"}
-    },
-    "description": "Configuration object"
-}
+config: Dict[str, str] = Field(description="Configuration object")
 ```
 
 ## Error Handling Patterns

@@ -3,7 +3,9 @@ ScrapeExecutor: Uses LimitedScrapeWebsiteTool to fetch and extract website conte
 This executor is designed to extract the main text and metadata from a given URL, making it suitable for analytics, machine learning, or information retrieval tasks.
 """
 
-from typing import Dict, Any, Optional
+from typing import ClassVar, Dict, Any, Optional
+
+from pydantic import BaseModel, Field
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.core.execution.errors import ValidationError
@@ -11,6 +13,16 @@ from apflow.extensions.tools.limited_scrape_tools import LimitedScrapeWebsiteToo
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class ScrapeInputSchema(BaseModel):
+    url: str = Field(description="Target website URL to scrape")
+    max_chars: int = Field(default=5000, description="Maximum number of characters to extract (default: 5000)")
+    extract_metadata: bool = Field(default=True, description="Whether to extract metadata like title and description (default: True)")
+
+
+class ScrapeOutputSchema(BaseModel):
+    result: str = Field(description="Scraped website content as string")
 
 
 @executor_register()
@@ -34,6 +46,8 @@ class ScrapeExecutor(BaseTask):
         "Fetch content from a documentation page",
     ]
     cancelable: bool = False
+    inputs_schema: ClassVar[type[BaseModel]] = ScrapeInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = ScrapeOutputSchema
 
     def __init__(self, headers=None, **kwargs):
         super().__init__(**kwargs)
@@ -88,34 +102,3 @@ class ScrapeExecutor(BaseTask):
             "result": "Title: Example Demo\nDescription: Example description.\nURL: https://example.com/demo\n\n---\n\nMain Text:\nThis is a demo of the website scraping executor.",
         }
 
-    def get_input_schema(self) -> Dict[str, Any]:
-        """
-        Return the input parameter schema for this executor.
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "url": {"type": "string", "description": "Target website URL to scrape"},
-                "max_chars": {
-                    "type": "integer",
-                    "description": "Maximum number of characters to extract (default: 5000)",
-                },
-                "extract_metadata": {
-                    "type": "boolean",
-                    "description": "Whether to extract metadata like title and description (default: True)",
-                },
-            },
-            "required": ["url"],
-        }
-
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Return the output result schema for this executor.
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "result": {"type": "string", "description": "Scraped website content as string"},
-            },
-            "required": ["result"],
-        }

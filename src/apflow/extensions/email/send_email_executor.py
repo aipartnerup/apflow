@@ -8,7 +8,9 @@ This executor supports two email providers:
 
 import httpx
 from email.message import EmailMessage
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Union
+
+from pydantic import BaseModel, Field
 
 from apflow.core.base import BaseTask
 from apflow.core.execution.errors import ConfigurationError, ValidationError
@@ -28,6 +30,52 @@ except ImportError:
         "aiosmtplib is not installed. SMTP email provider will not be available. "
         "Install it with: pip install apflow[email]"
     )
+
+
+class SendEmailInputSchema(BaseModel):
+    provider: Literal["resend", "smtp"] = Field(description="Email provider to use")
+    to: Union[str, List[str]] = Field(description="Recipient email address(es)")
+    subject: str = Field(description="Email subject line")
+    from_email: str = Field(description="Sender email address")
+    body: Optional[str] = Field(default=None, description="Plain text email body")
+    html: Optional[str] = Field(default=None, description="HTML email body")
+    cc: Optional[Union[str, List[str]]] = Field(
+        default=None, description="CC recipient email address(es)"
+    )
+    bcc: Optional[Union[str, List[str]]] = Field(
+        default=None, description="BCC recipient email address(es)"
+    )
+    reply_to: Optional[str] = Field(default=None, description="Reply-to email address")
+    timeout: float = Field(default=30, description="Request timeout in seconds (default: 30)")
+    api_key: Optional[str] = Field(
+        default=None, description="Resend API key (required for resend provider)"
+    )
+    smtp_host: Optional[str] = Field(
+        default=None, description="SMTP server hostname (required for smtp provider)"
+    )
+    smtp_port: int = Field(default=587, description="SMTP server port (default: 587)")
+    smtp_username: Optional[str] = Field(
+        default=None, description="SMTP authentication username"
+    )
+    smtp_password: Optional[str] = Field(
+        default=None, description="SMTP authentication password"
+    )
+    smtp_use_tls: bool = Field(
+        default=True, description="Whether to use STARTTLS (default: true)"
+    )
+
+
+class SendEmailOutputSchema(BaseModel):
+    success: bool = Field(description="Whether the email was sent successfully")
+    provider: str = Field(description="Email provider used (resend or smtp)")
+    message_id: Optional[str] = Field(
+        default=None, description="Message ID from provider (resend only)"
+    )
+    status_code: Optional[int] = Field(
+        default=None, description="HTTP status code (resend only)"
+    )
+    message: Optional[str] = Field(default=None, description="Success/error message")
+    error: Optional[str] = Field(default=None, description="Error details (on failure)")
 
 
 @executor_register()
@@ -66,6 +114,8 @@ class SendEmailExecutor(BaseTask):
     ]
 
     cancelable: bool = False
+    inputs_schema: ClassVar[type[BaseModel]] = SendEmailInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = SendEmailOutputSchema
 
     @property
     def type(self) -> str:
@@ -285,108 +335,4 @@ class SendEmailExecutor(BaseTask):
             "message_id": "demo-msg-id-123",
             "status_code": 200,
             "_demo_sleep": 0.3,
-        }
-
-    def get_input_schema(self) -> Dict[str, Any]:
-        """Return input parameter schema."""
-        return {
-            "type": "object",
-            "properties": {
-                "provider": {
-                    "type": "string",
-                    "enum": ["resend", "smtp"],
-                    "description": "Email provider to use",
-                },
-                "to": {
-                    "oneOf": [
-                        {"type": "string"},
-                        {"type": "array", "items": {"type": "string"}},
-                    ],
-                    "description": "Recipient email address(es)",
-                },
-                "subject": {"type": "string", "description": "Email subject line"},
-                "from_email": {"type": "string", "description": "Sender email address"},
-                "body": {"type": "string", "description": "Plain text email body"},
-                "html": {"type": "string", "description": "HTML email body"},
-                "cc": {
-                    "oneOf": [
-                        {"type": "string"},
-                        {"type": "array", "items": {"type": "string"}},
-                    ],
-                    "description": "CC recipient email address(es)",
-                },
-                "bcc": {
-                    "oneOf": [
-                        {"type": "string"},
-                        {"type": "array", "items": {"type": "string"}},
-                    ],
-                    "description": "BCC recipient email address(es)",
-                },
-                "reply_to": {"type": "string", "description": "Reply-to email address"},
-                "timeout": {
-                    "type": "number",
-                    "description": "Request timeout in seconds (default: 30)",
-                    "default": 30,
-                },
-                "api_key": {
-                    "type": "string",
-                    "description": "Resend API key (required for resend provider)",
-                },
-                "smtp_host": {
-                    "type": "string",
-                    "description": "SMTP server hostname (required for smtp provider)",
-                },
-                "smtp_port": {
-                    "type": "integer",
-                    "description": "SMTP server port (default: 587)",
-                    "default": 587,
-                },
-                "smtp_username": {
-                    "type": "string",
-                    "description": "SMTP authentication username",
-                },
-                "smtp_password": {
-                    "type": "string",
-                    "description": "SMTP authentication password",
-                },
-                "smtp_use_tls": {
-                    "type": "boolean",
-                    "description": "Whether to use STARTTLS (default: true)",
-                    "default": True,
-                },
-            },
-            "required": ["provider", "to", "subject", "from_email"],
-        }
-
-    def get_output_schema(self) -> Dict[str, Any]:
-        """Return output result schema."""
-        return {
-            "type": "object",
-            "properties": {
-                "success": {
-                    "type": "boolean",
-                    "description": "Whether the email was sent successfully",
-                },
-                "provider": {
-                    "type": "string",
-                    "description": "Email provider used (resend or smtp)",
-                },
-                "message_id": {
-                    "type": "string",
-                    "description": "Message ID from provider (resend only)",
-                },
-                "status_code": {
-                    "type": "integer",
-                    "description": "HTTP status code (resend only)",
-                },
-                "message": {
-                    "type": "string",
-                    "description": "Success/error message",
-                },
-                "error": {
-                    "type": "string",
-                    "description": "Error details (on failure)",
-                },
-            },
-            "required": ["success", "provider"],
         }

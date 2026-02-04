@@ -4,6 +4,15 @@
 
 ### Changed
 
+- **Executor Schema Mechanism — Pydantic BaseModel with ClassVar**
+  - All built-in executors now declare input/output schemas as Pydantic `BaseModel` classes assigned via `inputs_schema: ClassVar[type[BaseModel]]` and `outputs_schema: ClassVar[type[BaseModel]]`, replacing inline `get_input_schema()` / `get_output_schema()` method overrides
+  - `BaseTask.get_input_schema()` and `get_output_schema()` are now implemented in the base class: they call `model_json_schema()` on the Pydantic model and resolve `$ref` references inline via `resolve_schema_refs()`
+  - Subclasses no longer need to override `get_input_schema()` / `get_output_schema()` — just set the `ClassVar`
+  - Both Pydantic `BaseModel` and legacy `dict` schemas are still supported (backward compatible)
+  - Added `resolve_schema_refs()` helper in `core/utils/helpers.py` to inline `$defs/$ref` from Pydantic-generated JSON Schema
+  - Updated all 16 built-in executors: `AggregateResultsExecutor`, `ApiExecutor`, `BatchCrewaiExecutor`, `CrewaiExecutor`, `DockerExecutor`, `SendEmailExecutor`, `GenerateExecutor`, `GrpcExecutor`, `RestExecutor`, `LLMExecutor`, `McpExecutor`, `ScrapeExecutor`, `SshExecutor`, `CommandExecutor`, `SystemInfoExecutor`, `WebSocketExecutor`
+  - Updated documentation across 8 files: `extending.md`, `custom-tasks.md`, `quick-reference.md`, `python.md`, `basic_task.md`, `quick-start.md`, `faq.md`, `best-practices.md`
+
 - **API Architecture Refactoring — Three-Layer Design**
   - Introduced unified capabilities registry (`api/capabilities.py`) as single source of truth for all 15 task operations, replacing separate inline definitions in A2A and MCP modules
   - A2A `POST /` now only handles agent-level actions (`tasks.execute`, `tasks.generate`, `tasks.cancel`); CRUD operations return an error directing clients to `POST /tasks`

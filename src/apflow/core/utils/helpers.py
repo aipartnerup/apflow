@@ -42,6 +42,55 @@ def safe_get_nested(data: Dict, keys: List[str], default: Any = None) -> Any:
     return current
 
 
+def resolve_schema_refs(schema: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolve $ref references in JSON Schema by inlining $defs.
+
+    Pydantic's model_json_schema() produces $defs/$ref for nested models.
+    Consumers (e.g. task_manager) expect flat inline JSON Schema.
+    This helper inlines all $ref references and removes the $defs block.
+
+    Args:
+        schema: JSON Schema dict potentially containing $defs and $ref
+
+    Returns:
+        JSON Schema dict with all $ref resolved inline
+    """
+    if "$defs" not in schema:
+        return schema
+
+    defs = schema.get("$defs", {})
+
+    def _resolve(node: Any) -> Any:
+        if isinstance(node, dict):
+            # Handle $ref
+            if "$ref" in node:
+                ref_path = node["$ref"]  # e.g. "#/$defs/AuthConfig"
+                ref_name = ref_path.rsplit("/", 1)[-1]
+                if ref_name in defs:
+                    resolved = _resolve(dict(defs[ref_name]))
+                    # Merge any sibling keys (e.g. description alongside $ref)
+                    extra = {k: v for k, v in node.items() if k != "$ref"}
+                    if extra:
+                        resolved.update(extra)
+                    return resolved
+                return node
+
+            # Handle anyOf/oneOf/allOf containing $ref
+            return {k: _resolve(v) for k, v in node.items()}
+
+        if isinstance(node, list):
+            return [_resolve(item) for item in node]
+
+        return node
+
+    resolved = _resolve(schema)
+
+    # Remove $defs from top-level
+    resolved.pop("$defs", None)
+
+    return resolved
+
+
 def get_input_schema(input_schema: Type[BaseModel] | Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
     """get input parameters with their metadata (required, type, description, default)"""
     parameters = {}

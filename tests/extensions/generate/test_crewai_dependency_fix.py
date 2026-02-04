@@ -38,7 +38,13 @@ async def test_generated_crewai_task_no_template_variables_for_dependencies():
     
     print("\n=== Generated Task Tree ===")
     print(json.dumps(result, indent=2))
-    
+
+    # Skip on API rate limit / quota errors (external issue, not a code bug)
+    if result["status"] == "failed":
+        error_msg = result.get("error", "")
+        if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
+            pytest.skip(f"Skipping due to API rate limit / quota exceeded: {error_msg}")
+
     assert result["status"] == "completed", f"Generation failed: {result.get('error')}"
     assert "tasks" in result
     
@@ -143,6 +149,12 @@ async def test_crewai_task_with_static_inputs_can_use_template_variables():
     print("\n=== Generated Task Tree ===")
     print(json.dumps(result, indent=2))
     
+    # Skip on API rate limit / quota errors (external issue, not a code bug)
+    if result["status"] == "failed":
+        error_msg = result.get("error", "")
+        if "429" in error_msg or "quota" in error_msg.lower() or "rate" in error_msg.lower():
+            pytest.skip(f"Skipping due to API rate limit / quota exceeded: {error_msg}")
+
     assert result["status"] == "completed"
     tasks = result["tasks"]
     

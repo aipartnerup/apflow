@@ -956,33 +956,28 @@ requirement = "Get some data and do something with it"
 
 ### Schema Definition for Custom Executors
 
-**Always implement `get_input_schema()` for validation:**
+**Define input schemas as Pydantic BaseModel classes with `ClassVar`:**
 
 ```python
+from pydantic import BaseModel, Field
+from typing import ClassVar, Literal
+
+class MyCustomInputSchema(BaseModel):
+    """Input schema for my custom executor"""
+    url: str = Field(description="API endpoint to call", pattern=r"^https?://")
+    method: Literal["GET", "POST"] = Field(default="GET", description="HTTP method")
+
 @executor_register()
-class MyCustomExecutor(ExecutableTask):
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "API endpoint to call",
-                    "pattern": "^https?://"
-                },
-                "method": {
-                    "type": "string",
-                    "enum": ["GET", "POST"],
-                    "default": "GET"
-                }
-            },
-            "required": ["url"]
-        }
+class MyCustomExecutor(BaseTask):
+    inputs_schema: ClassVar[type[BaseModel]] = MyCustomInputSchema
+    # get_input_schema() is automatically provided by BaseTask
 ```
 
 **Benefits:**
-- Generate executor validates inputs automatically
-- Auto-completion in IDEs
+- Type-safe schema definition with IDE autocomplete
+- Automatic JSON Schema generation via `get_input_schema()`
+- Pydantic validation at runtime
+- Single source of truth for field definitions
 - Better error messages
 - Documentation for LLM
 

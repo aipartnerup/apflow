@@ -49,7 +49,7 @@ Learn how to create your own custom executors (tasks) in apflow. This guide will
 
 - ✅ How to create custom executors
 - ✅ How to register and use them
-- ✅ Input validation with JSON Schema
+- ✅ Input/output validation with Pydantic schemas
 - ✅ Error handling best practices
 - ✅ Common patterns and examples
 - ✅ Testing your custom tasks
@@ -73,30 +73,28 @@ The fastest way to create a custom executor:
 
 ```python
 from apflow import BaseTask, executor_register
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any
+from pydantic import BaseModel, Field
+
+# Define input schema as a Pydantic model
+class MyFirstInputSchema(BaseModel):
+    """Input schema for my first executor"""
+    data: str = Field(description="Input data")
 
 @executor_register()
 class MyFirstExecutor(BaseTask):
     """A simple custom executor"""
-    
+
     id = "my_first_executor"
     name = "My First Executor"
     description = "Does something useful"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = MyFirstInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the task"""
         result = f"Processed: {inputs.get('data', 'no data')}"
         return {"status": "completed", "result": result}
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        """Define input parameters"""
-        return {
-            "type": "object",
-            "properties": {
-                "data": {"type": "string", "description": "Input data"}
-            },
-            "required": ["data"]
-        }
 ```
 
 **That's it!** Just import it and use it:
@@ -172,50 +170,42 @@ Create a file `greeting_executor.py`:
 
 ```python
 from apflow import BaseTask, executor_register
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any, Literal
+from pydantic import BaseModel, Field
+
+# Define input schema
+class GreetingInputSchema(BaseModel):
+    """Input schema for greeting executor"""
+    name: str = Field(description="Name of the person to greet")
+    language: Literal["en", "es", "fr", "zh"] = Field(
+        default="en", description="Language for the greeting"
+    )
 
 @executor_register()
 class GreetingExecutor(BaseTask):
     """Creates personalized greetings"""
-    
+
     id = "greeting_executor"
     name = "Greeting Executor"
     description = "Creates personalized greeting messages"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = GreetingInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute greeting creation"""
         name = inputs.get("name", "Guest")
         language = inputs.get("language", "en")
-        
+
         greetings = {
             "en": f"Hello, {name}!",
             "es": f"¡Hola, {name}!",
             "fr": f"Bonjour, {name}!"
         }
-        
+
         return {
             "greeting": greetings.get(language, greetings["en"]),
             "name": name,
             "language": language
-        }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        """Define input parameters"""
-        return {
-            "type": "object",
-            "properties": {
-                "name": {
-                    "type": "string",
-                    "description": "Name of the person to greet"
-                },
-                "language": {
-                    "type": "string",
-                    "enum": ["en", "es", "fr", "zh"],
-                    "description": "Language for the greeting",
-                    "default": "en"
-                }
-            },
-            "required": ["name"]
         }
 ```
 
@@ -328,44 +318,36 @@ async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
 
 ### 5. Input Schema
 
-**Purpose**: Defines what inputs are expected (for validation)
+**Purpose**: Defines what inputs are expected (for validation and documentation)
+
+Define input schemas as Pydantic BaseModel classes and assign them as `ClassVar` on the executor. `BaseTask` automatically implements `get_input_schema()` by converting the model to JSON Schema:
 
 ```python
-def get_input_schema(self) -> Dict[str, Any]:
-    """
-    Return JSON Schema for input parameters
-    
-    Returns:
-        JSON Schema dictionary
-    """
-    return {
-        "type": "object",
-        "properties": {
-            "param1": {
-                "type": "string",
-                "description": "Parameter description"
-            }
-        },
-        "required": ["param1"]
-    }
+from pydantic import BaseModel, Field
+from typing import ClassVar
+
+class MyInputSchema(BaseModel):
+    """Input schema for my executor"""
+    param1: str = Field(description="Parameter description")
+
+class MyExecutor(BaseTask):
+    inputs_schema: ClassVar[type[BaseModel]] = MyInputSchema
+    # get_input_schema() is automatically provided by BaseTask
 ```
 
 ## Input Schema
 
-Input schemas use JSON Schema format to define and validate inputs.
+Input schemas are defined using Pydantic BaseModel classes. `BaseTask` converts them to JSON Schema automatically via `get_input_schema()`.
 
 ### Basic Schema
 
 ```python
-def get_input_schema(self) -> Dict[str, Any]:
-    return {
-        "type": "object",
-        "properties": {
-            "name": {"type": "string"},
-            "age": {"type": "integer"}
-        },
-        "required": ["name"]
-    }
+from pydantic import BaseModel, Field
+
+class MyInputSchema(BaseModel):
+    """Input schema for my executor"""
+    name: str = Field(description="Person's name")
+    age: int = Field(default=0, description="Person's age")
 ```
 
 ### Common Field Types
@@ -373,68 +355,41 @@ def get_input_schema(self) -> Dict[str, Any]:
 #### String
 
 ```python
-"name": {
-    "type": "string",
-    "description": "Person's name",
-    "minLength": 1,
-    "maxLength": 100
-}
+name: str = Field(description="Person's name", min_length=1, max_length=100)
 ```
 
 #### Integer
 
 ```python
-"age": {
-    "type": "integer",
-    "description": "Person's age",
-    "minimum": 0,
-    "maximum": 150
-}
+age: int = Field(description="Person's age", ge=0, le=150)
 ```
 
 #### Boolean
 
 ```python
-"enabled": {
-    "type": "boolean",
-    "description": "Whether feature is enabled",
-    "default": false
-}
+enabled: bool = Field(default=False, description="Whether feature is enabled")
 ```
 
 #### Array
 
 ```python
-"items": {
-    "type": "array",
-    "items": {"type": "string"},
-    "description": "List of items",
-    "minItems": 1
-}
+items: list[str] = Field(description="List of items", min_length=1)
 ```
 
 #### Object
 
 ```python
-"config": {
-    "type": "object",
-    "properties": {
-        "key": {"type": "string"},
-        "value": {"type": "string"}
-    },
-    "description": "Configuration object"
-}
+config: Dict[str, str] = Field(description="Configuration object")
 ```
 
 #### Enum (Limited Choices)
 
 ```python
-"status": {
-    "type": "string",
-    "enum": ["pending", "active", "completed"],
-    "description": "Task status",
-    "default": "pending"
-}
+from typing import Literal
+
+status: Literal["pending", "active", "completed"] = Field(
+    default="pending", description="Task status"
+)
 ```
 
 ### Default Values
@@ -442,66 +397,48 @@ def get_input_schema(self) -> Dict[str, Any]:
 Provide defaults for optional parameters:
 
 ```python
-"timeout": {
-    "type": "integer",
-    "description": "Timeout in seconds",
-    "default": 30  # Used if not provided
-}
+timeout: int = Field(default=30, description="Timeout in seconds")
 ```
 
 ### Required Fields
 
-Specify which fields are required:
+Fields without a default value are required:
 
 ```python
-{
-    "type": "object",
-    "properties": {
-        "name": {"type": "string"},
-        "email": {"type": "string"}
-    },
-    "required": ["name", "email"]  # Both required
-}
+class MyInputSchema(BaseModel):
+    """Input schema"""
+    name: str = Field(description="Name")          # Required (no default)
+    email: str = Field(description="Email")         # Required (no default)
+    age: int = Field(default=0, description="Age")  # Optional (has default)
 ```
 
 ### Complete Schema Example
 
 ```python
-def get_input_schema(self) -> Dict[str, Any]:
-    return {
-        "type": "object",
-        "properties": {
-            "url": {
-                "type": "string",
-                "description": "API endpoint URL",
-                "format": "uri"
-            },
-            "method": {
-                "type": "string",
-                "enum": ["GET", "POST", "PUT", "DELETE"],
-                "description": "HTTP method",
-                "default": "GET"
-            },
-            "headers": {
-                "type": "object",
-                "description": "HTTP headers",
-                "additionalProperties": {"type": "string"}
-            },
-            "timeout": {
-                "type": "integer",
-                "description": "Timeout in seconds",
-                "minimum": 1,
-                "maximum": 300,
-                "default": 30
-            },
-            "retry": {
-                "type": "boolean",
-                "description": "Whether to retry on failure",
-                "default": false
-            }
-        },
-        "required": ["url"]
-    }
+from pydantic import BaseModel, Field
+from typing import ClassVar, Dict, Any, Literal, Optional
+
+class APICallInputSchema(BaseModel):
+    """Input schema for API call executor"""
+    url: str = Field(description="API endpoint URL")
+    method: Literal["GET", "POST", "PUT", "DELETE"] = Field(
+        default="GET", description="HTTP method"
+    )
+    headers: Optional[Dict[str, str]] = Field(
+        default=None, description="HTTP headers"
+    )
+    timeout: int = Field(
+        default=30, description="Timeout in seconds", ge=1, le=300
+    )
+    retry: bool = Field(default=False, description="Whether to retry on failure")
+
+@executor_register()
+class APICallExecutor(BaseTask):
+    id = "api_call_executor"
+    name = "API Call Executor"
+    description = "Calls an external HTTP API"
+
+    inputs_schema: ClassVar[type[BaseModel]] = APICallInputSchema
 ```
 
 ## Error Handling
@@ -596,22 +533,32 @@ async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
 ```python
 import aiohttp
 from apflow import BaseTask, executor_register
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any, Literal, Optional
+from pydantic import BaseModel, Field
+
+class APICallInputSchema(BaseModel):
+    """Input schema for API call executor"""
+    url: str = Field(description="API URL")
+    method: Literal["GET", "POST"] = Field(default="GET", description="HTTP method")
+    headers: Optional[Dict[str, str]] = Field(default=None, description="HTTP headers")
+    timeout: int = Field(default=30, description="Timeout in seconds")
 
 @executor_register()
 class APICallExecutor(BaseTask):
     """Calls an external HTTP API"""
-    
+
     id = "api_call_executor"
     name = "API Call Executor"
     description = "Calls an external HTTP API"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = APICallInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         url = inputs.get("url")
         method = inputs.get("method", "GET")
         headers = inputs.get("headers", {})
         timeout = inputs.get("timeout", 30)
-        
+
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.request(
@@ -621,7 +568,7 @@ class APICallExecutor(BaseTask):
                     timeout=aiohttp.ClientTimeout(total=timeout)
                 ) as response:
                     data = await response.json() if response.content_type == "application/json" else await response.text()
-                    
+
                     return {
                         "status": "completed",
                         "status_code": response.status,
@@ -633,45 +580,36 @@ class APICallExecutor(BaseTask):
                 "error": str(e),
                 "error_type": type(e).__name__
             }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "url": {"type": "string", "description": "API URL"},
-                "method": {"type": "string", "enum": ["GET", "POST"], "default": "GET"},
-                "headers": {"type": "object"},
-                "timeout": {"type": "integer", "default": 30}
-            },
-            "required": ["url"]
-        }
 ```
 
 ### Pattern 2: Data Processing
 
 ```python
 from apflow import BaseTask, executor_register
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any, Literal
+from pydantic import BaseModel, Field
+
+class DataProcessorInputSchema(BaseModel):
+    """Input schema for data processor"""
+    data: list[float] = Field(description="Array of numbers")
+    operation: Literal["sum", "average", "max", "min"] = Field(
+        default="sum", description="Operation to perform"
+    )
 
 @executor_register()
 class DataProcessor(BaseTask):
     """Processes data"""
-    
+
     id = "data_processor"
     name = "Data Processor"
     description = "Processes data with various operations"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = DataProcessorInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         data = inputs.get("data", [])
         operation = inputs.get("operation", "sum")
-        
-        if not isinstance(data, list):
-            return {
-                "status": "failed",
-                "error": "Data must be a list",
-                "error_type": "validation_error"
-            }
-        
+
         if operation == "sum":
             result = sum(data)
         elif operation == "average":
@@ -686,30 +624,12 @@ class DataProcessor(BaseTask):
                 "error": f"Unknown operation: {operation}",
                 "error_type": "validation_error"
             }
-        
+
         return {
             "status": "completed",
             "operation": operation,
             "result": result,
             "input_count": len(data)
-        }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {"type": "number"},
-                    "description": "Array of numbers"
-                },
-                "operation": {
-                    "type": "string",
-                    "enum": ["sum", "average", "max", "min"],
-                    "default": "sum"
-                }
-            },
-            "required": ["data"]
         }
 ```
 
@@ -718,30 +638,35 @@ class DataProcessor(BaseTask):
 ```python
 import aiofiles
 from apflow import BaseTask, executor_register
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any
+from pydantic import BaseModel, Field
+
+class FileReaderInputSchema(BaseModel):
+    """Input schema for file reader"""
+    file_path: str = Field(description="Path to file")
 
 @executor_register()
 class FileReader(BaseTask):
     """Reads files"""
-    
+
     id = "file_reader"
     name = "File Reader"
     description = "Reads content from files"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = FileReaderInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         file_path = inputs.get("file_path")
-        
-        if not file_path:
-            return {
-                "status": "failed",
-                "error": "file_path is required",
-                "error_type": "validation_error"
-            }
-        
+
+        try:
+            self.check_input_schema(inputs)
+        except ValueError as e:
+            return {"status": "failed", "error": str(e), "error_type": "validation_error"}
+
         try:
             async with aiofiles.open(file_path, 'r') as f:
                 content = await f.read()
-            
+
             return {
                 "status": "completed",
                 "file_path": file_path,
@@ -760,55 +685,44 @@ class FileReader(BaseTask):
                 "error": str(e),
                 "error_type": type(e).__name__
             }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "file_path": {
-                    "type": "string",
-                    "description": "Path to file"
-                }
-            },
-            "required": ["file_path"]
-        }
 ```
 
 ### Pattern 4: Database Query
 
 ```python
 from apflow import BaseTask, executor_register
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any, Optional
+from pydantic import BaseModel, Field
+
+class DBQueryInputSchema(BaseModel):
+    """Input schema for database query"""
+    query: str = Field(description="SQL query")
+    params: Optional[Dict[str, Any]] = Field(default=None, description="Query parameters")
 
 @executor_register()
 class DatabaseQuery(BaseTask):
     """Executes database queries"""
-    
+
     id = "db_query"
     name = "Database Query"
     description = "Executes database queries"
-    
-    def __init__(self):
-        super().__init__()
-        # Initialize database connection
-        # self.db = create_db_connection()
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = DBQueryInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         query = inputs.get("query")
         params = inputs.get("params", {})
-        
-        if not query:
-            return {
-                "status": "failed",
-                "error": "query is required",
-                "error_type": "validation_error"
-            }
-        
+
+        try:
+            self.check_input_schema(inputs)
+        except ValueError as e:
+            return {"status": "failed", "error": str(e), "error_type": "validation_error"}
+
         try:
             # Execute query
             # result = await self.db.fetch(query, params)
             result = []  # Placeholder
-            
+
             return {
                 "status": "completed",
                 "rows": result,
@@ -820,16 +734,6 @@ class DatabaseQuery(BaseTask):
                 "error": str(e),
                 "error_type": "database_error"
             }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "SQL query"},
-                "params": {"type": "object", "description": "Query parameters"}
-            },
-            "required": ["query"]
-        }
 ```
 
 ## Advanced Features

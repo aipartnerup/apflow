@@ -8,7 +8,8 @@ via SSH with password or key-based authentication.
 import asyncio
 import os
 import stat
-from typing import Dict, Any, Optional
+from typing import ClassVar, Dict, Any, Optional, Union
+from pydantic import BaseModel, Field
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.core.execution.errors import ValidationError, ConfigurationError
@@ -26,6 +27,28 @@ except ImportError:
         "asyncssh is not installed. SSH executor will not be available. "
         "Install it with: pip install apflow[ssh]"
     )
+
+
+class SshInputSchema(BaseModel):
+    host: str = Field(description="Remote hostname or IP address to connect to")
+    port: int = Field(default=22, description="SSH port number", ge=1, le=65535)
+    username: str = Field(description="SSH username for authentication")
+    password: Optional[str] = Field(default=None, description="SSH password for authentication (optional if key_file provided)")
+    key_file: Optional[str] = Field(default=None, description="Path to SSH private key file (optional if password provided)")
+    command: str = Field(description="Command to execute on the remote server")
+    timeout: Union[int, float] = Field(default=30, description="Command execution timeout in seconds", ge=1)
+    env: Optional[Dict[str, str]] = Field(default=None, description="Environment variables to set for the command execution")
+
+
+class SshOutputSchema(BaseModel):
+    success: bool = Field(description="Whether the SSH command executed successfully")
+    error: Optional[str] = Field(default=None, description="Error message (only present on cancellation)")
+    command: str = Field(description="The command that was executed on the remote server")
+    stdout: Optional[str] = Field(default=None, description="Standard output from the executed command")
+    stderr: Optional[str] = Field(default=None, description="Standard error from the executed command")
+    return_code: Optional[int] = Field(default=None, description="Command exit code (0 for success)")
+    host: str = Field(description="Remote host that was connected to")
+    username: Optional[str] = Field(default=None, description="SSH username used for the connection")
 
 
 @executor_register()
@@ -62,6 +85,9 @@ class SshExecutor(BaseTask):
 
     # Cancellation support: Can be cancelled by closing SSH connection
     cancelable: bool = True
+
+    inputs_schema: ClassVar[type[BaseModel]] = SshInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = SshOutputSchema
 
     @property
     def type(self) -> str:
@@ -228,112 +254,3 @@ class SshExecutor(BaseTask):
             "_demo_sleep": 0.5,  # Simulate SSH connection and command execution time
         }
 
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Get output schema for SshExecutor execution results
-
-        Returns:
-            JSON Schema describing the output structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "success": {
-                    "type": "boolean",
-                    "description": "Whether the SSH command executed successfully",
-                },
-                "error": {
-                    "type": "string",
-                    "description": "Error message (only present on cancellation)",
-                },
-                "command": {
-                    "type": "string",
-                    "description": "The command that was executed on the remote server",
-                },
-                "stdout": {
-                    "type": "string",
-                    "description": "Standard output from the executed command",
-                },
-                "stderr": {
-                    "type": "string",
-                    "description": "Standard error from the executed command",
-                },
-                "return_code": {
-                    "type": "integer",
-                    "description": "Command exit code (0 for success)",
-                },
-                "host": {"type": "string", "description": "Remote host that was connected to"},
-                "username": {
-                    "type": "string",
-                    "description": "SSH username used for the connection",
-                },
-            },
-            "required": ["success", "command", "host"],
-        }
-
-    def get_input_schema(self) -> Dict[str, Any]:
-        """
-        Get input schema for SshExecutor execution parameters
-
-        Returns:
-            JSON Schema describing the input structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "host": {
-                    "type": "string",
-                    "description": "Remote hostname or IP address to connect to",
-                },
-                "port": {
-                    "type": "integer",
-                    "description": "SSH port number",
-                    "default": 22,
-                    "minimum": 1,
-                    "maximum": 65535,
-                },
-                "username": {
-                    "type": "string",
-                    "description": "SSH username for authentication",
-                },
-                "password": {
-                    "type": "string",
-                    "description": "SSH password for authentication (optional if key_file provided)",
-                },
-                "key_file": {
-                    "type": "string",
-                    "description": "Path to SSH private key file (optional if password provided)",
-                },
-                "command": {
-                    "type": "string",
-                    "description": "Command to execute on the remote server",
-                },
-                "timeout": {
-                    "type": ["integer", "number"],
-                    "description": "Command execution timeout in seconds",
-                    "default": 30,
-                    "minimum": 1,
-                },
-                "env": {
-                    "type": "object",
-                    "description": "Environment variables to set for the command execution",
-                    "additionalProperties": {"type": "string"},
-                },
-            },
-            "required": ["host", "username", "command"],
-            "allOf": [
-                {
-                    "if": {
-                        "not": {
-                            "anyOf": [
-                                {"required": ["password"]},
-                                {"required": ["key_file"]},
-                            ]
-                        }
-                    },
-                    "then": {
-                        "not": {}  # Always fail if neither password nor key_file is provided
-                    },
-                }
-            ],
-        }

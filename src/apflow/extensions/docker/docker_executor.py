@@ -6,7 +6,9 @@ with custom images, environment variables, and volume mounts.
 """
 
 import asyncio
-from typing import Dict, Any, Optional
+from typing import ClassVar, Dict, Any, Optional
+
+from pydantic import BaseModel, Field
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.core.execution.errors import ValidationError, ConfigurationError
@@ -24,6 +26,39 @@ except ImportError:
         "docker is not installed. Docker executor will not be available. "
         "Install it with: pip install apflow[docker]"
     )
+
+
+class DockerResourcesConfig(BaseModel):
+    cpu: Optional[str] = Field(default=None, description='CPU limit (e.g., "1.0" or "0.5")')
+    memory: Optional[str] = Field(default=None, description='Memory limit (e.g., "512m" or "1g")')
+
+
+class DockerInputSchema(BaseModel):
+    image: str = Field(description="Docker image name (required)")
+    command: str = Field(description="Command to execute in container (required)")
+    env: Optional[Dict[str, str]] = Field(default=None, description="Environment variables dict (optional)")
+    volumes: Optional[Dict[str, str]] = Field(
+        default=None,
+        description='Volume mounts dict {"host_path": "container_path"} (optional)',
+    )
+    working_dir: Optional[str] = Field(default=None, description="Working directory in container (optional)")
+    timeout: float = Field(default=60, description="Command timeout in seconds (default: 60)")
+    remove: bool = Field(default=True, description="Remove container after execution (default: True)")
+    resources: Optional[DockerResourcesConfig] = Field(default=None, description="Resource limits dict (optional)")
+
+
+class DockerOutputSchema(BaseModel):
+    success: bool = Field(description="Whether the Docker command executed successfully")
+    error: Optional[str] = Field(default=None, description="Error message (only present on cancellation)")
+    container_id: Optional[str] = Field(
+        default=None, description="Docker container ID (present when container was created)"
+    )
+    logs: Optional[str] = Field(default=None, description="Container logs combining stdout and stderr")
+    exit_code: Optional[int] = Field(
+        default=None, description="Container exit code (0 for success, present when execution completed)"
+    )
+    image: str = Field(description="Docker image that was used")
+    command: str = Field(description="Command that was executed in the container")
 
 
 @executor_register()
@@ -61,6 +96,9 @@ class DockerExecutor(BaseTask):
 
     # Cancellation support: Can be cancelled by stopping container
     cancelable: bool = True
+
+    inputs_schema: ClassVar[type[BaseModel]] = DockerInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = DockerOutputSchema
 
     @property
     def type(self) -> str:
@@ -248,103 +286,6 @@ class DockerExecutor(BaseTask):
                     logger.debug(f"Removed container {container_id}")
                 except Exception as e:
                     logger.warning(f"Failed to remove container {container_id}: {e}")
-
-    def get_input_schema(self) -> Dict[str, Any]:
-        """
-        Get input schema for DockerExecutor execution inputs
-
-        Returns:
-            JSON Schema describing the input structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "image": {"type": "string", "description": "Docker image name (required)"},
-                "command": {
-                    "type": "string",
-                    "description": "Command to execute in container (required)",
-                },
-                "env": {
-                    "type": "object",
-                    "description": "Environment variables dict (optional)",
-                    "additionalProperties": {"type": "string"},
-                },
-                "volumes": {
-                    "type": "object",
-                    "description": 'Volume mounts dict {"host_path": "container_path"} (optional)',
-                    "additionalProperties": {"type": "string"},
-                },
-                "working_dir": {
-                    "type": "string",
-                    "description": "Working directory in container (optional)",
-                },
-                "timeout": {
-                    "type": "number",
-                    "description": "Command timeout in seconds (default: 60)",
-                    "default": 60,
-                },
-                "remove": {
-                    "type": "boolean",
-                    "description": "Remove container after execution (default: True)",
-                    "default": True,
-                },
-                "resources": {
-                    "type": "object",
-                    "description": "Resource limits dict (optional)",
-                    "properties": {
-                        "cpu": {
-                            "type": "string",
-                            "description": 'CPU limit (e.g., "1.0" or "0.5")',
-                        },
-                        "memory": {
-                            "type": "string",
-                            "description": 'Memory limit (e.g., "512m" or "1g")',
-                        },
-                    },
-                    "additionalProperties": False,
-                },
-            },
-            "required": ["image", "command"],
-        }
-
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Get output schema for DockerExecutor execution results
-
-        Returns:
-            JSON Schema describing the output structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "success": {
-                    "type": "boolean",
-                    "description": "Whether the Docker command executed successfully",
-                },
-                "error": {
-                    "type": "string",
-                    "description": "Error message (only present on cancellation)",
-                },
-                "container_id": {
-                    "type": "string",
-                    "description": "Docker container ID (present when container was created)",
-                },
-                "logs": {
-                    "type": "string",
-                    "description": "Container logs combining stdout and stderr",
-                },
-                "exit_code": {
-                    "type": "integer",
-                    "description": "Container exit code (0 for success, present when execution completed)",
-                },
-                "image": {"type": "string", "description": "Docker image that was used"},
-                "command": {
-                    "type": "string",
-                    "description": "Command that was executed in the container",
-                },
-            },
-            "required": ["success", "image", "command"],
-        }
 
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo Docker container execution result"""

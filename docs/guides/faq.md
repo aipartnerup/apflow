@@ -68,23 +68,23 @@ export DATABASE_URL="postgresql+asyncpg://user:password@localhost/dbname"
 
 ```python
 from apflow import BaseTask, executor_register
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any
+from pydantic import BaseModel, Field
+
+class MyInputSchema(BaseModel):
+    """Input schema for my executor"""
+    param: str = Field(default="", description="Parameter")
 
 @executor_register()
 class MyExecutor(BaseTask):
     id = "my_executor"
     name = "My Executor"
     description = "Does something"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = MyInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "completed", "result": "..."}
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
 ```
 
 See the **[Custom Tasks Guide](custom-tasks.md)** for details.

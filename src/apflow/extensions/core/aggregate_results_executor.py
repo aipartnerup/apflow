@@ -7,12 +7,35 @@ It's a built-in executor that provides a common aggregation pattern.
 Users can create custom aggregator executors for more complex aggregation logic.
 """
 
-from typing import Dict, Any, Optional
+from typing import ClassVar, Dict, Any, Optional
+
+from pydantic import BaseModel, Field
+
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class AggregateInputSchema(BaseModel):
+    """Input schema for aggregate results executor"""
+
+    dependencies: Optional[list[str]] = Field(
+        default=None,
+        description="List of dependency task IDs (optional, auto-populated by TaskManager)",
+    )
+
+    model_config = {"extra": "allow"}
+
+
+class AggregateOutputSchema(BaseModel):
+    summary: str = Field(description="Summary of the aggregation operation")
+    timestamp: str = Field(description="ISO timestamp when aggregation was performed")
+    results: Dict[str, Any] = Field(
+        description="Dictionary of dependency results keyed by task ID"
+    )
+    result_count: int = Field(description="Number of aggregated results")
 
 
 @executor_register()
@@ -87,6 +110,9 @@ class AggregateResultsExecutor(BaseTask):
 
     # Cancellation support: No-op (aggregation is instant)
     cancelable: bool = False
+
+    inputs_schema: ClassVar[type[BaseModel]] = AggregateInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = AggregateOutputSchema
 
     @property
     def type(self) -> str:
@@ -199,44 +225,3 @@ class AggregateResultsExecutor(BaseTask):
             "result_count": result_count,
         }
 
-    def get_input_schema(self) -> Dict[str, Any]:
-        """
-        Get input parameter schema
-
-        Note: Dependency results are automatically merged into inputs by TaskManager,
-        so this schema is mainly for documentation.
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "_dependencies": {
-                    "type": "array",
-                    "description": "List of dependency task IDs (optional, auto-populated by TaskManager)",
-                }
-            },
-            "description": "Inputs will contain dependency results merged by TaskManager",
-        }
-
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Return the output result schema for this executor.
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "summary": {
-                    "type": "string",
-                    "description": "Summary of the aggregation operation",
-                },
-                "timestamp": {
-                    "type": "string",
-                    "description": "ISO timestamp when aggregation was performed",
-                },
-                "results": {
-                    "type": "object",
-                    "description": "Dictionary of dependency results keyed by task ID",
-                },
-                "result_count": {"type": "integer", "description": "Number of aggregated results"},
-            },
-            "required": ["summary", "timestamp", "results", "result_count"],
-        }

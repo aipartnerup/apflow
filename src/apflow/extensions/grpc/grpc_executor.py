@@ -6,7 +6,9 @@ dynamic proto loading and custom metadata.
 """
 
 import asyncio
-from typing import Dict, Any, Optional
+from typing import ClassVar, Dict, Any, Optional
+
+from pydantic import BaseModel, Field
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.core.execution.errors import ValidationError, ConfigurationError
@@ -46,6 +48,27 @@ except Exception:  # noqa: BLE001
     pass
 
 
+class GrpcInputSchema(BaseModel):
+    server: str = Field(description='gRPC server address (e.g., "localhost:50051") (required)')
+    service: str = Field(description="Service name (required)")
+    method: str = Field(description="Method name (required)")
+    request: Dict[str, Any] = Field(description="Request parameters as dict (required)")
+    proto_file: Optional[str] = Field(default=None, description="Path to proto file (optional, for dynamic loading)")
+    timeout: float = Field(default=30.0, description="Request timeout in seconds (default: 30.0)")
+    metadata: Optional[Dict[str, str]] = Field(default=None, description="gRPC metadata dict (optional)")
+
+
+class GrpcOutputSchema(BaseModel):
+    success: bool = Field(description="Whether the gRPC call was successful")
+    error: Optional[str] = Field(default=None, description="Error message (only present on failure or cancellation)")
+    server: str = Field(description="gRPC server address that was called")
+    service: str = Field(description="Service name that was called")
+    method: str = Field(description="Method name that was called")
+    request: Optional[Dict[str, Any]] = Field(default=None, description="Request data that was sent (only present on success)")
+    response: Optional[Dict[str, Any]] = Field(default=None, description="Response data received (only present on success)")
+    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Response metadata (only present on success)")
+
+
 @executor_register()
 class GrpcExecutor(BaseTask):
     """
@@ -83,6 +106,9 @@ class GrpcExecutor(BaseTask):
 
     # Cancellation support: Can be cancelled by cancelling gRPC call
     cancelable: bool = True
+
+    inputs_schema: ClassVar[type[BaseModel]] = GrpcInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = GrpcOutputSchema
 
     @property
     def type(self) -> str:
@@ -265,78 +291,3 @@ class GrpcExecutor(BaseTask):
             "_demo_sleep": 0.15,  # Simulate gRPC call latency (typically faster than HTTP)
         }
 
-    def get_input_schema(self) -> Dict[str, Any]:
-        """
-        Get input schema for GrpcExecutor execution inputs
-
-        Returns:
-            JSON Schema describing the input structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "server": {
-                    "type": "string",
-                    "description": 'gRPC server address (e.g., "localhost:50051") (required)',
-                },
-                "service": {"type": "string", "description": "Service name (required)"},
-                "method": {"type": "string", "description": "Method name (required)"},
-                "request": {
-                    "type": "object",
-                    "description": "Request parameters as dict (required)",
-                    "additionalProperties": True,
-                },
-                "proto_file": {
-                    "type": "string",
-                    "description": "Path to proto file (optional, for dynamic loading)",
-                },
-                "timeout": {
-                    "type": "number",
-                    "description": "Request timeout in seconds (default: 30.0)",
-                    "default": 30.0,
-                },
-                "metadata": {
-                    "type": "object",
-                    "description": "gRPC metadata dict (optional)",
-                    "additionalProperties": {"type": "string"},
-                },
-            },
-            "required": ["server", "service", "method", "request"],
-        }
-
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Get output schema for GrpcExecutor execution results
-
-        Returns:
-            JSON Schema describing the output structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "success": {
-                    "type": "boolean",
-                    "description": "Whether the gRPC call was successful",
-                },
-                "error": {
-                    "type": "string",
-                    "description": "Error message (only present on failure or cancellation)",
-                },
-                "server": {"type": "string", "description": "gRPC server address that was called"},
-                "service": {"type": "string", "description": "Service name that was called"},
-                "method": {"type": "string", "description": "Method name that was called"},
-                "request": {
-                    "type": "object",
-                    "description": "Request data that was sent (only present on success)",
-                },
-                "response": {
-                    "type": "object",
-                    "description": "Response data received (only present on success)",
-                },
-                "metadata": {
-                    "type": "object",
-                    "description": "Response metadata (only present on success)",
-                },
-            },
-            "required": ["success", "server", "service", "method"],
-        }

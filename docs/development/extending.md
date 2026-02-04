@@ -18,7 +18,9 @@ apflow is designed to be extensible. You can create:
 
 ### Method 1: Implement ExecutableTask Directly
 
-For maximum flexibility:
+For maximum flexibility. You must implement `get_input_schema()` and `get_output_schema()` manually:
+
+> **Recommendation**: Use Method 2 (BaseTask) instead for a simpler, type-safe approach with Pydantic schemas.
 
 ```python
 from apflow import ExecutableTask
@@ -26,22 +28,21 @@ from typing import Dict, Any
 
 class MyCustomExecutor(ExecutableTask):
     """Custom executor implementation"""
-    
+
     id = "my_custom_executor"
     name = "My Custom Executor"
     description = "Executes custom business logic"
-    
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the task"""
-        # Your execution logic here
         result = {
             "status": "completed",
             "data": inputs.get("data")
         }
         return result
-    
+
     def get_input_schema(self) -> Dict[str, Any]:
-        """Define input parameter schema"""
+        """Define input parameter schema (required for ExecutableTask)"""
         return {
             "type": "object",
             "properties": {
@@ -52,7 +53,17 @@ class MyCustomExecutor(ExecutableTask):
             },
             "required": ["data"]
         }
-    
+
+    def get_output_schema(self) -> Dict[str, Any]:
+        """Define output result schema (required for ExecutableTask)"""
+        return {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string"},
+                "data": {"type": "string"}
+            }
+        }
+
     async def cancel(self) -> Dict[str, Any]:
         """Optional: Implement cancellation support"""
         return {
@@ -61,52 +72,67 @@ class MyCustomExecutor(ExecutableTask):
         }
 ```
 
-### Method 2: Inherit from BaseTask
+### Method 2: Inherit from BaseTask (Recommended)
 
-For common functionality:
+Define input/output schemas as Pydantic BaseModel classes and assign them as `ClassVar` on the executor. `BaseTask` automatically implements `get_input_schema()` and `get_output_schema()` by converting the Pydantic models to JSON Schema:
 
 ```python
 from apflow import BaseTask
-from typing import Dict, Any
-from pydantic import BaseModel
+from typing import ClassVar, Dict, Any
+from pydantic import BaseModel, Field
 
 # Define input schema using Pydantic
 class MyTaskInputs(BaseModel):
-    data: str
-    count: int = 10
+    """Input schema for my custom executor"""
+    data: str = Field(description="Input data to process")
+    count: int = Field(default=10, description="Number of items to process")
+
+# Define output schema using Pydantic
+class MyTaskOutputs(BaseModel):
+    """Output schema for my custom executor"""
+    status: str = Field(description="Execution status")
+    processed_items: int = Field(description="Number of processed items")
+    data: str = Field(description="Processed data")
 
 class MyCustomExecutor(BaseTask):
     """Custom executor using BaseTask"""
-    
+
     id = "my_custom_executor"
     name = "My Custom Executor"
     description = "Executes custom business logic"
-    
-    # Use Pydantic model for input validation
-    inputs_schema = MyTaskInputs
-    
+
+    # Declare schemas as ClassVar with Pydantic model types
+    inputs_schema: ClassVar[type[BaseModel]] = MyTaskInputs
+    outputs_schema: ClassVar[type[BaseModel]] = MyTaskOutputs
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute the task"""
         # Inputs are automatically validated against inputs_schema
         data = inputs["data"]
         count = inputs["count"]
-        
+
         # Your execution logic
         result = {
             "status": "completed",
             "processed_items": count,
             "data": data
         }
-        
+
         # Check for cancellation (if supported)
         if self.cancellation_checker and self.cancellation_checker():
             return {
                 "status": "cancelled",
                 "message": "Task was cancelled"
             }
-        
+
         return result
 ```
+
+**Why Pydantic schemas?**
+- **Type safety**: Full type annotations with IDE autocomplete
+- **Single source of truth**: Field definitions aren't duplicated
+- **Automatic validation**: Pydantic validates inputs at runtime
+- **JSON Schema generation**: `get_input_schema()` / `get_output_schema()` are handled by BaseTask automatically
 
 ### Registering Your Executor
 
@@ -638,25 +664,24 @@ class StreamingExecutor(ExecutableTask):
 
 ### 1. Input Validation
 
-Always validate inputs:
+Define input schemas using Pydantic models for type-safe validation:
 
 ```python
-def get_input_schema(self) -> Dict[str, Any]:
-    return {
-        "type": "object",
-        "properties": {
-            "required_field": {
-                "type": "string",
-                "description": "Required field"
-            },
-            "optional_field": {
-                "type": "integer",
-                "description": "Optional field",
-                "default": 0
-            }
-        },
-        "required": ["required_field"]
-    }
+from pydantic import BaseModel, Field
+from typing import ClassVar
+
+class MyInputSchema(BaseModel):
+    """Input schema for my executor"""
+    required_field: str = Field(description="Required field")
+    optional_field: int = Field(default=0, description="Optional field")
+
+class MyExecutor(BaseTask):
+    inputs_schema: ClassVar[type[BaseModel]] = MyInputSchema
+
+    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        # Validate inputs against schema
+        self.check_input_schema(inputs)
+        # ...
 ```
 
 ### 2. Error Handling

@@ -13,7 +13,10 @@ MCP supports two transport modes:
 import asyncio
 import json
 import subprocess
-from typing import Dict, Any, Optional
+from typing import Any, ClassVar, Dict, Literal, Optional
+
+from pydantic import BaseModel, Field
+
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.logger import get_logger
@@ -30,6 +33,34 @@ except ImportError:
         "httpx is not installed. HTTP/SSE transport mode will not be available. "
         "Install it with: pip install httpx"
     )
+
+
+class McpInputSchema(BaseModel):
+    transport: Literal["stdio", "http"] = Field(description="Transport mode - 'stdio' or 'http' (required)")
+    operation: Literal["list_tools", "call_tool", "list_resources", "read_resource"] = Field(description="MCP operation type (required)")
+    timeout: float = Field(default=30.0, description="Optional timeout in seconds (default: 30.0)")
+    command: Optional[list[str]] = Field(default=None, description="Command to run MCP server for stdio transport (list of strings, required for stdio)")
+    env: Optional[Dict[str, str]] = Field(default=None, description="Optional environment variables dict for stdio transport")
+    cwd: Optional[str] = Field(default=None, description="Optional working directory for stdio transport")
+    url: Optional[str] = Field(default=None, description="MCP server URL for http transport (required for http)")
+    headers: Optional[Dict[str, str]] = Field(default=None, description="Optional HTTP headers dict for http transport")
+    tool_name: Optional[str] = Field(default=None, description="Name of tool to call (required for call_tool operation)")
+    arguments: Optional[Dict[str, Any]] = Field(default=None, description="Tool arguments dict (required for call_tool operation)")
+    resource_uri: Optional[str] = Field(default=None, description="Resource URI (required for read_resource operation)")
+
+
+class McpOutputSchema(BaseModel):
+    success: bool = Field(description="Whether the MCP operation was successful")
+    error: Optional[str] = Field(default=None, description="Error message (only present on failure)")
+    error_code: Optional[int] = Field(default=None, description="MCP error code (optional, only for MCP protocol errors)")
+    error_data: Optional[Dict[str, Any]] = Field(default=None, description="MCP error data (optional, only for MCP protocol errors)")
+    status_code: Optional[int] = Field(default=None, description="HTTP status code (optional, only for HTTP transport errors)")
+    return_code: Optional[int] = Field(default=None, description="Process return code (optional, only for stdio transport errors)")
+    stderr: Optional[str] = Field(default=None, description="Process stderr output (optional, only for stdio transport errors)")
+    raw_response: Optional[str] = Field(default=None, description="Raw response text (optional, only for JSON parsing errors)")
+    result: Optional[Dict[str, Any]] = Field(default=None, description="MCP operation result (only present on success)")
+    operation: str = Field(description="The MCP operation that was performed")
+    transport: str = Field(description="The transport mode used (stdio or http)")
 
 
 @executor_register()
@@ -68,6 +99,9 @@ class McpExecutor(BaseTask):
 
     # Cancellation support: Can be cancelled by closing connection
     cancelable: bool = True
+
+    inputs_schema: ClassVar[type[BaseModel]] = McpInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = McpOutputSchema
 
     @property
     def type(self) -> str:
@@ -372,129 +406,6 @@ class McpExecutor(BaseTask):
             raise ValueError(f"Unsupported operation: {operation}")
 
         return request
-
-    def get_input_schema(self) -> Dict[str, Any]:
-        """
-        Get input schema for McpExecutor execution inputs
-
-        Returns:
-            JSON Schema describing the input structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "transport": {
-                    "type": "string",
-                    "enum": ["stdio", "http"],
-                    "description": "Transport mode - 'stdio' or 'http' (required)",
-                },
-                "operation": {
-                    "type": "string",
-                    "enum": ["list_tools", "call_tool", "list_resources", "read_resource"],
-                    "description": "MCP operation type (required)",
-                },
-                "timeout": {
-                    "type": "number",
-                    "description": "Optional timeout in seconds (default: 30.0)",
-                    "default": 30.0,
-                },
-                "command": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Command to run MCP server for stdio transport (list of strings, required for stdio)",
-                },
-                "env": {
-                    "type": "object",
-                    "description": "Optional environment variables dict for stdio transport",
-                    "additionalProperties": {"type": "string"},
-                },
-                "cwd": {
-                    "type": "string",
-                    "description": "Optional working directory for stdio transport",
-                },
-                "url": {
-                    "type": "string",
-                    "description": "MCP server URL for http transport (required for http)",
-                },
-                "headers": {
-                    "type": "object",
-                    "description": "Optional HTTP headers dict for http transport",
-                    "additionalProperties": {"type": "string"},
-                },
-                "tool_name": {
-                    "type": "string",
-                    "description": "Name of tool to call (required for call_tool operation)",
-                },
-                "arguments": {
-                    "type": "object",
-                    "description": "Tool arguments dict (required for call_tool operation)",
-                    "additionalProperties": True,
-                },
-                "resource_uri": {
-                    "type": "string",
-                    "description": "Resource URI (required for read_resource operation)",
-                },
-            },
-            "required": ["transport", "operation"],
-        }
-
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Get output schema for McpExecutor execution results
-
-        Returns:
-            JSON Schema describing the output structure
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "success": {
-                    "type": "boolean",
-                    "description": "Whether the MCP operation was successful",
-                },
-                "error": {
-                    "type": "string",
-                    "description": "Error message (only present on failure)",
-                },
-                "error_code": {
-                    "type": "integer",
-                    "description": "MCP error code (optional, only for MCP protocol errors)",
-                },
-                "error_data": {
-                    "type": "object",
-                    "description": "MCP error data (optional, only for MCP protocol errors)",
-                },
-                "status_code": {
-                    "type": "integer",
-                    "description": "HTTP status code (optional, only for HTTP transport errors)",
-                },
-                "return_code": {
-                    "type": "integer",
-                    "description": "Process return code (optional, only for stdio transport errors)",
-                },
-                "stderr": {
-                    "type": "string",
-                    "description": "Process stderr output (optional, only for stdio transport errors)",
-                },
-                "raw_response": {
-                    "type": "string",
-                    "description": "Raw response text (optional, only for JSON parsing errors)",
-                },
-                "result": {
-                    "type": "object",
-                    "description": "MCP operation result (only present on success)",
-                },
-                "operation": {
-                    "type": "string",
-                    "description": "The MCP operation that was performed",
-                },
-                "transport": {
-                    "type": "string",
-                    "description": "The transport mode used (stdio or http)",
-                },
-            },
-            "required": ["success", "operation", "transport"],
-        }
 
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo MCP operation result"""

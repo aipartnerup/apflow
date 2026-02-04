@@ -149,22 +149,33 @@ Create `example_02_custom.py`:
 ```python
 import asyncio
 from apflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any, Literal
+from pydantic import BaseModel, Field
 
-# Step 1: Define your custom executor
+# Step 1: Define input schema
+class TextProcessorInputSchema(BaseModel):
+    """Input schema for text processor"""
+    text: str = Field(description="Text to process")
+    operation: Literal["count", "reverse", "uppercase"] = Field(
+        default="count", description="Operation to perform"
+    )
+
+# Step 2: Define your custom executor
 @executor_register()
 class TextProcessor(BaseTask):
     """Processes text data"""
-    
+
     id = "text_processor"
     name = "Text Processor"
     description = "Processes text: count words, reverse, uppercase"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = TextProcessorInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute text processing"""
         text = inputs.get("text", "")
         operation = inputs.get("operation", "count")
-        
+
         if operation == "count":
             result = len(text.split())
         elif operation == "reverse":
@@ -173,30 +184,11 @@ class TextProcessor(BaseTask):
             result = text.upper()
         else:
             raise ValueError(f"Unknown operation: {operation}")
-        
+
         return {
             "operation": operation,
             "input_text": text,
             "result": result
-        }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        """Define input parameters"""
-        return {
-            "type": "object",
-            "properties": {
-                "text": {
-                    "type": "string",
-                    "description": "Text to process"
-                },
-                "operation": {
-                    "type": "string",
-                    "enum": ["count", "reverse", "uppercase"],
-                    "description": "Operation to perform",
-                    "default": "count"
-                }
-            },
-            "required": ["text"]
         }
 
 # Step 2: Use your executor
@@ -247,7 +239,7 @@ Result: {'operation': 'count', 'input_text': 'Hello, apflow!', 'result': 2}
 - `@executor_register()`: Automatically registers the executor
 - `id`: Must be unique, used in `name` when creating tasks
 - `execute()`: Async function that does the actual work
-- `get_input_schema()`: Defines what inputs are expected (JSON Schema)
+- `inputs_schema`: Pydantic model defining expected inputs (auto-converted to JSON Schema)
 
 **Try Different Operations:**
 ```python
@@ -269,23 +261,33 @@ Create `example_03_api.py`:
 import asyncio
 import aiohttp
 from apflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any, Literal, Optional
+from pydantic import BaseModel, Field
+
+class APICallInputSchema(BaseModel):
+    """Input schema for API call task"""
+    url: str = Field(description="API endpoint URL")
+    method: Literal["GET", "POST"] = Field(default="GET", description="HTTP method")
+    data: Optional[Dict[str, Any]] = Field(default=None, description="Request body for POST requests")
+    headers: Optional[Dict[str, str]] = Field(default=None, description="HTTP headers")
 
 @executor_register()
 class APICallTask(BaseTask):
     """Calls an external HTTP API"""
-    
+
     id = "api_call_task"
     name = "API Call Task"
     description = "Calls an external HTTP API and returns the response"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = APICallInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute API call"""
         url = inputs.get("url")
         method = inputs.get("method", "GET")
         data = inputs.get("data")
         headers = inputs.get("headers", {})
-        
+
         async with aiohttp.ClientSession() as session:
             try:
                 if method == "GET":
@@ -298,7 +300,7 @@ class APICallTask(BaseTask):
                         status_code = response.status
                 else:
                     raise ValueError(f"Unsupported method: {method}")
-                
+
                 return {
                     "status": "completed",
                     "status_code": status_code,
@@ -309,33 +311,6 @@ class APICallTask(BaseTask):
                     "status": "failed",
                     "error": str(e)
                 }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        """Define input parameters"""
-        return {
-            "type": "object",
-            "properties": {
-                "url": {
-                    "type": "string",
-                    "description": "API endpoint URL"
-                },
-                "method": {
-                    "type": "string",
-                    "enum": ["GET", "POST"],
-                    "description": "HTTP method",
-                    "default": "GET"
-                },
-                "data": {
-                    "type": "object",
-                    "description": "Request body for POST requests"
-                },
-                "headers": {
-                    "type": "object",
-                    "description": "HTTP headers"
-                }
-            },
-            "required": ["url"]
-        }
 
 async def main():
     from example_03_api import APICallTask
@@ -586,91 +561,84 @@ Create `example_06_pipeline.py`:
 ```python
 import asyncio
 from apflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any, Literal, Optional
+from pydantic import BaseModel, Field
 
 # Step 1: Fetch data executor
+class FetchDataInputSchema(BaseModel):
+    """Input schema for fetch data task"""
+    source: str = Field(default="api", description="Data source")
+
 @executor_register()
 class FetchDataTask(BaseTask):
     """Fetches data from a source"""
-    
+
     id = "fetch_data"
     name = "Fetch Data"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = FetchDataInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        # Simulate fetching data
         data_source = inputs.get("source", "api")
         return {
             "source": data_source,
             "data": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "source": {"type": "string", "default": "api"}
-            }
-        }
 
 # Step 2: Process data executor
+class ProcessDataInputSchema(BaseModel):
+    """Input schema for process data task"""
+    data: list[float] = Field(description="Array of numbers")
+    operation: Literal["sum", "average", "count"] = Field(
+        default="sum", description="Operation to perform"
+    )
+
 @executor_register()
 class ProcessDataTask(BaseTask):
     """Processes data"""
-    
+
     id = "process_data"
     name = "Process Data"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = ProcessDataInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        # Get data from inputs (could come from dependency)
         data = inputs.get("data", [])
         operation = inputs.get("operation", "sum")
-        
+
         if operation == "sum":
             result = sum(data)
         elif operation == "average":
             result = sum(data) / len(data) if data else 0
         else:
             result = len(data)
-        
+
         return {
             "operation": operation,
             "input_count": len(data),
             "result": result
         }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "data": {"type": "array", "items": {"type": "number"}},
-                "operation": {"type": "string", "enum": ["sum", "average", "count"], "default": "sum"}
-            },
-            "required": ["data"]
-        }
 
 # Step 3: Save results executor
+class SaveResultsInputSchema(BaseModel):
+    """Input schema for save results task"""
+    result: float = Field(description="Result to save")
+
 @executor_register()
 class SaveResultsTask(BaseTask):
     """Saves results"""
-    
+
     id = "save_results"
     name = "Save Results"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = SaveResultsInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         result = inputs.get("result")
         return {
             "saved": True,
             "result": result,
             "timestamp": "2024-01-01T00:00:00Z"
-        }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "result": {"type": "number"}
-            },
-            "required": ["result"]
         }
 
 async def main():
@@ -758,29 +726,33 @@ Create `example_07_errors.py`:
 ```python
 import asyncio
 from apflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any
+from pydantic import BaseModel, Field
+
+class RobustTaskInputSchema(BaseModel):
+    """Input schema for robust task"""
+    data: list[float] = Field(description="Array of numbers")
 
 @executor_register()
 class RobustTask(BaseTask):
     """Task with comprehensive error handling"""
-    
+
     id = "robust_task"
     name = "Robust Task"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = RobustTaskInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """Execute with error handling"""
         try:
-            # Validate inputs
+            # Validate inputs against schema
+            self.check_input_schema(inputs)
+
             data = inputs.get("data")
-            if not data:
-                raise ValueError("Data is required")
-            
-            if not isinstance(data, list):
-                raise ValueError("Data must be a list")
-            
+
             # Process data
             result = sum(data) / len(data) if data else 0
-            
+
             return {
                 "status": "completed",
                 "result": result,
@@ -800,19 +772,6 @@ class RobustTask(BaseTask):
                 "error": str(e),
                 "error_type": "execution_error"
             }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "data": {
-                    "type": "array",
-                    "items": {"type": "number"},
-                    "description": "Array of numbers"
-                }
-            },
-            "required": ["data"]
-        }
 
 async def main():
     from example_07_errors import RobustTask
@@ -1048,92 +1007,86 @@ Create `example_10_complete.py`:
 ```python
 import asyncio
 from apflow import BaseTask, executor_register, TaskManager, TaskTreeNode, create_session
-from typing import Dict, Any
+from typing import ClassVar, Dict, Any, Literal
+from pydantic import BaseModel, Field
 
 # Executor 1: Data fetcher
+class DataFetcherInputSchema(BaseModel):
+    """Input schema for data fetcher"""
+    source: str = Field(default="default", description="Data source")
+
 @executor_register()
 class DataFetcher(BaseTask):
     id = "data_fetcher"
     name = "Data Fetcher"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = DataFetcherInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         source = inputs.get("source", "default")
-        # Simulate fetching
         return {
             "source": source,
             "data": [10, 20, 30, 40, 50],
             "count": 5
         }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "source": {"type": "string", "default": "default"}
-            }
-        }
 
 # Executor 2: Data processor
+class DataProcessorInputSchema(BaseModel):
+    """Input schema for data processor"""
+    data: list[float] = Field(description="Array of numbers")
+    operation: Literal["sum", "average", "max"] = Field(
+        default="sum", description="Operation to perform"
+    )
+
 @executor_register()
 class DataProcessor(BaseTask):
     id = "data_processor"
     name = "Data Processor"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = DataProcessorInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         data = inputs.get("data", [])
         operation = inputs.get("operation", "sum")
-        
+
         if operation == "sum":
             result = sum(data)
         elif operation == "average":
             result = sum(data) / len(data) if data else 0
         else:
             result = max(data) if data else 0
-        
+
         return {
             "operation": operation,
             "result": result,
             "input_count": len(data)
         }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "data": {"type": "array", "items": {"type": "number"}},
-                "operation": {"type": "string", "enum": ["sum", "average", "max"], "default": "sum"}
-            },
-            "required": ["data"]
-        }
 
 # Executor 3: Result formatter
+class ResultFormatterInputSchema(BaseModel):
+    """Input schema for result formatter"""
+    result: float = Field(description="Result to format")
+    format: Literal["json", "text"] = Field(default="json", description="Output format")
+
 @executor_register()
 class ResultFormatter(BaseTask):
     id = "result_formatter"
     name = "Result Formatter"
-    
+
+    inputs_schema: ClassVar[type[BaseModel]] = ResultFormatterInputSchema
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         result = inputs.get("result")
         format_type = inputs.get("format", "json")
-        
+
         if format_type == "json":
             output = {"result": result, "formatted": True}
         else:
             output = f"Result: {result}"
-        
+
         return {
             "format": format_type,
             "output": output
-        }
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "result": {"type": "number"},
-                "format": {"type": "string", "enum": ["json", "text"], "default": "json"}
-            },
-            "required": ["result"]
         }
 
 async def main():

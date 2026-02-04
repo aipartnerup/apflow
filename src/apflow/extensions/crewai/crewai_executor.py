@@ -6,7 +6,9 @@ CrewaiExecutor implements ExecutableTask interface and can be used:
 2. In Batch: As part of a batch operation (multiple crews executed atomically)
 """
 
-from typing import Any, Dict, Optional
+from typing import Any, ClassVar, Dict, Literal, Optional
+
+from pydantic import BaseModel, Field
 
 from crewai import Crew as CrewAI, LLM
 from crewai.agent import Agent
@@ -18,6 +20,46 @@ from apflow.core.tools import resolve_tool
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class CrewAgentConfig(BaseModel):
+    role: str = Field(description="Agent's role/title (REQUIRED)")
+    goal: str = Field(description="Agent's primary goal (REQUIRED)")
+    backstory: str = Field(description="Agent's background and expertise (REQUIRED)")
+    llm: str = Field(description="LLM model name (e.g., 'gpt-4', 'claude-3-opus') (REQUIRED)")
+    tools: Optional[list[str]] = Field(default=None, description="List of tool names or objects (optional)")
+
+
+class CrewTaskConfig(BaseModel):
+    description: str = Field(description="Task description")
+    agent: str = Field(description="Agent name (must exist in agents dict)")
+    prompt: Optional[str] = Field(default=None, description="Detailed task prompt that defines output format (JSON, text, structured, etc.)")
+    expected_output: Optional[str] = Field(default=None, description="Description of expected output format")
+
+
+class CrewWorksConfig(BaseModel):
+    agents: Dict[str, CrewAgentConfig] = Field(description="Dictionary of agent configurations: {agent_name: {role, goal, backstory, llm, tools, ...}}")
+    tasks: Dict[str, CrewTaskConfig] = Field(description="Dictionary of task configurations: {task_name: {description, agent, prompt, expected_output, ...}}")
+
+
+class CrewaiInputSchema(BaseModel):
+    works: CrewWorksConfig = Field(description="Crew configuration with agents and tasks definitions")
+    user_id: Optional[str] = Field(default=None, description="Optional user ID for LLM key context")
+
+
+class CrewaiTokenUsage(BaseModel):
+    total_tokens: Optional[int] = Field(default=None)
+    prompt_tokens: Optional[int] = Field(default=None)
+    completion_tokens: Optional[int] = Field(default=None)
+    cached_prompt_tokens: Optional[int] = Field(default=None)
+    successful_requests: Optional[int] = Field(default=None)
+
+
+class CrewaiOutputSchema(BaseModel):
+    status: Literal["success", "failed", "cancelled"] = Field(description="Execution status")
+    result: Optional[Any] = Field(default=None, description="Crew execution result - format determined by works.tasks[*].prompt fields. Usually JSON object, JSON array, or formatted text. The prompt in each task definition specifies the output format.")
+    error: Optional[str] = Field(default=None, description="Error message (only present on failure)")
+    token_usage: Optional[CrewaiTokenUsage] = Field(default=None, description="Token usage statistics from LLM calls")
 
 
 @executor_register()
@@ -42,6 +84,9 @@ class CrewaiExecutor(BaseTask):
 
     # Cancellation support: CrewAI's kickoff() is blocking and cannot be cancelled during execution
     cancelable: bool = False
+
+    inputs_schema: ClassVar[type[BaseModel]] = CrewaiInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = CrewaiOutputSchema
 
     @property
     def type(self) -> str:
@@ -272,150 +317,6 @@ class CrewaiExecutor(BaseTask):
         """Set streaming context for progress updates"""
         self.event_queue = event_queue
         self.context = context
-
-    def get_input_schema(self) -> Dict[str, Any]:
-        """
-        Get input parameters schema (JSON Schema format)
-
-        Returns:
-            Dictionary containing parameter metadata
-            
-        Note:
-            CrewaiExecutor requires 'works' parameter which defines the crew structure:
-            - agents: Dict of agent configurations (role, goal, backstory, llm are REQUIRED; tools optional)
-            - tasks: Dict of task configurations (description, agent, prompt, expected_output, etc.)
-            
-            The output result format is determined by the 'prompt' field in each task config.
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "works": {
-                    "type": "object",
-                    "description": "Crew configuration with agents and tasks definitions",
-                    "properties": {
-                        "agents": {
-                            "type": "object",
-                            "description": "Dictionary of agent configurations: {agent_name: {role, goal, backstory, llm, tools, ...}}",
-                            "additionalProperties": {
-                                "type": "object",
-                                "properties": {
-                                    "role": {
-                                        "type": "string",
-                                        "description": "Agent's role/title (REQUIRED)",
-                                    },
-                                    "goal": {
-                                        "type": "string",
-                                        "description": "Agent's primary goal (REQUIRED)",
-                                    },
-                                    "backstory": {
-                                        "type": "string",
-                                        "description": "Agent's background and expertise (REQUIRED)",
-                                    },
-                                    "llm": {
-                                        "type": "string",
-                                        "description": "LLM model name (e.g., 'gpt-4', 'claude-3-opus') (REQUIRED)",
-                                    },
-                                    "tools": {
-                                        "type": "array",
-                                        "description": "List of tool names or objects (optional)",
-                                        "items": {"type": "string"},
-                                    },
-                                },
-                                "required": ["role", "goal", "backstory", "llm"],
-                            },
-                        },
-                        "tasks": {
-                            "type": "object",
-                            "description": "Dictionary of task configurations: {task_name: {description, agent, prompt, expected_output, ...}}",
-                            "additionalProperties": {
-                                "type": "object",
-                                "properties": {
-                                    "description": {
-                                        "type": "string",
-                                        "description": "Task description",
-                                    },
-                                    "agent": {
-                                        "type": "string",
-                                        "description": "Agent name (must exist in agents dict)",
-                                    },
-                                    "prompt": {
-                                        "type": "string",
-                                        "description": "Detailed task prompt that defines output format (JSON, text, structured, etc.)",
-                                    },
-                                    "expected_output": {
-                                        "type": "string",
-                                        "description": "Description of expected output format",
-                                    },
-                                },
-                                "required": ["description", "agent"],
-                            },
-                        },
-                    },
-                    "required": ["agents", "tasks"],
-                },
-                "user_id": {
-                    "type": "string",
-                    "description": "Optional user ID for LLM key context",
-                },
-            },
-            "required": ["works"],
-        }
-
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Get output result schema (JSON Schema format)
-
-        Returns:
-            Dictionary containing output result metadata
-            
-        Note:
-            IMPORTANT: The 'result' format is DYNAMIC and determined by the task prompts in works.tasks:
-            - Each task's 'prompt' field defines what format the task will output
-            - Common formats: JSON object, JSON array, text summary, structured data, etc.
-            - When generating crewai_executor tasks, the prompt should clearly specify the output format
-            
-            For example:
-            - prompt: "Analyze and return as JSON: {analysis: string, score: number, items: []}"
-            - prompt: "Generate a CSV-formatted report with columns: name, value, status"
-            - prompt: "Return a markdown-formatted summary"
-            
-            The crew's final result is aggregated from all tasks' outputs.
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "string",
-                    "enum": ["success", "failed", "cancelled"],
-                    "description": "Execution status",
-                },
-                "result": {
-                    "type": ["string", "object", "array"],
-                    "description": (
-                        "Crew execution result - format determined by works.tasks[*].prompt fields. "
-                        "Usually JSON object, JSON array, or formatted text. "
-                        "The prompt in each task definition specifies the output format."
-                    ),
-                },
-                "error": {
-                    "type": "string",
-                    "description": "Error message (only present on failure)",
-                },
-                "token_usage": {
-                    "type": "object",
-                    "description": "Token usage statistics from LLM calls",
-                    "properties": {
-                        "total_tokens": {"type": "integer"},
-                        "prompt_tokens": {"type": "integer"},
-                        "completion_tokens": {"type": "integer"},
-                        "cached_prompt_tokens": {"type": "integer"},
-                        "successful_requests": {"type": "integer"},
-                    },
-                },
-            },
-            "required": ["status"],
-        }
 
     def _check_cancellation(self) -> bool:
         """

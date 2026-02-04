@@ -6,13 +6,47 @@ It supports authentication, custom headers, query parameters, and request bodies
 """
 
 import httpx
-from typing import Dict, Any, Optional
+from typing import Any, ClassVar, Dict, Literal, Optional
+from pydantic import BaseModel, Field
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
 from apflow.core.execution.errors import ValidationError
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+class RestAuthConfig(BaseModel):
+    type: Literal["bearer", "basic", "apikey"] = Field(description="Authentication type")
+    token: Optional[str] = Field(default=None, description="Bearer token (for bearer auth)")
+    username: Optional[str] = Field(default=None, description="Username (for basic auth)")
+    password: Optional[str] = Field(default=None, description="Password (for basic auth)")
+    key: Optional[str] = Field(default=None, description="API key name (for apikey auth)")
+    value: Optional[str] = Field(default=None, description="API key value (for apikey auth)")
+    location: Literal["header", "query"] = Field(default="header", description="Where to place the API key (default: header)")
+
+
+class RestInputSchema(BaseModel):
+    url: str = Field(description="Target URL for the HTTP request")
+    method: Literal["GET", "POST", "PUT", "DELETE", "PATCH"] = Field(default="GET", description="HTTP method (default: GET)")
+    headers: Optional[Dict[str, Any]] = Field(default=None, description="Additional HTTP headers as key-value pairs (merged with defaults)")
+    params: Optional[Dict[str, Any]] = Field(default=None, description="Query parameters as key-value pairs")
+    json: Optional[Dict[str, Any]] = Field(default=None, description="JSON request body")
+    data: Optional[Dict[str, Any]] = Field(default=None, description="Form data as key-value pairs")
+    auth: Optional[RestAuthConfig] = Field(default=None, description="Authentication configuration")
+    timeout: float = Field(default=30.0, description="Request timeout in seconds (default: 30.0)")
+    verify: bool = Field(default=True, description="Whether to verify SSL certificates (default: true)")
+
+
+class RestOutputSchema(BaseModel):
+    success: bool = Field(description="Whether the request was successful")
+    status_code: Optional[int] = Field(default=None, description="HTTP status code")
+    url: Optional[str] = Field(default=None, description="Final URL after redirects")
+    headers: Optional[Dict[str, Any]] = Field(default=None, description="Response headers")
+    method: str = Field(description="HTTP method used")
+    json: Optional[Dict[str, Any]] = Field(default=None, description="JSON response body (if applicable)")
+    text: Optional[str] = Field(default=None, description="Text response body (if applicable)")
+    error: Optional[str] = Field(default=None, description="Error message (if applicable)")
 
 
 @executor_register()
@@ -45,6 +79,8 @@ class RestExecutor(BaseTask):
         "Send webhook notification",
         "Fetch data from HTTP service",
     ]
+    inputs_schema: ClassVar[type[BaseModel]] = RestInputSchema
+    outputs_schema: ClassVar[type[BaseModel]] = RestOutputSchema
 
     # Cancellation support: Can be cancelled by closing the HTTP client
     cancelable: bool = True
@@ -211,79 +247,3 @@ class RestExecutor(BaseTask):
             "method": method,
         }
 
-    def get_input_schema(self) -> Dict[str, Any]:
-        """Return input parameter schema"""
-        return {
-            "type": "object",
-            "properties": {
-                "url": {"type": "string", "description": "Target URL for the HTTP request"},
-                "method": {
-                    "type": "string",
-                    "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
-                    "description": "HTTP method (default: GET)",
-                },
-                "headers": {
-                    "type": "object",
-                    "description": "Additional HTTP headers as key-value pairs (merged with defaults)",
-                },
-                "params": {"type": "object", "description": "Query parameters as key-value pairs"},
-                "json": {"type": "object", "description": "JSON request body"},
-                "data": {"type": "object", "description": "Form data as key-value pairs"},
-                "auth": {
-                    "type": "object",
-                    "description": "Authentication configuration",
-                    "properties": {
-                        "type": {
-                            "type": "string",
-                            "enum": ["bearer", "basic", "apikey"],
-                            "description": "Authentication type",
-                        },
-                        "token": {
-                            "type": "string",
-                            "description": "Bearer token (for bearer auth)",
-                        },
-                        "username": {"type": "string", "description": "Username (for basic auth)"},
-                        "password": {"type": "string", "description": "Password (for basic auth)"},
-                        "key": {"type": "string", "description": "API key name (for apikey auth)"},
-                        "value": {
-                            "type": "string",
-                            "description": "API key value (for apikey auth)",
-                        },
-                        "location": {
-                            "type": "string",
-                            "enum": ["header", "query"],
-                            "description": "Where to place the API key (default: header)",
-                        },
-                    },
-                    "required": ["type"],
-                },
-                "timeout": {
-                    "type": "number",
-                    "description": "Request timeout in seconds (default: 30.0)",
-                },
-                "verify": {
-                    "type": "boolean",
-                    "description": "Whether to verify SSL certificates (default: true)",
-                },
-            },
-            "required": ["url"],
-        }
-
-    def get_output_schema(self) -> Dict[str, Any]:
-        """
-        Return the output result schema for this executor.
-        """
-        return {
-            "type": "object",
-            "properties": {
-                "success": {"type": "boolean", "description": "Whether the request was successful"},
-                "status_code": {"type": "integer", "description": "HTTP status code"},
-                "url": {"type": "string", "description": "Final URL after redirects"},
-                "headers": {"type": "object", "description": "Response headers"},
-                "method": {"type": "string", "description": "HTTP method used"},
-                "json": {"type": "object", "description": "JSON response body (if applicable)"},
-                "text": {"type": "string", "description": "Text response body (if applicable)"},
-                "error": {"type": "string", "description": "Error message (if applicable)"},
-            },
-            "required": ["success", "method"],
-        }

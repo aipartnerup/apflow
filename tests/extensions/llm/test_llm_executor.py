@@ -160,7 +160,11 @@ async def test_llm_executor_real_api_call():
     try:
         result = await executor.execute(inputs)
     except Exception as e:
-        pytest.fail(f"Real API call execution exception: {str(e)}")
+        error_msg = str(e)
+        # Rate limit / quota errors are external API issues, not code bugs
+        if "RateLimitError" in type(e).__name__ or "429" in error_msg or "quota" in error_msg.lower():
+            pytest.skip(f"Skipping due to API rate limit / quota exceeded: {error_msg}")
+        pytest.fail(f"Real API call execution exception: {error_msg}")
     
     if not result["success"]:
         # If it failed due to authentication, we want to know which key was used
