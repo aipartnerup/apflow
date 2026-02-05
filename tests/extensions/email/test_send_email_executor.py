@@ -15,14 +15,15 @@ class TestSendEmailExecutorValidation:
     """Test input validation for SendEmailExecutor"""
 
     @pytest.mark.asyncio
-    async def test_execute_missing_provider(self):
-        """Test error when provider is missing"""
+    async def test_execute_missing_provider_no_env(self):
+        """Test error when provider is missing and no env vars set"""
         executor = SendEmailExecutor()
 
-        with pytest.raises(ValidationError, match="provider is required"):
-            await executor.execute(
-                {"to": "a@b.com", "subject": "Hi", "from_email": "x@y.com", "body": "text"}
-            )
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError, match="provider is required"):
+                await executor.execute(
+                    {"to": "a@b.com", "subject": "Hi", "from_email": "x@y.com", "body": "text"}
+                )
 
     @pytest.mark.asyncio
     async def test_execute_missing_to(self):
@@ -385,10 +386,12 @@ class TestSchemaAndDemo:
         schema = executor.get_input_schema()
 
         assert schema["type"] == "object"
-        assert "provider" in schema["required"]
+        # to and subject are always required
         assert "to" in schema["required"]
         assert "subject" in schema["required"]
-        assert "from_email" in schema["required"]
+        # provider and from_email are optional (can come from env vars)
+        assert "provider" in schema["properties"]
+        assert "from_email" in schema["properties"]
         assert "api_key" in schema["properties"]
         assert "smtp_host" in schema["properties"]
 
@@ -443,3 +446,242 @@ class TestSchemaAndDemo:
         assert executor.id == "send_email_executor"
         assert executor.type == "email"
         assert executor.cancelable is False
+
+
+class TestEnvVarDefaults:
+    """Test environment variable defaults"""
+
+    @pytest.mark.asyncio
+    async def test_resend_api_key_from_env(self):
+        """Test api_key falls back to RESEND_API_KEY env var"""
+        executor = SendEmailExecutor()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "msg_env"}
+
+        with (
+            patch.dict("os.environ", {"RESEND_API_KEY": "re_env_key"}),
+            patch("httpx.AsyncClient") as mock_client,
+        ):
+            mock_instance = AsyncMock()
+            mock_client.return_value.__aenter__.return_value = mock_instance
+            mock_instance.post = AsyncMock(return_value=mock_response)
+
+            result = await executor.execute(
+                {
+                    "provider": "resend",
+                    "to": "user@example.com",
+                    "subject": "Test",
+                    "from_email": "sender@example.com",
+                    "body": "Hello",
+                }
+            )
+
+            assert result["success"] is True
+            call_kwargs = mock_instance.post.call_args[1]
+            assert "Bearer re_env_key" in call_kwargs["headers"]["Authorization"]
+
+    @pytest.mark.asyncio
+    async def test_input_api_key_overrides_env(self):
+        """Test input api_key takes priority over env var"""
+        executor = SendEmailExecutor()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "msg_override"}
+
+        with (
+            patch.dict("os.environ", {"RESEND_API_KEY": "re_env_key"}),
+            patch("httpx.AsyncClient") as mock_client,
+        ):
+            mock_instance = AsyncMock()
+            mock_client.return_value.__aenter__.return_value = mock_instance
+            mock_instance.post = AsyncMock(return_value=mock_response)
+
+            result = await executor.execute(
+                {
+                    "provider": "resend",
+                    "api_key": "re_input_key",
+                    "to": "user@example.com",
+                    "subject": "Test",
+                    "from_email": "sender@example.com",
+                    "body": "Hello",
+                }
+            )
+
+            assert result["success"] is True
+            call_kwargs = mock_instance.post.call_args[1]
+            assert "Bearer re_input_key" in call_kwargs["headers"]["Authorization"]
+
+    @pytest.mark.asyncio
+    async def test_from_email_from_env(self):
+        """Test from_email falls back to FROM_EMAIL env var"""
+        executor = SendEmailExecutor()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "msg_from_env"}
+
+        with (
+            patch.dict("os.environ", {"FROM_EMAIL": "env-sender@example.com"}),
+            patch("httpx.AsyncClient") as mock_client,
+        ):
+            mock_instance = AsyncMock()
+            mock_client.return_value.__aenter__.return_value = mock_instance
+            mock_instance.post = AsyncMock(return_value=mock_response)
+
+            result = await executor.execute(
+                {
+                    "provider": "resend",
+                    "api_key": "re_test",
+                    "to": "user@example.com",
+                    "subject": "Test",
+                    "body": "Hello",
+                }
+            )
+
+            assert result["success"] is True
+            call_kwargs = mock_instance.post.call_args[1]
+            assert call_kwargs["json"]["from"] == "env-sender@example.com"
+
+    @pytest.mark.asyncio
+    async def test_auto_detect_provider_resend(self):
+        """Test provider auto-detection when RESEND_API_KEY is set"""
+        executor = SendEmailExecutor()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"id": "msg_auto"}
+
+        with (
+            patch.dict("os.environ", {"RESEND_API_KEY": "re_auto_key"}),
+            patch("httpx.AsyncClient") as mock_client,
+        ):
+            mock_instance = AsyncMock()
+            mock_client.return_value.__aenter__.return_value = mock_instance
+            mock_instance.post = AsyncMock(return_value=mock_response)
+
+            result = await executor.execute(
+                {
+                    "to": "user@example.com",
+                    "subject": "Test",
+                    "from_email": "sender@example.com",
+                    "body": "Hello",
+                }
+            )
+
+            assert result["success"] is True
+            assert result["provider"] == "resend"
+
+    @pytest.mark.asyncio
+    async def test_auto_detect_provider_smtp(self):
+        """Test provider auto-detection when SMTP_HOST is set"""
+        executor = SendEmailExecutor()
+
+        with (
+            patch.dict("os.environ", {"SMTP_HOST": "smtp.example.com"}),
+            patch("apflow.extensions.email.send_email_executor.AIOSMTPLIB_AVAILABLE", True),
+            patch("apflow.extensions.email.send_email_executor.aiosmtplib") as mock_aiosmtplib,
+        ):
+            mock_aiosmtplib.send = AsyncMock()
+
+            result = await executor.execute(
+                {
+                    "to": "user@example.com",
+                    "subject": "Test",
+                    "from_email": "sender@example.com",
+                    "body": "Hello",
+                }
+            )
+
+            assert result["success"] is True
+            assert result["provider"] == "smtp"
+
+    @pytest.mark.asyncio
+    async def test_smtp_config_from_env(self):
+        """Test SMTP config falls back to env vars"""
+        executor = SendEmailExecutor()
+
+        env_vars = {
+            "SMTP_HOST": "env-smtp.example.com",
+            "SMTP_PORT": "465",
+            "SMTP_USERNAME": "env_user",
+            "SMTP_PASSWORD": "env_pass",
+            "SMTP_USE_TLS": "false",
+        }
+
+        with (
+            patch.dict("os.environ", env_vars),
+            patch("apflow.extensions.email.send_email_executor.AIOSMTPLIB_AVAILABLE", True),
+            patch("apflow.extensions.email.send_email_executor.aiosmtplib") as mock_aiosmtplib,
+        ):
+            mock_aiosmtplib.send = AsyncMock()
+
+            result = await executor.execute(
+                {
+                    "provider": "smtp",
+                    "to": "user@example.com",
+                    "subject": "Test",
+                    "from_email": "sender@example.com",
+                    "body": "Hello",
+                }
+            )
+
+            assert result["success"] is True
+            call_kwargs = mock_aiosmtplib.send.call_args[1]
+            assert call_kwargs["hostname"] == "env-smtp.example.com"
+            assert call_kwargs["port"] == 465
+            assert call_kwargs["username"] == "env_user"
+            assert call_kwargs["password"] == "env_pass"
+            assert "start_tls" not in call_kwargs
+
+    @pytest.mark.asyncio
+    async def test_input_smtp_config_overrides_env(self):
+        """Test input SMTP config takes priority over env vars"""
+        executor = SendEmailExecutor()
+
+        env_vars = {
+            "SMTP_HOST": "env-smtp.example.com",
+            "SMTP_PORT": "465",
+        }
+
+        with (
+            patch.dict("os.environ", env_vars),
+            patch("apflow.extensions.email.send_email_executor.AIOSMTPLIB_AVAILABLE", True),
+            patch("apflow.extensions.email.send_email_executor.aiosmtplib") as mock_aiosmtplib,
+        ):
+            mock_aiosmtplib.send = AsyncMock()
+
+            result = await executor.execute(
+                {
+                    "provider": "smtp",
+                    "smtp_host": "input-smtp.example.com",
+                    "smtp_port": 587,
+                    "to": "user@example.com",
+                    "subject": "Test",
+                    "from_email": "sender@example.com",
+                    "body": "Hello",
+                }
+            )
+
+            assert result["success"] is True
+            call_kwargs = mock_aiosmtplib.send.call_args[1]
+            assert call_kwargs["hostname"] == "input-smtp.example.com"
+            assert call_kwargs["port"] == 587
+
+    @pytest.mark.asyncio
+    async def test_missing_provider_and_no_env_error(self):
+        """Test error when provider not set and no env vars configured"""
+        executor = SendEmailExecutor()
+
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(ValidationError, match="provider is required"):
+                await executor.execute(
+                    {
+                        "to": "user@example.com",
+                        "subject": "Test",
+                        "from_email": "sender@example.com",
+                        "body": "Hello",
+                    }
+                )

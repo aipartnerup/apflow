@@ -173,6 +173,42 @@ APFLOW_STDIO_ALLOW_COMMAND=true
 APFLOW_STDIO_COMMAND_WHITELIST=echo,ls,cat
 ```
 
+### Email Extension
+
+The email extension supports sending emails via Resend API or SMTP. Environment variables provide default configuration that can be overridden by task inputs.
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `RESEND_API_KEY` | string | - | Resend API key for cloud email sending |
+| `SMTP_HOST` | string | - | SMTP server hostname |
+| `SMTP_PORT` | integer | 587 | SMTP server port |
+| `SMTP_USERNAME` | string | - | SMTP authentication username |
+| `SMTP_PASSWORD` | string | - | SMTP authentication password |
+| `SMTP_USE_TLS` | string | true | Whether to use STARTTLS ("true"/"false") |
+| `FROM_EMAIL` | string | - | Default sender email address (shared by both providers) |
+
+**Provider Auto-Detection:**
+- If `RESEND_API_KEY` is set, provider defaults to `resend`
+- If `SMTP_HOST` is set (and no Resend key), provider defaults to `smtp`
+
+**Example (Resend):**
+```bash
+RESEND_API_KEY=re_xxxxxxxxxxxxx
+FROM_EMAIL=noreply@example.com
+```
+
+**Example (SMTP with Gmail):**
+```bash
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+SMTP_USE_TLS=true
+FROM_EMAIL=your-email@gmail.com
+```
+
+**See also:** [Email Executor Guide](../examples/email-executor.md) for detailed usage examples.
+
 ### Daemon
 
 | Variable | Type | Default | Description |

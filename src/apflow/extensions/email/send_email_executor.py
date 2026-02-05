@@ -4,8 +4,20 @@ Send Email Executor for sending emails via Resend API or SMTP.
 This executor supports two email providers:
 - Resend: Cloud email API via HTTP
 - SMTP: Traditional SMTP protocol via aiosmtplib (optional dependency)
+
+Environment variables can be used as defaults (input values take priority):
+- RESEND_API_KEY: Resend API key
+- SMTP_HOST: SMTP server hostname
+- SMTP_PORT: SMTP server port (default: 587)
+- SMTP_USERNAME: SMTP authentication username
+- SMTP_PASSWORD: SMTP authentication password
+- SMTP_USE_TLS: Whether to use STARTTLS ("true"/"false", default: "true")
+- FROM_EMAIL: Default sender email address
+
+If provider is not specified, it will be auto-detected based on available env vars.
 """
 
+import os
 import httpx
 from email.message import EmailMessage
 from typing import Any, ClassVar, Dict, List, Literal, Optional, Union
@@ -33,10 +45,16 @@ except ImportError:
 
 
 class SendEmailInputSchema(BaseModel):
-    provider: Literal["resend", "smtp"] = Field(description="Email provider to use")
+    provider: Optional[Literal["resend", "smtp"]] = Field(
+        default=None,
+        description="Email provider to use. Auto-detected from env vars if not specified.",
+    )
     to: Union[str, List[str]] = Field(description="Recipient email address(es)")
     subject: str = Field(description="Email subject line")
-    from_email: str = Field(description="Sender email address")
+    from_email: Optional[str] = Field(
+        default=None,
+        description="Sender email address. Falls back to FROM_EMAIL env var.",
+    )
     body: Optional[str] = Field(default=None, description="Plain text email body")
     html: Optional[str] = Field(default=None, description="HTML email body")
     cc: Optional[Union[str, List[str]]] = Field(
@@ -48,20 +66,28 @@ class SendEmailInputSchema(BaseModel):
     reply_to: Optional[str] = Field(default=None, description="Reply-to email address")
     timeout: float = Field(default=30, description="Request timeout in seconds (default: 30)")
     api_key: Optional[str] = Field(
-        default=None, description="Resend API key (required for resend provider)"
+        default=None,
+        description="Resend API key. Falls back to RESEND_API_KEY env var.",
     )
     smtp_host: Optional[str] = Field(
-        default=None, description="SMTP server hostname (required for smtp provider)"
+        default=None,
+        description="SMTP server hostname. Falls back to SMTP_HOST env var.",
     )
-    smtp_port: int = Field(default=587, description="SMTP server port (default: 587)")
+    smtp_port: Optional[int] = Field(
+        default=None,
+        description="SMTP server port. Falls back to SMTP_PORT env var (default: 587).",
+    )
     smtp_username: Optional[str] = Field(
-        default=None, description="SMTP authentication username"
+        default=None,
+        description="SMTP authentication username. Falls back to SMTP_USERNAME env var.",
     )
     smtp_password: Optional[str] = Field(
-        default=None, description="SMTP authentication password"
+        default=None,
+        description="SMTP authentication password. Falls back to SMTP_PASSWORD env var.",
     )
-    smtp_use_tls: bool = Field(
-        default=True, description="Whether to use STARTTLS (default: true)"
+    smtp_use_tls: Optional[bool] = Field(
+        default=None,
+        description="Whether to use STARTTLS. Falls back to SMTP_USE_TLS env var (default: true).",
     )
 
 
@@ -71,9 +97,7 @@ class SendEmailOutputSchema(BaseModel):
     message_id: Optional[str] = Field(
         default=None, description="Message ID from provider (resend only)"
     )
-    status_code: Optional[int] = Field(
-        default=None, description="HTTP status code (resend only)"
-    )
+    status_code: Optional[int] = Field(default=None, description="HTTP status code (resend only)")
     message: Optional[str] = Field(default=None, description="Success/error message")
     error: Optional[str] = Field(default=None, description="Error details (on failure)")
 
@@ -130,16 +154,55 @@ class SendEmailExecutor(BaseTask):
             return [value]
         return list(value)
 
+    def _merge_env_defaults(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Merge environment variable defaults with inputs.
+
+        Input values take priority over env vars.
+        """
+        merged = dict(inputs)
+
+        # Resend config
+        if not merged.get("api_key"):
+            merged["api_key"] = os.getenv("RESEND_API_KEY")
+
+        # SMTP config
+        if not merged.get("smtp_host"):
+            merged["smtp_host"] = os.getenv("SMTP_HOST")
+        if merged.get("smtp_port") is None:
+            env_port = os.getenv("SMTP_PORT")
+            merged["smtp_port"] = int(env_port) if env_port else 587
+        if not merged.get("smtp_username"):
+            merged["smtp_username"] = os.getenv("SMTP_USERNAME")
+        if not merged.get("smtp_password"):
+            merged["smtp_password"] = os.getenv("SMTP_PASSWORD")
+        if merged.get("smtp_use_tls") is None:
+            env_tls = os.getenv("SMTP_USE_TLS", "true").lower()
+            merged["smtp_use_tls"] = env_tls not in ("false", "0", "no")
+
+        # Shared config
+        if not merged.get("from_email"):
+            merged["from_email"] = os.getenv("FROM_EMAIL")
+
+        # Auto-detect provider if not specified
+        if not merged.get("provider"):
+            if merged.get("api_key"):
+                merged["provider"] = "resend"
+            elif merged.get("smtp_host"):
+                merged["provider"] = "smtp"
+
+        return merged
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Send an email using the specified provider.
 
         Args:
             inputs: Dictionary containing:
-                - provider: "resend" or "smtp" (required)
+                - provider: "resend" or "smtp" (auto-detected from env if not set)
                 - to: Recipient email(s), str or list (required)
                 - subject: Email subject (required)
-                - from_email: Sender email address (required)
+                - from_email: Sender email address (falls back to FROM_EMAIL env)
                 - body: Plain text body (required if html not provided)
                 - html: HTML body (optional, alternative to body)
                 - cc: CC recipients, str or list (optional)
@@ -147,42 +210,51 @@ class SendEmailExecutor(BaseTask):
                 - reply_to: Reply-to address (optional)
                 - timeout: Request timeout in seconds (default: 30)
                 Resend-specific:
-                - api_key: Resend API key (required for resend)
+                - api_key: Resend API key (falls back to RESEND_API_KEY env)
                 SMTP-specific:
-                - smtp_host: SMTP server hostname (required for smtp)
-                - smtp_port: SMTP server port (default: 587)
-                - smtp_username: SMTP auth username (optional)
-                - smtp_password: SMTP auth password (optional)
-                - smtp_use_tls: Whether to use STARTTLS (default: True)
+                - smtp_host: SMTP server hostname (falls back to SMTP_HOST env)
+                - smtp_port: SMTP server port (falls back to SMTP_PORT env, default: 587)
+                - smtp_username: SMTP auth username (falls back to SMTP_USERNAME env)
+                - smtp_password: SMTP auth password (falls back to SMTP_PASSWORD env)
+                - smtp_use_tls: Whether to use STARTTLS (falls back to SMTP_USE_TLS env)
 
         Returns:
             Dictionary with send results.
         """
-        provider = inputs.get("provider")
-        if not provider:
-            raise ValidationError(f"[{self.id}] provider is required")
+        # Merge env var defaults with inputs (inputs take priority)
+        merged = self._merge_env_defaults(inputs)
 
-        to = inputs.get("to")
+        provider = merged.get("provider")
+        if not provider:
+            raise ValidationError(
+                f"[{self.id}] provider is required. "
+                "Set provider in inputs or configure RESEND_API_KEY or SMTP_HOST env var."
+            )
+
+        to = merged.get("to")
         if not to:
             raise ValidationError(f"[{self.id}] to is required")
 
-        subject = inputs.get("subject")
+        subject = merged.get("subject")
         if not subject:
             raise ValidationError(f"[{self.id}] subject is required")
 
-        from_email = inputs.get("from_email")
+        from_email = merged.get("from_email")
         if not from_email:
-            raise ValidationError(f"[{self.id}] from_email is required")
+            raise ValidationError(
+                f"[{self.id}] from_email is required. "
+                "Set from_email in inputs or configure FROM_EMAIL env var."
+            )
 
-        body = inputs.get("body")
-        html = inputs.get("html")
+        body = merged.get("body")
+        html = merged.get("html")
         if not body and not html:
             raise ValidationError(f"[{self.id}] Either body or html must be provided")
 
         if provider == "resend":
-            return await self._send_via_resend(inputs)
+            return await self._send_via_resend(merged)
         elif provider == "smtp":
-            return await self._send_via_smtp(inputs)
+            return await self._send_via_smtp(merged)
         else:
             raise ValidationError(
                 f"[{self.id}] Unknown provider '{provider}'. Supported: 'resend', 'smtp'"
@@ -192,7 +264,10 @@ class SendEmailExecutor(BaseTask):
         """Send email via Resend HTTP API."""
         api_key = inputs.get("api_key")
         if not api_key:
-            raise ValidationError(f"[{self.id}] api_key is required for resend provider")
+            raise ValidationError(
+                f"[{self.id}] api_key is required for resend provider. "
+                "Set api_key in inputs or configure RESEND_API_KEY env var."
+            )
 
         to_list = self._normalize_recipients(inputs.get("to"))
         cc_list = self._normalize_recipients(inputs.get("cc"))
@@ -254,7 +329,10 @@ class SendEmailExecutor(BaseTask):
 
         smtp_host = inputs.get("smtp_host")
         if not smtp_host:
-            raise ValidationError(f"[{self.id}] smtp_host is required for smtp provider")
+            raise ValidationError(
+                f"[{self.id}] smtp_host is required for smtp provider. "
+                "Set smtp_host in inputs or configure SMTP_HOST env var."
+            )
 
         smtp_port = inputs.get("smtp_port", 587)
         smtp_username = inputs.get("smtp_username")
