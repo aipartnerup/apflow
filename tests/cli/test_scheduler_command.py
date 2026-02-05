@@ -14,6 +14,7 @@ Tests use mocks by default to avoid starting real processes.
 
 import re
 
+import click
 import pytest
 from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
@@ -27,7 +28,9 @@ from apflow.cli.commands.scheduler import (
     is_process_running,
 )
 
-runner = CliRunner(mix_stderr=False)
+# mix_stderr was added in Click 8.0
+_click_major = int(click.__version__.split(".")[0])
+runner = CliRunner(mix_stderr=False) if _click_major >= 8 else CliRunner()
 
 
 def strip_ansi(text: str) -> str:
