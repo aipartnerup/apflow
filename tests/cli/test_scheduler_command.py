@@ -12,6 +12,8 @@ Tests the scheduler command:
 Tests use mocks by default to avoid starting real processes.
 """
 
+import re
+
 import pytest
 from unittest.mock import patch, MagicMock
 from click.testing import CliRunner
@@ -25,7 +27,13 @@ from apflow.cli.commands.scheduler import (
     is_process_running,
 )
 
-runner = CliRunner()
+runner = CliRunner(mix_stderr=False)
+
+
+def strip_ansi(text: str) -> str:
+    """Strip ANSI escape codes from text."""
+    ansi_pattern = re.compile(r"\x1b\[[0-9;]*m")
+    return ansi_pattern.sub("", text)
 
 
 @pytest.fixture
@@ -62,11 +70,12 @@ class TestSchedulerCommandHelp:
         """Test scheduler start subcommand help"""
         result = runner.invoke(cli, ["scheduler", "start", "--help"])
         assert result.exit_code == 0
-        assert "Start the internal scheduler" in result.stdout
-        assert "--poll-interval" in result.stdout
-        assert "--max-concurrent" in result.stdout
-        assert "--background" in result.stdout
-        assert "--timeout" in result.stdout
+        output = strip_ansi(result.stdout)
+        assert "Start the internal scheduler" in output
+        assert "--poll-interval" in output
+        assert "--max-concurrent" in output
+        assert "--background" in output
+        assert "--timeout" in output
 
     def test_scheduler_stop_help(self):
         """Test scheduler stop subcommand help"""
@@ -84,24 +93,27 @@ class TestSchedulerCommandHelp:
         """Test scheduler trigger subcommand help"""
         result = runner.invoke(cli, ["scheduler", "trigger", "--help"])
         assert result.exit_code == 0
-        assert "Manually trigger a scheduled task" in result.stdout
-        assert "--wait" in result.stdout
+        output = strip_ansi(result.stdout)
+        assert "Manually trigger a scheduled task" in output
+        assert "--wait" in output
 
     def test_scheduler_export_ical_help(self):
         """Test scheduler export-ical subcommand help"""
         result = runner.invoke(cli, ["scheduler", "export-ical", "--help"])
         assert result.exit_code == 0
-        assert "Export scheduled tasks as iCalendar" in result.stdout
-        assert "--output" in result.stdout
-        assert "--user-id" in result.stdout
-        assert "--name" in result.stdout
+        output = strip_ansi(result.stdout)
+        assert "Export scheduled tasks as iCalendar" in output
+        assert "--output" in output
+        assert "--user-id" in output
+        assert "--name" in output
 
     def test_scheduler_webhook_url_help(self):
         """Test scheduler webhook-url subcommand help"""
         result = runner.invoke(cli, ["scheduler", "webhook-url", "--help"])
         assert result.exit_code == 0
-        assert "Generate webhook URL for a task" in result.stdout
-        assert "--base-url" in result.stdout
+        output = strip_ansi(result.stdout)
+        assert "Generate webhook URL for a task" in output
+        assert "--base-url" in output
 
 
 class TestSchedulerPidFunctions:
@@ -328,7 +340,9 @@ class TestSchedulerTrigger:
         """Test scheduler trigger without task ID"""
         result = runner.invoke(cli, ["scheduler", "trigger"])
         assert result.exit_code != 0
-        assert "Missing argument" in result.stdout or "TASK_ID" in result.stdout
+        # Error output may go to stdout or stderr depending on Rich/Click configuration
+        combined_output = strip_ansi(result.stdout + (result.stderr or ""))
+        assert "Missing argument" in combined_output or "TASK_ID" in combined_output
 
     @patch("apflow.cli.commands.scheduler.asyncio.run")
     def test_scheduler_trigger_success(self, mock_asyncio_run):
