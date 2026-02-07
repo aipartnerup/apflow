@@ -74,7 +74,7 @@ class APIClient:
             timeout: Request timeout in seconds
             retry_attempts: Number of retry attempts on failure
             retry_backoff: Initial backoff for exponential retry (seconds)
-            proxies: Proxy URL (e.g., http://127.0.0.1:7890). 
+            proxies: Proxy URL (e.g., http://127.0.0.1:7890).
                      If None, disables automatic proxy detection from environment.
                      Use empty string "" to use environment proxy settings.
         """
@@ -130,9 +130,7 @@ class APIClient:
 
         return response
 
-    async def _request(
-        self, method: str, path: str, **kwargs: Any
-    ) -> Dict[str, Any]:
+    async def _request(self, method: str, path: str, **kwargs: Any) -> Dict[str, Any]:
         """
         Make HTTP request with exponential backoff retry.
 
@@ -186,9 +184,7 @@ class APIClient:
                 )
 
                 if response.status_code >= 400:
-                    raise APIResponseError(
-                        f"API error {response.status_code}: {response.text}"
-                    )
+                    raise APIResponseError(f"API error {response.status_code}: {response.text}")
 
                 return response.json()
 
@@ -221,6 +217,18 @@ class APIClient:
             raise last_error
 
         raise APIClientError("Unknown error in API request")
+
+    async def call_method(self, method: str, **params: Any) -> Any:
+        """Call a JSON-RPC method on the /tasks endpoint.
+
+        Args:
+            method: The RPC method name (e.g., "tasks.scheduled.list")
+            **params: Parameters to pass to the RPC method
+
+        Returns:
+            The result from the RPC response
+        """
+        return await self._tasks_rpc(method, params)
 
     async def execute_task(self, task_id: str, **kwargs: Any) -> Dict[str, Any]:
         """Execute a task by ID."""
@@ -310,9 +318,7 @@ class APIClient:
         """Create tasks from a task array or single task dict."""
         return await self._tasks_rpc("tasks.create", tasks)
 
-    async def update_task(
-        self, task_id: str, **updates: Any
-    ) -> Dict[str, Any]:
+    async def update_task(self, task_id: str, **updates: Any) -> Dict[str, Any]:
         """Update task fields."""
         return await self._tasks_rpc("tasks.update", {"task_id": task_id, **updates})
 

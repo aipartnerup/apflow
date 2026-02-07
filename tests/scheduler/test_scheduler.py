@@ -12,7 +12,7 @@ import asyncio
 
 import pytest
 from datetime import datetime, timezone, timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from apflow.scheduler.base import (
     SchedulerConfig,
@@ -897,3 +897,478 @@ class TestSchedulerIntegration:
 
         assert "0 9 * * 1-5" in cron
         assert webhook_info["url"] in cron
+
+
+# ============================================================================
+# Scheduler API Integration Tests
+# ============================================================================
+
+
+class TestSchedulerAPIDetection:
+    """Tests for scheduler API mode detection with real should_use_api() logic.
+
+    These tests exercise the full detection flow: ConfigManager state ->
+    should_use_api() -> _detect_api_mode(). Only the network accessibility
+    check is mocked to avoid real HTTP calls.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _reset_api_state(self):
+        """Reset API validation cache and ConfigManager between tests."""
+        from apflow.cli.api_gateway_helper import reset_api_validation
+        from apflow.core.config_manager import get_config_manager
+
+        reset_api_validation()
+        cm = get_config_manager()
+        cm.clear()
+        yield
+        reset_api_validation()
+        cm.clear()
+
+    @pytest.fixture()
+    def api_accessible(self, monkeypatch):
+        """Mock only the network check to return True."""
+
+        async def _accessible(*_args: object, **_kwargs: object) -> bool:
+            return True
+
+        monkeypatch.setattr(
+            "apflow.core.config_manager.ConfigManager.check_api_server_accessible",
+            _accessible,
+        )
+
+    @pytest.fixture()
+    def api_inaccessible(self, monkeypatch):
+        """Mock only the network check to return False."""
+
+        async def _inaccessible(*_args: object, **_kwargs: object) -> bool:
+            return False
+
+        monkeypatch.setattr(
+            "apflow.core.config_manager.ConfigManager.check_api_server_accessible",
+            _inaccessible,
+        )
+
+    def test_detect_api_mode_true_when_url_configured_and_accessible(self, api_accessible):
+        """Real detection: URL configured + server accessible -> True."""
+        from apflow.core.config_manager import get_config_manager
+
+        cm = get_config_manager()
+        cm.set_api_server_url("http://localhost:8000")
+
+        scheduler = InternalScheduler()
+        assert scheduler._detect_api_mode() is True
+
+    def test_detect_api_mode_false_when_url_configured_but_inaccessible(self, api_inaccessible):
+        """Real detection: URL configured + server inaccessible -> False."""
+        from apflow.core.config_manager import get_config_manager
+
+        cm = get_config_manager()
+        cm.set_api_server_url("http://localhost:8000")
+
+        scheduler = InternalScheduler()
+        assert scheduler._detect_api_mode() is False
+
+    def test_detect_api_mode_false_when_no_url_configured(self, api_inaccessible):
+        """Real detection: no URL configured + default unreachable -> False."""
+        scheduler = InternalScheduler()
+        assert scheduler._detect_api_mode() is False
+
+    def test_detect_api_mode_auto_discovers_default_url(self, api_accessible):
+        """Real detection: no URL configured but default localhost accessible -> True."""
+        from apflow.core.config_manager import get_config_manager
+
+        cm = get_config_manager()
+        # No URL set; should_use_api auto-probes localhost:8000
+        assert cm.get_api_server_url() is None
+
+        scheduler = InternalScheduler()
+        assert scheduler._detect_api_mode() is True
+        # After auto-discovery the URL is set on ConfigManager
+        assert cm.get_api_server_url() == "http://localhost:8000"
+
+    def test_detect_api_mode_caches_result(self, api_accessible):
+        """Real detection: result is cached per session (only one probe)."""
+        from apflow.cli.api_gateway_helper import reset_api_validation
+        from apflow.core.config_manager import get_config_manager
+
+        cm = get_config_manager()
+        cm.set_api_server_url("http://localhost:8000")
+
+        scheduler = InternalScheduler()
+        assert scheduler._detect_api_mode() is True
+
+        # Change config — but cache should still return True
+        cm.set_api_server_url(None)
+        assert scheduler._detect_api_mode() is True
+
+        # After reset, should re-evaluate
+        reset_api_validation()
+        # Now no URL configured, but api_accessible is still mocked as True,
+        # so auto-discovery of localhost:8000 succeeds
+        assert scheduler._detect_api_mode() is True
+
+    @pytest.mark.asyncio
+    async def test_start_enables_api_mode_with_real_detection(self, api_accessible):
+        """Real end-to-end: start() detects API and sets _use_api=True."""
+        from apflow.core.config_manager import get_config_manager
+
+        cm = get_config_manager()
+        cm.set_api_server_url("http://localhost:8000")
+
+        scheduler = InternalScheduler()
+        scheduler._get_due_tasks = AsyncMock(return_value=[])
+
+        await scheduler.start()
+        assert scheduler._use_api is True
+        await scheduler.stop()
+
+    @pytest.mark.asyncio
+    async def test_start_disables_api_mode_when_server_down(self, api_inaccessible):
+        """Real end-to-end: start() detects no API and sets _use_api=False."""
+        scheduler = InternalScheduler()
+        scheduler._get_due_tasks = AsyncMock(return_value=[])
+
+        await scheduler.start()
+        assert scheduler._use_api is False
+        await scheduler.stop()
+
+    def test_use_api_defaults_to_false(self):
+        """_use_api defaults to False before start."""
+        scheduler = InternalScheduler()
+        assert scheduler._use_api is False
+
+
+class TestSchedulerGetDueTasksAPI:
+    """Tests for _get_due_tasks_via_api."""
+
+    @pytest.mark.asyncio
+    async def test_get_due_tasks_via_api_calls_correct_method(self):
+        """Test that _get_due_tasks_via_api calls tasks.scheduled.due."""
+        scheduler = InternalScheduler()
+
+        mock_client = AsyncMock()
+        mock_client.call_method = AsyncMock(return_value=[{"id": "task1"}, {"id": "task2"}])
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch.object(scheduler, "_create_api_client", return_value=mock_client):
+            result = await scheduler._get_due_tasks_via_api()
+
+        assert result == [{"id": "task1"}, {"id": "task2"}]
+        mock_client.call_method.assert_called_once_with(
+            "tasks.scheduled.due",
+            limit=scheduler.config.max_concurrent_tasks * 2,
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_due_tasks_via_api_with_user_id(self):
+        """Test that _get_due_tasks_via_api passes user_id when configured."""
+        config = SchedulerConfig(user_id="user123")
+        scheduler = InternalScheduler(config)
+
+        mock_client = AsyncMock()
+        mock_client.call_method = AsyncMock(return_value=[])
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch.object(scheduler, "_create_api_client", return_value=mock_client):
+            await scheduler._get_due_tasks_via_api()
+
+        mock_client.call_method.assert_called_once_with(
+            "tasks.scheduled.due",
+            limit=config.max_concurrent_tasks * 2,
+            user_id="user123",
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_due_tasks_via_api_handles_dict_response(self):
+        """Test that _get_due_tasks_via_api handles dict response with tasks key."""
+        scheduler = InternalScheduler()
+
+        mock_client = AsyncMock()
+        mock_client.call_method = AsyncMock(return_value={"tasks": [{"id": "task1"}], "total": 1})
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch.object(scheduler, "_create_api_client", return_value=mock_client):
+            result = await scheduler._get_due_tasks_via_api()
+
+        assert result == [{"id": "task1"}]
+
+    @pytest.mark.asyncio
+    async def test_get_due_tasks_falls_back_to_db_on_api_error(self):
+        """Test that _get_due_tasks falls back to DB when API fails."""
+        scheduler = InternalScheduler()
+        scheduler._use_api = True
+
+        from apflow.cli.api_client import APIClientError
+
+        scheduler._get_due_tasks_via_api = AsyncMock(
+            side_effect=APIClientError("connection refused")
+        )
+        scheduler._get_due_tasks_via_db = AsyncMock(return_value=[{"id": "task1"}])
+
+        result = await scheduler._get_due_tasks()
+
+        assert result == [{"id": "task1"}]
+        scheduler._get_due_tasks_via_api.assert_called_once()
+        scheduler._get_due_tasks_via_db.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_due_tasks_skips_api_when_not_configured(self):
+        """Test that _get_due_tasks skips API when _use_api is False."""
+        scheduler = InternalScheduler()
+        scheduler._use_api = False
+
+        scheduler._get_due_tasks_via_api = AsyncMock()
+        scheduler._get_due_tasks_via_db = AsyncMock(return_value=[])
+
+        await scheduler._get_due_tasks()
+
+        scheduler._get_due_tasks_via_api.assert_not_called()
+        scheduler._get_due_tasks_via_db.assert_called_once()
+
+
+class TestSchedulerExecuteTaskAPI:
+    """Tests for _execute_task_via_api."""
+
+    @pytest.mark.asyncio
+    async def test_execute_task_via_api_calls_webhook_trigger(self):
+        """Test that _execute_task_via_api calls tasks.webhook.trigger."""
+        scheduler = InternalScheduler()
+
+        mock_client = AsyncMock()
+        mock_client.call_method = AsyncMock(
+            return_value={"status": "completed", "result": {"output": "done"}}
+        )
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch.object(scheduler, "_create_api_client", return_value=mock_client):
+            await scheduler._execute_task_via_api("task123")
+
+        mock_client.call_method.assert_called_once_with(
+            "tasks.webhook.trigger",
+            task_id="task123",
+            async_execution=False,
+        )
+
+    @pytest.mark.asyncio
+    async def test_execute_task_via_api_tracks_success_stats(self):
+        """Test that successful API execution increments success stats."""
+        scheduler = InternalScheduler()
+
+        mock_client = AsyncMock()
+        mock_client.call_method = AsyncMock(
+            return_value={"status": "completed", "result": {"data": "ok"}}
+        )
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch.object(scheduler, "_create_api_client", return_value=mock_client):
+            await scheduler._execute_task_via_api("task123")
+
+        assert scheduler.stats.tasks_executed == 1
+        assert scheduler.stats.tasks_succeeded == 1
+        assert scheduler.stats.tasks_failed == 0
+
+    @pytest.mark.asyncio
+    async def test_execute_task_via_api_tracks_failure_stats(self):
+        """Test that failed API execution increments failure stats."""
+        scheduler = InternalScheduler()
+
+        mock_client = AsyncMock()
+        mock_client.call_method = AsyncMock(return_value={"status": "failed", "error": "timeout"})
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch.object(scheduler, "_create_api_client", return_value=mock_client):
+            await scheduler._execute_task_via_api("task123")
+
+        assert scheduler.stats.tasks_executed == 1
+        assert scheduler.stats.tasks_succeeded == 0
+        assert scheduler.stats.tasks_failed == 1
+
+    @pytest.mark.asyncio
+    async def test_execute_task_via_api_notifies_callback(self):
+        """Test that API execution notifies task completion callbacks."""
+        scheduler = InternalScheduler()
+
+        callback_results: list = []
+
+        def callback(task_id: str, success: bool, result: object) -> None:
+            callback_results.append((task_id, success, result))
+
+        scheduler.on_task_complete(callback)
+
+        mock_client = AsyncMock()
+        mock_client.call_method = AsyncMock(
+            return_value={"status": "completed", "result": {"data": "ok"}}
+        )
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch.object(scheduler, "_create_api_client", return_value=mock_client):
+            await scheduler._execute_task_via_api("task123")
+
+        assert len(callback_results) == 1
+        assert callback_results[0] == ("task123", True, {"data": "ok"})
+
+    @pytest.mark.asyncio
+    async def test_execute_task_falls_back_to_db_on_api_error(self):
+        """Test that _execute_task falls back to DB when API fails."""
+        scheduler = InternalScheduler()
+        scheduler._use_api = True
+        scheduler._semaphore = asyncio.Semaphore(10)
+        scheduler._active_task_ids.add("task123")
+
+        from apflow.cli.api_client import APIClientError
+
+        scheduler._execute_task_via_api = AsyncMock(side_effect=APIClientError("server error"))
+        scheduler._execute_task_via_db = AsyncMock()
+
+        await scheduler._execute_task("task123")
+
+        scheduler._execute_task_via_api.assert_called_once_with("task123")
+        scheduler._execute_task_via_db.assert_called_once_with("task123")
+        # Task should be removed from active set
+        assert "task123" not in scheduler._active_task_ids
+
+    @pytest.mark.asyncio
+    async def test_execute_task_skips_api_when_not_configured(self):
+        """Test that _execute_task skips API when _use_api is False."""
+        scheduler = InternalScheduler()
+        scheduler._use_api = False
+        scheduler._semaphore = asyncio.Semaphore(10)
+        scheduler._active_task_ids.add("task123")
+
+        scheduler._execute_task_via_api = AsyncMock()
+        scheduler._execute_task_via_db = AsyncMock()
+
+        await scheduler._execute_task("task123")
+
+        scheduler._execute_task_via_api.assert_not_called()
+        scheduler._execute_task_via_db.assert_called_once_with("task123")
+
+    @pytest.mark.asyncio
+    async def test_execute_task_via_api_uses_task_timeout(self):
+        """Test that _execute_task_via_api creates client with task_timeout."""
+        config = SchedulerConfig(task_timeout=7200)
+        scheduler = InternalScheduler(config)
+
+        mock_client = AsyncMock()
+        mock_client.call_method = AsyncMock(return_value={"status": "completed"})
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch.object(scheduler, "_create_api_client", return_value=mock_client) as mock_create:
+            await scheduler._execute_task_via_api("task123")
+
+        mock_create.assert_called_once_with(timeout=7200.0)
+
+    @pytest.mark.asyncio
+    async def test_execute_task_via_api_handles_success_flag(self):
+        """Test that _execute_task_via_api recognizes success=True in result."""
+        scheduler = InternalScheduler()
+
+        mock_client = AsyncMock()
+        mock_client.call_method = AsyncMock(
+            return_value={"success": True, "result": {"output": "done"}}
+        )
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch.object(scheduler, "_create_api_client", return_value=mock_client):
+            await scheduler._execute_task_via_api("task123")
+
+        assert scheduler.stats.tasks_succeeded == 1
+
+
+class TestSchedulerCreateAPIClient:
+    """Tests for _create_api_client helper."""
+
+    def test_create_api_client_uses_config_manager(self):
+        """Test that _create_api_client reads from ConfigManager."""
+        scheduler = InternalScheduler()
+
+        mock_cm = MagicMock()
+        mock_cm.api_server_url = "http://myserver:9000"
+        mock_cm.admin_auth_token = "test-token"
+        mock_cm.api_timeout = 45.0
+        mock_cm.api_retry_attempts = 5
+        mock_cm.api_retry_backoff = 2.0
+
+        with patch("apflow.core.config_manager.get_config_manager", return_value=mock_cm):
+            client = scheduler._create_api_client()
+
+        assert client.server_url == "http://myserver:9000"
+        assert client.auth_token == "test-token"
+        assert client.timeout == 45.0
+        assert client.retry_attempts == 5
+        assert client.retry_backoff == 2.0
+        assert client.proxies is None
+
+    def test_create_api_client_with_timeout_override(self):
+        """Test that _create_api_client uses timeout override."""
+        scheduler = InternalScheduler()
+
+        mock_cm = MagicMock()
+        mock_cm.api_server_url = "http://localhost:8000"
+        mock_cm.admin_auth_token = None
+        mock_cm.api_timeout = 30.0
+        mock_cm.api_retry_attempts = 3
+        mock_cm.api_retry_backoff = 1.0
+
+        with patch("apflow.core.config_manager.get_config_manager", return_value=mock_cm):
+            client = scheduler._create_api_client(timeout=3600.0)
+
+        assert client.timeout == 3600.0
+
+    def test_create_api_client_defaults_server_url(self):
+        """Test that _create_api_client defaults to localhost:8000."""
+        scheduler = InternalScheduler()
+
+        mock_cm = MagicMock()
+        mock_cm.api_server_url = None
+        mock_cm.admin_auth_token = None
+        mock_cm.api_timeout = 30.0
+        mock_cm.api_retry_attempts = 3
+        mock_cm.api_retry_backoff = 1.0
+
+        with patch("apflow.core.config_manager.get_config_manager", return_value=mock_cm):
+            client = scheduler._create_api_client()
+
+        assert client.server_url == "http://localhost:8000"
+
+
+class TestAPIClientCallMethod:
+    """Tests for APIClient.call_method."""
+
+    @pytest.mark.asyncio
+    async def test_call_method_delegates_to_tasks_rpc(self):
+        """Test that call_method delegates to _tasks_rpc."""
+        from apflow.cli.api_client import APIClient
+
+        client = APIClient(server_url="http://localhost:8000")
+        client._tasks_rpc = AsyncMock(return_value={"result": "ok"})
+
+        result = await client.call_method("tasks.scheduled.due", limit=20, user_id="user1")
+
+        assert result == {"result": "ok"}
+        client._tasks_rpc.assert_called_once_with(
+            "tasks.scheduled.due", {"limit": 20, "user_id": "user1"}
+        )
+
+    @pytest.mark.asyncio
+    async def test_call_method_with_no_params(self):
+        """Test that call_method works with no extra params."""
+        from apflow.cli.api_client import APIClient
+
+        client = APIClient(server_url="http://localhost:8000")
+        client._tasks_rpc = AsyncMock(return_value=[])
+
+        result = await client.call_method("tasks.scheduled.list")
+
+        assert result == []
+        client._tasks_rpc.assert_called_once_with("tasks.scheduled.list", {})
