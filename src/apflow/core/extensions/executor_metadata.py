@@ -18,19 +18,19 @@ logger = get_logger(__name__)
 def get_executor_metadata(executor_id: str) -> Optional[Dict[str, Any]]:
     """
     Get executor metadata for demo task generation
-    
+
     Returns comprehensive metadata about an executor including:
     - id, name, description
     - input_schema (for validation)
     - examples (text descriptions)
     - tags
-    
+
     Args:
         executor_id: Executor ID (e.g., "system_info_executor")
-        
+
     Returns:
         Dictionary with executor metadata, or None if executor not found
-        
+
     Example:
         metadata = get_executor_metadata("system_info_executor")
         # Returns:
@@ -45,15 +45,17 @@ def get_executor_metadata(executor_id: str) -> Optional[Dict[str, Any]]:
     """
     registry = get_registry()
     extension = registry.get_by_id(executor_id)
-    
+
     if not extension:
         logger.warning(f"Executor '{executor_id}' not found in registry")
         return None
-    
+
     if extension.category != ExtensionCategory.EXECUTOR:
-        logger.warning(f"Extension '{executor_id}' is not an executor (category: {extension.category.value})")
+        logger.warning(
+            f"Extension '{executor_id}' is not an executor (category: {extension.category.value})"
+        )
         return None
-    
+
     # Create executor instance to get metadata
     # Use empty inputs for metadata query
     try:
@@ -69,7 +71,7 @@ def get_executor_metadata(executor_id: str) -> Optional[Dict[str, Any]]:
             "examples": getattr(extension, "examples", []) or [],
             "tags": getattr(extension, "tags", []) or [],
         }
-    
+
     # Get input schema from executor instance
     input_schema = {}
     if hasattr(executor_instance, "get_input_schema"):
@@ -77,7 +79,7 @@ def get_executor_metadata(executor_id: str) -> Optional[Dict[str, Any]]:
             input_schema = executor_instance.get_input_schema()
         except Exception as e:
             logger.warning(f"Failed to get input schema from executor '{executor_id}': {e}")
-    
+
     # Collect metadata
     metadata = {
         "id": extension.id,
@@ -87,28 +89,28 @@ def get_executor_metadata(executor_id: str) -> Optional[Dict[str, Any]]:
         "examples": getattr(extension, "examples", []) or [],
         "tags": getattr(extension, "tags", []) or [],
     }
-    
+
     # Add type if available
     if hasattr(extension, "type"):
         metadata["type"] = extension.type
-    
+
     return metadata
 
 
 def validate_task_format(task: Dict[str, Any], executor_id: str) -> bool:
     """
     Validate task against executor's input schema
-    
+
     Checks if the task's inputs match the executor's expected input schema.
     This ensures tasks are accurate and will work correctly when executed.
-    
+
     Args:
         task: Task dictionary (must have "inputs" and "schemas.method" fields)
         executor_id: Executor ID to validate against (optional, can be extracted from task)
-        
+
     Returns:
         True if task format is valid, False otherwise
-        
+
     Example:
         task = {
             "name": "CPU Analysis",
@@ -122,33 +124,37 @@ def validate_task_format(task: Dict[str, Any], executor_id: str) -> bool:
         schemas = task.get("schemas", {})
         executor_id = schemas.get("method")
         if not executor_id:
-            logger.warning("Cannot validate task: no executor_id provided and task.schemas.method is missing")
+            logger.warning(
+                "Cannot validate task: no executor_id provided and task.schemas.method is missing"
+            )
             return False
-    
+
     # Get executor metadata
     metadata = get_executor_metadata(executor_id)
     if not metadata:
         logger.warning(f"Cannot validate task: executor '{executor_id}' not found")
         return False
-    
+
     # Get input schema
     input_schema = metadata.get("input_schema", {})
     if not input_schema:
         # No schema defined, assume valid
         logger.debug(f"Executor '{executor_id}' has no input schema, skipping validation")
         return True
-    
+
     # Get task inputs
     task_inputs = task.get("inputs", {})
     if not task_inputs:
         # Check if inputs are required
         required_fields = input_schema.get("required", [])
         if required_fields:
-            logger.warning(f"Task has no inputs but executor '{executor_id}' requires: {required_fields}")
+            logger.warning(
+                f"Task has no inputs but executor '{executor_id}' requires: {required_fields}"
+            )
             return False
         # No inputs and no required fields, valid
         return True
-    
+
     # Validate inputs against schema
     try:
         is_valid = _validate_input_schema(input_schema, task_inputs)
@@ -166,10 +172,10 @@ def validate_task_format(task: Dict[str, Any], executor_id: str) -> bool:
 def get_all_executor_metadata() -> Dict[str, Dict[str, Any]]:
     """
     Get metadata for all registered executors
-    
+
     Returns:
         Dictionary mapping executor_id -> metadata dict
-        
+
     Example:
         all_metadata = get_all_executor_metadata()
         # Returns:
@@ -181,15 +187,14 @@ def get_all_executor_metadata() -> Dict[str, Dict[str, Any]]:
     """
     registry = get_registry()
     all_metadata = {}
-    
+
     # Get all executor extensions
     executors = registry.list_executors()
-    
+
     for executor in executors:
         executor_id = executor.id
         metadata = get_executor_metadata(executor_id)
         if metadata:
             all_metadata[executor_id] = metadata
-    
-    return all_metadata
 
+    return all_metadata

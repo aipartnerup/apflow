@@ -53,20 +53,32 @@ class GrpcInputSchema(BaseModel):
     service: str = Field(description="Service name (required)")
     method: str = Field(description="Method name (required)")
     request: Dict[str, Any] = Field(description="Request parameters as dict (required)")
-    proto_file: Optional[str] = Field(default=None, description="Path to proto file (optional, for dynamic loading)")
+    proto_file: Optional[str] = Field(
+        default=None, description="Path to proto file (optional, for dynamic loading)"
+    )
     timeout: float = Field(default=30.0, description="Request timeout in seconds (default: 30.0)")
-    metadata: Optional[Dict[str, str]] = Field(default=None, description="gRPC metadata dict (optional)")
+    metadata: Optional[Dict[str, str]] = Field(
+        default=None, description="gRPC metadata dict (optional)"
+    )
 
 
 class GrpcOutputSchema(BaseModel):
     success: bool = Field(description="Whether the gRPC call was successful")
-    error: Optional[str] = Field(default=None, description="Error message (only present on failure or cancellation)")
+    error: Optional[str] = Field(
+        default=None, description="Error message (only present on failure or cancellation)"
+    )
     server: str = Field(description="gRPC server address that was called")
     service: str = Field(description="Service name that was called")
     method: str = Field(description="Method name that was called")
-    request: Optional[Dict[str, Any]] = Field(default=None, description="Request data that was sent (only present on success)")
-    response: Optional[Dict[str, Any]] = Field(default=None, description="Response data received (only present on success)")
-    metadata: Optional[Dict[str, Any]] = Field(default=None, description="Response metadata (only present on success)")
+    request: Optional[Dict[str, Any]] = Field(
+        default=None, description="Request data that was sent (only present on success)"
+    )
+    response: Optional[Dict[str, Any]] = Field(
+        default=None, description="Response data received (only present on success)"
+    )
+    metadata: Optional[Dict[str, Any]] = Field(
+        default=None, description="Response metadata (only present on success)"
+    )
 
 
 @executor_register()
@@ -290,4 +302,3 @@ class GrpcExecutor(BaseTask):
             "success": True,
             "_demo_sleep": 0.15,  # Simulate gRPC call latency (typically faster than HTTP)
         }
-

@@ -1,4 +1,3 @@
 """
 API module tests
 """
-

@@ -9,7 +9,7 @@ import json
 
 class DuckDBDialect:
     """DuckDB dialect configuration (default)"""
-    
+
     @staticmethod
     def normalize_data(data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -24,7 +24,7 @@ class DuckDBDialect:
             else:
                 normalized[key] = value
         return normalized
-    
+
     @staticmethod
     def denormalize_data(data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -41,12 +41,12 @@ class DuckDBDialect:
             else:
                 denormalized[key] = value
         return denormalized
-    
+
     @staticmethod
     def get_connection_string(path: str = ":memory:") -> str:
         """
         Generate DuckDB connection string
-        
+
         Args:
             path: Database file path, ":memory:" for in-memory database
         """
@@ -56,7 +56,7 @@ class DuckDBDialect:
             # Ensure path is absolute
             abs_path = str(Path(path).absolute())
             return f"duckdb:///{abs_path}"
-    
+
     @staticmethod
     def get_engine_kwargs() -> Dict[str, Any]:
         """DuckDB specific engine parameters"""
@@ -64,4 +64,3 @@ class DuckDBDialect:
             "pool_pre_ping": True,
             # DuckDB is embedded, doesn't need connection pooling
         }
-

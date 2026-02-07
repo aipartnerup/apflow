@@ -123,13 +123,14 @@ async def test_system_executors_api_with_restrictions():
 
 if __name__ == "__main__":
     import asyncio
+
     print("\n" + "=" * 80)
     print("Testing API endpoint: system.executors")
     print("=" * 80)
-    
+
     asyncio.run(test_system_executors_api_no_restrictions())
     asyncio.run(test_system_executors_api_with_restrictions())
-    
+
     print("\n" + "=" * 80)
     print("All API tests passed! ✅")
     print("=" * 80 + "\n")

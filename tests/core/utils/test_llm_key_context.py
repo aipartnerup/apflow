@@ -46,6 +46,6 @@ class TestLLMKeyContext:
         """Test setting and clearing LLM key header"""
         set_llm_key_from_header("sk-test123", "openai")
         assert get_llm_provider_from_header() == "openai"
-        
+
         clear_llm_key_context()
         assert get_llm_provider_from_header() is None

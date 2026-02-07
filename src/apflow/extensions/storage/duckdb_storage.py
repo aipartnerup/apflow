@@ -15,25 +15,25 @@ from apflow.core.extensions.decorators import storage_register
 class DuckDBStorage(StorageBackend):
     """
     DuckDB storage backend extension
-    
+
     Provides embedded DuckDB database support.
     Registered as ExtensionCategory.STORAGE extension.
     """
-    
+
     id = "duckdb"
     name = "DuckDB Storage"
     description = "Embedded DuckDB database backend (default)"
     version = "1.0.0"
-    
+
     @property
     def type(self) -> str:
         """Extension type identifier"""
         return "duckdb"
-    
+
     def normalize_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Normalize data before writing to database
-        
+
         DuckDB supports JSON type, but needs special handling for nested structures.
         """
         normalized = {}
@@ -44,7 +44,7 @@ class DuckDBStorage(StorageBackend):
             else:
                 normalized[key] = value
         return normalized
-    
+
     def denormalize_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Denormalize data after reading from database
@@ -60,22 +60,22 @@ class DuckDBStorage(StorageBackend):
             else:
                 denormalized[key] = value
         return denormalized
-    
+
     def get_connection_string(self, **kwargs) -> str:
         """
         Generate DuckDB connection string
-        
+
         Args:
             **kwargs: Connection parameters
                 - path: Database file path (default: ":memory:")
                 - connection_string: Direct connection string (if provided, used as-is)
-        
+
         Returns:
             Connection string for SQLAlchemy
         """
         if "connection_string" in kwargs:
             return kwargs["connection_string"]
-        
+
         path = kwargs.get("path", ":memory:")
         if path == ":memory:":
             return "duckdb:///:memory:"
@@ -83,7 +83,7 @@ class DuckDBStorage(StorageBackend):
             # Ensure path is absolute
             abs_path = str(Path(path).absolute())
             return f"duckdb:///{abs_path}"
-    
+
     def get_engine_kwargs(self) -> Dict[str, Any]:
         """DuckDB specific engine parameters"""
         return {
@@ -93,4 +93,3 @@ class DuckDBStorage(StorageBackend):
 
 
 __all__ = ["DuckDBStorage"]
-

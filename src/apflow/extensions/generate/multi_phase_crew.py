@@ -34,6 +34,7 @@ class MultiPhaseGenerationCrew:
     def _import_crewai(self):
         """Lazy import crewai to avoid slow module-level imports"""
         from crewai import Agent, Task, Crew, Process
+
         return Agent, Task, Crew, Process
 
     async def generate(self, requirement: str, user_id: Optional[str] = None) -> Dict[str, Any]:

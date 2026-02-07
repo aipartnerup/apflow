@@ -49,6 +49,7 @@ class TestGenerateExecutor:
         executor = GenerateExecutor()
         with pytest.raises(ValueError, match="Failed to parse JSON"):
             executor._parse_llm_response("invalid json")
+
     def test_validate_tasks_array_empty(self):
         """Test validation of empty array"""
         executor = GenerateExecutor()

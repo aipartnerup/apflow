@@ -63,29 +63,29 @@ MODEL_PROVIDER_PATTERNS = {
 def detect_provider_from_model(model_name: str) -> Optional[str]:
     """
     Detect LLM provider from model name
-    
+
     Args:
         model_name: Model name (e.g., "openai/gpt-4", "gpt-4", "claude-3", "gemini-pro")
-        
+
     Returns:
         Provider name if detected, None otherwise
     """
     if not model_name:
         return None
-    
+
     model_lower = model_name.lower()
-    
+
     # Check if model name contains provider prefix (e.g., "openai/gpt-4")
     if "/" in model_lower:
         provider = model_lower.split("/")[0]
         if provider in PROVIDER_ENV_VARS:
             return provider
-    
+
     # Check model name patterns
     for pattern, provider in MODEL_PROVIDER_PATTERNS.items():
         if pattern in model_lower:
             return provider
-    
+
     # Default to OpenAI if no pattern matches (common case)
     return "openai"
 
@@ -94,17 +94,17 @@ def inject_llm_key(
     api_key: str,
     provider: Optional[str] = None,
     model_name: Optional[str] = None,
-    works: Optional[Dict[str, Any]] = None
+    works: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Inject LLM API key into appropriate environment variable
-    
+
     Priority for provider detection:
     1. Explicit provider parameter
     2. Model name from works configuration
     3. Model name parameter
     4. Default to OpenAI
-    
+
     Args:
         api_key: LLM API key
         provider: Explicit provider name (e.g., "openai", "anthropic")
@@ -113,10 +113,10 @@ def inject_llm_key(
     """
     if not api_key:
         return
-    
+
     # Try to detect provider
     detected_provider = provider
-    
+
     if not detected_provider:
         # Try to extract model name from works
         if works:
@@ -130,35 +130,34 @@ def inject_llm_key(
                 elif hasattr(agent_llm, "model"):
                     detected_provider = detect_provider_from_model(agent_llm.model)
                     break
-            
+
             # Check crew-level LLM if not found in agents
             if not detected_provider:
                 crew_llm = works.get("llm")
                 if isinstance(crew_llm, str):
                     detected_provider = detect_provider_from_model(crew_llm)
-    
+
     if not detected_provider and model_name:
         detected_provider = detect_provider_from_model(model_name)
-    
+
     # Default to OpenAI if still not detected
     if not detected_provider:
         detected_provider = "openai"
         logger.debug("Provider not detected, defaulting to OpenAI")
-    
+
     # Get environment variable name for provider
     env_var = PROVIDER_ENV_VARS.get(detected_provider)
     if not env_var:
         # Fallback: use provider name in uppercase with _API_KEY suffix
         env_var = f"{detected_provider.upper()}_API_KEY"
         logger.warning(f"Unknown provider '{detected_provider}', using env var '{env_var}'")
-    
+
     # Set environment variable
     os.environ[env_var] = api_key
     logger.debug(f"Injected LLM key for provider '{detected_provider}' using env var '{env_var}'")
-    
+
     # Special handling for AWS Bedrock/SageMaker
     if detected_provider in ("bedrock", "sagemaker"):
         # AWS requires additional env vars, but we only set the API key
         # User should set AWS_SECRET_ACCESS_KEY and AWS_REGION separately
         logger.debug("AWS provider detected - ensure AWS_SECRET_ACCESS_KEY and AWS_REGION are set")
-

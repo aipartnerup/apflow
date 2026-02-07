@@ -209,6 +209,21 @@ FROM_EMAIL=your-email@gmail.com
 
 **See also:** [Email Executor Guide](../examples/email-executor.md) for detailed usage examples.
 
+### Scheduler & Webhooks
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `APFLOW_WEBHOOK_SECRET` | string | - | HMAC secret key for webhook signature validation |
+| `APFLOW_WEBHOOK_ALLOWED_IPS` | string | - | Comma-separated IP addresses allowed to trigger webhooks |
+| `APFLOW_WEBHOOK_RATE_LIMIT` | integer | 0 | Max webhook requests per minute (0=unlimited) |
+
+**Example:**
+```bash
+APFLOW_WEBHOOK_SECRET=your-webhook-secret
+APFLOW_WEBHOOK_ALLOWED_IPS=10.0.0.1,10.0.0.2
+APFLOW_WEBHOOK_RATE_LIMIT=60
+```
+
 ### Daemon
 
 | Variable | Type | Default | Description |

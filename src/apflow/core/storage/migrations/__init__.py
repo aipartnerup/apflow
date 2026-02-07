@@ -71,4 +71,3 @@ class Migration(ABC):
 
     def __repr__(self) -> str:
         return f"<Migration(id='{self.id}')>"
-

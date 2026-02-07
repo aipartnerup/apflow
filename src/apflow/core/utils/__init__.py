@@ -14,7 +14,6 @@ def __getattr__(name):
     """Lazy import to avoid loading parent package apflow.core"""
     if name == "get_logger":
         from apflow.logger import get_logger
+
         return get_logger
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-

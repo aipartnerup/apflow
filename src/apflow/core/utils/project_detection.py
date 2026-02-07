@@ -62,7 +62,7 @@ def get_project_data_dir() -> Optional[Path]:
         data_dir = project_root / ".data"
         logger.debug(f"Project data directory: {data_dir}")
         return data_dir
-    
+
     logger.debug("Not in project context, no project data directory")
     return None
 
@@ -79,4 +79,3 @@ def is_in_project_context() -> bool:
         ...     print("Running in project context")
     """
     return get_project_root() is not None
-

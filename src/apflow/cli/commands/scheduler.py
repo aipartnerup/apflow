@@ -7,6 +7,7 @@ Usage:
     apflow scheduler start          # Start the internal scheduler
     apflow scheduler stop           # Stop the running scheduler
     apflow scheduler status         # Show scheduler status
+    apflow scheduler list           # List scheduled tasks
     apflow scheduler trigger TASK   # Manually trigger a task
     apflow scheduler export-ical    # Export tasks as iCal
 """
@@ -102,8 +103,9 @@ def start(
     background: bool = typer.Option(
         False, "--background/--foreground", "-b", help="Run in background"
     ),
-    timeout: int = typer.Option(
-        3600, "--timeout", "-t", help="Default task timeout in seconds"
+    timeout: int = typer.Option(3600, "--timeout", "-t", help="Default task timeout in seconds"),
+    verbose: bool = typer.Option(
+        False, "--verbose", "-v", help="Show task execution results (id, name, status)"
     ),
 ):
     """
@@ -111,9 +113,11 @@ def start(
 
     The scheduler polls the database for due tasks and executes them.
     Use --background to run as a daemon process.
+    Use --verbose to show task execution results (id, name, status).
 
     Examples:
         apflow scheduler start
+        apflow scheduler start --verbose
         apflow scheduler start --poll-interval 30 --max-concurrent 5
         apflow scheduler start --background
     """
@@ -150,6 +154,9 @@ def start(
             if user_id:
                 cmd.extend(["--user-id", user_id])
 
+            if verbose:
+                cmd.append("--verbose")
+
             # Start background process
             with open(log_file, "a") as log:
                 process = subprocess.Popen(
@@ -170,6 +177,8 @@ def start(
             console.print(f"Max concurrent: {max_concurrent}")
             if user_id:
                 console.print(f"User ID filter: {user_id}")
+            if verbose:
+                console.print("Verbose: ON (showing task execution results)")
             console.print("[yellow]Press Ctrl+C to stop[/yellow]")
 
             # Import and run scheduler
@@ -183,7 +192,7 @@ def start(
                 user_id=user_id,
             )
 
-            scheduler = InternalScheduler(config)
+            scheduler = InternalScheduler(config, verbose=verbose)
 
             async def run():
                 try:
@@ -249,6 +258,7 @@ def stop():
 
         # Wait for process to stop
         import time
+
         for _ in range(30):  # Wait up to 30 seconds
             if not is_process_running(pid):
                 break
@@ -339,6 +349,15 @@ def trigger(
                 console.print(f"Status: {result['status']}")
             if result.get("result"):
                 console.print(f"Result: {json.dumps(result['result'], indent=2)}")
+
+            if not wait:
+                console.print("\n[yellow]Task is executing in the background.[/yellow]")
+                console.print(
+                    "Use [cyan]apflow scheduler trigger <id> --wait[/cyan] to wait for completion."
+                )
+                console.print(
+                    "Use [cyan]apflow scheduler list --status running[/cyan] to see running tasks."
+                )
         else:
             console.print(f"[red]Failed to trigger task: {result.get('error')}[/red]")
             raise typer.Exit(1)
@@ -348,23 +367,110 @@ def trigger(
         raise typer.Exit(1)
 
 
+@app.command("list")
+def list_scheduled(
+    enabled_only: bool = typer.Option(
+        True, "--enabled-only/--all", help="Only show enabled schedules (default: enabled only)"
+    ),
+    user_id: Optional[str] = typer.Option(None, "--user-id", "-u", help="Filter by user ID"),
+    schedule_type: Optional[str] = typer.Option(
+        None,
+        "--type",
+        "-t",
+        help="Filter by schedule type (once, interval, cron, daily, weekly, monthly)",
+    ),
+    status: Optional[str] = typer.Option(
+        None,
+        "--status",
+        "-s",
+        help="Filter by task status (e.g. pending, running, completed, failed)",
+    ),
+    limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of tasks"),
+    output_format: str = typer.Option(
+        "table", "--format", "-f", help="Output format: json or table"
+    ),
+) -> None:
+    """
+    List all scheduled tasks.
+
+    Shows tasks that have scheduling configured. Use this to monitor
+    all scheduled tasks in the system, including those currently running.
+
+    Examples:
+        apflow scheduler list
+        apflow scheduler list --all
+        apflow scheduler list --type daily
+        apflow scheduler list --status running
+        apflow scheduler list -f json
+    """
+    try:
+        from apflow.cli.api_gateway_helper import (
+            get_api_client_if_configured,
+            log_api_usage,
+            run_async_safe,
+            should_use_api,
+        )
+        from apflow.core.config import get_task_model_class
+        from apflow.core.storage import get_default_session
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        using_api = should_use_api()
+        log_api_usage("scheduled.list", using_api)
+
+        async def get_scheduled_tasks() -> list:
+            async with get_api_client_if_configured() as client:
+                if client:
+                    return await client.call_method(
+                        "tasks.scheduled.list",
+                        enabled_only=enabled_only,
+                        user_id=user_id,
+                        schedule_type=schedule_type,
+                        status=status,
+                        limit=limit,
+                    )
+
+            db_session = get_default_session()
+            task_repository = TaskRepository(
+                db_session,
+                task_model_class=get_task_model_class(),
+            )
+
+            tasks = await task_repository.get_scheduled_tasks(
+                enabled_only=enabled_only,
+                user_id=user_id,
+                schedule_type=schedule_type,
+                status=status,
+                limit=limit,
+            )
+
+            return [task.output() for task in tasks]
+
+        tasks = run_async_safe(get_scheduled_tasks())
+
+        if output_format == "json":
+            console.print(json.dumps(tasks, indent=2))
+        else:
+            from apflow.cli.commands.tasks import _print_scheduled_tasks_table
+
+            _print_scheduled_tasks_table(tasks)
+
+    except Exception as e:
+        console.print(f"[red]Error listing scheduled tasks: {e}[/red]")
+        logger.error(f"Failed to list scheduled tasks: {e}", exc_info=True)
+        raise typer.Exit(1)
+
+
 @app.command("export-ical")
 def export_ical(
     output: Optional[str] = typer.Option(
         None, "--output", "-o", help="Output file path (default: stdout)"
     ),
-    user_id: Optional[str] = typer.Option(
-        None, "--user-id", "-u", help="Filter by user ID"
-    ),
+    user_id: Optional[str] = typer.Option(None, "--user-id", "-u", help="Filter by user ID"),
     schedule_type: Optional[str] = typer.Option(
         None, "--type", "-t", help="Filter by schedule type"
     ),
-    calendar_name: str = typer.Option(
-        "APFlow Tasks", "--name", "-n", help="Calendar name"
-    ),
-    base_url: Optional[str] = typer.Option(
-        None, "--base-url", help="Base URL for task links"
-    ),
+    calendar_name: str = typer.Option("APFlow Tasks", "--name", "-n", help="Calendar name"),
+    base_url: Optional[str] = typer.Option(None, "--base-url", help="Base URL for task links"),
     enabled_only: bool = typer.Option(
         True, "--enabled-only/--all", help="Only include enabled schedules"
     ),
@@ -418,9 +524,7 @@ def export_ical(
 @app.command("webhook-url")
 def webhook_url(
     task_id: str = typer.Argument(..., help="Task ID"),
-    base_url: str = typer.Option(
-        "http://localhost:8000", "--base-url", "-b", help="API base URL"
-    ),
+    base_url: str = typer.Option("http://localhost:8000", "--base-url", "-b", help="API base URL"),
 ):
     """
     Generate webhook URL for a task.
@@ -464,6 +568,7 @@ if __name__ == "__main__":
     parser.add_argument("--max-concurrent", type=int, default=10)
     parser.add_argument("--timeout", type=int, default=3600)
     parser.add_argument("--user-id", type=str, default=None)
+    parser.add_argument("--verbose", action="store_true", default=False)
 
     args = parser.parse_args()
 
@@ -478,4 +583,4 @@ if __name__ == "__main__":
 
     from apflow.scheduler.internal import run_scheduler
 
-    asyncio.run(run_scheduler(config))
+    asyncio.run(run_scheduler(config, verbose=args.verbose))

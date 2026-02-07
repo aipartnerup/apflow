@@ -84,6 +84,7 @@ class TestAPIGatewayHelper:
 
     def test_run_async_safe_with_no_running_loop(self):
         """Test run_async_safe when no event loop is running."""
+
         async def dummy_coro():
             return "result"
 
@@ -131,9 +132,7 @@ class TestCLIListCommandWithAPI:
     """Test CLI list command with API gateway integration."""
 
     @pytest.mark.asyncio
-    async def test_list_uses_api_when_configured(
-        self, mock_cli_config_file, api_accessible
-    ):
+    async def test_list_uses_api_when_configured(self, mock_cli_config_file, api_accessible):
         """Test that list command uses API when configured."""
         cm = get_config_manager()
         cm.clear()
@@ -157,9 +156,7 @@ class TestCLIStatusCommandWithAPI:
     """Test CLI status command with API gateway integration."""
 
     @pytest.mark.asyncio
-    async def test_status_uses_api_when_configured(
-        self, mock_cli_config_file, api_accessible
-    ):
+    async def test_status_uses_api_when_configured(self, mock_cli_config_file, api_accessible):
         """Test that status command uses API when configured."""
         cm = get_config_manager()
         cm.clear()
@@ -174,9 +171,7 @@ class TestCLICancelCommandWithAPI:
     """Test CLI cancel command with API gateway integration."""
 
     @pytest.mark.asyncio
-    async def test_cancel_uses_api_when_configured(
-        self, mock_cli_config_file, api_accessible
-    ):
+    async def test_cancel_uses_api_when_configured(self, mock_cli_config_file, api_accessible):
         """Test that cancel command uses API when configured."""
         cm = get_config_manager()
         cm.clear()
@@ -191,9 +186,7 @@ class TestCLIGetCommandWithAPI:
     """Test CLI get command with API gateway integration."""
 
     @pytest.mark.asyncio
-    async def test_get_uses_api_when_configured(
-        self, mock_cli_config_file, api_accessible
-    ):
+    async def test_get_uses_api_when_configured(self, mock_cli_config_file, api_accessible):
         """Test that get command uses API when configured."""
         cm = get_config_manager()
         cm.clear()

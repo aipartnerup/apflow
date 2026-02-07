@@ -6,6 +6,7 @@ from apflow.extensions.tools.limited_scrape_tools import (
     LimitedScrapeWebsiteInputSchema,
 )
 
+
 class DummyResponse:
     def __init__(self, text: str, url: str = "http://test.com", status_code: int = 200):
         self.text = text
@@ -16,6 +17,7 @@ class DummyResponse:
     def raise_for_status(self) -> None:
         if self.status_code != 200:
             raise Exception("HTTP error")
+
 
 @pytest.fixture
 def html_with_metadata() -> str:
@@ -32,6 +34,7 @@ def html_with_metadata() -> str:
     </html>
     """
 
+
 def test_extract_social_media_links(html_with_metadata: str) -> None:
     from bs4 import BeautifulSoup
 
@@ -41,23 +44,30 @@ def test_extract_social_media_links(html_with_metadata: str) -> None:
     assert "twitter" in links
     assert links["twitter"].startswith("https://twitter.com/")
 
+
 def test_extract_content_by_soup(html_with_metadata: str) -> None:
     tool = LimitedScrapeWebsiteTool()
     response = DummyResponse(html_with_metadata)
     content = tool.extract_content_by_soup(response)
     assert "This is the main content" in content
 
+
 @patch("apflow.extensions.tools.limited_scrape_tools.requests.get")
 def test_run_success(mock_get, html_with_metadata: str) -> None:
     tool = LimitedScrapeWebsiteTool()
     mock_get.return_value = DummyResponse(html_with_metadata)
     # Patch extract_content to return predictable content, so test does not depend on trafilatura
-    with patch.object(LimitedScrapeWebsiteTool, "extract_content", return_value="This is the main content. It should be extracted."):
+    with patch.object(
+        LimitedScrapeWebsiteTool,
+        "extract_content",
+        return_value="This is the main content. It should be extracted.",
+    ):
         result = tool._run("http://test.com")
     assert "Test Title" in result
     assert "Test Description" in result
     assert "This is the main content" in result
     assert "twitter" in result.lower()
+
 
 @patch("apflow.extensions.tools.limited_scrape_tools.requests.get")
 def test_run_request_exception(mock_get) -> None:
@@ -65,6 +75,7 @@ def test_run_request_exception(mock_get) -> None:
     mock_get.side_effect = Exception("Network error")
     result = tool._run("http://badurl.com")
     assert "Error: Could not access" in result or "Error: Failed to scrape" in result
+
 
 def test_input_schema_validation() -> None:
     # Valid input
@@ -79,6 +90,7 @@ def test_input_schema_validation() -> None:
     assert schema.extract_metadata is True
     assert schema.headers == {"X-Test": "1"}
 
+
 def test_content_truncation(html_with_metadata: str) -> None:
     tool = LimitedScrapeWebsiteTool()
     # Patch extract_content to return a long string using patch.object, to avoid pydantic dynamic attribute error
@@ -88,6 +100,7 @@ def test_content_truncation(html_with_metadata: str) -> None:
             result = tool._run("http://test.com", max_chars=100)
             # Ensure the result is truncated as expected
             assert len(result) <= 100 or result.endswith("...")
+
 
 def test_real_website_scrape() -> None:
     tool = LimitedScrapeWebsiteTool()

@@ -1,5 +1,87 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- **Scheduler webhook trigger admin permission bypass**
+  - `handle_webhook_trigger` now checks `_is_admin(request)` and sets `user_id=None` for admin users, matching the pattern used by all other handlers (`handle_tasks_list`, `handle_tasks_count`, etc.)
+  - Previously, admin JWT tokens passed to the webhook trigger were treated as regular users, causing "Permission denied" when the scheduler triggered tasks owned by other users
+
+- **Scheduled task re-execution not resetting child tasks**
+  - `complete_scheduled_run()` now clears `result`, `progress`, and resets all child tasks to `pending` before the next scheduled run via `reset_task_tree_for_reexecution()`
+  - Previously, a scheduled parent task would re-run but its children retained their `completed` status and stale results from the previous cycle, causing incorrect or skipped execution
+
+- **ISO datetime 'Z' suffix parsing inconsistency**
+  - Added `parse_iso_datetime()` helper in `core/utils/helpers.py` that normalises the `Z` suffix before calling `fromisoformat()`, fixing compatibility with Python 3.10 and below
+  - Replaced scattered `datetime.fromisoformat(value.replace('Z', '+00:00'))` calls across `schedule_calculator.py`, `ical.py`, `tasks.py` routes, and CLI commands with the centralised helper
+
+### Added
+
+- **Scheduler auto-generates admin JWT for API access**
+  - `InternalScheduler._get_auth_token()` auto-generates an admin JWT using the local `jwt_secret` from `config.cli.yaml` when `admin_auth_token` is not explicitly configured
+  - Token is cached per scheduler session (generated once, reused for all API calls)
+  - Falls back gracefully to unauthenticated access if JWT generation fails
+  - Eliminates the need for manual token configuration when running `apflow scheduler start` locally
+
+- **Scheduler startup auth identity logging**
+  - `_log_auth_identity()` logs the auth source (configured token vs auto-generated) and JWT subject at startup for troubleshooting
+
+- **Webhook verify hook for custom authentication** (`register_webhook_verify_hook`)
+  - New `@register_webhook_verify_hook` decorator in public API (`apflow.register_webhook_verify_hook`) for tenant-level custom webhook verification
+  - Hook receives `WebhookVerifyContext` (task_id, signature, timestamp, client_ip) and returns `WebhookVerifyResult` (valid, user_id, error)
+  - Supports both sync and async hook functions
+  - Added `WebhookVerifyContext`, `WebhookVerifyResult` dataclasses, and `WebhookVerifyHook` type alias in `core/types.py`
+
+- **`apflow scheduler list` CLI command**
+  - List scheduled tasks with filters: `--enabled-only/--all`, `--user-id`, `--type`, `--status`, `--format`
+  - Supports both API and direct DB modes via the standard API gateway helper
+  - Example: `apflow scheduler list --status running`, `apflow scheduler list --type daily -f json`
+
+- **`apflow scheduler start --verbose` option**
+  - New `--verbose` / `-v` flag enables DEBUG-level logging for the scheduler process
+  - Works in both foreground and background modes
+
+- **`tasks.scheduled.export-ical` API endpoint**
+  - Export scheduled tasks as iCalendar format via JSON-RPC
+  - Supports `user_id`, `schedule_type`, `enabled_only`, `limit`, `calendar_name`, and `base_url` parameters
+  - Non-admin users can only export their own tasks; admin users can export all
+
+- **Status filter for scheduled task queries**
+  - `tasks.scheduled.list` API endpoint and CLI command (`apflow tasks scheduled list`, `apflow scheduler list`) now accept `--status` / `status` parameter to filter by task status (e.g. `pending`, `running`, `completed`, `failed`)
+  - `TaskRepository.get_scheduled_tasks()` updated with new `status` parameter
+
+- **`reset_task_tree_for_reexecution()` repository method**
+  - Resets all child tasks in a tree to clean pending state (status, result, error, timestamps, progress) before scheduled re-execution
+  - Called automatically by `complete_scheduled_run()` for parent tasks with children
+
+- Comprehensive test coverage for admin webhook permissions (`TestWebhookTriggerAdminPermission`: 3 tests)
+- Comprehensive test coverage for iCal export API endpoint (`TestScheduledTasksExportIcal`: 4 tests)
+- Additional scheduler tests for auto-generated auth token and auth identity logging
+
+### Changed
+
+- **Webhook trigger authentication redesigned — three-layer priority chain**
+  - Authentication priority: (1) JWT via middleware → (2) `webhook_verify_hook` for tenant-level custom verification → (3) `APFLOW_WEBHOOK_SECRET` for internal HMAC
+  - IP whitelist and rate limit are now applied as an additional protection layer after authentication, instead of being bundled with signature validation
+  - Replaces the previous single-`WebhookGateway` approach where all validation was handled in one pass
+
+- **Unified task tree execution model for scheduler**
+  - Scheduler (`internal.py`) and webhook gateway (`webhook.py`) now always load the task tree from DB via `get_task_tree_for_api()`, removing the `has_children`-based auto-detection of single vs tree mode
+  - Dependency cascade is handled uniformly by `execute_after_task` regardless of task structure
+
+- **Scheduled tasks table now shows Status column**
+  - `_print_scheduled_tasks_table()` includes task status with color-coded display (yellow=pending, blue=running, green=completed, red=failed)
+
+- **Refined log levels across scheduler and API routes**
+  - Scheduler (`internal.py`): Demoted per-poll-cycle and per-task-execution detail logs from INFO to DEBUG (`Found N due tasks`, `Executing scheduled task`, `Loaded task tree`, `Task not completed (status=pending)`, etc.)
+  - Scheduler: Task failures without an explicit error (e.g., `status=pending`) are now logged at DEBUG instead of WARNING
+  - API routes (`tasks.py`): Demoted per-request method/params/duration logs from INFO to DEBUG, reducing noise under default INFO level
+  - API routes: Demoted CRUD operation detail logs from INFO to DEBUG (`Updated task`, `Creating task tree from N tasks`, `Generated task copy preview`)
+  - Removed emoji characters from API route log messages
+
+- **Code formatting applied across codebase** via Black formatter
+
 ## [0.14.0] 2026-02-07
 
 ### Changed

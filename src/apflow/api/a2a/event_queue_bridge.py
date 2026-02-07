@@ -17,11 +17,11 @@ class EventQueueBridge:
     """
     Bridge that converts TaskManager progress updates to A2A TaskStatusUpdateEvents
     """
-    
+
     def __init__(self, event_queue: EventQueue, context: Any):
         """
         Initialize bridge
-        
+
         Args:
             event_queue: A2A EventQueue
             context: RequestContext from A2A
@@ -30,26 +30,26 @@ class EventQueueBridge:
         self.context = context
         self._update_queue = asyncio.Queue()
         self._bridge_task = None
-        
+
         # Start background task to process updates
         self._start_bridge_task()
-    
+
     def _start_bridge_task(self):
         """Start background task to bridge updates"""
         self._closed = False
-        
+
         async def bridge_worker():
             while True:
                 try:
                     update_data = await self._update_queue.get()
-                    
+
                     if update_data is None:  # Sentinel to stop
                         break
-                    
+
                     # Convert to A2A TaskStatusUpdateEvent
                     event = self._convert_to_task_status_event(update_data)
                     await self.event_queue.enqueue_event(event)
-                    
+
                     self._update_queue.task_done()
                 except asyncio.CancelledError:
                     # Task was cancelled, exit gracefully
@@ -62,25 +62,25 @@ class EventQueueBridge:
                         except Exception:
                             # If logging fails (e.g., during cleanup), just ignore
                             pass
-        
+
         self._bridge_task = asyncio.create_task(bridge_worker())
-    
+
     async def put(self, update_data: Dict[str, Any]):
         """
         Put progress update to bridge
-        
+
         Args:
             update_data: Progress update data from TaskManager
         """
         await self._update_queue.put(update_data)
-    
+
     def _convert_to_task_status_event(self, update_data: Dict[str, Any]) -> TaskStatusUpdateEvent:
         """
         Convert TaskManager progress update to A2A TaskStatusUpdateEvent
-        
+
         Args:
             update_data: Progress update data
-            
+
         Returns:
             TaskStatusUpdateEvent
         """
@@ -89,22 +89,24 @@ class EventQueueBridge:
         task_id = self.context.task_id
         if not task_id:
             raise ValueError("context.task_id is required for A2A protocol")
-        
+
         update_type = update_data.get("type", "progress")
         status = update_data.get("status", "in_progress")
-        
+
         # Map status to TaskState
         # TaskState enum values: submitted, working, input_required, completed, canceled, failed, rejected, auth_required, unknown
         state_map = {
             "completed": TaskState.completed,
             "failed": TaskState.failed,
             "in_progress": TaskState.working,  # Map in_progress to working
-            "pending": TaskState.submitted,    # Map pending to submitted
+            "pending": TaskState.submitted,  # Map pending to submitted
             "cancelled": TaskState.canceled,
             "canceled": TaskState.canceled,
         }
-        task_state = state_map.get(status, TaskState.working)  # Default to working for unknown statuses
-        
+        task_state = state_map.get(
+            status, TaskState.working
+        )  # Default to working for unknown statuses
+
         # Create message based on update type
         # Include actual task_id from update_data in the event data for reference
         actual_task_id = update_data.get("task_id")
@@ -116,33 +118,31 @@ class EventQueueBridge:
             if "metadata" not in event_data:
                 event_data["metadata"] = {}
             event_data["metadata"]["actual_task_id"] = actual_task_id
-        
+
         if update_type == "final":
-            message = new_agent_parts_message([
-                DataPart(data=event_data.get("result") or event_data)
-            ])
+            message = new_agent_parts_message(
+                [DataPart(data=event_data.get("result") or event_data)]
+            )
         elif update_type == "task_failed":
             message = new_agent_text_message(update_data.get("error", "Task failed"))
         else:
             # Progress or other updates
-            message = new_agent_parts_message([
-                DataPart(data=event_data)
-            ])
-        
+            message = new_agent_parts_message([DataPart(data=event_data)])
+
         return TaskStatusUpdateEvent(
             task_id=task_id,  # Always use context.task_id for A2A protocol
             context_id=self.context.context_id or "unknown",
             status=TaskStatus(state=task_state, message=message),
-            final=update_data.get("final", False)
+            final=update_data.get("final", False),
         )
-    
+
     async def close(self):
         """Close bridge and stop background task"""
         if self._closed:
             return
-        
+
         self._closed = True
-        
+
         # Cancel the task first to stop it immediately
         if self._bridge_task and not self._bridge_task.done():
             self._bridge_task.cancel()
@@ -152,22 +152,21 @@ class EventQueueBridge:
                 pass
             except Exception:
                 pass
-        
+
         # Put sentinel to ensure queue is drained (in case task wasn't cancelled)
         try:
             await self._update_queue.put(None)
         except Exception:
             pass
-    
+
     def __del__(self):
         """Cleanup when object is garbage collected"""
         # Mark as closed to prevent logging during cleanup
         self._closed = True
-        
+
         # Cancel task if it exists and is not done
         if self._bridge_task and not self._bridge_task.done():
             try:
                 self._bridge_task.cancel()
             except Exception:
                 pass
-

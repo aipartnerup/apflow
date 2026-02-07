@@ -63,6 +63,9 @@ apflow tasks scheduled init <task_id>
 # Run in foreground
 apflow scheduler start
 
+# Run with verbose logging (DEBUG level)
+apflow scheduler start --verbose
+
 # Run in background
 apflow scheduler start --background
 
@@ -77,7 +80,11 @@ apflow scheduler start \
 
 ```bash
 # List all scheduled tasks
-apflow tasks scheduled list
+apflow scheduler list
+
+# List with filters
+apflow scheduler list --status running
+apflow scheduler list --type daily --all
 
 # Check for due tasks
 apflow tasks scheduled due
@@ -99,6 +106,7 @@ The internal scheduler polls the database for due tasks and executes them automa
 | `--timeout` | 3600 | Default task timeout in seconds |
 | `--user-id` | None | Only process tasks for this user |
 | `--background` | False | Run as background daemon |
+| `--verbose` / `-v` | False | Enable DEBUG-level logging output |
 
 ### Python API
 
@@ -136,6 +144,34 @@ async def main():
         await scheduler.stop()
 
 asyncio.run(main())
+```
+
+### Scheduler Authentication
+
+When running in API mode, the scheduler needs an admin token to trigger tasks on behalf of any user. The token is resolved in this order:
+
+1. **`admin_auth_token`** from `config.cli.yaml` (if explicitly configured)
+2. **Auto-generated** admin JWT using the local `jwt_secret` from `config.cli.yaml`
+
+The auto-generated token is cached for the scheduler session and eliminates the need for manual token configuration when running locally. At startup, the scheduler logs its auth identity (subject and source) for troubleshooting.
+
+### Listing Scheduled Tasks
+
+```bash
+# List all enabled scheduled tasks
+apflow scheduler list
+
+# Include disabled schedules
+apflow scheduler list --all
+
+# Filter by schedule type
+apflow scheduler list --type daily
+
+# Filter by task status
+apflow scheduler list --status running
+
+# JSON output
+apflow scheduler list -f json
 ```
 
 ### Scheduler Lifecycle
@@ -189,22 +225,50 @@ manifest = generate_kubernetes_cronjob(
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `tasks.scheduled.list` | JSON-RPC | List all scheduled tasks |
+| `tasks.scheduled.list` | JSON-RPC | List all scheduled tasks (supports `status` filter) |
 | `tasks.scheduled.due` | JSON-RPC | Get tasks due for execution |
 | `tasks.scheduled.init` | JSON-RPC | Initialize/recalculate next_run_at |
 | `tasks.scheduled.complete` | JSON-RPC | Mark task completed, calculate next run |
+| `tasks.scheduled.export-ical` | JSON-RPC | Export scheduled tasks as iCalendar format |
 | `tasks.webhook.trigger` | JSON-RPC | Trigger task execution via webhook |
 | `/webhook/trigger/{task_id}` | REST POST | Simple REST endpoint for external schedulers |
+
+#### Webhook Authentication
+
+The webhook trigger endpoint supports a three-layer authentication priority chain:
+
+| Priority | Method | Description |
+|----------|--------|-------------|
+| 1 | **JWT** | Standard JWT via `Authorization` header (handled by middleware) |
+| 2 | **Webhook verify hook** | Custom verification via `@register_webhook_verify_hook` decorator |
+| 3 | **APFLOW_WEBHOOK_SECRET** | Internal HMAC signature validation |
+
+IP whitelist (`APFLOW_WEBHOOK_ALLOWED_IPS`) and rate limit (`APFLOW_WEBHOOK_RATE_LIMIT`) are applied as additional protection after authentication.
+
+**Custom webhook verification hook:**
+
+```python
+from apflow import register_webhook_verify_hook
+from apflow.core.types import WebhookVerifyContext, WebhookVerifyResult
+
+@register_webhook_verify_hook
+async def verify_tenant_webhook(ctx: WebhookVerifyContext) -> WebhookVerifyResult:
+    # ctx provides: task_id, signature, timestamp, client_ip
+    if is_valid_signature(ctx.signature, ctx.timestamp):
+        return WebhookVerifyResult(valid=True, user_id="tenant-user")
+    return WebhookVerifyResult(valid=False, error="Invalid signature")
+```
 
 #### REST Webhook Endpoint
 
 The simplest way to trigger tasks from external schedulers:
 
 ```bash
-# Basic trigger
-curl -X POST https://api.example.com/webhook/trigger/abc123
+# Basic trigger (with JWT)
+curl -X POST https://api.example.com/webhook/trigger/abc123 \
+  -H "Authorization: Bearer <jwt-token>"
 
-# With signature validation (if configured)
+# With HMAC signature validation (if APFLOW_WEBHOOK_SECRET is configured)
 curl -X POST https://api.example.com/webhook/trigger/abc123 \
   -H "X-Webhook-Signature: <hmac-signature>" \
   -H "X-Webhook-Timestamp: <unix-timestamp>"
@@ -261,6 +325,23 @@ apflow scheduler export-ical --user-id user123 -o user_schedule.ics
 apflow scheduler export-ical --name "My Task Schedule" -o schedule.ics
 ```
 
+### API Export
+
+```bash
+curl -X POST https://api.example.com/tasks/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tasks.scheduled.export-ical",
+    "params": {
+      "calendar_name": "APFlow Tasks",
+      "enabled_only": true,
+      "limit": 100
+    },
+    "id": 1
+  }'
+```
+
 ### Python API
 
 ```python
@@ -300,32 +381,19 @@ url = generate_ical_feed_url(
 
 ## Execution Mode
 
-When a scheduled task is triggered, APFlow automatically determines the execution mode based on the task structure:
+When a scheduled task is triggered, APFlow always loads the task tree from the database and executes it using the unified tree execution model. Dependency cascade is handled by `execute_after_task` regardless of task structure.
 
-| Task Structure | Execution Mode | Behavior |
-|----------------|----------------|----------|
-| Has children (`has_children=True`) | **Tree mode** | Execute full task tree with all children in dependency order |
-| No children (`has_children=False`) | **Single mode** | Execute only this task |
-
-This automatic detection ensures:
-- Parent/orchestration tasks execute their complete workflow
-- Standalone tasks execute efficiently without unnecessary tree traversal
+For tasks with children, all child tasks are reset to clean `pending` state before each scheduled run. This ensures every execution cycle starts fresh — previous results, errors, and progress are cleared automatically.
 
 ```
-# Tree Mode (task with children)
+# Scheduled execution cycle
 ┌─────────────────┐
-│  Root Task      │  ← Scheduled task triggers
+│  Root Task      │  ← Scheduler triggers
 │  (scheduled)    │
 ├─────────────────┤
-│  ├─ Child 1     │  ← All children executed
-│  ├─ Child 2     │     in dependency order
+│  ├─ Child 1     │  ← All children reset to pending
+│  ├─ Child 2     │     and re-executed in dependency order
 │  └─ Child 3     │
-└─────────────────┘
-
-# Single Mode (task without children)
-┌─────────────────┐
-│  Task           │  ← Only this task executed
-│  (scheduled)    │
 └─────────────────┘
 ```
 

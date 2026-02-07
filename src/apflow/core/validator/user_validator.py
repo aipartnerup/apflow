@@ -1,10 +1,11 @@
-
 from apflow.core.storage.sqlalchemy.models import TaskModelType
 from apflow.core.types import TaskTreeNode
 from typing import List, Union
 
 
-def check_tasks_user_ownership(tasks: Union[TaskTreeNode, TaskModelType, List[TaskModelType]], user_id: str) -> bool:
+def check_tasks_user_ownership(
+    tasks: Union[TaskTreeNode, TaskModelType, List[TaskModelType]], user_id: str
+) -> bool:
     """
     Check tasks belong to the specified user ID.
 
@@ -18,7 +19,7 @@ def check_tasks_user_ownership(tasks: Union[TaskTreeNode, TaskModelType, List[Ta
     # Optimization 1: Handle edge case of empty list/empty node
     if not tasks:
         return True  # Can be adjusted to False according to business requirements
-    
+
     # Optimization 2: Fix type judgment logic (original logic only judged single node, not list)
     if isinstance(tasks, TaskTreeNode):
         task_list = tasks.to_list()
@@ -29,12 +30,11 @@ def check_tasks_user_ownership(tasks: Union[TaskTreeNode, TaskModelType, List[Ta
     else:
         # Optimization 3: Explicitly handle unexpected types to avoid implicit errors
         return False
-    
+
     # Core validation logic (unchanged)
     for task in task_list:
         # Optimization 4: Add attribute existence check to avoid AttributeError
         if not hasattr(task, "user_id") or task.user_id != user_id:
             return False
-    
-    return True
 
+    return True

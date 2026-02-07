@@ -21,9 +21,9 @@ def reset_logging():
     factory_logger = logging.getLogger("apflow.core.storage.factory")
     original_level = factory_logger.level
     original_handlers = factory_logger.handlers.copy()
-    
+
     yield
-    
+
     # Restore original logging state
     factory_logger.setLevel(original_level)
     for handler in factory_logger.handlers[:]:
@@ -58,14 +58,12 @@ def mock_home_dir(tmp_path):
 
 class TestDefaultDbPathPriority:
     """Tests for _get_default_db_path function priority logic.
-    
+
     Note: These tests assume DATABASE_URL is not set. When DATABASE_URL is set,
     it takes precedence over file path resolution.
     """
 
-    def test_new_project_uses_project_local_path(
-        self, temp_project_with_pyproject, mock_home_dir
-    ):
+    def test_new_project_uses_project_local_path(self, temp_project_with_pyproject, mock_home_dir):
         """Test that new projects without existing db use project-local .data/apflow.duckdb."""
         with patch("pathlib.Path.cwd", return_value=temp_project_with_pyproject):
             with patch("pathlib.Path.home", return_value=mock_home_dir):
@@ -74,9 +72,7 @@ class TestDefaultDbPathPriority:
                     expected = str(temp_project_with_pyproject / ".data" / "apflow.duckdb")
                     assert result == expected
 
-    def test_existing_project_local_db_is_used(
-        self, temp_project_with_pyproject, mock_home_dir
-    ):
+    def test_existing_project_local_db_is_used(self, temp_project_with_pyproject, mock_home_dir):
         """Test that existing project-local database is preferred."""
         # Create project-local database
         data_dir = temp_project_with_pyproject / ".data"
@@ -127,9 +123,7 @@ class TestDefaultDbPathPriority:
                     result = _get_default_db_path()
                     assert result == str(project_db)
 
-    def test_outside_project_uses_global_location(
-        self, temp_non_project_dir, mock_home_dir
-    ):
+    def test_outside_project_uses_global_location(self, temp_non_project_dir, mock_home_dir):
         """Test that global location is used when not in project context."""
         with patch("pathlib.Path.cwd", return_value=temp_non_project_dir):
             with patch("pathlib.Path.home", return_value=mock_home_dir):
@@ -138,15 +132,13 @@ class TestDefaultDbPathPriority:
                     expected = str(mock_home_dir / ".aipartnerup" / "data" / "apflow.duckdb")
                     assert result == expected
 
-    def test_global_location_directory_is_created(
-        self, temp_non_project_dir, mock_home_dir
-    ):
+    def test_global_location_directory_is_created(self, temp_non_project_dir, mock_home_dir):
         """Test that global data directory is created if it doesn't exist."""
         with patch("pathlib.Path.cwd", return_value=temp_non_project_dir):
             with patch("pathlib.Path.home", return_value=mock_home_dir):
                 with patch.dict(os.environ, {}, clear=True):
                     _get_default_db_path()
-                    
+
                     # Verify directory was created
                     expected_dir = mock_home_dir / ".aipartnerup" / "data"
                     assert expected_dir.exists()
@@ -160,7 +152,7 @@ class TestDefaultDbPathPriority:
             with patch("pathlib.Path.home", return_value=mock_home_dir):
                 with patch.dict(os.environ, {}, clear=True):
                     _get_default_db_path()
-                    
+
                     # Verify .data directory was created
                     data_dir = temp_project_with_pyproject / ".data"
                     assert data_dir.exists()
@@ -188,7 +180,7 @@ class TestDefaultDbPathPriority:
 
 class TestDatabaseUrlEnvironmentVariables:
     """Tests for DATABASE_URL environment variable handling.
-    
+
     Note: DATABASE_URL is handled by _get_database_url_from_env() and takes
     precedence before _get_default_db_path() is even called.
     """
@@ -208,50 +200,53 @@ class TestDatabasePathLogging:
         self, temp_project_with_pyproject, mock_home_dir, caplog, reset_logging
     ):
         """Test that logging isolation works even after other tests pollute logger state.
-        
+
         This test simulates environment pollution by a previous test that may have
         modified the logger state, and verifies that our logging capture still works.
         """
         import logging
-        
+
         # Simulate environment pollution from previous test
         factory_logger = logging.getLogger("apflow.core.storage.factory")
         # Set to WARNING level to simulate pollution
         factory_logger.setLevel(logging.WARNING)
-        
+
         # Now verify that caplog.at_level() properly overrides this
         with caplog.at_level(logging.DEBUG, logger="apflow.core.storage.factory"):
             with patch("pathlib.Path.cwd", return_value=temp_project_with_pyproject):
                 with patch("pathlib.Path.home", return_value=mock_home_dir):
                     with patch.dict(os.environ, {}, clear=True):
                         _get_default_db_path()
-                        
+
                         # Even with polluted logger state, caplog.at_level should capture it
-                        assert any("Database path:" in record.message for record in caplog.records), \
-                            f"Expected log message not found. Captured records: {[r.message for r in caplog.records]}"
+                        assert any(
+                            "Database path:" in record.message for record in caplog.records
+                        ), f"Expected log message not found. Captured records: {[r.message for r in caplog.records]}"
 
     def test_debug_log_for_project_local_path(
         self, temp_project_with_pyproject, mock_home_dir, caplog, reset_logging
     ):
         """Test that debug log is emitted when using project-local path."""
         import logging
-        
+
         with caplog.at_level(logging.DEBUG, logger="apflow.core.storage.factory"):
             with patch("pathlib.Path.cwd", return_value=temp_project_with_pyproject):
                 with patch("pathlib.Path.home", return_value=mock_home_dir):
                     with patch.dict(os.environ, {}, clear=True):
                         _get_default_db_path()
-                        
+
                         # Check that debug log was emitted
                         assert any("Database path:" in record.message for record in caplog.records)
-                        assert any("project-local" in record.message.lower() for record in caplog.records)
+                        assert any(
+                            "project-local" in record.message.lower() for record in caplog.records
+                        )
 
     def test_debug_log_for_legacy_path(
         self, temp_project_with_pyproject, mock_home_dir, caplog, reset_logging
     ):
         """Test that debug log with tip is emitted when using legacy path."""
         import logging
-        
+
         # Create legacy database
         legacy_dir = mock_home_dir / ".aipartnerup" / "data"
         legacy_dir.mkdir(parents=True)
@@ -263,9 +258,12 @@ class TestDatabasePathLogging:
                 with patch("pathlib.Path.home", return_value=mock_home_dir):
                     with patch.dict(os.environ, {}, clear=True):
                         _get_default_db_path()
-                        
+
                         # Check that debug log includes tip about copying
-                        assert any("consider copying to" in record.message.lower() for record in caplog.records)
+                        assert any(
+                            "consider copying to" in record.message.lower()
+                            for record in caplog.records
+                        )
 
 
 class TestDatabasePathEdgeCases:
@@ -312,4 +310,3 @@ class TestDatabasePathEdgeCases:
                     # Empty string is falsy, so should use default logic
                     expected = str(temp_project_with_pyproject / ".data" / "apflow.duckdb")
                     assert result == expected or ".aipartnerup" in result
-

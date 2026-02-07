@@ -279,7 +279,14 @@ class TestMultiPhaseGenerationCrew:
                 "schemas": {"method": "llm_executor"},
                 "parent_id": "550e8400-e29b-41d4-a716-446655440001",
                 "dependencies": [{"id": "550e8400-e29b-41d4-a716-446655440002", "required": True}],
-                "inputs": {"messages": [{"role": "user", "content": "Analyze the website content and generate a detailed report."}]},
+                "inputs": {
+                    "messages": [
+                        {
+                            "role": "user",
+                            "content": "Analyze the website content and generate a detailed report.",
+                        }
+                    ]
+                },
             },
         ]
 
@@ -300,7 +307,8 @@ class TestMultiPhaseGenerationCrew:
             mock_crew_class.return_value = mock_crew_instance
 
             result = await crew.generate(
-                requirement="Please analyze the aipartnerup.com website and provide a report.", user_id="test_user"
+                requirement="Please analyze the aipartnerup.com website and provide a report.",
+                user_id="test_user",
             )
 
             # Verify success

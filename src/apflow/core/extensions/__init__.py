@@ -47,4 +47,3 @@ __all__ = [
     "validate_task_format",
     "get_all_executor_metadata",
 ]
-

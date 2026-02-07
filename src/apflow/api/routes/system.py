@@ -99,9 +99,10 @@ class SystemRoutes(BaseRouteHandler):
         """Handle health check"""
         # Get actual running task count from TaskTracker
         from apflow.core.execution.task_tracker import TaskTracker
+
         tracker = TaskTracker()
         running_count = len(tracker._running_tasks)
-        
+
         return {
             "status": "healthy",
             "message": "apflow is healthy",

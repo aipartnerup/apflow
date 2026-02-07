@@ -28,4 +28,3 @@ tasks = type("tasks", (), {"app": tasks_app})()
 generate = type("generate", (), {"app": generate_app})()
 executors = type("executors", (), {"app": executors_app})()
 scheduler = type("scheduler", (), {"app": scheduler_app})()
-

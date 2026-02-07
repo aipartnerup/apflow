@@ -46,7 +46,9 @@ if _whitelist_str:
 
 
 class CommandInputSchema(BaseModel):
-    command: str = Field(description="Shell command to execute (requires APFLOW_STDIO_ALLOW_COMMAND=1)")
+    command: str = Field(
+        description="Shell command to execute (requires APFLOW_STDIO_ALLOW_COMMAND=1)"
+    )
     timeout: float = Field(default=30, description="Command timeout in seconds (default: 30)")
 
 
@@ -190,4 +192,3 @@ class CommandExecutor(BaseTask):
             "stdout": "Hello, World!\nDemo execution result",
             "stderr": "",
         }
-

@@ -6,6 +6,7 @@ Tests cover:
 - tasks.scheduled.due - Get due scheduled tasks
 - tasks.scheduled.init - Initialize scheduled task
 - tasks.scheduled.complete - Complete scheduled task run
+- tasks.scheduled.export-ical - Export scheduled tasks as iCal
 """
 
 import pytest
@@ -525,6 +526,133 @@ class TestWebhookTriggerJsonRpc:
             assert isinstance(result, dict)
 
 
+class TestWebhookTriggerAdminPermission:
+    """Tests for admin permission bypass in webhook trigger
+
+    Verifies that admin users (JWT with 'admin' role) can trigger tasks
+    owned by other users, while non-admin users still have their user_id
+    passed for permission checking.
+    """
+
+    @pytest.mark.asyncio
+    async def test_admin_user_triggers_other_users_task(self, use_test_db_session):
+        """Test that admin user bypasses user_id check (user_id=None to trigger_task)"""
+        from apflow.cli.jwt_token import generate_token, verify_token
+
+        secret_key = "test_secret_webhook_admin"
+        token = generate_token(
+            subject="admin_user",
+            secret=secret_key,
+            extra_claims={"user_id": "admin_user", "roles": ["admin"]},
+        )
+
+        def verify_token_func(token_str: str) -> dict:
+            return verify_token(token_str, secret_key)
+
+        task_routes = TaskRoutes(
+            task_model_class=get_task_model_class(),
+            verify_token_func=verify_token_func,
+        )
+
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "127.0.0.1"
+        request.state = Mock()
+        request.state.user_id = "admin_user"
+        request.state.token_payload = verify_token_func(token)
+
+        with patch("apflow.scheduler.gateway.webhook.WebhookGateway") as mock_gateway_class:
+            mock_gateway = AsyncMock()
+            mock_gateway.trigger_task = AsyncMock(
+                return_value={"success": True, "status": "triggered", "task_id": "other-user-task"}
+            )
+            mock_gateway_class.return_value = mock_gateway
+
+            result = await task_routes.handle_webhook_trigger(
+                {"task_id": "other-user-task"},
+                request,
+                str(uuid.uuid4()),
+            )
+
+            assert result["success"] is True
+            # Admin should bypass: user_id=None passed to trigger_task
+            mock_gateway.trigger_task.assert_called_once_with(
+                task_id="other-user-task",
+                user_id=None,
+                execute_async=True,
+            )
+
+    @pytest.mark.asyncio
+    async def test_non_admin_user_passes_own_user_id(self, use_test_db_session):
+        """Test that non-admin user passes their user_id (for permission check in trigger_task)"""
+        from apflow.cli.jwt_token import generate_token, verify_token
+
+        secret_key = "test_secret_webhook_nonadmin"
+        token = generate_token(
+            subject="regular_user",
+            secret=secret_key,
+            extra_claims={"user_id": "regular_user", "roles": ["user"]},
+        )
+
+        def verify_token_func(token_str: str) -> dict:
+            return verify_token(token_str, secret_key)
+
+        task_routes = TaskRoutes(
+            task_model_class=get_task_model_class(),
+            verify_token_func=verify_token_func,
+        )
+
+        request = Mock(spec=Request)
+        request.client = Mock()
+        request.client.host = "127.0.0.1"
+        request.state = Mock()
+        request.state.user_id = "regular_user"
+        request.state.token_payload = verify_token_func(token)
+
+        with patch("apflow.scheduler.gateway.webhook.WebhookGateway") as mock_gateway_class:
+            mock_gateway = AsyncMock()
+            mock_gateway.trigger_task = AsyncMock(
+                return_value={"success": True, "status": "triggered", "task_id": "some-task"}
+            )
+            mock_gateway_class.return_value = mock_gateway
+
+            await task_routes.handle_webhook_trigger(
+                {"task_id": "some-task"},
+                request,
+                str(uuid.uuid4()),
+            )
+
+            # Non-admin: user_id should be passed for permission checking
+            mock_gateway.trigger_task.assert_called_once_with(
+                task_id="some-task",
+                user_id="regular_user",
+                execute_async=True,
+            )
+
+    @pytest.mark.asyncio
+    async def test_no_jwt_user_passes_none_user_id(self, task_routes, mock_request):
+        """Test that unauthenticated request passes user_id=None"""
+        with patch("apflow.scheduler.gateway.webhook.WebhookGateway") as mock_gateway_class:
+            mock_gateway = AsyncMock()
+            mock_gateway.trigger_task = AsyncMock(
+                return_value={"success": True, "status": "triggered", "task_id": "any-task"}
+            )
+            mock_gateway_class.return_value = mock_gateway
+
+            await task_routes.handle_webhook_trigger(
+                {"task_id": "any-task"},
+                mock_request,
+                str(uuid.uuid4()),
+            )
+
+            # No JWT: user_id=None (no permission restriction)
+            mock_gateway.trigger_task.assert_called_once_with(
+                task_id="any-task",
+                user_id=None,
+                execute_async=True,
+            )
+
+
 class TestSchedulerRoutesPermissions:
     """Tests for permission checking in scheduler routes"""
 
@@ -992,3 +1120,405 @@ class TestSchedulerRoutesIntegration:
 
         task_ids = [t.get("id") for t in result]
         assert disabled_task_id not in task_ids
+
+
+# ============================================================================
+# Export iCal Tests
+# ============================================================================
+
+
+class TestScheduledTasksExportIcal:
+    """Tests for tasks.scheduled.export-ical endpoint"""
+
+    @pytest.mark.asyncio
+    async def test_export_ical_empty(self, task_routes, mock_request):
+        """Test export iCal when no scheduled tasks exist"""
+        params = {}
+        request_id = str(uuid.uuid4())
+
+        result = await task_routes.handle_scheduled_tasks_export_ical(
+            params, mock_request, request_id
+        )
+
+        assert result["task_count"] == 0
+        assert "BEGIN:VCALENDAR" in result["ical_content"]
+        assert "END:VCALENDAR" in result["ical_content"]
+
+    @pytest.mark.asyncio
+    async def test_export_ical_with_tasks(
+        self, task_routes, mock_request, multiple_scheduled_tasks
+    ):
+        """Test export iCal returns valid iCal content with scheduled tasks"""
+        params = {"enabled_only": False}
+        request_id = str(uuid.uuid4())
+
+        result = await task_routes.handle_scheduled_tasks_export_ical(
+            params, mock_request, request_id
+        )
+
+        assert result["task_count"] >= 3
+        content = result["ical_content"]
+        assert "BEGIN:VCALENDAR" in content
+        assert "END:VCALENDAR" in content
+        assert "BEGIN:VEVENT" in content
+        assert "END:VEVENT" in content
+
+    @pytest.mark.asyncio
+    async def test_export_ical_enabled_only(
+        self, task_routes, mock_request, multiple_scheduled_tasks
+    ):
+        """Test export iCal with enabled_only filter excludes disabled tasks"""
+        # Export all
+        all_result = await task_routes.handle_scheduled_tasks_export_ical(
+            {"enabled_only": False}, mock_request, str(uuid.uuid4())
+        )
+        # Export enabled only
+        enabled_result = await task_routes.handle_scheduled_tasks_export_ical(
+            {"enabled_only": True}, mock_request, str(uuid.uuid4())
+        )
+
+        assert enabled_result["task_count"] < all_result["task_count"]
+
+    @pytest.mark.asyncio
+    async def test_export_ical_filter_by_user(self, task_routes, mock_request, use_test_db_session):
+        """Test export iCal filtered by user_id"""
+        task_repository = TaskRepository(
+            use_test_db_session, task_model_class=get_task_model_class()
+        )
+
+        # Create tasks for two users
+        now = datetime.now(timezone.utc)
+        await task_repository.create_task(
+            id=f"ical-user1-{uuid.uuid4().hex[:8]}",
+            name="User1 Task",
+            user_id="ical_user_one",
+            status="pending",
+            priority=1,
+            has_children=False,
+            progress=0.0,
+            schemas={"method": "system_info_executor"},
+            inputs={},
+            schedule_type="interval",
+            schedule_config={"interval": 3600},
+            schedule_enabled=True,
+            next_run_at=now + timedelta(hours=1),
+        )
+        await task_repository.create_task(
+            id=f"ical-user2-{uuid.uuid4().hex[:8]}",
+            name="User2 Task",
+            user_id="ical_user_two",
+            status="pending",
+            priority=1,
+            has_children=False,
+            progress=0.0,
+            schemas={"method": "system_info_executor"},
+            inputs={},
+            schedule_type="cron",
+            schedule_config={"cron": "0 * * * *"},
+            schedule_enabled=True,
+            next_run_at=now + timedelta(hours=2),
+        )
+
+        result = await task_routes.handle_scheduled_tasks_export_ical(
+            {"user_id": "ical_user_one"}, mock_request, str(uuid.uuid4())
+        )
+
+        assert result["task_count"] >= 1
+        content = result["ical_content"]
+        assert "User1 Task" in content
+        assert "User2 Task" not in content
+
+    @pytest.mark.asyncio
+    async def test_export_ical_filter_by_schedule_type(
+        self, task_routes, mock_request, use_test_db_session
+    ):
+        """Test export iCal filtered by schedule_type"""
+        task_repository = TaskRepository(
+            use_test_db_session, task_model_class=get_task_model_class()
+        )
+
+        now = datetime.now(timezone.utc)
+        await task_repository.create_task(
+            id=f"ical-cron-{uuid.uuid4().hex[:8]}",
+            name="Cron Only Task",
+            user_id="ical_type_user",
+            status="pending",
+            priority=1,
+            has_children=False,
+            progress=0.0,
+            schemas={"method": "system_info_executor"},
+            inputs={},
+            schedule_type="cron",
+            schedule_config={"cron": "0 * * * *"},
+            schedule_enabled=True,
+            next_run_at=now + timedelta(hours=1),
+        )
+        await task_repository.create_task(
+            id=f"ical-intv-{uuid.uuid4().hex[:8]}",
+            name="Interval Only Task",
+            user_id="ical_type_user",
+            status="pending",
+            priority=1,
+            has_children=False,
+            progress=0.0,
+            schemas={"method": "system_info_executor"},
+            inputs={},
+            schedule_type="interval",
+            schedule_config={"interval": 1800},
+            schedule_enabled=True,
+            next_run_at=now + timedelta(minutes=30),
+        )
+
+        result = await task_routes.handle_scheduled_tasks_export_ical(
+            {"schedule_type": "cron", "user_id": "ical_type_user"},
+            mock_request,
+            str(uuid.uuid4()),
+        )
+
+        assert result["task_count"] >= 1
+        content = result["ical_content"]
+        assert "Cron Only Task" in content
+        assert "Interval Only Task" not in content
+
+    @pytest.mark.asyncio
+    async def test_export_ical_custom_calendar_name(
+        self, task_routes, mock_request, scheduled_task
+    ):
+        """Test export iCal with custom calendar name"""
+        params = {"calendar_name": "My Custom Calendar", "enabled_only": False}
+        request_id = str(uuid.uuid4())
+
+        result = await task_routes.handle_scheduled_tasks_export_ical(
+            params, mock_request, request_id
+        )
+
+        assert "My Custom Calendar" in result["ical_content"]
+
+    @pytest.mark.asyncio
+    async def test_export_ical_with_base_url(self, task_routes, mock_request, scheduled_task):
+        """Test export iCal includes task URLs when base_url is provided"""
+        params = {
+            "base_url": "https://api.example.com",
+            "enabled_only": False,
+        }
+        request_id = str(uuid.uuid4())
+
+        result = await task_routes.handle_scheduled_tasks_export_ical(
+            params, mock_request, request_id
+        )
+
+        content = result["ical_content"]
+        assert "https://api.example.com/tasks/" in content
+
+    @pytest.mark.asyncio
+    async def test_export_ical_ical_format_validity(
+        self, task_routes, mock_request, scheduled_task
+    ):
+        """Test export iCal produces valid iCal structure"""
+        params = {"enabled_only": False}
+        request_id = str(uuid.uuid4())
+
+        result = await task_routes.handle_scheduled_tasks_export_ical(
+            params, mock_request, request_id
+        )
+
+        content = result["ical_content"]
+        # Verify iCal structure
+        assert content.startswith("BEGIN:VCALENDAR")
+        assert content.strip().endswith("END:VCALENDAR")
+        assert "VERSION:2.0" in content
+        assert "PRODID:" in content
+        # Each VEVENT should have required fields
+        assert "DTSTART:" in content
+        assert "DTEND:" in content
+        assert "UID:" in content
+        assert "SUMMARY:" in content
+
+    @pytest.mark.asyncio
+    async def test_export_ical_limit(self, task_routes, mock_request, multiple_scheduled_tasks):
+        """Test export iCal respects limit parameter"""
+        result = await task_routes.handle_scheduled_tasks_export_ical(
+            {"limit": 1, "enabled_only": False}, mock_request, str(uuid.uuid4())
+        )
+
+        assert result["task_count"] <= 1
+
+
+class TestExportIcalPermissions:
+    """Tests for permission checking in export-ical endpoint"""
+
+    @pytest.mark.asyncio
+    async def test_non_admin_user_sees_own_tasks_only(self, use_test_db_session):
+        """Test non-admin user can only export their own tasks"""
+        from apflow.cli.jwt_token import generate_token, verify_token
+
+        task_repository = TaskRepository(
+            use_test_db_session, task_model_class=get_task_model_class()
+        )
+
+        now = datetime.now(timezone.utc)
+        await task_repository.create_task(
+            id=f"ical-perm-mine-{uuid.uuid4().hex[:8]}",
+            name="My Task",
+            user_id="regular_user",
+            status="pending",
+            priority=1,
+            has_children=False,
+            progress=0.0,
+            schemas={"method": "system_info_executor"},
+            inputs={},
+            schedule_type="interval",
+            schedule_config={"interval": 3600},
+            schedule_enabled=True,
+            next_run_at=now + timedelta(hours=1),
+        )
+        await task_repository.create_task(
+            id=f"ical-perm-other-{uuid.uuid4().hex[:8]}",
+            name="Other User Task",
+            user_id="other_user",
+            status="pending",
+            priority=1,
+            has_children=False,
+            progress=0.0,
+            schemas={"method": "system_info_executor"},
+            inputs={},
+            schedule_type="interval",
+            schedule_config={"interval": 3600},
+            schedule_enabled=True,
+            next_run_at=now + timedelta(hours=2),
+        )
+
+        # Set up JWT for non-admin user
+        secret_key = "test_secret_for_ical_perm"
+        token = generate_token(
+            subject="regular_user",
+            secret=secret_key,
+            extra_claims={"user_id": "regular_user", "roles": ["user"]},
+        )
+
+        def verify_token_func(token_str: str):
+            return verify_token(token_str, secret_key)
+
+        task_routes = TaskRoutes(
+            task_model_class=get_task_model_class(),
+            verify_token_func=verify_token_func,
+        )
+
+        request = Mock(spec=Request)
+        request.headers = {"Authorization": f"Bearer {token}"}
+        request.cookies = {}
+        request.state = Mock()
+        request.state.user_id = "regular_user"
+        request.state.token_payload = verify_token_func(token)
+
+        result = await task_routes.handle_scheduled_tasks_export_ical(
+            {}, request, str(uuid.uuid4())
+        )
+
+        content = result["ical_content"]
+        assert "My Task" in content
+        assert "Other User Task" not in content
+
+    @pytest.mark.asyncio
+    async def test_admin_user_sees_all_tasks(self, use_test_db_session):
+        """Test admin user can export all users' tasks"""
+        from apflow.cli.jwt_token import generate_token, verify_token
+
+        task_repository = TaskRepository(
+            use_test_db_session, task_model_class=get_task_model_class()
+        )
+
+        now = datetime.now(timezone.utc)
+        await task_repository.create_task(
+            id=f"ical-admin-u1-{uuid.uuid4().hex[:8]}",
+            name="Admin View Task A",
+            user_id="user_alpha",
+            status="pending",
+            priority=1,
+            has_children=False,
+            progress=0.0,
+            schemas={"method": "system_info_executor"},
+            inputs={},
+            schedule_type="interval",
+            schedule_config={"interval": 3600},
+            schedule_enabled=True,
+            next_run_at=now + timedelta(hours=1),
+        )
+        await task_repository.create_task(
+            id=f"ical-admin-u2-{uuid.uuid4().hex[:8]}",
+            name="Admin View Task B",
+            user_id="user_beta",
+            status="pending",
+            priority=1,
+            has_children=False,
+            progress=0.0,
+            schemas={"method": "system_info_executor"},
+            inputs={},
+            schedule_type="cron",
+            schedule_config={"cron": "0 * * * *"},
+            schedule_enabled=True,
+            next_run_at=now + timedelta(hours=2),
+        )
+
+        # Set up JWT for admin user
+        secret_key = "test_secret_for_ical_admin"
+        token = generate_token(
+            subject="admin_user",
+            secret=secret_key,
+            extra_claims={"user_id": "admin_user", "roles": ["admin"]},
+        )
+
+        def verify_token_func(token_str: str):
+            return verify_token(token_str, secret_key)
+
+        task_routes = TaskRoutes(
+            task_model_class=get_task_model_class(),
+            verify_token_func=verify_token_func,
+        )
+
+        request = Mock(spec=Request)
+        request.headers = {"Authorization": f"Bearer {token}"}
+        request.cookies = {}
+        request.state = Mock()
+        request.state.user_id = "admin_user"
+        request.state.token_payload = verify_token_func(token)
+
+        result = await task_routes.handle_scheduled_tasks_export_ical(
+            {}, request, str(uuid.uuid4())
+        )
+
+        content = result["ical_content"]
+        assert "Admin View Task A" in content
+        assert "Admin View Task B" in content
+
+    @pytest.mark.asyncio
+    async def test_non_admin_cannot_export_other_user(self, use_test_db_session):
+        """Test non-admin user cannot export other user's tasks by specifying user_id"""
+        from apflow.cli.jwt_token import generate_token, verify_token
+
+        secret_key = "test_secret_for_ical_deny"
+        token = generate_token(
+            subject="regular_user",
+            secret=secret_key,
+            extra_claims={"user_id": "regular_user", "roles": ["user"]},
+        )
+
+        def verify_token_func(token_str: str):
+            return verify_token(token_str, secret_key)
+
+        task_routes = TaskRoutes(
+            task_model_class=get_task_model_class(),
+            verify_token_func=verify_token_func,
+        )
+
+        request = Mock(spec=Request)
+        request.headers = {"Authorization": f"Bearer {token}"}
+        request.cookies = {}
+        request.state = Mock()
+        request.state.user_id = "regular_user"
+        request.state.token_payload = verify_token_func(token)
+
+        with pytest.raises(ValueError, match="Permission denied"):
+            await task_routes.handle_scheduled_tasks_export_ical(
+                {"user_id": "other_user"}, request, str(uuid.uuid4())
+            )

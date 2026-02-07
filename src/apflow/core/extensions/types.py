@@ -17,14 +17,15 @@ from enum import Enum
 class ExtensionCategory(str, Enum):
     """
     Extension categories for classification
-    
+
     Each extension must belong to one category, which determines
     how it's used and discovered in the system.
-    
+
     Categories are kept minimal - only those with active use cases or
     clear implementation plans are included. Additional categories can
     be added as needed.
     """
+
     EXECUTOR = "executor"
     """
     Task execution implementations
@@ -35,7 +36,7 @@ class ExtensionCategory(str, Enum):
     - http: HTTP API call executors
     - custom: User-defined task executors
     """
-    
+
     STORAGE = "storage"
     """
     Storage backend implementations
@@ -46,7 +47,7 @@ class ExtensionCategory(str, Enum):
     
     Registered via @storage_register() decorator.
     """
-    
+
     HOOK = "hook"
     """
     Lifecycle hook implementations
@@ -60,4 +61,3 @@ class ExtensionCategory(str, Enum):
 
 
 __all__ = ["ExtensionCategory"]
-

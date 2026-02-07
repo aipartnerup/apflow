@@ -26,6 +26,8 @@ from apflow.core.config.registry import (
     task_model_register,
     set_demo_sleep_scale,
     get_demo_sleep_scale,
+    register_webhook_verify_hook,
+    get_webhook_verify_hook,
 )
 
 __all__ = [
@@ -46,5 +48,6 @@ __all__ = [
     "task_model_register",
     "set_demo_sleep_scale",
     "get_demo_sleep_scale",
+    "register_webhook_verify_hook",
+    "get_webhook_verify_hook",
 ]
-

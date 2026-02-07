@@ -36,7 +36,7 @@ def create_a2a_server(
 ) -> Any:
     """
     Create A2A Protocol Server
-    
+
     Args:
         jwt_secret_key: JWT secret key for token verification (used if verify_token_func is None)
         jwt_algorithm: JWT algorithm (default: "HS256")
@@ -205,12 +205,13 @@ def create_app_by_protocol(
     # Get protocol dependency info for logging
     _, _, description = get_protocol_dependency_info(protocol)
     logger.info(f"Creating {description} application")
-    
+
     # Check if APFLOW_JWT_SECRET is actually in .env file
     # This handles the case where env var was previously set but is now commented out
     env_file_has_jwt_secret = False
     try:
         from pathlib import Path
+
         env_path = Path.cwd() / ".env"
         if env_path.exists():
             env_content = env_path.read_text()
@@ -222,28 +223,31 @@ def create_app_by_protocol(
                         break
     except Exception:
         pass
-    
+
     # If .env doesn't have APFLOW_JWT_SECRET, remove it from environment
     if not env_file_has_jwt_secret and "APFLOW_JWT_SECRET" in os.environ:
         del os.environ["APFLOW_JWT_SECRET"]
         logger.info("Cleared APFLOW_JWT_SECRET from environment (not found in .env file)")
-    
+
     # Common configuration
     jwt_secret_key = os.getenv("APFLOW_JWT_SECRET")
     jwt_algorithm = os.getenv("APFLOW_JWT_ALGORITHM", "HS256")
-    
+
     # Log JWT configuration status for debugging
     if jwt_secret_key:
-        logger.info(f"JWT secret key found: {'*' * min(len(jwt_secret_key), 8)}... (length: {len(jwt_secret_key)})")
+        logger.info(
+            f"JWT secret key found: {'*' * min(len(jwt_secret_key), 8)}... (length: {len(jwt_secret_key)})"
+        )
     else:
-        logger.info("JWT secret key not found (APFLOW_JWT_SECRET not set) - authentication will be disabled")
-    enable_system_routes = (
-        os.getenv("APFLOW_ENABLE_SYSTEM_ROUTES", "true").lower()
-        in ("true", "1", "yes")
+        logger.info(
+            "JWT secret key not found (APFLOW_JWT_SECRET not set) - authentication will be disabled"
+        )
+    enable_system_routes = os.getenv("APFLOW_ENABLE_SYSTEM_ROUTES", "true").lower() in (
+        "true",
+        "1",
+        "yes",
     )
-    enable_docs = (
-        os.getenv("APFLOW_ENABLE_DOCS", "true").lower() in ("true", "1", "yes")
-    )
+    enable_docs = os.getenv("APFLOW_ENABLE_DOCS", "true").lower() in ("true", "1", "yes")
     host = os.getenv("APFLOW_API_HOST", os.getenv("API_HOST", "0.0.0.0"))
     port = int(os.getenv("APFLOW_API_PORT", os.getenv("API_PORT", "8000")))
     default_url = get_url_with_host_and_port(host, port)
@@ -278,4 +282,3 @@ def create_app_by_protocol(
             f"Supported protocols: 'a2a', 'mcp', 'rest' (future). "
             f"Set APFLOW_API_PROTOCOL environment variable."
         )
-

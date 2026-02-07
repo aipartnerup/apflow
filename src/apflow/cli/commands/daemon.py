@@ -42,7 +42,7 @@ def read_pid() -> Optional[int]:
     pid_file = get_pid_file()
     if not pid_file.exists():
         return None
-    
+
     try:
         with open(pid_file, "r") as f:
             pid_str = f.read().strip()
@@ -91,26 +91,24 @@ def start(
         elif existing_pid:
             # Stale PID file, remove it
             remove_pid()
-        
+
         # Build command to start API server
         log_file = get_log_file()
         python_exe = sys.executable
         api_module = "apflow.api.main"
-        
-        cmd = [
-            python_exe, "-m", api_module
-        ]
-        
+
+        cmd = [python_exe, "-m", api_module]
+
         # Set environment variables for API server
         env = os.environ.copy()
         env["APFLOW_API_HOST"] = host
         env["APFLOW_API_PORT"] = str(port)
         env["APFLOW_API_PROTOCOL"] = protocol
-        
+
         if background:
             typer.echo("Starting daemon service in background...")
             typer.echo(f"Log file: {log_file}")
-            
+
             # Start process in background
             with open(log_file, "a") as log_f:
                 process = subprocess.Popen(
@@ -120,13 +118,13 @@ def start(
                     env=env,
                     start_new_session=True,  # Detach from terminal
                 )
-            
+
             # Write PID
             write_pid(process.pid)
-            
+
             # Give it a moment to start (check if it crashes immediately)
             time.sleep(0.3)
-            
+
             # Check if process is still running
             if process.poll() is None:
                 typer.echo(f"Daemon started successfully (PID: {process.pid})")
@@ -141,7 +139,7 @@ def start(
             typer.echo("Press Ctrl+C to stop")
             # Run in foreground
             subprocess.run(cmd, env=env)
-            
+
     except Exception as e:
         typer.echo(f"Error starting daemon: {str(e)}", err=True)
         logger.exception("Error starting daemon")
@@ -156,18 +154,18 @@ def stop():
         if pid is None:
             typer.echo("Daemon is not running (no PID file found)")
             return
-        
+
         if not is_process_running(pid):
             typer.echo(f"Daemon process (PID: {pid}) is not running (stale PID file)")
             remove_pid()
             return
-        
+
         typer.echo(f"Stopping daemon (PID: {pid})...")
-        
+
         # Send SIGTERM signal
         try:
             os.kill(pid, signal.SIGTERM)
-            
+
             # Wait for process to terminate (max 10 seconds)
             # First check quickly (many processes respond immediately)
             time.sleep(0.2)
@@ -185,21 +183,21 @@ def stop():
                     typer.echo("Process didn't terminate, sending SIGKILL...")
                     os.kill(pid, signal.SIGKILL)
                     time.sleep(0.2)  # SIGKILL is immediate, short wait is enough
-            
+
             if not is_process_running(pid):
                 typer.echo("Daemon stopped successfully")
                 remove_pid()
             else:
                 typer.echo("Failed to stop daemon", err=True)
                 raise typer.Exit(1)
-                
+
         except ProcessLookupError:
             typer.echo("Process not found (may have already stopped)")
             remove_pid()
         except PermissionError:
             typer.echo(f"Permission denied. Cannot stop process {pid}", err=True)
             raise typer.Exit(1)
-            
+
     except Exception as e:
         typer.echo(f"Error stopping daemon: {str(e)}", err=True)
         logger.exception("Error stopping daemon")
@@ -214,7 +212,7 @@ def status():
         if pid is None:
             typer.echo("Status: Not running (no PID file)")
             return
-        
+
         if is_process_running(pid):
             typer.echo(f"Status: Running (PID: {pid})")
             pid_file = get_pid_file()
@@ -224,7 +222,7 @@ def status():
         else:
             typer.echo(f"Status: Not running (stale PID file: {pid})")
             typer.echo("You may want to remove the stale PID file")
-            
+
     except Exception as e:
         typer.echo(f"Error checking daemon status: {str(e)}", err=True)
         logger.exception("Error checking daemon status")
@@ -245,11 +243,11 @@ def restart(
             stop()
             # Brief wait to ensure resources are released
             time.sleep(0.3)
-        
+
         # Start
         typer.echo("Starting daemon...")
         start(host=host, port=port, background=True)
-        
+
     except Exception as e:
         typer.echo(f"Error restarting daemon: {str(e)}", err=True)
         logger.exception("Error restarting daemon")
@@ -267,12 +265,13 @@ def logs(
         if not log_file.exists():
             typer.echo(f"Log file not found: {log_file}")
             return
-        
+
         if follow:
             typer.echo(f"Following log file: {log_file}")
             typer.echo("Press Ctrl+C to stop")
             try:
                 import subprocess
+
                 subprocess.run(["tail", "-f", str(log_file)])
             except FileNotFoundError:
                 # Fallback to Python implementation
@@ -294,9 +293,8 @@ def logs(
                 all_lines = f.readlines()
                 for line in all_lines[-lines:]:
                     typer.echo(line.rstrip())
-                    
+
     except Exception as e:
         typer.echo(f"Error viewing logs: {str(e)}", err=True)
         logger.exception("Error viewing logs")
         raise typer.Exit(1)
-

@@ -84,10 +84,10 @@ def list_executors(
             typer.echo(f"🔧 {typer.style(executor_id, fg=typer.colors.CYAN, bold=True)}")
             typer.echo(f"   Name: {name}")
             typer.echo(f"   Type: {extension_type}")
-            
+
             if verbose:
                 typer.echo(f"   Description: {description}")
-                
+
                 # Show input schema if available
                 input_schema = executor.get("input_schema")
                 if input_schema:
@@ -101,12 +101,12 @@ def list_executors(
                             typer.echo(f"     - {prop_name}: {prop_type}{required_mark}")
                             if prop_desc:
                                 typer.echo(f"       {prop_desc}")
-                
+
                 # Show tags if available
                 tags = executor.get("tags")
                 if tags:
                     typer.echo(f"   Tags: {', '.join(tags)}")
-            
+
             typer.echo()
 
     except Exception as e:

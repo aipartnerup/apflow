@@ -26,6 +26,7 @@ logger = get_logger(__name__)
 
 class AddSchedulingFields(Migration):
     """Add scheduling fields to TaskModel"""
+
     aliases = ["add_scheduling_fields"]
     description = "Add scheduling fields: schedule_type, schedule_expression, schedule_enabled, schedule_start_at, schedule_end_at, next_run_at, last_run_at, max_runs, run_count"
 
@@ -63,6 +64,7 @@ class AddSchedulingFields(Migration):
             # Fallback: try to get columns using inspector
             try:
                 from sqlalchemy import inspect as sa_inspect
+
                 inspector = sa_inspect(engine)
                 existing_columns = {col["name"] for col in inspector.get_columns(table_name)}
             except Exception as e:
@@ -111,9 +113,7 @@ class AddSchedulingFields(Migration):
             with engine.begin() as conn:
                 for col_name, idx_name in indexes_to_create:
                     conn.execute(
-                        text(
-                            f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table_name} ({col_name})"
-                        )
+                        text(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table_name} ({col_name})")
                     )
             logger.info(f"✓ {self.id}: Created indexes for scheduling columns")
         except Exception as e:
@@ -153,6 +153,7 @@ class AddSchedulingFields(Migration):
         except Exception:
             try:
                 from sqlalchemy import inspect as sa_inspect
+
                 inspector = sa_inspect(engine)
                 existing_columns = {col["name"] for col in inspector.get_columns(table_name)}
             except Exception as e:
@@ -179,6 +180,8 @@ class AddSchedulingFields(Migration):
                         conn.execute(text(f"ALTER TABLE {table_name} DROP COLUMN {col_name}"))
                     logger.info(f"✓ Downgrade {self.id}: Dropped column '{col_name}'")
                 except Exception as e:
-                    logger.warning(f"⚠ Downgrade {self.id}: Could not drop column '{col_name}': {str(e)}")
+                    logger.warning(
+                        f"⚠ Downgrade {self.id}: Could not drop column '{col_name}': {str(e)}"
+                    )
 
         logger.info(f"Downgrade {self.id}: Completed")

@@ -37,14 +37,18 @@ else:
 
 
 class LLMInputSchema(BaseModel):
-    messages: list[Dict[str, Any]] = Field(description="Chat messages like [{'role': 'user', 'content': '...'}]")
+    messages: list[Dict[str, Any]] = Field(
+        description="Chat messages like [{'role': 'user', 'content': '...'}]"
+    )
 
 
 class LLMOutputSchema(BaseModel):
     success: bool = Field(description="Whether the LLM call was successful")
     content: Optional[str] = Field(default=None, description="LLM generated response content")
     is_stream: bool = Field(description="Whether the response is a stream")
-    stream: Optional[Any] = Field(default=None, description="Stream generator (only present when is_stream is True)")
+    stream: Optional[Any] = Field(
+        default=None, description="Stream generator (only present when is_stream is True)"
+    )
     usage: Optional[Dict[str, Any]] = Field(default=None, description="Token usage information")
     model: Optional[str] = Field(default=None, description="Model used for the completion")
 
@@ -238,4 +242,3 @@ class LLMExecutor(BaseTask):
             "usage": None,
             "model": model,
         }
-

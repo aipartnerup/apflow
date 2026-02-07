@@ -51,9 +51,7 @@ class TestScheduleCalculatorOnce:
         from_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         expression = "2024-01-15T09:00:00+00:00"
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.once, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.once, expression, from_time)
 
         expected = datetime(2024, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
         assert result == expected
@@ -63,9 +61,7 @@ class TestScheduleCalculatorOnce:
         from_time = datetime(2024, 1, 20, 12, 0, 0, tzinfo=timezone.utc)
         expression = "2024-01-15T09:00:00+00:00"
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.once, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.once, expression, from_time)
 
         assert result is None
 
@@ -74,9 +70,7 @@ class TestScheduleCalculatorOnce:
         from_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         expression = "2024-01-15T09:00:00Z"
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.once, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.once, expression, from_time)
 
         expected = datetime(2024, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
         assert result == expected
@@ -98,9 +92,7 @@ class TestScheduleCalculatorInterval:
         from_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         expression = "3600"  # 1 hour
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.interval, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.interval, expression, from_time)
 
         expected = datetime(2024, 1, 1, 13, 0, 0, tzinfo=timezone.utc)
         assert result == expected
@@ -110,9 +102,7 @@ class TestScheduleCalculatorInterval:
         from_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         expression = "86400"  # 24 hours
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.interval, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.interval, expression, from_time)
 
         expected = datetime(2024, 1, 2, 12, 0, 0, tzinfo=timezone.utc)
         assert result == expected
@@ -155,9 +145,7 @@ class TestScheduleCalculatorCron:
         from_time = datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc)
         expression = "0 9 * * *"  # Every day at 9 AM
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.cron, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.cron, expression, from_time)
 
         expected = datetime(2024, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
         assert result == expected
@@ -173,9 +161,7 @@ class TestScheduleCalculatorCron:
         from_time = datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
         expression = "0 9 * * 1-5"  # Weekdays at 9 AM
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.cron, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.cron, expression, from_time)
 
         # Next occurrence should be Tuesday Jan 2 at 9 AM
         expected = datetime(2024, 1, 2, 9, 0, 0, tzinfo=timezone.utc)
@@ -199,7 +185,7 @@ class TestScheduleCalculatorCron:
         from_time = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         expression = "0 9 * * *"
 
-        with patch.dict('sys.modules', {'croniter': None}):
+        with patch.dict("sys.modules", {"croniter": None}):
             # Force reimport to trigger ImportError
             import apflow.core.storage.sqlalchemy.schedule_calculator as calc_module
 
@@ -228,9 +214,7 @@ class TestScheduleCalculatorDaily:
         from_time = datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc)
         expression = "09:00"
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.daily, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.daily, expression, from_time)
 
         expected = datetime(2024, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
         assert result == expected
@@ -240,9 +224,7 @@ class TestScheduleCalculatorDaily:
         from_time = datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
         expression = "09:00"
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.daily, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.daily, expression, from_time)
 
         expected = datetime(2024, 1, 2, 9, 0, 0, tzinfo=timezone.utc)
         assert result == expected
@@ -252,9 +234,7 @@ class TestScheduleCalculatorDaily:
         from_time = datetime(2024, 1, 1, 1, 0, 0, tzinfo=timezone.utc)
         expression = "6:30"
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.daily, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.daily, expression, from_time)
 
         expected = datetime(2024, 1, 1, 6, 30, 0, tzinfo=timezone.utc)
         assert result == expected
@@ -293,9 +273,7 @@ class TestScheduleCalculatorWeekly:
         from_time = datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc)
         expression = "1,3,5 09:00"  # Mon, Wed, Fri at 9 AM
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.weekly, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.weekly, expression, from_time)
 
         # Next occurrence should be Monday Jan 1 at 9 AM
         expected = datetime(2024, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
@@ -307,9 +285,7 @@ class TestScheduleCalculatorWeekly:
         from_time = datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
         expression = "1,3,5 09:00"  # Mon, Wed, Fri at 9 AM
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.weekly, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.weekly, expression, from_time)
 
         # Next occurrence should be Wednesday Jan 3 at 9 AM
         expected = datetime(2024, 1, 3, 9, 0, 0, tzinfo=timezone.utc)
@@ -321,9 +297,7 @@ class TestScheduleCalculatorWeekly:
         from_time = datetime(2024, 1, 5, 10, 0, 0, tzinfo=timezone.utc)
         expression = "1,3,5 09:00"  # Mon, Wed, Fri at 9 AM
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.weekly, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.weekly, expression, from_time)
 
         # Next occurrence should be Monday Jan 8 at 9 AM
         expected = datetime(2024, 1, 8, 9, 0, 0, tzinfo=timezone.utc)
@@ -335,9 +309,7 @@ class TestScheduleCalculatorWeekly:
         from_time = datetime(2024, 1, 6, 10, 0, 0, tzinfo=timezone.utc)
         expression = "7 15:00"  # Sunday at 3 PM
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.weekly, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.weekly, expression, from_time)
 
         # Next occurrence should be Sunday Jan 7 at 3 PM
         expected = datetime(2024, 1, 7, 15, 0, 0, tzinfo=timezone.utc)
@@ -368,9 +340,7 @@ class TestScheduleCalculatorMonthly:
         from_time = datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc)
         expression = "1,15 09:00"  # 1st and 15th at 9 AM
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.monthly, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.monthly, expression, from_time)
 
         # Next occurrence should be Jan 1 at 9 AM
         expected = datetime(2024, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
@@ -381,9 +351,7 @@ class TestScheduleCalculatorMonthly:
         from_time = datetime(2024, 1, 2, 10, 0, 0, tzinfo=timezone.utc)
         expression = "1,15 09:00"  # 1st and 15th at 9 AM
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.monthly, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.monthly, expression, from_time)
 
         # Next occurrence should be Jan 15 at 9 AM
         expected = datetime(2024, 1, 15, 9, 0, 0, tzinfo=timezone.utc)
@@ -394,9 +362,7 @@ class TestScheduleCalculatorMonthly:
         from_time = datetime(2024, 1, 20, 10, 0, 0, tzinfo=timezone.utc)
         expression = "1,15 09:00"  # 1st and 15th at 9 AM
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.monthly, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.monthly, expression, from_time)
 
         # Next occurrence should be Feb 1 at 9 AM
         expected = datetime(2024, 2, 1, 9, 0, 0, tzinfo=timezone.utc)
@@ -407,9 +373,7 @@ class TestScheduleCalculatorMonthly:
         from_time = datetime(2024, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
         expression = "31 09:00"  # 31st at 9 AM
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.monthly, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.monthly, expression, from_time)
 
         # Next occurrence should be Jan 31 at 9 AM
         expected = datetime(2024, 1, 31, 9, 0, 0, tzinfo=timezone.utc)
@@ -421,9 +385,7 @@ class TestScheduleCalculatorMonthly:
         from_time = datetime(2024, 2, 1, 10, 0, 0, tzinfo=timezone.utc)
         expression = "30 09:00"  # 30th at 9 AM
 
-        result = ScheduleCalculator.calculate_next_run(
-            ScheduleType.monthly, expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run(ScheduleType.monthly, expression, from_time)
 
         # Feb doesn't have 30th, so should skip to March 30
         expected = datetime(2024, 3, 30, 9, 0, 0, tzinfo=timezone.utc)
@@ -476,9 +438,7 @@ class TestScheduleCalculatorEdgeCases:
         from_time = datetime(2024, 1, 1, 8, 0, 0, tzinfo=timezone.utc)
         expression = "09:00"
 
-        result = ScheduleCalculator.calculate_next_run(
-            "daily", expression, from_time
-        )
+        result = ScheduleCalculator.calculate_next_run("daily", expression, from_time)
 
         expected = datetime(2024, 1, 1, 9, 0, 0, tzinfo=timezone.utc)
         assert result == expected
@@ -897,6 +857,157 @@ class TestSchedulingRepositoryMethods:
         assert due_tasks[0].id == active_task.id
 
     @pytest.mark.asyncio
+    async def test_get_due_scheduled_tasks_recovery_completed(self, sync_db_session):
+        """Test that completed tasks with active schedule are picked up (recovery)."""
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+
+        now = datetime.now(timezone.utc)
+        past = now - timedelta(hours=1)
+
+        # Simulate a task stuck in completed (complete_scheduled_run missed)
+        stuck_task = await repo.create_task(
+            name="Stuck Completed Task",
+            user_id="test-user",
+            status="completed",
+            schedule_type="interval",
+            schedule_expression="5",
+            schedule_enabled=True,
+            next_run_at=past,
+            max_runs=100,
+            run_count=56,
+        )
+
+        due_tasks = await repo.get_due_scheduled_tasks()
+
+        assert len(due_tasks) == 1
+        assert due_tasks[0].id == stuck_task.id
+
+    @pytest.mark.asyncio
+    async def test_get_due_scheduled_tasks_recovery_failed(self, sync_db_session):
+        """Test that failed tasks with active schedule are picked up (recovery)."""
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+
+        now = datetime.now(timezone.utc)
+        past = now - timedelta(hours=1)
+
+        stuck_task = await repo.create_task(
+            name="Stuck Failed Task",
+            user_id="test-user",
+            status="failed",
+            schedule_type="interval",
+            schedule_expression="10",
+            schedule_enabled=True,
+            next_run_at=past,
+            max_runs=50,
+            run_count=10,
+        )
+
+        due_tasks = await repo.get_due_scheduled_tasks()
+
+        assert len(due_tasks) == 1
+        assert due_tasks[0].id == stuck_task.id
+
+    @pytest.mark.asyncio
+    async def test_get_due_scheduled_tasks_excludes_running(self, sync_db_session):
+        """Test that running/in_progress tasks are NOT picked up (avoid double-execution)."""
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+
+        now = datetime.now(timezone.utc)
+        past = now - timedelta(hours=1)
+
+        await repo.create_task(
+            name="Running Task",
+            user_id="test-user",
+            status="in_progress",
+            schedule_type="interval",
+            schedule_expression="5",
+            schedule_enabled=True,
+            next_run_at=past,
+        )
+
+        due_tasks = await repo.get_due_scheduled_tasks()
+        assert len(due_tasks) == 0
+
+    @pytest.mark.asyncio
+    async def test_mark_scheduled_task_running_recovery_resets_children(self, sync_db_session):
+        """Test that mark_scheduled_task_running resets children in recovery case."""
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+
+        # Create parent stuck in "completed"
+        parent = await repo.create_task(
+            name="Stuck Parent",
+            user_id="test-user",
+            status="completed",
+            has_children=True,
+            schedule_type="interval",
+            schedule_expression="5",
+            schedule_enabled=True,
+        )
+
+        # Create completed child
+        child = await repo.create_task(
+            name="Child Task",
+            user_id="test-user",
+            status="completed",
+            parent_id=parent.id,
+            result={"data": "old"},
+        )
+
+        # mark_scheduled_task_running should reset children
+        updated = await repo.mark_scheduled_task_running(parent.id)
+
+        assert updated is not None
+        assert updated.status == "in_progress"
+
+        # Verify child was reset
+        refreshed_child = await repo.get_task_by_id(child.id)
+        assert refreshed_child.status == "pending"
+        assert refreshed_child.result is None
+
+    @pytest.mark.asyncio
+    async def test_mark_scheduled_task_running_normal_skips_child_reset(self, sync_db_session):
+        """Test that mark_scheduled_task_running skips child reset for normal pending case."""
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+
+        # Create parent in normal "pending" state
+        parent = await repo.create_task(
+            name="Normal Parent",
+            user_id="test-user",
+            status="pending",
+            has_children=True,
+            schedule_type="interval",
+            schedule_expression="5",
+            schedule_enabled=True,
+        )
+
+        # Create pending child (already in correct state)
+        child = await repo.create_task(
+            name="Child Task",
+            user_id="test-user",
+            status="pending",
+            parent_id=parent.id,
+        )
+
+        updated = await repo.mark_scheduled_task_running(parent.id)
+
+        assert updated is not None
+        assert updated.status == "in_progress"
+
+        # Child should remain pending (no reset needed)
+        refreshed_child = await repo.get_task_by_id(child.id)
+        assert refreshed_child.status == "pending"
+
+    @pytest.mark.asyncio
     async def test_get_scheduled_tasks(self, sync_db_session):
         """Test listing all scheduled tasks"""
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
@@ -1005,7 +1116,7 @@ class TestSchedulingRepositoryMethods:
         assert updated.next_run_at is not None
         assert updated.next_run_at > now  # Next run should be in the future
         assert updated.status == "pending"  # Reset for next run
-        assert updated.result == {"processed": 100}
+        assert updated.result is None  # Cleared for clean re-execution
 
     @pytest.mark.asyncio
     async def test_complete_scheduled_run_max_runs_reached(self, sync_db_session):
@@ -1062,6 +1173,180 @@ class TestSchedulingRepositoryMethods:
         assert updated.schedule_enabled is False
         assert updated.status == "completed"
 
+    @pytest.mark.asyncio
+    async def test_complete_scheduled_run_resets_task_tree(self, sync_db_session):
+        """Test that complete_scheduled_run resets child tasks for re-execution.
+
+        Simulates interval=1s, max_runs=2: after the first run completes,
+        the parent should be reset to pending and all children should be
+        reset to clean pending state (result/error/timestamps cleared).
+        """
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+
+        now = datetime.now(timezone.utc)
+
+        # Create a parent task with children, interval=1s, max_runs=2
+        parent = await repo.create_task(
+            name="Parent Scheduled Task",
+            user_id="test-user",
+            schedule_type="interval",
+            schedule_expression="1",
+            schedule_enabled=True,
+            next_run_at=now,
+            max_runs=2,
+            run_count=0,
+            has_children=True,
+        )
+
+        # Create two child tasks (simulating a completed first run)
+        child1 = await repo.create_task(
+            name="Child Task 1",
+            user_id="test-user",
+            parent_id=parent.id,
+            status="completed",
+            result={"output": "child1-result"},
+            started_at=now,
+            completed_at=now,
+            progress=1.0,
+        )
+        child2 = await repo.create_task(
+            name="Child Task 2",
+            user_id="test-user",
+            parent_id=parent.id,
+            status="completed",
+            result={"output": "child2-result"},
+            started_at=now,
+            completed_at=now,
+            progress=1.0,
+        )
+
+        # Complete the first scheduled run (run_count goes from 0 -> 1, max_runs=2 not reached)
+        updated_parent = await repo.complete_scheduled_run(
+            parent.id,
+            success=True,
+            result={"output": "parent-result-run1"},
+        )
+
+        # Parent should be reset to pending for the next run
+        assert updated_parent is not None
+        assert updated_parent.status == "pending"
+        assert updated_parent.run_count == 1
+        assert updated_parent.schedule_enabled is True
+        assert updated_parent.next_run_at is not None
+        assert updated_parent.result is None  # Cleared for next run
+        assert updated_parent.progress == 0.0  # Reset for next run
+
+        # Children should be fully reset to pending
+        refreshed_child1 = await repo.get_task_by_id(child1.id)
+        assert refreshed_child1.status == "pending"
+        assert refreshed_child1.result is None
+        assert refreshed_child1.error is None
+        assert refreshed_child1.started_at is None
+        assert refreshed_child1.completed_at is None
+        assert refreshed_child1.progress == 0.0
+
+        refreshed_child2 = await repo.get_task_by_id(child2.id)
+        assert refreshed_child2.status == "pending"
+        assert refreshed_child2.result is None
+        assert refreshed_child2.error is None
+        assert refreshed_child2.started_at is None
+        assert refreshed_child2.completed_at is None
+        assert refreshed_child2.progress == 0.0
+
+    @pytest.mark.asyncio
+    async def test_complete_scheduled_run_disables_after_max_runs_with_tree(self, sync_db_session):
+        """Test that schedule is disabled when max_runs reached, even with children.
+
+        After the final run (run_count reaches max_runs), the parent should
+        be marked completed and schedule_enabled=False. Children are NOT reset
+        because there will be no next run.
+        """
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+
+        now = datetime.now(timezone.utc)
+
+        # Create parent at run_count=1, max_runs=2 (this is the final run)
+        parent = await repo.create_task(
+            name="Parent Last Run",
+            user_id="test-user",
+            schedule_type="interval",
+            schedule_expression="1",
+            schedule_enabled=True,
+            next_run_at=now,
+            max_runs=2,
+            run_count=1,
+            has_children=True,
+        )
+
+        child = await repo.create_task(
+            name="Child Task",
+            user_id="test-user",
+            parent_id=parent.id,
+            status="completed",
+            result={"output": "child-final"},
+            started_at=now,
+            completed_at=now,
+            progress=1.0,
+        )
+
+        # Complete the second (final) run
+        updated_parent = await repo.complete_scheduled_run(
+            parent.id,
+            success=True,
+            result={"output": "parent-result-run2"},
+        )
+
+        # Parent should be completed and disabled (max_runs reached)
+        assert updated_parent is not None
+        assert updated_parent.status == "completed"
+        assert updated_parent.run_count == 2
+        assert updated_parent.schedule_enabled is False
+        assert updated_parent.next_run_at is None
+        assert updated_parent.result == {"output": "parent-result-run2"}
+
+        # Child should NOT be reset (no more runs)
+        refreshed_child = await repo.get_task_by_id(child.id)
+        assert refreshed_child.status == "completed"
+        assert refreshed_child.result == {"output": "child-final"}
+
+    @pytest.mark.asyncio
+    async def test_complete_scheduled_run_no_children_skips_tree_reset(self, sync_db_session):
+        """Test that tree reset is skipped for tasks without children."""
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+
+        now = datetime.now(timezone.utc)
+
+        # Create a single task with no children
+        task = await repo.create_task(
+            name="Solo Scheduled Task",
+            user_id="test-user",
+            schedule_type="interval",
+            schedule_expression="1",
+            schedule_enabled=True,
+            next_run_at=now,
+            max_runs=2,
+            run_count=0,
+            has_children=False,
+        )
+
+        updated = await repo.complete_scheduled_run(
+            task.id,
+            success=True,
+            result={"output": "solo-result"},
+        )
+
+        assert updated is not None
+        assert updated.status == "pending"
+        assert updated.run_count == 1
+        assert updated.result is None  # Cleared for next run
+        assert updated.progress == 0.0
+
 
 class TestSchedulingMigration:
     """Test scheduling migration"""
@@ -1074,7 +1359,7 @@ class TestSchedulingMigration:
         # Import module with numeric prefix using spec
         migration_path = os.path.join(
             os.path.dirname(__file__),
-            "../../../../src/apflow/core/storage/migrations/002_add_scheduling_fields.py"
+            "../../../../src/apflow/core/storage/migrations/002_add_scheduling_fields.py",
         )
         migration_path = os.path.abspath(migration_path)
 
@@ -1085,7 +1370,10 @@ class TestSchedulingMigration:
         AddSchedulingFields = migration_module.AddSchedulingFields
         migration = AddSchedulingFields()
         assert migration.description is not None
-        assert "scheduling" in migration.description.lower() or "schedule" in migration.description.lower()
+        assert (
+            "scheduling" in migration.description.lower()
+            or "schedule" in migration.description.lower()
+        )
 
     def test_migration_has_upgrade_method(self):
         """Test that migration has upgrade method"""
@@ -1094,7 +1382,7 @@ class TestSchedulingMigration:
 
         migration_path = os.path.join(
             os.path.dirname(__file__),
-            "../../../../src/apflow/core/storage/migrations/002_add_scheduling_fields.py"
+            "../../../../src/apflow/core/storage/migrations/002_add_scheduling_fields.py",
         )
         migration_path = os.path.abspath(migration_path)
 
@@ -1114,7 +1402,7 @@ class TestSchedulingMigration:
 
         migration_path = os.path.join(
             os.path.dirname(__file__),
-            "../../../../src/apflow/core/storage/migrations/002_add_scheduling_fields.py"
+            "../../../../src/apflow/core/storage/migrations/002_add_scheduling_fields.py",
         )
         migration_path = os.path.abspath(migration_path)
 

@@ -23,19 +23,30 @@ class RestAuthConfig(BaseModel):
     password: Optional[str] = Field(default=None, description="Password (for basic auth)")
     key: Optional[str] = Field(default=None, description="API key name (for apikey auth)")
     value: Optional[str] = Field(default=None, description="API key value (for apikey auth)")
-    location: Literal["header", "query"] = Field(default="header", description="Where to place the API key (default: header)")
+    location: Literal["header", "query"] = Field(
+        default="header", description="Where to place the API key (default: header)"
+    )
 
 
 class RestInputSchema(BaseModel):
     url: str = Field(description="Target URL for the HTTP request")
-    method: Literal["GET", "POST", "PUT", "DELETE", "PATCH"] = Field(default="GET", description="HTTP method (default: GET)")
-    headers: Optional[Dict[str, Any]] = Field(default=None, description="Additional HTTP headers as key-value pairs (merged with defaults)")
-    params: Optional[Dict[str, Any]] = Field(default=None, description="Query parameters as key-value pairs")
+    method: Literal["GET", "POST", "PUT", "DELETE", "PATCH"] = Field(
+        default="GET", description="HTTP method (default: GET)"
+    )
+    headers: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Additional HTTP headers as key-value pairs (merged with defaults)",
+    )
+    params: Optional[Dict[str, Any]] = Field(
+        default=None, description="Query parameters as key-value pairs"
+    )
     json: Optional[Dict[str, Any]] = Field(default=None, description="JSON request body")
     data: Optional[Dict[str, Any]] = Field(default=None, description="Form data as key-value pairs")
     auth: Optional[RestAuthConfig] = Field(default=None, description="Authentication configuration")
     timeout: float = Field(default=30.0, description="Request timeout in seconds (default: 30.0)")
-    verify: bool = Field(default=True, description="Whether to verify SSL certificates (default: true)")
+    verify: bool = Field(
+        default=True, description="Whether to verify SSL certificates (default: true)"
+    )
 
 
 class RestOutputSchema(BaseModel):
@@ -44,7 +55,9 @@ class RestOutputSchema(BaseModel):
     url: Optional[str] = Field(default=None, description="Final URL after redirects")
     headers: Optional[Dict[str, Any]] = Field(default=None, description="Response headers")
     method: str = Field(description="HTTP method used")
-    json: Optional[Dict[str, Any]] = Field(default=None, description="JSON response body (if applicable)")
+    json: Optional[Dict[str, Any]] = Field(
+        default=None, description="JSON response body (if applicable)"
+    )
     text: Optional[str] = Field(default=None, description="Text response body (if applicable)")
     error: Optional[str] = Field(default=None, description="Error message (if applicable)")
 
@@ -246,4 +259,3 @@ class RestExecutor(BaseTask):
             "json": demo_json,
             "method": method,
         }
-

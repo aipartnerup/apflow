@@ -119,4 +119,3 @@ class TestIsInProjectContext:
         """Test that True is returned when in git project."""
         with patch("pathlib.Path.cwd", return_value=temp_git_dir):
             assert is_in_project_context() is True
-

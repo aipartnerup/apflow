@@ -54,28 +54,28 @@ def get_cli_registry() -> dict[str, typer.Typer]:
 def get_cli_group(name: str) -> typer.Typer:
     """
     Get a CLI group by name, supporting both registered extensions and built-in groups.
-    
+
     This function allows external projects to extend existing CLI groups by adding
     subcommands to them.
-    
+
     Args:
         name: Group name (e.g., "tasks", "config", or a custom group name)
-    
+
     Returns:
         Typer app instance for the group
-    
+
     Raises:
         KeyError: If the group doesn't exist
-    
+
     Example:
         # Extend a custom group
         from apflow.cli import get_cli_group
-        
+
         my_group = get_cli_group("my-group")
         @my_group.command()
         def new_command():
             print("New command in my-group")
-        
+
         # Extend apflow built-in group (if supported)
         tasks_group = get_cli_group("tasks")
         @tasks_group.command()
@@ -86,7 +86,7 @@ def get_cli_group(name: str) -> typer.Typer:
     registry = get_cli_registry()
     if name in registry:
         return registry[name]
-    
+
     # Try to get from built-in commands (lazy-loaded)
     # This allows extending apflow's built-in groups like "tasks", "config", etc.
     try:
@@ -101,22 +101,23 @@ def get_cli_group(name: str) -> typer.Typer:
             "config": ("apflow.cli.commands.config", "app"),
             "executors": ("apflow.cli.commands.executors", "app"),
         }
-        
+
         if name in builtin_commands:
             module_path, attr_name = builtin_commands[name]
             import importlib
+
             module = importlib.import_module(module_path)
             typer_app = getattr(module, attr_name)
-            
+
             # Check if it's a group (has subcommands)
-            if hasattr(typer_app, 'registered_commands') and len(typer_app.registered_commands) > 0:
+            if hasattr(typer_app, "registered_commands") and len(typer_app.registered_commands) > 0:
                 return typer_app
             else:
                 # If it's not a group, we can't extend it
                 raise KeyError(f"'{name}' is not a group (it's a single command)")
     except (ImportError, AttributeError):
         pass
-    
+
     raise KeyError(f"CLI group '{name}' not found. Available groups: {list(registry.keys())}")
 
 
@@ -160,7 +161,7 @@ def cli_register(
     Args:
         name: Command/subcommand name. If not provided, uses class/function name in lowercase.
         help: Help text for the command/subcommand.
-        override: 
+        override:
             - If `group` is None: If True, override entire group/command registration
             - If `group` is set: If True, override existing subcommand in the group
         group: If provided, extend this group with a new subcommand instead of registering a new command.
@@ -168,6 +169,7 @@ def cli_register(
     Returns:
         Decorated class or function (same object, registered automatically)
     """
+
     def decorator(obj: T) -> T:
         # Determine command/subcommand name
         cmd_name = name or getattr(obj, "__name__", None)
@@ -186,7 +188,7 @@ def cli_register(
                     f"Cannot extend group '{group_name}': group not found. "
                     f"Register the group first or use an existing group name."
                 )
-            
+
             # Check if subcommand already exists
             existing_commands = {cmd.name for cmd in target_group.registered_commands}
             if cmd_name in existing_commands and not override:
@@ -195,7 +197,7 @@ def cli_register(
                     f"Use override=True to override it."
                 )
                 return obj
-            
+
             # Register function as subcommand in the group
             if callable(obj):
                 target_group.command(name=cmd_name, help=help)(obj)
@@ -214,7 +216,6 @@ def cli_register(
                 f"Use override=True to force override the existing registration."
             )
             return obj
-
 
         # Register class-based group
         if isinstance(obj, type):
@@ -235,8 +236,6 @@ def cli_register(
                 _cli_registry[cmd_name] = app
             return obj
 
-
-
         # Register function as root command
         # All single functions are root commands (can be invoked directly)
         # Examples: apflow version, apflow server --port 8000
@@ -251,4 +250,3 @@ def cli_register(
         raise TypeError("@cli_register can only be applied to classes or functions.")
 
     return decorator
-

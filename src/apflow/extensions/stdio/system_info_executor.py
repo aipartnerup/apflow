@@ -19,27 +19,55 @@ logger = get_logger(__name__)
 
 
 class SystemInfoInputSchema(BaseModel):
-    resource: Literal["cpu", "memory", "disk", "all"] = Field(default="all", description="Resource type to query")
+    resource: Literal["cpu", "memory", "disk", "all"] = Field(
+        default="all", description="Resource type to query"
+    )
     timeout: int = Field(default=30, description="Command execution timeout in seconds", ge=1)
 
 
 class SystemInfoOutputSchema(BaseModel):
-    error: Optional[str] = Field(default=None, description="Error message (present on validation errors or execution failures)")
-    validation_error: Optional[str] = Field(default=None, description="Detailed validation error message (present on input validation failures)")
-    system: Optional[str] = Field(default=None, description="Operating system type (Darwin, Linux, Windows, etc.)")
+    error: Optional[str] = Field(
+        default=None,
+        description="Error message (present on validation errors or execution failures)",
+    )
+    validation_error: Optional[str] = Field(
+        default=None,
+        description="Detailed validation error message (present on input validation failures)",
+    )
+    system: Optional[str] = Field(
+        default=None, description="Operating system type (Darwin, Linux, Windows, etc.)"
+    )
     brand: Optional[str] = Field(default=None, description="CPU brand/model name (CPU info only)")
-    cores: Optional[Union[int, str]] = Field(default=None, description="Number of CPU cores or processor description")
-    threads: Optional[int] = Field(default=None, description="Number of CPU threads (CPU info only)")
-    total_gb: Optional[float] = Field(default=None, description="Total memory in GB (memory info only)")
-    total_bytes: Optional[int] = Field(default=None, description="Total memory in bytes (memory info only)")
+    cores: Optional[Union[int, str]] = Field(
+        default=None, description="Number of CPU cores or processor description"
+    )
+    threads: Optional[int] = Field(
+        default=None, description="Number of CPU threads (CPU info only)"
+    )
+    total_gb: Optional[float] = Field(
+        default=None, description="Total memory in GB (memory info only)"
+    )
+    total_bytes: Optional[int] = Field(
+        default=None, description="Total memory in bytes (memory info only)"
+    )
     total: Optional[str] = Field(default=None, description="Total size (memory or disk info)")
     used: Optional[str] = Field(default=None, description="Used size (disk info only)")
     available: Optional[str] = Field(default=None, description="Available size (disk info only)")
-    used_percent: Optional[str] = Field(default=None, description="Used percentage (disk info only)")
-    note: Optional[str] = Field(default=None, description="Additional notes when information is unavailable for the system")
-    cpu: Optional[Dict[str, Any]] = Field(default=None, description="CPU information object (when resource='all')")
-    memory: Optional[Dict[str, Any]] = Field(default=None, description="Memory information object (when resource='all')")
-    disk: Optional[Dict[str, Any]] = Field(default=None, description="Disk information object (when resource='all')")
+    used_percent: Optional[str] = Field(
+        default=None, description="Used percentage (disk info only)"
+    )
+    note: Optional[str] = Field(
+        default=None, description="Additional notes when information is unavailable for the system"
+    )
+    cpu: Optional[Dict[str, Any]] = Field(
+        default=None, description="CPU information object (when resource='all')"
+    )
+    memory: Optional[Dict[str, Any]] = Field(
+        default=None, description="Memory information object (when resource='all')"
+    )
+    disk: Optional[Dict[str, Any]] = Field(
+        default=None, description="Disk information object (when resource='all')"
+    )
 
 
 @executor_register()
@@ -326,4 +354,3 @@ class SystemInfoExecutor(BaseTask):
             result["_demo_sleep"] = 0.05  # Simulate quick local system info query
 
         return result
-

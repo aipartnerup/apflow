@@ -8,4 +8,3 @@ from apflow.extensions.core.aggregate_results_executor import AggregateResultsEx
 __all__ = [
     "AggregateResultsExecutor",
 ]
-

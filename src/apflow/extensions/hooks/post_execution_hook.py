@@ -18,30 +18,27 @@ logger = get_logger(__name__)
 class PostExecutionHookExtension(HookExtension):
     """
     Post-execution hook extension
-    
+
     Wraps all registered post-execution hooks from ConfigRegistry.
     This allows hooks to be discovered and managed via ExtensionRegistry.
     """
-    
+
     id = "post_execution_hooks"
     name = "Post-Execution Hooks"
     description = "Post-execution hooks from ConfigRegistry"
     version = "1.0.0"
-    
+
     @property
     def type(self) -> str:
         """Extension type identifier"""
         return "post_execution"
-    
+
     async def execute(
-        self,
-        task: TaskModel,
-        inputs: Optional[Dict[str, Any]] = None,
-        result: Optional[Any] = None
+        self, task: TaskModel, inputs: Optional[Dict[str, Any]] = None, result: Optional[Any] = None
     ) -> None:
         """
         Execute all registered post-execution hooks
-        
+
         Args:
             task: Task model instance
             inputs: Final input parameters used for execution
@@ -50,12 +47,12 @@ class PostExecutionHookExtension(HookExtension):
         hooks = get_post_hooks()
         if not hooks:
             return
-        
+
         import asyncio
         from inspect import iscoroutinefunction
-        
+
         logger.debug(f"Executing {len(hooks)} post-execution hooks for task {task.id}")
-        
+
         for hook in hooks:
             try:
                 if iscoroutinefunction(hook):
@@ -72,4 +69,3 @@ class PostExecutionHookExtension(HookExtension):
 
 
 __all__ = ["PostExecutionHookExtension"]
-

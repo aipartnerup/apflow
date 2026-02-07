@@ -39,38 +39,38 @@ _start_time: Optional[float] = None
 def _load_env_file():
     """
     Load .env file from appropriate location via ConfigManager to keep env/hook wiring centralized
-    
+
     Priority order:
     1. Current working directory (where script is run from)
     2. Project root directory (if in a project, found by pyproject.toml or .git)
     3. Directory of the main script (if running as a script)
     4. Library's own directory (only when running library's own main.py directly)
-    
+
     This ensures that when used as a library, it loads .env from the calling project,
     not from the library's installation directory.
     """
     import os
-    
+
     possible_paths = []
-    
+
     # 1. Current working directory (where the script is run from)
     # This is the most common case when running from project root
     try:
         possible_paths.append(Path.cwd() / ".env")
     except Exception:
         pass  # Ignore errors in getting current working directory
-    
+
     # 2. Project root directory (if in a project)
     # This helps when API server is started from a subdirectory
     try:
         from apflow.cli.cli_config import get_project_root
-        
+
         project_root = get_project_root()
         if project_root:
             possible_paths.append(project_root / ".env")
     except Exception:
         pass  # Ignore errors
-    
+
     # 3. Directory of the main script (if running as a script)
     # This finds .env in the same directory as the script that calls main()
     if sys.argv and len(sys.argv) > 0:
@@ -80,7 +80,7 @@ def _load_env_file():
                 possible_paths.append(main_script.parent / ".env")
         except Exception:
             pass  # Ignore errors in resolving script path
-    
+
     # 4. Library's own directory (only for library development)
     # Check if we're running apflow's own main.py directly
     # This helps when developing the library itself
@@ -92,11 +92,11 @@ def _load_env_file():
             possible_paths.append(lib_root / ".env")
     except Exception:
         pass  # Ignore errors
-    
+
     # Try each path and load the first one that exists
     config_manager = get_config_manager()
     config_manager.load_env_files(possible_paths, override=False)
-    
+
     # If APFLOW_JWT_SECRET is not in any .env file, ensure it's not set in environment
     # This handles the case where the env var was previously set but is now commented out
     env_file_has_jwt_secret = False
@@ -114,7 +114,7 @@ def _load_env_file():
                 pass
         if env_file_has_jwt_secret:
             break
-    
+
     # If .env files don't have APFLOW_JWT_SECRET, remove it from environment
     if not env_file_has_jwt_secret and "APFLOW_JWT_SECRET" in os.environ:
         del os.environ["APFLOW_JWT_SECRET"]
@@ -124,11 +124,11 @@ def _load_env_file():
 def _setup_development_environment():
     """
     Setup development environment (only when running library's own main.py directly)
-    
+
     This includes:
     - Suppressing specific warnings for cleaner output
     - Adding project root to Python path (for development mode)
-    
+
     This should NOT run when used as a library to avoid affecting the calling project.
     """
     # Check if we're running apflow's own main.py directly
@@ -141,12 +141,12 @@ def _setup_development_environment():
             return  # Installed as package, skip development setup
     except Exception:
         return  # Can't determine, skip to be safe
-    
+
     # Suppress specific warnings for cleaner output (only in development)
     warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
     warnings.filterwarnings("ignore", category=DeprecationWarning, module="websockets")
     warnings.filterwarnings("ignore", category=DeprecationWarning, module="uvicorn")
-    
+
     # Add project root to Python path for development (only when running directly)
     # This helps when running: python -m apflow.api.main
     project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -157,11 +157,11 @@ def _setup_development_environment():
 def create_runnable_app(**kwargs):
     """
     Create a runnable application based on protocol type
-    
+
     This function handles all initialization steps and returns a configured
     application instance. Use this when you need the app object but want to
     run the server yourself (e.g., with custom uvicorn configuration).
-    
+
     Args:
         **kwargs: Additional arguments passed to create_app_by_protocol():
             - protocol: Protocol type (overrides APFLOW_API_PROTOCOL env var)
@@ -177,50 +177,51 @@ def create_runnable_app(**kwargs):
                                     If None, permission checking is disabled.
                                     Signature: verify_permission_func(user_id: str, target_user_id: Optional[str], roles: Optional[list]) -> bool
             - And any other arguments supported by create_app_by_protocol()
-    
+
     Returns:
         Configured Starlette/FastAPI application instance
-    
+
     Examples:
         # Basic usage (uses environment variables)
         from apflow.api.main import create_runnable_app
         app = create_runnable_app()
-        
+
         # With custom routes and middleware
         from starlette.routing import Route
         from starlette.middleware.base import BaseHTTPMiddleware
-        
+
         app = create_runnable_app(
             custom_routes=[Route("/health", health_handler, methods=["GET"])],
             custom_middleware=[LoggingMiddleware]
         )
-        
+
         # With custom protocol
         app = create_runnable_app(protocol="mcp")
-        
+
         # Run with custom uvicorn configuration
         import uvicorn
         uvicorn.run(app, host="0.0.0.0", port=8080, workers=4)
     """
     global _start_time
-    
+
     # Initialize start time if not set
     if _start_time is None:
         _start_time = time.time()
-    
+
     # Setup logging based on environment variables (LOG_LEVEL or DEBUG)
     from apflow.logger import setup_logging
+
     setup_logging()
-    
+
     # Load .env file (from calling project's directory when used as library)
     # ConfigManager is the single entrypoint for env + hook registration across CLI/API
     _load_env_file()
-    
+
     # Setup development environment (only when running library's own main.py directly)
     _setup_development_environment()
-    
+
     logger.info("Starting apflow service")
-    
+
     # Auto-discover built-in extensions (optional, extensions register via @executor_register, @storage_register, @hook_register decorators)
     # This ensures extensions are available when TaskManager is used
     auto_initialize_extensions = kwargs.pop("auto_initialize_extensions", True)
@@ -244,8 +245,12 @@ def create_runnable_app(**kwargs):
         from sqlalchemy.ext.asyncio import AsyncSession
         from sqlalchemy import create_engine
         from apflow.core.storage.sqlalchemy.models import Base
-        from apflow.core.storage.factory import _get_database_url_from_env, is_postgresql_url, normalize_postgresql_url
-        
+        from apflow.core.storage.factory import (
+            _get_database_url_from_env,
+            is_postgresql_url,
+            normalize_postgresql_url,
+        )
+
         # Check if DATABASE_URL is set
         db_url = _get_database_url_from_env()
         if db_url and is_postgresql_url(db_url):
@@ -280,22 +285,19 @@ def create_runnable_app(**kwargs):
     logger.info(f"Starting API service with protocol: {protocol}")
 
     # Create app based on protocol (pass remaining kwargs)
-    return create_app_by_protocol(
-        protocol=protocol,
-        **kwargs
-    )
+    return create_app_by_protocol(protocol=protocol, **kwargs)
 
 
 def main(**kwargs):
     """
     Main entry point for API service (can be called via entry point or as a library)
-    
+
     This function handles all initialization steps, creates the application, and runs
     the uvicorn server. Use this when you want a complete ready-to-run server.
-    
+
     Can be called directly from external projects (e.g., apflow-demo) with
     custom configuration.
-    
+
     Args:
         **kwargs: Arguments can include:
             - Application configuration (passed to create_runnable_app()):
@@ -319,15 +321,15 @@ def main(**kwargs):
                 - limit_concurrency: Maximum concurrent connections (default: 100)
                 - limit_max_requests: Maximum requests per worker (default: 1000)
                 - access_log: Enable access logging (default: True)
-    
+
     Examples:
         # Basic usage (uses environment variables)
         from apflow.api.main import main
         main()
-        
+
         # With custom routes and server configuration
         from starlette.routing import Route
-        
+
         main(
             custom_routes=[Route("/health", health_handler, methods=["GET"])],
             host="0.0.0.0",
@@ -340,22 +342,22 @@ def main(**kwargs):
     host = kwargs.pop("host", None)
     if host is None:
         host = os.getenv("APFLOW_API_HOST", os.getenv("API_HOST", "0.0.0.0"))
-    
+
     port = kwargs.pop("port", None)
     if port is None:
         port = int(os.getenv("APFLOW_API_PORT", os.getenv("API_PORT", "8000")))
     else:
         port = int(port)
-    
+
     workers = kwargs.pop("workers", 1)
     loop = kwargs.pop("loop", "asyncio")
     limit_concurrency = kwargs.pop("limit_concurrency", 100)
     limit_max_requests = kwargs.pop("limit_max_requests", 1000)
     access_log = kwargs.pop("access_log", True)
-    
+
     # Create app with remaining kwargs (application configuration)
     app = create_runnable_app(**kwargs)
-        
+
     # Run server
     uvicorn.run(
         app,
@@ -368,8 +370,9 @@ def main(**kwargs):
         access_log=access_log,
     )
 
-
     # Auto-initialize core extension on module import
     load_extension_by_name("core")
+
+
 if __name__ == "__main__":
     main()

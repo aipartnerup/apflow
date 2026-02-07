@@ -10,7 +10,7 @@ import os
 from threading import local
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
-from apflow.core.types import TaskPreHook, TaskPostHook
+from apflow.core.types import TaskPreHook, TaskPostHook, WebhookVerifyHook
 from apflow.logger import get_logger
 
 if TYPE_CHECKING:
@@ -37,10 +37,12 @@ class ConfigRegistry:
 
     def __init__(self):
         """Initialize empty registry"""
-        self._task_model_class: Optional['TaskModelType'] = None
+        self._task_model_class: Optional["TaskModelType"] = None
         self._pre_hooks: List[TaskPreHook] = []
         self._post_hooks: List[TaskPostHook] = []
-        self._use_task_creator: Optional['TaskCreatorType'] = None  # Default to True for rigorous task creation
+        self._use_task_creator: Optional["TaskCreatorType"] = (
+            None  # Default to True for rigorous task creation
+        )
         self._require_existing_tasks: bool = False  # Default to False for convenience (auto-create)
         # Task tree lifecycle hooks
         self._task_tree_hooks: Dict[str, List[Callable]] = {
@@ -49,12 +51,14 @@ class ConfigRegistry:
             "on_tree_completed": [],
             "on_tree_failed": [],
         }
+        # Webhook verify hook for custom authentication
+        self._webhook_verify_hook: Optional[WebhookVerifyHook] = None
         # Demo mode sleep scale factor - multiplies executor-specific _demo_sleep values
         # Default: read from environment variable APFLOW_DEMO_SLEEP_SCALE, or 1.0 (no scaling)
         # Example: executor returns _demo_sleep=2.0, global scale=0.5 → actual sleep=1.0s
         self._demo_sleep_scale: float = float(os.getenv("APFLOW_DEMO_SLEEP_SCALE", "1.0"))
 
-    def set_task_model_class(self, task_model_class: Optional['TaskModel']) -> None:
+    def set_task_model_class(self, task_model_class: Optional["TaskModel"]) -> None:
         """
         Set the global task model class
 
@@ -78,18 +82,21 @@ class ConfigRegistry:
             except TypeError:
                 # If issubclass fails (e.g., due to module reload), check MRO
                 is_subclass = False
-            
+
             # If issubclass failed or returned False, check MRO for any TaskModel class
             # This handles cases where TaskModel was reloaded and CustomTaskModel inherits from old TaskModel
-            if not is_subclass and hasattr(task_model_class, '__mro__'):
+            if not is_subclass and hasattr(task_model_class, "__mro__"):
                 for base in task_model_class.__mro__:
                     # Check if base is TaskModel (current) or has TaskModel name and correct module
-                    if (base is ImportedTaskModel or 
-                        (hasattr(base, '__name__') and base.__name__ == 'TaskModel' and 
-                         hasattr(base, '__module__') and 'apflow.core.storage.sqlalchemy.models' in base.__module__)):
+                    if base is ImportedTaskModel or (
+                        hasattr(base, "__name__")
+                        and base.__name__ == "TaskModel"
+                        and hasattr(base, "__module__")
+                        and "apflow.core.storage.sqlalchemy.models" in base.__module__
+                    ):
                         is_subclass = True
                         break
-            
+
             if not is_subclass:
                 raise TypeError(
                     f"task_model_class must be a subclass of TaskModel, "
@@ -106,7 +113,7 @@ class ConfigRegistry:
             f"{task_model_class.__name__ if task_model_class else 'TaskModel'}"
         )
 
-    def get_task_model_class(self) -> 'TaskModel':
+    def get_task_model_class(self) -> "TaskModel":
         """
         Get the global task model class
 
@@ -115,9 +122,10 @@ class ConfigRegistry:
         """
         if self._task_model_class:
             return self._task_model_class
-        
+
         # Lazy import TaskModel on first access
         from apflow.core.storage.sqlalchemy.models import TaskModel
+
         return TaskModel
 
     def register_pre_hook(self, hook: TaskPreHook) -> None:
@@ -164,7 +172,7 @@ class ConfigRegistry:
         """
         return self._post_hooks.copy()
 
-    def set_use_task_creator(self, use_task_creator: Optional['TaskCreatorType']) -> None:
+    def set_use_task_creator(self, use_task_creator: Optional["TaskCreatorType"]) -> None:
         """
         Set whether to use TaskCreator for rigorous task creation
 
@@ -176,7 +184,7 @@ class ConfigRegistry:
         self._use_task_creator = use_task_creator
         logger.debug(f"Set use_task_creator: {use_task_creator}")
 
-    def get_use_task_creator(self) -> 'TaskCreatorType':
+    def get_use_task_creator(self) -> "TaskCreatorType":
         """
         Get whether to use TaskCreator for task creation
 
@@ -187,6 +195,7 @@ class ConfigRegistry:
             return self._use_task_creator
         # Lazy import TaskCreator on first access
         from apflow.core.execution.task_creator import TaskCreator
+
         return TaskCreator
 
     def set_require_existing_tasks(self, require_existing_tasks: bool) -> None:
@@ -274,6 +283,30 @@ class ConfigRegistry:
         """
         return self._demo_sleep_scale
 
+    def register_webhook_verify_hook(self, hook: WebhookVerifyHook) -> None:
+        """
+        Register a webhook verify hook for custom authentication
+
+        Only one hook is allowed since verification logic should come from a single source.
+
+        Args:
+            hook: Webhook verify hook function (sync or async)
+        """
+        self._webhook_verify_hook = hook
+        logger.debug(
+            f"Registered webhook verify hook: "
+            f"{hook.__name__ if hasattr(hook, '__name__') else str(hook)}"
+        )
+
+    def get_webhook_verify_hook(self) -> Optional[WebhookVerifyHook]:
+        """
+        Get the registered webhook verify hook
+
+        Returns:
+            Webhook verify hook function, or None if not registered
+        """
+        return self._webhook_verify_hook
+
     def clear(self) -> None:
         """Clear all configuration (useful for testing)"""
         self._task_model_class = None
@@ -281,12 +314,14 @@ class ConfigRegistry:
         self._post_hooks.clear()
         self._use_task_creator = None  # Reset to default
         self._require_existing_tasks = False  # Reset to default
+        self._webhook_verify_hook = None
         # Clear task tree hooks
         for hook_list in self._task_tree_hooks.values():
             hook_list.clear()
         # Reset TaskExecutor singleton to avoid test pollution
         try:
             from apflow.core.execution.task_executor import TaskExecutor
+
             TaskExecutor._instance = None
             TaskExecutor._initialized = False
         except ImportError:
@@ -321,7 +356,7 @@ def get_config() -> ConfigRegistry:
     return _get_registry()
 
 
-def set_task_model_class(task_model_class: Optional['TaskModel']) -> None:
+def set_task_model_class(task_model_class: Optional["TaskModel"]) -> None:
     """
     Set the global task model class
 
@@ -331,7 +366,7 @@ def set_task_model_class(task_model_class: Optional['TaskModel']) -> None:
     _get_registry().set_task_model_class(task_model_class)
 
 
-def get_task_model_class() -> 'TaskModel':
+def get_task_model_class() -> "TaskModel":
     """
     Get the global task model class
 
@@ -442,7 +477,7 @@ def set_use_task_creator(use_task_creator: bool) -> None:
     _get_registry().set_use_task_creator(use_task_creator)
 
 
-def get_use_task_creator() -> 'TaskCreatorType':
+def get_use_task_creator() -> "TaskCreatorType":
     """
     Get whether to use TaskCreator for task creation
 
@@ -510,6 +545,48 @@ def get_require_existing_tasks() -> bool:
         True if only existing tasks should be executed, False if tasks can be auto-created (default)
     """
     return _get_registry().get_require_existing_tasks()
+
+
+def register_webhook_verify_hook(
+    hook: Optional[WebhookVerifyHook] = None,
+) -> Callable:
+    """
+    Register a webhook verify hook using decorator syntax
+
+    Can be used as a decorator:
+        @register_webhook_verify_hook
+        async def my_verify(ctx):
+            ...
+
+    Or called directly:
+        register_webhook_verify_hook(my_verify)
+
+    Args:
+        hook: Webhook verify hook function (sync or async), or None when used as decorator
+
+    Returns:
+        Hook function (for decorator usage)
+    """
+
+    def decorator(func: WebhookVerifyHook) -> WebhookVerifyHook:
+        _get_registry().register_webhook_verify_hook(func)
+        return func
+
+    if hook is None:
+        return decorator
+    else:
+        _get_registry().register_webhook_verify_hook(hook)
+        return hook
+
+
+def get_webhook_verify_hook() -> Optional[WebhookVerifyHook]:
+    """
+    Get the registered webhook verify hook
+
+    Returns:
+        Webhook verify hook function, or None if not registered
+    """
+    return _get_registry().get_webhook_verify_hook()
 
 
 def register_task_tree_hook(hook_type: Optional[str] = None):
@@ -580,7 +657,7 @@ def task_model_register():
     # Import here to avoid circular imports at module level
     from apflow.core.storage.sqlalchemy.models import TaskModel
 
-    def decorator(cls: 'TaskModel') -> 'TaskModel':
+    def decorator(cls: "TaskModel") -> "TaskModel":
         if not issubclass(cls, TaskModel):
             raise TypeError(
                 f"Class {cls.__name__} must be a subclass of TaskModel. "
@@ -614,4 +691,6 @@ __all__ = [
     "register_task_tree_hook",
     "get_task_tree_hooks",
     "task_model_register",
+    "register_webhook_verify_hook",
+    "get_webhook_verify_hook",
 ]

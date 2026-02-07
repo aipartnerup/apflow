@@ -21,21 +21,24 @@ TaskModelType = TypeVar("TaskModelType", bound="TaskModel")
 # Can be overridden via APFLOW_TASK_TABLE_NAME environment variable
 TASK_TABLE_NAME = os.getenv("APFLOW_TASK_TABLE_NAME", "apflow_tasks")
 
+
 class TaskOriginType(StrEnum):
     create = auto()  # Task created freshly
-    link = auto() # Task linked from another
-    copy = auto()   # Task copied from another (can be modified)
+    link = auto()  # Task linked from another
+    copy = auto()  # Task copied from another (can be modified)
     archive = auto()  # Task archived from another (can not be modified)
 
 
 class ScheduleType(StrEnum):
     """Schedule type for recurring tasks"""
-    once = auto()      # Single execution at a specific datetime
+
+    once = auto()  # Single execution at a specific datetime
     interval = auto()  # Recurring at fixed intervals (in seconds)
-    cron = auto()      # Cron expression scheduling
-    daily = auto()     # Daily at specific time
-    weekly = auto()    # Weekly on specific days
-    monthly = auto()   # Monthly on specific dates
+    cron = auto()  # Cron expression scheduling
+    daily = auto()  # Daily at specific time
+    weekly = auto()  # Weekly on specific days
+    monthly = auto()  # Monthly on specific dates
+
 
 class TaskModel(Base):
     """
@@ -162,13 +165,8 @@ class TaskModel(Base):
     )  # Last time this scheduled task was executed
 
     # === Execution Control ===
-    max_runs = Column(
-        Integer, nullable=True
-    )  # Maximum number of scheduled runs (null = unlimited)
-    run_count = Column(
-        Integer, default=0
-    )  # Number of times this scheduled task has been executed
-
+    max_runs = Column(Integer, nullable=True)  # Maximum number of scheduled runs (null = unlimited)
+    run_count = Column(Integer, default=0)  # Number of times this scheduled task has been executed
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert model to dictionary"""
@@ -203,10 +201,18 @@ class TaskModel(Base):
             "has_children": self.has_children,
             # Task origin/reference fields
             "original_task_id": self.original_task_id,
-            "origin_type": self.origin_type.value if isinstance(self.origin_type, TaskOriginType) else self.origin_type,
+            "origin_type": (
+                self.origin_type.value
+                if isinstance(self.origin_type, TaskOriginType)
+                else self.origin_type
+            ),
             "has_references": self.has_references,
             # Scheduling configuration
-            "schedule_type": self.schedule_type.value if isinstance(self.schedule_type, ScheduleType) else self.schedule_type,
+            "schedule_type": (
+                self.schedule_type.value
+                if isinstance(self.schedule_type, ScheduleType)
+                else self.schedule_type
+            ),
             "schedule_expression": self.schedule_expression,
             "schedule_enabled": self.schedule_enabled,
             # Schedule boundaries
@@ -219,7 +225,6 @@ class TaskModel(Base):
             "max_runs": self.max_runs,
             "run_count": self.run_count,
         }
-    
 
     def output(self) -> Dict[str, Any]:
         """Convert model to dictionary"""
@@ -229,12 +234,14 @@ class TaskModel(Base):
         data["updated_at"] = self.updated_at.isoformat() if self.updated_at else None
         data["completed_at"] = self.completed_at.isoformat() if self.completed_at else None
         # Schedule datetime fields
-        data["schedule_start_at"] = self.schedule_start_at.isoformat() if self.schedule_start_at else None
+        data["schedule_start_at"] = (
+            self.schedule_start_at.isoformat() if self.schedule_start_at else None
+        )
         data["schedule_end_at"] = self.schedule_end_at.isoformat() if self.schedule_end_at else None
         data["next_run_at"] = self.next_run_at.isoformat() if self.next_run_at else None
         data["last_run_at"] = self.last_run_at.isoformat() if self.last_run_at else None
         return data
-    
+
     def copy(self, override: Optional[Dict[str, Any]] = None) -> TaskModelType:
         """
         Return a new instance of this TaskModel (or subclass), optionally overriding fields.
@@ -243,7 +250,7 @@ class TaskModel(Base):
         if override:
             data.update(override)
         return self.__class__(**data)
-    
+
     def update_from_dict(self, data: Dict[str, Any]) -> TaskModelType:
         """
         Update model fields from a dictionary
@@ -252,13 +259,14 @@ class TaskModel(Base):
             if hasattr(self, key):
                 setattr(self, key, value)
 
-        if 'status' in data:
-            if data['status'] in {"completed", "failed", "cancelled"}:
+        if "status" in data:
+            if data["status"] in {"completed", "failed", "cancelled"}:
                 from datetime import datetime
+
                 self.completed_at = datetime.now(timezone.utc)
-                    
+
         return self
-    
+
     def default_values(self) -> Dict[str, Any]:
         """
         Return default values for TaskModel fields
@@ -289,44 +297,46 @@ class TaskModel(Base):
             "max_runs": None,
             "run_count": 0,
         }
-    
+
     @classmethod
     def create(cls: Type[TaskModelType], data: Dict[str, Any]) -> TaskModelType:
         """
         Create a new TaskModel (or subclass) instance from a dictionary,
         applying default values and filtering unavailable columns.
         """
-        available_columns = {c.name for c in cls.__table__.columns} if hasattr(cls, '__table__') else set()
+        available_columns = (
+            {c.name for c in cls.__table__.columns} if hasattr(cls, "__table__") else set()
+        )
         # Start with defaults, then update with provided data
         task_data = cls().default_values()
         task_data.update(data)
         # Only keep keys that are valid columns
         filtered_data = {k: v for k, v in task_data.items() if k in available_columns}
         return cls(**filtered_data)
-    
+
     def convert_to_link(self) -> TaskModelType:
         """
         Fields to reset when converting to a linked task.
         """
         if self.origin_type == TaskOriginType.link:
-            return self  # Already a link, no changes needed    
-        
+            return self  # Already a link, no changes needed
+
         self.origin_type = TaskOriginType.link
         self.params = None
         self.inputs = None
         self.schemas = None
-        self.result = None  
+        self.result = None
         return self
-    
+
     def is_json_field(self, field: str) -> bool:
         column = self.__class__.__table__.columns.get(field)
         if column is not None and isinstance(column.type, JSON):
             return True
         return False
-   
 
     def __repr__(self):
         return f"<TaskModel(id='{self.id}', name='{self.name}', status='{self.status}')>"
+
 
 class SchemaMigration(Base):
     """
@@ -340,7 +350,9 @@ class SchemaMigration(Base):
     __tablename__ = "apflow_schema_migrations"  # Fixed table name (not configurable)
 
     # === Migration Identity ===
-    id = Column(String(100), primary_key=True, index=True)  # Migration ID (filename without .py, e.g., "001_add_task_tree_fields")
+    id = Column(
+        String(100), primary_key=True, index=True
+    )  # Migration ID (filename without .py, e.g., "001_add_task_tree_fields")
 
     # === Migration Info ===
     description = Column(Text, nullable=False)  # What this migration does

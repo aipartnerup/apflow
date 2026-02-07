@@ -183,7 +183,9 @@ def load_extension_by_name(extension_name: str) -> None:
             logger.warning(f"Skipped executor '{executor_id}' in extension '{extension_name}': {e}")
 
     _loaded_extensions[extension_name] = True
-    logger.debug(f"Loaded {loaded_count}/{len(executor_ids)} executors from extension '{extension_name}'")
+    logger.debug(
+        f"Loaded {loaded_count}/{len(executor_ids)} executors from extension '{extension_name}'"
+    )
 
 
 def load_extension_by_id(executor_id: str) -> None:

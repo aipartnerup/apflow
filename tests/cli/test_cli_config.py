@@ -29,8 +29,13 @@ class TestCLIConfigPersistence:
             config_file = config_dir / "config.cli.yaml"
 
             with patch("apflow.cli.cli_config.get_config_dir", return_value=config_dir):
-                with patch("apflow.cli.cli_config.get_cli_config_file_path", return_value=config_file):
-                    with patch("apflow.cli.cli_config.get_all_cli_config_locations", return_value=[config_file]):
+                with patch(
+                    "apflow.cli.cli_config.get_cli_config_file_path", return_value=config_file
+                ):
+                    with patch(
+                        "apflow.cli.cli_config.get_all_cli_config_locations",
+                        return_value=[config_file],
+                    ):
                         # Save config
                         test_config = {
                             "api_server_url": "http://localhost:8000",
@@ -62,8 +67,13 @@ class TestCLIConfigPersistence:
             nonexistent_file = config_dir / "config.cli.yaml"
 
             with patch("apflow.cli.cli_config.get_config_dir", return_value=config_dir):
-                with patch("apflow.cli.cli_config.get_cli_config_file_path", return_value=nonexistent_file):
-                    with patch("apflow.cli.cli_config.get_all_cli_config_locations", return_value=[nonexistent_file]):
+                with patch(
+                    "apflow.cli.cli_config.get_cli_config_file_path", return_value=nonexistent_file
+                ):
+                    with patch(
+                        "apflow.cli.cli_config.get_all_cli_config_locations",
+                        return_value=[nonexistent_file],
+                    ):
                         loaded = load_cli_config()
                         assert loaded == {}
 
@@ -74,8 +84,13 @@ class TestCLIConfigPersistence:
             config_file = config_dir / "config.cli.yaml"
 
             with patch("apflow.cli.cli_config.get_config_dir", return_value=config_dir):
-                with patch("apflow.cli.cli_config.get_cli_config_file_path", return_value=config_file):
-                    with patch("apflow.cli.cli_config.get_all_cli_config_locations", return_value=[config_file]):
+                with patch(
+                    "apflow.cli.cli_config.get_cli_config_file_path", return_value=config_file
+                ):
+                    with patch(
+                        "apflow.cli.cli_config.get_all_cli_config_locations",
+                        return_value=[config_file],
+                    ):
                         # Set value
                         set_config_value("test_key", "test_value")
 
@@ -94,8 +109,13 @@ class TestCLIConfigPersistence:
             config_file = config_dir / "config.cli.yaml"
 
             with patch("apflow.cli.cli_config.get_config_dir", return_value=config_dir):
-                with patch("apflow.cli.cli_config.get_cli_config_file_path", return_value=config_file):
-                    with patch("apflow.cli.cli_config.get_all_cli_config_locations", return_value=[config_file]):
+                with patch(
+                    "apflow.cli.cli_config.get_cli_config_file_path", return_value=config_file
+                ):
+                    with patch(
+                        "apflow.cli.cli_config.get_all_cli_config_locations",
+                        return_value=[config_file],
+                    ):
                         # Set value
                         set_config_value("key_to_delete", "value")
                         assert get_config_value("key_to_delete") == "value"
@@ -111,8 +131,13 @@ class TestCLIConfigPersistence:
             config_file = config_dir / "config.cli.yaml"
 
             with patch("apflow.cli.cli_config.get_config_dir", return_value=config_dir):
-                with patch("apflow.cli.cli_config.get_cli_config_file_path", return_value=config_file):
-                    with patch("apflow.cli.cli_config.get_all_cli_config_locations", return_value=[config_file]):
+                with patch(
+                    "apflow.cli.cli_config.get_cli_config_file_path", return_value=config_file
+                ):
+                    with patch(
+                        "apflow.cli.cli_config.get_all_cli_config_locations",
+                        return_value=[config_file],
+                    ):
                         # Save config with token
                         config = {
                             "api_server_url": "http://localhost:8000",
@@ -146,8 +171,13 @@ class TestCLIConfigIntegration:
             config_file = config_dir / "config.cli.yaml"
 
             with patch("apflow.cli.cli_config.get_config_dir", return_value=config_dir):
-                with patch("apflow.cli.cli_config.get_cli_config_file_path", return_value=config_file):
-                    with patch("apflow.cli.cli_config.get_all_cli_config_locations", return_value=[config_file]):
+                with patch(
+                    "apflow.cli.cli_config.get_cli_config_file_path", return_value=config_file
+                ):
+                    with patch(
+                        "apflow.cli.cli_config.get_all_cli_config_locations",
+                        return_value=[config_file],
+                    ):
                         # Set multiple values (use localhost to avoid jwt_secret requirement)
                         set_config_value("api_server_url", "http://localhost:8000")
                         set_config_value("admin_auth_token", "token-xyz")
@@ -166,7 +196,9 @@ class TestCLIConfigIntegration:
             config_file = config_dir / "config.cli.yaml"
 
             with patch("apflow.cli.cli_config.get_config_dir", return_value=config_dir):
-                with patch("apflow.cli.cli_config.get_cli_config_file_path", return_value=config_file):
+                with patch(
+                    "apflow.cli.cli_config.get_cli_config_file_path", return_value=config_file
+                ):
                     # Save config
                     test_config = {"key1": "value1", "key2": "value2"}
                     save_cli_config_yaml(test_config)
@@ -249,4 +281,3 @@ class TestConfigValidation:
         }
         validate_cli_config(config)
         assert config["jwt_algorithm"] == "HS512"
-

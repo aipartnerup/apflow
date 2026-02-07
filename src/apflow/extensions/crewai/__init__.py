@@ -15,6 +15,7 @@ from apflow.extensions.crewai.types import (
     FlowState,
     CrewState,
 )
+
 # Import tools from core.tools (tools framework is now in core)
 from apflow.core.tools import (
     ToolRegistry,
@@ -43,4 +44,3 @@ __all__ = [
     "crew_tool",  # Backward compatibility alias
     "resolve_tool",
 ]
-

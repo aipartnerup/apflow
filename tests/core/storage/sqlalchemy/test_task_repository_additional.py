@@ -22,7 +22,7 @@ class TestTaskRepositoryAdditional:
             inputs={"key": "value"},
             params={"param1": "val1"},
             schemas={"input_schema": {}, "output_schema": {}},
-            result={"output": "data"}
+            result={"output": "data"},
         )
 
         assert task.name == "full_task"
@@ -86,11 +86,7 @@ class TestTaskRepositoryAdditional:
 
         task = await repo.create_task(name="test", user_id="test_user")
         result_data = {"completed": True, "output": "success"}
-        await repo.update_task(
-            task_id=task.id,
-            status="completed",
-            result=result_data
-        )
+        await repo.update_task(task_id=task.id, status="completed", result=result_data)
 
         updated_task = await repo.get_task_by_id(task.id)
         assert updated_task.result == result_data

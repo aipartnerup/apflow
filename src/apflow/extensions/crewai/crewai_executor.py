@@ -27,23 +27,36 @@ class CrewAgentConfig(BaseModel):
     goal: str = Field(description="Agent's primary goal (REQUIRED)")
     backstory: str = Field(description="Agent's background and expertise (REQUIRED)")
     llm: str = Field(description="LLM model name (e.g., 'gpt-4', 'claude-3-opus') (REQUIRED)")
-    tools: Optional[list[str]] = Field(default=None, description="List of tool names or objects (optional)")
+    tools: Optional[list[str]] = Field(
+        default=None, description="List of tool names or objects (optional)"
+    )
 
 
 class CrewTaskConfig(BaseModel):
     description: str = Field(description="Task description")
     agent: str = Field(description="Agent name (must exist in agents dict)")
-    prompt: Optional[str] = Field(default=None, description="Detailed task prompt that defines output format (JSON, text, structured, etc.)")
-    expected_output: Optional[str] = Field(default=None, description="Description of expected output format")
+    prompt: Optional[str] = Field(
+        default=None,
+        description="Detailed task prompt that defines output format (JSON, text, structured, etc.)",
+    )
+    expected_output: Optional[str] = Field(
+        default=None, description="Description of expected output format"
+    )
 
 
 class CrewWorksConfig(BaseModel):
-    agents: Dict[str, CrewAgentConfig] = Field(description="Dictionary of agent configurations: {agent_name: {role, goal, backstory, llm, tools, ...}}")
-    tasks: Dict[str, CrewTaskConfig] = Field(description="Dictionary of task configurations: {task_name: {description, agent, prompt, expected_output, ...}}")
+    agents: Dict[str, CrewAgentConfig] = Field(
+        description="Dictionary of agent configurations: {agent_name: {role, goal, backstory, llm, tools, ...}}"
+    )
+    tasks: Dict[str, CrewTaskConfig] = Field(
+        description="Dictionary of task configurations: {task_name: {description, agent, prompt, expected_output, ...}}"
+    )
 
 
 class CrewaiInputSchema(BaseModel):
-    works: CrewWorksConfig = Field(description="Crew configuration with agents and tasks definitions")
+    works: CrewWorksConfig = Field(
+        description="Crew configuration with agents and tasks definitions"
+    )
     user_id: Optional[str] = Field(default=None, description="Optional user ID for LLM key context")
 
 
@@ -57,9 +70,16 @@ class CrewaiTokenUsage(BaseModel):
 
 class CrewaiOutputSchema(BaseModel):
     status: Literal["success", "failed", "cancelled"] = Field(description="Execution status")
-    result: Optional[Any] = Field(default=None, description="Crew execution result - format determined by works.tasks[*].prompt fields. Usually JSON object, JSON array, or formatted text. The prompt in each task definition specifies the output format.")
-    error: Optional[str] = Field(default=None, description="Error message (only present on failure)")
-    token_usage: Optional[CrewaiTokenUsage] = Field(default=None, description="Token usage statistics from LLM calls")
+    result: Optional[Any] = Field(
+        default=None,
+        description="Crew execution result - format determined by works.tasks[*].prompt fields. Usually JSON object, JSON array, or formatted text. The prompt in each task definition specifies the output format.",
+    )
+    error: Optional[str] = Field(
+        default=None, description="Error message (only present on failure)"
+    )
+    token_usage: Optional[CrewaiTokenUsage] = Field(
+        default=None, description="Token usage statistics from LLM calls"
+    )
 
 
 @executor_register()
@@ -257,7 +277,7 @@ class CrewaiExecutor(BaseTask):
 
         Returns:
             Created Task instance
-            
+
         Note:
             Dependency data injection happens later in _inject_dependency_data_into_tasks()
             during execute(), not here during initialization.
@@ -270,7 +290,7 @@ class CrewaiExecutor(BaseTask):
 
             # Create a copy of task_config for processing
             processed_config = task_config.copy()
-            
+
             # Process agent reference: if agent is a string, find the agent by name
             agent_name = processed_config.get("agent")
             if agent_name:
@@ -481,36 +501,40 @@ class CrewaiExecutor(BaseTask):
     def _inject_dependency_data_into_tasks(self) -> None:
         """
         Inject dependency data directly into task descriptions.
-        
+
         This is called during execute() after inputs are set with dependency data.
         We need to modify the Task objects' descriptions to include the dependency content.
-        
+
         CrewAI Tasks are immutable once created, so we need to update the description
         by modifying the task's internal config.
         """
         if not self.task or not self.task.dependencies or not self.inputs:
             return
-            
-        logger.info(f"Injecting dependency data into tasks (found {len(self.task.dependencies)} dependencies)")
-        
+
+        logger.info(
+            f"Injecting dependency data into tasks (found {len(self.task.dependencies)} dependencies)"
+        )
+
         for dep in self.task.dependencies:
-            dep_id = dep.get('id') if isinstance(dep, dict) else dep
+            dep_id = dep.get("id") if isinstance(dep, dict) else dep
             if dep_id in self.inputs:
                 dep_data = self.inputs[dep_id]
-                
+
                 # Extract actual content from dependency result
-                if isinstance(dep_data, dict) and 'result' in dep_data:
-                    dep_content = dep_data['result']
+                if isinstance(dep_data, dict) and "result" in dep_data:
+                    dep_content = dep_data["result"]
                 else:
                     dep_content = dep_data
-                
+
                 # Truncate very long content to avoid overwhelming the agent
                 dep_content_str = str(dep_content)
                 max_length = 5000  # Reasonable limit for context
                 if len(dep_content_str) > max_length:
                     dep_content_str = dep_content_str[:max_length] + "\n... (truncated)"
-                    logger.info(f"Truncated dependency data from {len(str(dep_content))} to {max_length} chars")
-                
+                    logger.info(
+                        f"Truncated dependency data from {len(str(dep_content))} to {max_length} chars"
+                    )
+
                 # Update description for ALL tasks in the crew
                 # (since we don't know which task needs the dependency)
                 for task_name, task in self.tasks.items():
@@ -527,7 +551,7 @@ class CrewaiExecutor(BaseTask):
                         f"✅ Injected dependency data into task '{task_name}' description "
                         f"({len(dep_content_str)} chars from dependency {dep_id[:8] if isinstance(dep_id, str) and len(dep_id) >= 8 else dep_id}...)"
                     )
-                
+
                 # Only inject first dependency to avoid confusion
                 break
 
@@ -620,7 +644,7 @@ class CrewaiExecutor(BaseTask):
         if not self.works:
             return {
                 "status": "failed",
-                "error": "works parameter is required for execution. Expected format: {\"works\": {\"agents\": {...}, \"tasks\": {...}}}",
+                "error": 'works parameter is required for execution. Expected format: {"works": {"agents": {...}, "tasks": {...}}}',
             }
 
         # Get LLM API key with unified priority order and inject into environment
@@ -671,7 +695,7 @@ class CrewaiExecutor(BaseTask):
                 # even when dependency results are stored with task IDs as keys
                 inputs = self._inject_dependency_template_variables(inputs)
                 self.set_inputs(inputs)
-                
+
                 # CRITICAL: Inject dependency data into task descriptions NOW
                 # (after inputs are set, before execution starts)
                 self._inject_dependency_data_into_tasks()
@@ -714,7 +738,7 @@ class CrewaiExecutor(BaseTask):
         """
         try:
             import json
-            
+
             if isinstance(result, str):
                 # Try to parse JSON string
                 try:
@@ -724,15 +748,17 @@ class CrewaiExecutor(BaseTask):
             elif hasattr(result, "raw"):
                 # CrewAI result object - extract raw value
                 raw_value = result.raw
-                
+
                 # Check if raw value is a JSON string and parse it
-                if isinstance(raw_value, str) and raw_value.strip().startswith(('{', '[')):
+                if isinstance(raw_value, str) and raw_value.strip().startswith(("{", "[")):
                     try:
                         parsed = json.loads(raw_value)
                         logger.debug(f"Parsed JSON string result to {type(parsed).__name__}")
                         return parsed
                     except json.JSONDecodeError:
-                        logger.debug("Raw value looks like JSON but failed to parse, returning as-is")
+                        logger.debug(
+                            "Raw value looks like JSON but failed to parse, returning as-is"
+                        )
                         return raw_value
                 else:
                     return raw_value

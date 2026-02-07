@@ -16,17 +16,17 @@ class TestTaskExecutorAdditional:
         """Test is_task_running returns True for running task"""
         executor = TaskExecutor()
         task_id = "test-task-running"
-        
+
         await executor.start_task_tracking(task_id)
         assert executor.is_task_running(task_id) is True
-        
+
         await executor.stop_task_tracking(task_id)
 
     @pytest.mark.asyncio
     async def test_is_task_running_false(self):
         """Test is_task_running returns False for non-running task"""
         executor = TaskExecutor()
-        
+
         assert executor.is_task_running("non-existent-task") is False
 
     @pytest.mark.asyncio
@@ -34,10 +34,10 @@ class TestTaskExecutorAdditional:
         """Test start_task_tracking with duplicate task ID"""
         executor = TaskExecutor()
         task_id = "dup-task"
-        
+
         await executor.start_task_tracking(task_id)
         await executor.start_task_tracking(task_id)  # Should not raise error
-        
+
         assert executor.is_task_running(task_id) is True
         await executor.stop_task_tracking(task_id)
 
@@ -46,7 +46,7 @@ class TestTaskExecutorAdditional:
         """Test stop_task_tracking for task that was never started"""
         executor = TaskExecutor()
         task_id = "never-started"
-        
+
         # Should not raise error
         await executor.stop_task_tracking(task_id)
 
@@ -54,10 +54,10 @@ class TestTaskExecutorAdditional:
     async def test_refresh_config(self):
         """Test refresh_config method updates hooks"""
         executor = TaskExecutor()
-        
+
         # Should not raise error
         executor.refresh_config()
-        
+
         # Check hooks are populated
         assert executor.pre_hooks is not None
         assert executor.post_hooks is not None
@@ -67,14 +67,14 @@ class TestTaskExecutorAdditional:
         """Test get_task_status method"""
         executor = TaskExecutor()
         task_id = "status-test-task"
-        
+
         # Start tracking
         await executor.start_task_tracking(task_id)
-        
+
         # Get status
         status = executor.get_task_status(task_id)
         assert status is not None
-        
+
         await executor.stop_task_tracking(task_id)
 
     @pytest.mark.asyncio
@@ -83,14 +83,14 @@ class TestTaskExecutorAdditional:
         executor = TaskExecutor()
         task_id1 = "running-task-1"
         task_id2 = "running-task-2"
-        
+
         await executor.start_task_tracking(task_id1)
         await executor.start_task_tracking(task_id2)
-        
+
         running_tasks = executor.get_all_running_tasks()
         assert task_id1 in running_tasks
         assert task_id2 in running_tasks
-        
+
         await executor.stop_task_tracking(task_id1)
         await executor.stop_task_tracking(task_id2)
 
@@ -99,13 +99,13 @@ class TestTaskExecutorAdditional:
         """Test get_running_tasks_count method"""
         executor = TaskExecutor()
         task_id = "count-test-task"
-        
+
         initial_count = executor.get_running_tasks_count()
-        
+
         await executor.start_task_tracking(task_id)
         new_count = executor.get_running_tasks_count()
         assert new_count == initial_count + 1
-        
+
         await executor.stop_task_tracking(task_id)
 
     @pytest.mark.asyncio
@@ -117,14 +117,12 @@ class TestTaskExecutorAdditional:
             user_id="test-user",
             schemas={"method": "system_info_executor"},
         )
-        
+
         executor = TaskExecutor()
         result = await executor.cancel_task(
-            task_id=task.id,
-            error_message="Test cancel",
-            db_session=sync_db_session
+            task_id=task.id, error_message="Test cancel", db_session=sync_db_session
         )
-        
+
         # Should return cancelled status
         assert "status" in result
 
@@ -132,43 +130,41 @@ class TestTaskExecutorAdditional:
     async def test_execute_tasks_with_db_session(self, sync_db_session):
         """Test execute_tasks method with explicit db_session"""
         executor = TaskExecutor()
-        
-        tasks = [{
-            "id": "exec-test-task",
-            "name": "Execute Test",
-            "user_id": "test-user",
-            "schemas": {"method": "system_info_executor"},
-            "inputs": {"resource": "cpu"}
-        }]
-        
+
+        tasks = [
+            {
+                "id": "exec-test-task",
+                "name": "Execute Test",
+                "user_id": "test-user",
+                "schemas": {"method": "system_info_executor"},
+                "inputs": {"resource": "cpu"},
+            }
+        ]
+
         result = await executor.execute_tasks(
             tasks=tasks,
             db_session=sync_db_session,
-            use_demo=True  # Use demo mode to avoid real execution
+            use_demo=True,  # Use demo mode to avoid real execution
         )
-        
+
         assert "status" in result
 
     @pytest.mark.asyncio
     async def test_execute_tasks_empty_raises_error(self, sync_db_session):
         """Test execute_tasks with empty tasks array raises error"""
         executor = TaskExecutor()
-        
+
         with pytest.raises(ValueError, match="No tasks provided"):
-            await executor.execute_tasks(
-                tasks=[],
-                db_session=sync_db_session
-            )
+            await executor.execute_tasks(tasks=[], db_session=sync_db_session)
 
     @pytest.mark.asyncio
     async def test_execute_task_by_id_task_not_found(self, sync_db_session):
         """Test execute_task_by_id when task doesn't exist"""
         executor = TaskExecutor()
-        
+
         with pytest.raises(ValueError, match="not found"):
             await executor.execute_task_by_id(
-                task_id="nonexistent-task-id",
-                db_session=sync_db_session
+                task_id="nonexistent-task-id", db_session=sync_db_session
             )
 
     @pytest.mark.asyncio
@@ -179,29 +175,29 @@ class TestTaskExecutorAdditional:
             name="exec-by-id-test",
             user_id="test-user",
             schemas={"method": "system_info_executor"},
-            inputs={"resource": "cpu"}
+            inputs={"resource": "cpu"},
         )
-        
+
         executor = TaskExecutor()
         result = await executor.execute_task_by_id(
-            task_id=task.id,
-            db_session=sync_db_session,
-            use_demo=True
+            task_id=task.id, db_session=sync_db_session, use_demo=True
         )
-        
+
         assert "status" in result
 
     @pytest.mark.asyncio
     async def test_build_task_tree_from_tasks_missing_user_id(self):
         """Test _build_task_tree_from_tasks with missing user_id"""
         executor = TaskExecutor()
-        
-        tasks = [{
-            "id": "task-no-user",
-            "name": "No User Task"
-            # Missing user_id
-        }]
-        
+
+        tasks = [
+            {
+                "id": "task-no-user",
+                "name": "No User Task",
+                # Missing user_id
+            }
+        ]
+
         with pytest.raises(ValueError, match="missing required user_id"):
             executor._build_task_tree_from_tasks(tasks)
 
@@ -209,14 +205,16 @@ class TestTaskExecutorAdditional:
     async def test_build_task_tree_from_tasks_no_root(self):
         """Test _build_task_tree_from_tasks with no root task"""
         executor = TaskExecutor()
-        
-        tasks = [{
-            "id": "child-task",
-            "name": "Child Task",
-            "user_id": "test-user",
-            "parent_id": "some-parent"  # Has parent, not root
-        }]
-        
+
+        tasks = [
+            {
+                "id": "child-task",
+                "name": "Child Task",
+                "user_id": "test-user",
+                "parent_id": "some-parent",  # Has parent, not root
+            }
+        ]
+
         with pytest.raises(ValueError, match="No root task found"):
             executor._build_task_tree_from_tasks(tasks)
 
@@ -224,23 +222,19 @@ class TestTaskExecutorAdditional:
     async def test_build_task_tree_from_tasks_success(self):
         """Test _build_task_tree_from_tasks with valid tasks"""
         executor = TaskExecutor()
-        
+
         tasks = [
-            {
-                "id": "root-task",
-                "name": "Root Task",
-                "user_id": "test-user"
-            },
+            {"id": "root-task", "name": "Root Task", "user_id": "test-user"},
             {
                 "id": "child-task",
                 "name": "Child Task",
                 "user_id": "test-user",
-                "parent_id": "root-task"
-            }
+                "parent_id": "root-task",
+            },
         ]
-        
+
         tree = executor._build_task_tree_from_tasks(tasks)
-        
+
         assert tree.task.id == "root-task"
         assert len(tree.children) == 1
         assert tree.children[0].task.id == "child-task"
@@ -249,21 +243,18 @@ class TestTaskExecutorAdditional:
     async def test_mark_tasks_for_reexecution(self, sync_db_session):
         """Test _mark_tasks_for_reexecution method"""
         repo = TaskRepository(sync_db_session)
-        
+
         # Create a task and set it to failed status
-        task = await repo.create_task(
-            name="failed-task",
-            user_id="test-user"
-        )
+        task = await repo.create_task(name="failed-task", user_id="test-user")
         # Update to failed status
         await repo.update_task(task.id, status="failed")
         task = await repo.get_task_by_id(task.id)
-        
+
         task_tree = TaskTreeNode(task)
         executor = TaskExecutor()
-        
+
         marked_ids = executor._mark_tasks_for_reexecution(task_tree)
-        
+
         # Failed tasks should be marked for re-execution
         assert task.id in marked_ids
 
@@ -275,14 +266,12 @@ class TestTaskExecutorRequireExisting:
     async def test_execute_tasks_require_existing_task_not_found(self, sync_db_session):
         """Test execute_tasks with require_existing_tasks when task doesn't exist"""
         executor = TaskExecutor()
-        
+
         tasks = [{"id": "nonexistent-task-id"}]
-        
+
         with pytest.raises(ValueError, match="not found"):
             await executor.execute_tasks(
-                tasks=tasks,
-                require_existing_tasks=True,
-                db_session=sync_db_session
+                tasks=tasks, require_existing_tasks=True, db_session=sync_db_session
             )
 
     @pytest.mark.asyncio
@@ -293,34 +282,31 @@ class TestTaskExecutorRequireExisting:
             name="existing-task",
             user_id="test-user",
             schemas={"method": "system_info_executor"},
-            inputs={"resource": "cpu"}
+            inputs={"resource": "cpu"},
         )
-        
+
         executor = TaskExecutor()
-        
+
         tasks = [{"id": task.id}]
-        
+
         result = await executor.execute_tasks(
-            tasks=tasks,
-            require_existing_tasks=True,
-            db_session=sync_db_session,
-            use_demo=True
+            tasks=tasks, require_existing_tasks=True, db_session=sync_db_session, use_demo=True
         )
-        
+
         assert "status" in result
 
     @pytest.mark.asyncio
     async def test_execute_tasks_with_parent_child(self, sync_db_session):
         """Test execute_tasks with parent-child relationship"""
         executor = TaskExecutor()
-        
+
         tasks = [
             {
                 "id": "parent-task",
                 "name": "Parent Task",
                 "user_id": "test-user",
                 "schemas": {"method": "system_info_executor"},
-                "inputs": {"resource": "cpu"}
+                "inputs": {"resource": "cpu"},
             },
             {
                 "id": "child-task",
@@ -328,23 +314,21 @@ class TestTaskExecutorRequireExisting:
                 "user_id": "test-user",
                 "parent_id": "parent-task",
                 "schemas": {"method": "system_info_executor"},
-                "inputs": {"resource": "memory"}
-            }
+                "inputs": {"resource": "memory"},
+            },
         ]
-        
+
         result = await executor.execute_tasks(
-            tasks=tasks,
-            db_session=sync_db_session,
-            use_demo=True
+            tasks=tasks, db_session=sync_db_session, use_demo=True
         )
-        
+
         assert "status" in result
 
     @pytest.mark.asyncio
     async def test_execute_tasks_with_dependencies(self, sync_db_session):
         """Test execute_tasks with task dependencies"""
         executor = TaskExecutor()
-        
+
         # Both tasks need to be in same tree, dep-task is child of main-task
         tasks = [
             {
@@ -361,26 +345,24 @@ class TestTaskExecutorRequireExisting:
                 "parent_id": "main-task",
                 "schemas": {"method": "system_info_executor"},
                 "inputs": {"resource": "cpu"},
-                "dependencies": [{"id": "main-task", "required": True}]
-            }
+                "dependencies": [{"id": "main-task", "required": True}],
+            },
         ]
-        
+
         result = await executor.execute_tasks(
-            tasks=tasks,
-            db_session=sync_db_session,
-            use_demo=True
+            tasks=tasks, db_session=sync_db_session, use_demo=True
         )
-        
+
         assert "status" in result
 
     @pytest.mark.asyncio
     async def test_load_existing_task_tree_invalid_format(self, sync_db_session):
         """Test _load_existing_task_tree with invalid task format"""
         executor = TaskExecutor()
-        
+
         # Task dict without id field
         tasks = [{"name": "no-id-task"}]
-        
+
         with pytest.raises(ValueError, match="must have 'id' field"):
             await executor._load_existing_task_tree(tasks, sync_db_session)
 
@@ -388,37 +370,31 @@ class TestTaskExecutorRequireExisting:
     async def test_load_existing_task_tree_string_ids(self, sync_db_session):
         """Test _load_existing_task_tree with string task IDs"""
         repo = TaskRepository(sync_db_session)
-        task = await repo.create_task(
-            name="string-id-task",
-            user_id="test-user"
-        )
-        
+        task = await repo.create_task(name="string-id-task", user_id="test-user")
+
         executor = TaskExecutor()
-        
+
         # Pass task IDs as strings
         tree = await executor._load_existing_task_tree([task.id], sync_db_session)
-        
+
         assert tree.task.id == task.id
 
     @pytest.mark.asyncio
     async def test_collect_all_dependencies_empty(self, sync_db_session):
         """Test _collect_all_dependencies with no dependencies"""
         repo = TaskRepository(sync_db_session)
-        task = await repo.create_task(
-            name="no-deps-task",
-            user_id="test-user"
-        )
-        
+        task = await repo.create_task(name="no-deps-task", user_id="test-user")
+
         executor = TaskExecutor()
-        
+
         collected = await executor._collect_all_dependencies(
             task_id=task.id,
             task_repository=repo,
             collected=set(),
             processed=set(),
-            all_tasks_in_tree=[task]
+            all_tasks_in_tree=[task],
         )
-        
+
         # Should return empty set since task has no dependencies
         assert len(collected) == 0
 
@@ -426,26 +402,23 @@ class TestTaskExecutorRequireExisting:
     async def test_collect_all_dependencies_with_deps(self, sync_db_session):
         """Test _collect_all_dependencies with dependencies"""
         repo = TaskRepository(sync_db_session)
-        
-        dep_task = await repo.create_task(
-            name="dep-task",
-            user_id="test-user"
-        )
-        
+
+        dep_task = await repo.create_task(name="dep-task", user_id="test-user")
+
         main_task = await repo.create_task(
             name="main-task",
             user_id="test-user",
-            dependencies=[{"id": dep_task.id, "required": True}]
+            dependencies=[{"id": dep_task.id, "required": True}],
         )
-        
+
         executor = TaskExecutor()
-        
+
         collected = await executor._collect_all_dependencies(
             task_id=main_task.id,
             task_repository=repo,
             collected=set(),
             processed=set(),
-            all_tasks_in_tree=[dep_task, main_task]
+            all_tasks_in_tree=[dep_task, main_task],
         )
-        
+
         assert dep_task.id in collected

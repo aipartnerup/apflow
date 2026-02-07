@@ -334,9 +334,7 @@ class TestSchemaBasedTaskExecution:
             def get_input_schema(self):
                 return {
                     "type": "object",
-                    "properties": {
-                        "content": {"type": "string"}  # Direct field match
-                    },
+                    "properties": {"content": {"type": "string"}},  # Direct field match
                 }
 
         # Mock the executors

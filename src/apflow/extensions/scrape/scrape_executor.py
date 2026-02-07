@@ -17,8 +17,13 @@ logger = get_logger(__name__)
 
 class ScrapeInputSchema(BaseModel):
     url: str = Field(description="Target website URL to scrape")
-    max_chars: int = Field(default=5000, description="Maximum number of characters to extract (default: 5000)")
-    extract_metadata: bool = Field(default=True, description="Whether to extract metadata like title and description (default: True)")
+    max_chars: int = Field(
+        default=5000, description="Maximum number of characters to extract (default: 5000)"
+    )
+    extract_metadata: bool = Field(
+        default=True,
+        description="Whether to extract metadata like title and description (default: True)",
+    )
 
 
 class ScrapeOutputSchema(BaseModel):
@@ -101,4 +106,3 @@ class ScrapeExecutor(BaseTask):
         return {
             "result": "Title: Example Demo\nDescription: Example description.\nURL: https://example.com/demo\n\n---\n\nMain Text:\nThis is a demo of the website scraping executor.",
         }
-

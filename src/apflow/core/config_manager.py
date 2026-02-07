@@ -58,7 +58,7 @@ class ConfigManager:
         cm.set_api_server_url("http://localhost:8000")
         cm.set_admin_auth_token("token-xyz")
         cm.set_api_timeout(60.0)
-    
+
     Configure API gateway with validation:
         cm = get_config_manager()
         success = await cm.set_api_server_url_with_check("http://localhost:8000")
@@ -100,7 +100,7 @@ class ConfigManager:
             except Exception as exc:  # pragma: no cover - defensive
                 logger.debug("Failed to load .env from %s: %s", env_path, exc)
                 continue
-        
+
         logger.debug("No .env file found in any of the checked paths")
 
     def load_cli_config(self) -> None:
@@ -117,12 +117,12 @@ class ConfigManager:
         - APFLOW_ADMIN_AUTH_TOKEN: Admin auth token
 
         This enables users to connect without initializing config.cli.yaml.
-        
+
         Note: URL accessibility checks are NOT performed here. URLs are loaded
         as-is. Validation happens automatically in CLI when needed (see should_use_api).
         """
         config = {}
-        
+
         try:
             from apflow.cli.cli_config import load_cli_config as load_config
 
@@ -141,7 +141,7 @@ class ConfigManager:
             # Check .env APFLOW_BASE_URL or APFLOW_API_HOST/APFLOW_API_PORT
             # Only set URL if explicitly configured, don't default to localhost:8000
             from apflow.core.utils.helpers import get_url_with_host_and_port
-            
+
             base_url = os.getenv("APFLOW_BASE_URL")
             if base_url:
                 self.set_api_server_url(base_url)
@@ -171,10 +171,10 @@ class ConfigManager:
                 self.set_admin_auth_token(auth_token)
                 logger.debug("Loaded admin auth token from environment")
 
-    def set_task_model_class(self, task_model_class: Optional['TaskModelTypel']) -> None:
+    def set_task_model_class(self, task_model_class: Optional["TaskModelTypel"]) -> None:
         self._registry.set_task_model_class(task_model_class)
 
-    def get_task_model_class(self) -> 'TaskModelTypel':
+    def get_task_model_class(self) -> "TaskModelTypel":
         return self._registry.get_task_model_class()
 
     def register_pre_hook(self, hook: TaskPreHook) -> None:
@@ -226,6 +226,7 @@ class ConfigManager:
         """
         try:
             import httpx
+
             headers = {}
             token = self.get_admin_auth_token()
             if token:
@@ -238,7 +239,6 @@ class ConfigManager:
         except Exception as exc:
             logger.debug(f"API server health check failed for {url}: {exc}")
             return False
-        
 
     # API Gateway configuration methods
     def set_api_server_url(self, url: Optional[str]) -> None:
@@ -264,9 +264,7 @@ class ConfigManager:
     # Backward compatibility aliases
     def set_api_auth_token(self, token: Optional[str]) -> None:
         """Set admin auth token (backward compatibility alias)."""
-        logger.warning(
-            "set_api_auth_token() is deprecated, use set_admin_auth_token() instead"
-        )
+        logger.warning("set_api_auth_token() is deprecated, use set_admin_auth_token() instead")
         self.set_admin_auth_token(token)
 
     def get_api_auth_token(self) -> Optional[str]:

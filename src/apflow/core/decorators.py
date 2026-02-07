@@ -9,21 +9,21 @@ dynamic or test-time registration.
 
 All decorators are part of the core framework and can be imported from:
     from apflow import register_pre_hook, register_post_hook, executor_register
-    
+
 Or directly from core:
     from apflow.core.decorators import register_pre_hook
 
 Usage:
     from apflow import register_pre_hook, register_post_hook, executor_register
-    
+
     @register_pre_hook
     async def my_pre_hook(task):
         ...
-    
+
     @register_post_hook
     async def my_post_hook(task, inputs, result):
         ...
-    
+
     @executor_register()
     class MyExecutor(BaseTask):
         ...
@@ -43,6 +43,8 @@ from apflow.core.config import (
     register_task_tree_hook,
     get_task_tree_hooks,
     task_model_register,
+    register_webhook_verify_hook,
+    get_webhook_verify_hook,
 )
 
 # Re-export extension decorators
@@ -72,6 +74,9 @@ __all__ = [
     # Task execution mode configuration
     "set_require_existing_tasks",
     "get_require_existing_tasks",
+    # Webhook verify hook
+    "register_webhook_verify_hook",
+    "get_webhook_verify_hook",
     # Extension registration
     "executor_register",
     "storage_register",
@@ -79,4 +84,3 @@ __all__ = [
     # Tool registration
     "tool_register",
 ]
-

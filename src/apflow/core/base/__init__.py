@@ -8,4 +8,3 @@ to get common functionality. All base classes implement core interfaces.
 from apflow.core.base.base_task import BaseTask
 
 __all__ = ["BaseTask"]
-

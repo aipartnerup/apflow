@@ -18,6 +18,7 @@ from typing import Optional
 import re
 
 from apflow.core.storage.sqlalchemy.models import ScheduleType
+from apflow.core.utils.helpers import parse_iso_datetime
 
 
 class ScheduleCalculator:
@@ -89,6 +90,7 @@ class ScheduleCalculator:
         if timezone_str:
             try:
                 import pytz
+
                 tz_obj = pytz.timezone(timezone_str)
                 now = now.astimezone(tz_obj)
             except ImportError:
@@ -103,17 +105,20 @@ class ScheduleCalculator:
         """Localize a naive datetime to a timezone."""
         try:
             import pytz
+
             tz_obj = pytz.timezone(timezone_str)
             if dt.tzinfo is None:
                 return tz_obj.localize(dt)
             return dt.astimezone(tz_obj)
         except ImportError:
             from datetime import timezone as tz
+
             if dt.tzinfo is None:
                 return dt.replace(tzinfo=tz.utc)
             return dt
         except Exception:
             from datetime import timezone as tz
+
             if dt.tzinfo is None:
                 return dt.replace(tzinfo=tz.utc)
             return dt
@@ -133,7 +138,7 @@ class ScheduleCalculator:
         """
         try:
             # Parse ISO datetime
-            scheduled_time = datetime.fromisoformat(expression.replace('Z', '+00:00'))
+            scheduled_time = parse_iso_datetime(expression)
 
             # If the scheduled time is in the future, return it
             if scheduled_time > from_time:
@@ -165,7 +170,9 @@ class ScheduleCalculator:
         except (ValueError, TypeError) as e:
             if "Interval must be positive" in str(e):
                 raise
-            raise ValueError(f"Invalid 'interval' expression: {expression}. Expected integer seconds.")
+            raise ValueError(
+                f"Invalid 'interval' expression: {expression}. Expected integer seconds."
+            )
 
     @staticmethod
     def _calculate_cron(
@@ -213,9 +220,11 @@ class ScheduleCalculator:
         """
         try:
             # Parse HH:MM format
-            match = re.match(r'^(\d{1,2}):(\d{2})$', expression.strip())
+            match = re.match(r"^(\d{1,2}):(\d{2})$", expression.strip())
             if not match:
-                raise ValueError(f"Invalid 'daily' expression: {expression}. Expected HH:MM format.")
+                raise ValueError(
+                    f"Invalid 'daily' expression: {expression}. Expected HH:MM format."
+                )
 
             hour = int(match.group(1))
             minute = int(match.group(2))
@@ -226,12 +235,7 @@ class ScheduleCalculator:
                 raise ValueError(f"Invalid minute in 'daily' expression: {minute}. Expected 0-59.")
 
             # Create target time for today
-            target_time = from_time.replace(
-                hour=hour,
-                minute=minute,
-                second=0,
-                microsecond=0
-            )
+            target_time = from_time.replace(hour=hour, minute=minute, second=0, microsecond=0)
 
             # If target time is in the past, move to tomorrow
             if target_time <= from_time:
@@ -259,7 +263,7 @@ class ScheduleCalculator:
         """
         try:
             # Parse expression: "days HH:MM"
-            match = re.match(r'^([\d,]+)\s+(\d{1,2}):(\d{2})$', expression.strip())
+            match = re.match(r"^([\d,]+)\s+(\d{1,2}):(\d{2})$", expression.strip())
             if not match:
                 raise ValueError(
                     f"Invalid 'weekly' expression: {expression}. "
@@ -272,10 +276,12 @@ class ScheduleCalculator:
 
             # Parse days (1=Monday, 7=Sunday)
             days = []
-            for day_str in days_str.split(','):
+            for day_str in days_str.split(","):
                 day = int(day_str.strip())
                 if day < 1 or day > 7:
-                    raise ValueError(f"Invalid day in 'weekly' expression: {day}. Expected 1-7 (1=Mon, 7=Sun).")
+                    raise ValueError(
+                        f"Invalid day in 'weekly' expression: {day}. Expected 1-7 (1=Mon, 7=Sun)."
+                    )
                 days.append(day)
 
             if not days:
@@ -299,10 +305,7 @@ class ScheduleCalculator:
 
                 if check_weekday in days:
                     target_time = check_date.replace(
-                        hour=hour,
-                        minute=minute,
-                        second=0,
-                        microsecond=0
+                        hour=hour, minute=minute, second=0, microsecond=0
                     )
 
                     # If it's today but the time has passed, skip to next occurrence
@@ -337,7 +340,7 @@ class ScheduleCalculator:
         """
         try:
             # Parse expression: "dates HH:MM"
-            match = re.match(r'^([\d,]+)\s+(\d{1,2}):(\d{2})$', expression.strip())
+            match = re.match(r"^([\d,]+)\s+(\d{1,2}):(\d{2})$", expression.strip())
             if not match:
                 raise ValueError(
                     f"Invalid 'monthly' expression: {expression}. "
@@ -350,10 +353,12 @@ class ScheduleCalculator:
 
             # Parse dates (1-31)
             dates = []
-            for date_str in dates_str.split(','):
+            for date_str in dates_str.split(","):
                 date = int(date_str.strip())
                 if date < 1 or date > 31:
-                    raise ValueError(f"Invalid date in 'monthly' expression: {date}. Expected 1-31.")
+                    raise ValueError(
+                        f"Invalid date in 'monthly' expression: {date}. Expected 1-31."
+                    )
                 dates.append(date)
 
             if not dates:
@@ -362,7 +367,9 @@ class ScheduleCalculator:
             if hour < 0 or hour > 23:
                 raise ValueError(f"Invalid hour in 'monthly' expression: {hour}. Expected 0-23.")
             if minute < 0 or minute > 59:
-                raise ValueError(f"Invalid minute in 'monthly' expression: {minute}. Expected 0-59.")
+                raise ValueError(
+                    f"Invalid minute in 'monthly' expression: {minute}. Expected 0-59."
+                )
 
             # Sort dates for consistent iteration
             dates = sorted(set(dates))
@@ -373,11 +380,7 @@ class ScheduleCalculator:
                 for target_date in dates:
                     try:
                         target_time = check_date.replace(
-                            day=target_date,
-                            hour=hour,
-                            minute=minute,
-                            second=0,
-                            microsecond=0
+                            day=target_date, hour=hour, minute=minute, second=0, microsecond=0
                         )
 
                         if target_time > from_time:
@@ -443,6 +446,7 @@ class ScheduleCalculator:
         # Get current time if not provided
         if from_time is None:
             from datetime import timezone as tz
+
             from_time = datetime.now(tz.utc)
 
         # Check schedule boundaries

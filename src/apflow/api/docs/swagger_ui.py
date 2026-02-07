@@ -16,17 +16,17 @@ def get_swagger_ui_html(
 ) -> str:
     """
     Generate Swagger UI HTML page
-    
+
     Args:
         openapi_url: URL to OpenAPI schema JSON
         title: Page title
         swagger_js_url: Swagger UI JavaScript bundle URL (CDN)
         swagger_css_url: Swagger UI CSS URL (CDN)
-        
+
     Returns:
         HTML string for Swagger UI
     """
-    
+
     html = f"""
 <!DOCTYPE html>
 <html lang="en">
@@ -87,10 +87,10 @@ def get_swagger_ui_html(
 def get_swagger_ui_route_handler(openapi_schema: Dict[str, Any]) -> HTMLResponse:
     """
     Create route handler for Swagger UI
-    
+
     Args:
         openapi_schema: OpenAPI schema dictionary
-        
+
     Returns:
         HTMLResponse with Swagger UI page
     """
@@ -101,12 +101,11 @@ def get_swagger_ui_route_handler(openapi_schema: Dict[str, Any]) -> HTMLResponse
 def get_openapi_json_route_handler(openapi_schema: Dict[str, Any]) -> JSONResponse:
     """
     Create route handler for OpenAPI JSON schema
-    
+
     Args:
         openapi_schema: OpenAPI schema dictionary
-        
+
     Returns:
         JSONResponse with OpenAPI schema
     """
     return JSONResponse(content=openapi_schema)
-

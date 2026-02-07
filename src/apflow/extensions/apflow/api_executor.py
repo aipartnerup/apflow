@@ -66,34 +66,82 @@ logger = get_logger(__name__)
 
 
 class ApFlowApiInputSchema(BaseModel):
-    base_url: str = Field(description='apflow API base URL (e.g., "http://localhost:8000") (required)')
-    method: str = Field(description='API method name (e.g., "tasks.execute", "tasks.create") (required)')
+    base_url: str = Field(
+        description='apflow API base URL (e.g., "http://localhost:8000") (required)'
+    )
+    method: str = Field(
+        description='API method name (e.g., "tasks.execute", "tasks.create") (required)'
+    )
     params: Dict[str, Any] = Field(description="Method parameters dict (required)")
-    auth_token: Optional[str] = Field(default=None, description="Optional JWT token for authentication")
-    use_streaming: bool = Field(default=False, description="Whether to use streaming mode (only for tasks.execute, default: False)")
-    wait_for_completion: bool = Field(default=False, description="Whether to wait for task completion (only for tasks.execute, default: False)")
-    poll_interval: float = Field(default=1.0, description="Polling interval in seconds when waiting for completion (default: 1.0)")
+    auth_token: Optional[str] = Field(
+        default=None, description="Optional JWT token for authentication"
+    )
+    use_streaming: bool = Field(
+        default=False,
+        description="Whether to use streaming mode (only for tasks.execute, default: False)",
+    )
+    wait_for_completion: bool = Field(
+        default=False,
+        description="Whether to wait for task completion (only for tasks.execute, default: False)",
+    )
+    poll_interval: float = Field(
+        default=1.0,
+        description="Polling interval in seconds when waiting for completion (default: 1.0)",
+    )
     timeout: float = Field(default=300.0, description="Total timeout in seconds (default: 300.0)")
-    headers: Optional[Dict[str, str]] = Field(default=None, description="Additional HTTP headers dict (optional)")
+    headers: Optional[Dict[str, str]] = Field(
+        default=None, description="Additional HTTP headers dict (optional)"
+    )
 
 
 class ApFlowApiOutputSchema(BaseModel):
     success: bool = Field(description="Whether the API call was successful")
-    result: Optional[Dict[str, Any]] = Field(default=None, description="API response result data (only present on success)")
-    error: Optional[str] = Field(default=None, description="Error message (only present on failure)")
-    error_code: Optional[int] = Field(default=None, description="JSON-RPC error code (optional, only present for JSON-RPC errors)")
-    error_data: Optional[Dict[str, Any]] = Field(default=None, description="JSON-RPC error data (optional, only present for JSON-RPC errors)")
-    status_code: Optional[int] = Field(default=None, description="HTTP status code (optional, only present for HTTP errors)")
-    response: Optional[str] = Field(default=None, description="Raw HTTP response text (optional, only present for HTTP errors)")
+    result: Optional[Dict[str, Any]] = Field(
+        default=None, description="API response result data (only present on success)"
+    )
+    error: Optional[str] = Field(
+        default=None, description="Error message (only present on failure)"
+    )
+    error_code: Optional[int] = Field(
+        default=None, description="JSON-RPC error code (optional, only present for JSON-RPC errors)"
+    )
+    error_data: Optional[Dict[str, Any]] = Field(
+        default=None, description="JSON-RPC error data (optional, only present for JSON-RPC errors)"
+    )
+    status_code: Optional[int] = Field(
+        default=None, description="HTTP status code (optional, only present for HTTP errors)"
+    )
+    response: Optional[str] = Field(
+        default=None, description="Raw HTTP response text (optional, only present for HTTP errors)"
+    )
     base_url: str = Field(description="The apflow API base URL that was called")
     method: str = Field(description="The API method that was called")
-    task_id: Optional[str] = Field(default=None, description="Task ID (only present when waiting for task completion)")
-    status: Optional[str] = Field(default=None, description="Final task status (only present when waiting for task completion)")
-    task: Optional[Dict[str, Any]] = Field(default=None, description="Complete task data (only present when waiting for task completion)")
-    poll_count: Optional[int] = Field(default=None, description="Number of polling attempts (only present when waiting for task completion)")
-    total_failures: Optional[int] = Field(default=None, description="Total polling failures (only present when waiting for task completion)")
-    consecutive_failures: Optional[int] = Field(default=None, description="Consecutive polling failures (only present in circuit breaker scenarios)")
-    error_type: Optional[Literal["client_error", "circuit_breaker", "max_failures"]] = Field(default=None, description="Type of polling error (only present in specific error scenarios)")
+    task_id: Optional[str] = Field(
+        default=None, description="Task ID (only present when waiting for task completion)"
+    )
+    status: Optional[str] = Field(
+        default=None,
+        description="Final task status (only present when waiting for task completion)",
+    )
+    task: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Complete task data (only present when waiting for task completion)",
+    )
+    poll_count: Optional[int] = Field(
+        default=None,
+        description="Number of polling attempts (only present when waiting for task completion)",
+    )
+    total_failures: Optional[int] = Field(
+        default=None,
+        description="Total polling failures (only present when waiting for task completion)",
+    )
+    consecutive_failures: Optional[int] = Field(
+        default=None,
+        description="Consecutive polling failures (only present in circuit breaker scenarios)",
+    )
+    error_type: Optional[Literal["client_error", "circuit_breaker", "max_failures"]] = Field(
+        default=None, description="Type of polling error (only present in specific error scenarios)"
+    )
 
 
 @executor_register()
@@ -591,4 +639,3 @@ class ApFlowApiExecutor(BaseTask):
                 "id": "demo-request-id",
                 "_demo_sleep": 0.2,  # Simulate API call latency
             }
-

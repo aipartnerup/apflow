@@ -26,10 +26,10 @@ def a2a_server_app(use_test_db_session):
         base_url="http://localhost:8000",
         enable_system_routes=True,
     )
-    
+
     # Build the app
     app = server_instance.build()
-    
+
     return app
 
 
@@ -37,42 +37,43 @@ def a2a_server_app(use_test_db_session):
 async def a2a_client(a2a_server_app):
     """
     Create A2A client connected to test server using ClientFactory
-    
+
     This uses the official A2A SDK ClientFactory to create a proper A2A client,
     which is different from direct HTTP calls used in test_http_json_rpc.py
     """
     from httpx import ASGITransport, AsyncClient
-    
+
     # Create async transport using the ASGI app
     transport = ASGITransport(app=a2a_server_app)
-    
+
     # Create async HTTP client with custom transport
     async_httpx_client = AsyncClient(transport=transport, base_url="http://testserver")
-    
+
     # Create A2A client config with custom httpx client
     config = ClientConfig(
         streaming=True,
         polling=False,
         httpx_client=async_httpx_client,
     )
-    
+
     # Create client factory
     factory = ClientFactory(config=config)
-    
+
     # Fetch agent card first (required to create client with ClientFactory)
     # We need to make a direct HTTP call to get the card first
     # Then use ClientFactory.create() to create the proper client
     from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
+
     card_response = await async_httpx_client.get(AGENT_CARD_WELL_KNOWN_PATH)
     assert card_response.status_code == 200
     card_data = card_response.json()
     agent_card = AgentCard(**card_data)
-    
+
     # Create proper A2A client using ClientFactory (new API)
     client = factory.create(card=agent_card)
-    
+
     yield client
-    
+
     # Cleanup
     await async_httpx_client.aclose()
 
@@ -82,7 +83,7 @@ async def test_a2a_agent_card(a2a_client):
     """Test fetching agent card via A2A client"""
     # Get agent card using A2A client
     card = await a2a_client.get_card()
-    
+
     # Verify agent card structure
     assert card.name == "apflow"
     assert card.description is not None
@@ -103,21 +104,14 @@ async def test_a2a_execute_task_simple_mode(a2a_client):
         "priority": 1,
         "has_children": False,
         "dependencies": [],
-        "schemas": {
-            "method": "system_info",
-            "type": "stdio"
-        },
-        "inputs": {}
+        "schemas": {"method": "system_info", "type": "stdio"},
+        "inputs": {},
     }
-    
+
     # Create A2A message with task data
     data_part = DataPart(kind="data", data={"tasks": [task_data]})
-    message = Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.user,
-        parts=[data_part]
-    )
-    
+    message = Message(message_id=str(uuid.uuid4()), role=Role.user, parts=[data_part])
+
     # Send message using A2A client (new API returns AsyncIterator)
     responses = []
     async for response in a2a_client.send_message(message):
@@ -130,13 +124,16 @@ async def test_a2a_execute_task_simple_mode(a2a_client):
                     if part.kind == "data" and isinstance(part.data, dict):
                         result_data = part.data
                         # Verify execution result has expected fields
-                        assert "status" in result_data or "root_task_id" in result_data or "progress" in result_data, \
-                            f"Result data missing expected fields: {result_data}"
+                        assert (
+                            "status" in result_data
+                            or "root_task_id" in result_data
+                            or "progress" in result_data
+                        ), f"Result data missing expected fields: {result_data}"
         elif isinstance(response, tuple):
             # Response is (Task, Update) tuple
             task, update = response
             assert task is not None
-    
+
     # Verify we received at least one response
     assert len(responses) > 0
 
@@ -153,21 +150,14 @@ async def test_a2a_execute_task_streaming_mode(a2a_client):
         "priority": 1,
         "has_children": False,
         "dependencies": [],
-        "schemas": {
-            "method": "system_info",
-            "type": "stdio"
-        },
-        "inputs": {}
+        "schemas": {"method": "system_info", "type": "stdio"},
+        "inputs": {},
     }
-    
+
     # Create A2A message with task data
     data_part = DataPart(kind="data", data={"tasks": [task_data]})
-    message = Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.user,
-        parts=[data_part]
-    )
-    
+    message = Message(message_id=str(uuid.uuid4()), role=Role.user, parts=[data_part])
+
     # Send message using A2A client (automatically handles streaming based on config)
     # The client config has streaming=True, so it will use streaming mode
     events_received = []
@@ -180,12 +170,16 @@ async def test_a2a_execute_task_streaming_mode(a2a_client):
                 for part in response.parts:
                     if part.kind == "data" and isinstance(part.data, dict):
                         # Verify streaming event structure
-                        assert "status" in part.data or "root_task_id" in part.data or "progress" in part.data
+                        assert (
+                            "status" in part.data
+                            or "root_task_id" in part.data
+                            or "progress" in part.data
+                        )
         elif isinstance(response, tuple):
             # Response is (Task, Update) tuple - streaming updates
             task, update = response
             assert task is not None
-    
+
     # Verify we received at least one event
     assert len(events_received) > 0
 
@@ -204,13 +198,10 @@ async def test_a2a_task_with_dependencies(a2a_client):
             "has_children": True,
             "dependencies": [
                 {"id": "child-1", "required": True},
-                {"id": "child-2", "required": True}
+                {"id": "child-2", "required": True},
             ],
-            "schemas": {
-                "method": "aggregate_results_executor",
-                "type": "core"
-            },
-            "inputs": {}
+            "schemas": {"method": "aggregate_results_executor", "type": "core"},
+            "inputs": {},
         },
         {
             "id": "child-1",
@@ -221,11 +212,8 @@ async def test_a2a_task_with_dependencies(a2a_client):
             "priority": 1,
             "has_children": False,
             "dependencies": [],
-            "schemas": {
-                "method": "system_info",
-                "type": "stdio"
-            },
-            "inputs": {}
+            "schemas": {"method": "system_info", "type": "stdio"},
+            "inputs": {},
         },
         {
             "id": "child-2",
@@ -235,25 +223,16 @@ async def test_a2a_task_with_dependencies(a2a_client):
             "status": "pending",
             "priority": 1,
             "has_children": False,
-            "dependencies": [
-                {"id": "child-1", "required": True}
-            ],
-            "schemas": {
-                "method": "system_info",
-                "type": "stdio"
-            },
-            "inputs": {}
-        }
+            "dependencies": [{"id": "child-1", "required": True}],
+            "schemas": {"method": "system_info", "type": "stdio"},
+            "inputs": {},
+        },
     ]
-    
+
     # Create A2A message with task tree
     data_part = DataPart(kind="data", data={"tasks": tasks})
-    message = Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.user,
-        parts=[data_part]
-    )
-    
+    message = Message(message_id=str(uuid.uuid4()), role=Role.user, parts=[data_part])
+
     # Send message using A2A client (new API returns AsyncIterator)
     responses = []
     async for response in a2a_client.send_message(message):
@@ -267,13 +246,16 @@ async def test_a2a_task_with_dependencies(a2a_client):
                         result_data = part.data
                         print(f"Result data:\n {json.dumps(result_data, indent=2)}")
                         # Verify execution result has expected fields
-                        assert "status" in result_data or "root_task_id" in result_data or "progress" in result_data, \
-                            f"Result data missing expected fields: {result_data}"
+                        assert (
+                            "status" in result_data
+                            or "root_task_id" in result_data
+                            or "progress" in result_data
+                        ), f"Result data missing expected fields: {result_data}"
         elif isinstance(response, tuple):
             # Response is (Task, Update) tuple
             task, update = response
             assert task is not None
-    
+
     # Verify we received at least one response
     assert len(responses) > 0
 
@@ -283,11 +265,9 @@ async def test_a2a_error_handling(a2a_client):
     """Test A2A client error handling"""
     # Create message with empty parts (should cause error)
     message = Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.user,
-        parts=[]  # Empty parts - should cause error
+        message_id=str(uuid.uuid4()), role=Role.user, parts=[]  # Empty parts - should cause error
     )
-    
+
     # Send message - should handle error gracefully
     # New API returns AsyncIterator, so we need to iterate
     try:
@@ -310,7 +290,7 @@ async def test_a2a_client_integration(a2a_client):
     # Step 1: Get agent card
     card = await a2a_client.get_card()
     assert card.name == "apflow"
-    
+
     # Step 2: Execute a task
     task_data = {
         "id": "integration-test-task",
@@ -320,21 +300,14 @@ async def test_a2a_client_integration(a2a_client):
         "priority": 1,
         "has_children": False,
         "dependencies": [],
-        "schemas": {
-            "method": "system_info",
-            "type": "stdio"
-        },
-        "inputs": {}
+        "schemas": {"method": "system_info", "type": "stdio"},
+        "inputs": {},
     }
-    
+
     # Create A2A message with task data
     data_part = DataPart(kind="data", data={"tasks": [task_data]})
-    message = Message(
-        message_id=str(uuid.uuid4()),
-        role=Role.user,
-        parts=[data_part]
-    )
-    
+    message = Message(message_id=str(uuid.uuid4()), role=Role.user, parts=[data_part])
+
     # Send message using A2A client (new API returns AsyncIterator)
     responses = []
     async for response in a2a_client.send_message(message):
@@ -347,12 +320,15 @@ async def test_a2a_client_integration(a2a_client):
                     if part.kind == "data" and isinstance(part.data, dict):
                         result_data = part.data
                         # Verify execution result has expected fields
-                        assert "status" in result_data or "root_task_id" in result_data or "progress" in result_data, \
-                            f"Result data missing expected fields: {result_data}"
+                        assert (
+                            "status" in result_data
+                            or "root_task_id" in result_data
+                            or "progress" in result_data
+                        ), f"Result data missing expected fields: {result_data}"
         elif isinstance(response, tuple):
             # Response is (Task, Update) tuple
             task, update = response
             assert task is not None
-    
+
     # Verify we received at least one response
     assert len(responses) > 0

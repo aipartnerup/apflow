@@ -11,4 +11,3 @@ __all__ = [
     "register_dialect",
     "get_dialect_config",
 ]
-

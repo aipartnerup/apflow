@@ -81,6 +81,14 @@ class TestSchedulerCommandHelp:
         assert "--background" in output
         assert "--timeout" in output
 
+    def test_scheduler_start_help_verbose_flag(self):
+        """Test scheduler start help shows --verbose / -v with correct description"""
+        result = runner.invoke(cli, ["scheduler", "start", "--help"])
+        assert result.exit_code == 0
+        output = strip_ansi(result.stdout)
+        assert "--verbose" in output or "-v" in output
+        assert "task execution results" in output.lower()
+
     def test_scheduler_stop_help(self):
         """Test scheduler stop subcommand help"""
         result = runner.invoke(cli, ["scheduler", "stop", "--help"])
@@ -262,6 +270,90 @@ class TestSchedulerStart:
             call_args = mock_popen.call_args[0][0]
             assert "--user-id" in call_args
             assert "user123" in call_args
+
+    def test_scheduler_start_background_with_verbose(self, cleanup_scheduler_files):
+        """Test scheduler start --background --verbose passes --verbose to subprocess"""
+        with patch("subprocess.Popen") as mock_popen:
+            mock_process = MagicMock()
+            mock_process.pid = 33333
+            mock_popen.return_value = mock_process
+
+            result = runner.invoke(
+                cli,
+                ["scheduler", "start", "--background", "--verbose"],
+            )
+
+            assert result.exit_code == 0
+            call_args = mock_popen.call_args[0][0]
+            assert "--verbose" in call_args
+
+    def test_scheduler_start_background_without_verbose(self, cleanup_scheduler_files):
+        """Test scheduler start --background without --verbose does not pass --verbose"""
+        with patch("subprocess.Popen") as mock_popen:
+            mock_process = MagicMock()
+            mock_process.pid = 33334
+            mock_popen.return_value = mock_process
+
+            result = runner.invoke(
+                cli,
+                ["scheduler", "start", "--background"],
+            )
+
+            assert result.exit_code == 0
+            call_args = mock_popen.call_args[0][0]
+            assert "--verbose" not in call_args
+
+    @patch("apflow.scheduler.InternalScheduler")
+    def test_scheduler_start_foreground_verbose_shows_message(
+        self, mock_scheduler_class, cleanup_scheduler_files
+    ):
+        """Test scheduler start --verbose in foreground shows verbose message"""
+        mock_scheduler = MagicMock()
+        mock_scheduler.stats.state = "stopped"
+        mock_scheduler.start = MagicMock(side_effect=Exception("stop early"))
+        mock_scheduler_class.return_value = mock_scheduler
+
+        result = runner.invoke(cli, ["scheduler", "start", "--verbose"])
+
+        output = strip_ansi(result.stdout)
+        assert "Verbose: ON" in output
+
+    @patch("apflow.scheduler.InternalScheduler")
+    def test_scheduler_start_foreground_verbose_passes_to_scheduler(
+        self, mock_scheduler_class, cleanup_scheduler_files
+    ):
+        """Test scheduler start --verbose passes verbose=True to InternalScheduler"""
+        mock_scheduler = MagicMock()
+        mock_scheduler.stats.state = "stopped"
+        mock_scheduler.start = MagicMock(side_effect=Exception("stop early"))
+        mock_scheduler_class.return_value = mock_scheduler
+
+        runner.invoke(cli, ["scheduler", "start", "--verbose"])
+
+        # Verify InternalScheduler was constructed with verbose=True
+        mock_scheduler_class.assert_called_once()
+        call_kwargs = mock_scheduler_class.call_args
+        assert call_kwargs[1].get("verbose") is True or (
+            len(call_kwargs[0]) > 1 and call_kwargs[0][1] is True
+        )
+
+    @patch("apflow.scheduler.InternalScheduler")
+    def test_scheduler_start_foreground_no_verbose_passes_false(
+        self, mock_scheduler_class, cleanup_scheduler_files
+    ):
+        """Test scheduler start without --verbose passes verbose=False to InternalScheduler"""
+        mock_scheduler = MagicMock()
+        mock_scheduler.stats.state = "stopped"
+        mock_scheduler.start = MagicMock(side_effect=Exception("stop early"))
+        mock_scheduler_class.return_value = mock_scheduler
+
+        runner.invoke(cli, ["scheduler", "start"])
+
+        mock_scheduler_class.assert_called_once()
+        call_kwargs = mock_scheduler_class.call_args
+        assert call_kwargs[1].get("verbose") is False or (
+            len(call_kwargs[0]) > 1 and call_kwargs[0][1] is False
+        )
 
     def test_scheduler_start_removes_stale_pid(self, cleanup_scheduler_files):
         """Test scheduler start removes stale PID file"""

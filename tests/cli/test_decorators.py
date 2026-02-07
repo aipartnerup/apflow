@@ -1,6 +1,7 @@
 """
 Test CLI decorators: registration and group extension.
 """
+
 import typer
 from apflow.cli.decorators import cli_register, get_cli_group, get_cli_registry
 from typer.testing import CliRunner
@@ -9,17 +10,20 @@ from typer.testing import CliRunner
 # Note: These decorators run at import time, but the registry may be cleared
 # by conftest cleanup. The tests will re-register if needed.
 
+
 # Register as root command (all functions are root commands by default)
 @cli_register(name="hello-func", help="Say hello (function)")
 def hello_func(name: str = "world"):
     """A simple hello command."""
     print(f"Hello, {name} (from func)!")
 
+
 # Register as root command with typer.Option
 @cli_register(name="hello-root", help="Say hello (root)")
 def hello_root(name: str = typer.Option("world", help="Name to greet")):
     """A simple hello command (root)."""
     print(f"Hello, {name} (from root)!")
+
 
 # Use a plain class with a public method to be registered as a command
 @cli_register(name="dummy-group", help="Dummy group")
@@ -43,11 +47,12 @@ def _ensure_test_commands_registered():
 
 # --- Basic Registration Tests ---
 
+
 def test_cli_register_function():
     """Test registering functions as root commands."""
     _ensure_test_commands_registered()
     registry = get_cli_registry()
-    
+
     # Test hello-func (root command with simple parameter)
     assert "hello-func" in registry
     app = registry["hello-func"]
@@ -94,8 +99,10 @@ def test_cli_register_help_text():
 
 # --- Group Extension Tests ---
 
+
 def test_cli_register_extend_group():
     """Test extending a group using @cli_register with group parameter."""
+
     # First register a group
     @cli_register(name="test-group", help="Test group")
     class TestGroup:
@@ -111,12 +118,12 @@ def test_cli_register_extend_group():
     registry = get_cli_registry()
     app = registry["test-group"]
     runner = CliRunner()
-    
+
     # Test original command
     result1 = runner.invoke(app, ["foo"])
     assert result1.exit_code == 0
     assert "foo from TestGroup" in result1.output
-    
+
     # Test extended command
     result2 = runner.invoke(app, ["bar"])
     assert result2.exit_code == 0
@@ -125,6 +132,7 @@ def test_cli_register_extend_group():
 
 def test_cli_register_override_subcommand():
     """Test overriding a subcommand in a group."""
+
     # Register a group with a command
     @cli_register(name="test-group2", help="Test group 2")
     class TestGroup2:
@@ -139,7 +147,7 @@ def test_cli_register_override_subcommand():
     registry = get_cli_registry()
     app = registry["test-group2"]
     runner = CliRunner()
-    
+
     result = runner.invoke(app, ["original"])
     assert result.exit_code == 0
     assert "overridden command" in result.output
@@ -148,6 +156,7 @@ def test_cli_register_override_subcommand():
 
 def test_extend_registered_group():
     """Test extending a group using get_cli_group()."""
+
     # Register a group
     @cli_register(name="test-group3", help="Test group 3")
     class TestGroup3:
@@ -156,7 +165,7 @@ def test_extend_registered_group():
 
     # Extend the group using get_cli_group
     group = get_cli_group("test-group3")
-    
+
     @group.command()
     def bar():
         print("bar from extension")
@@ -165,12 +174,12 @@ def test_extend_registered_group():
     registry = get_cli_registry()
     app = registry["test-group3"]
     runner = CliRunner()
-    
+
     # Test original command
     result1 = runner.invoke(app, ["foo"])
     assert result1.exit_code == 0
     assert "foo from TestGroup3" in result1.output
-    
+
     # Test extended command
     result2 = runner.invoke(app, ["bar"])
     assert result2.exit_code == 0
@@ -182,15 +191,15 @@ def test_extend_builtin_group():
     try:
         # Try to get tasks group (built-in)
         group = get_cli_group("tasks")
-        
+
         # Verify it's a group (has subcommands)
-        assert hasattr(group, 'registered_commands')
-        
+        assert hasattr(group, "registered_commands")
+
         # Add a custom command
         @group.command()
         def custom_action():
             print("Custom action in tasks group")
-        
+
         # Verify the command count increased (or at least the group is accessible)
         # Note: Due to lazy loading, the command might not persist across calls
         # but the group should be accessible

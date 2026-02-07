@@ -27,6 +27,7 @@ from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+from apflow.core.utils.helpers import parse_iso_datetime
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
@@ -239,7 +240,7 @@ class ICalExporter:
 
         # Parse datetime if string
         if isinstance(next_run_at, str):
-            next_run_at = datetime.fromisoformat(next_run_at.replace("Z", "+00:00"))
+            next_run_at = parse_iso_datetime(next_run_at)
 
         lines.append("BEGIN:VEVENT")
 
@@ -285,9 +286,7 @@ class ICalExporter:
             # UNTIL for schedule_end_at
             if schedule_end_at:
                 if isinstance(schedule_end_at, str):
-                    schedule_end_at = datetime.fromisoformat(
-                        schedule_end_at.replace("Z", "+00:00")
-                    )
+                    schedule_end_at = parse_iso_datetime(schedule_end_at)
                 # Note: UNTIL is included in RRULE, not separate
 
         # Custom properties
@@ -422,9 +421,7 @@ class ICalExporter:
         # Add UNTIL or COUNT
         if schedule_end_at:
             if isinstance(schedule_end_at, str):
-                schedule_end_at = datetime.fromisoformat(
-                    schedule_end_at.replace("Z", "+00:00")
-                )
+                schedule_end_at = parse_iso_datetime(schedule_end_at)
             parts.append(f"UNTIL={format_datetime(schedule_end_at)}")
         elif max_runs:
             remaining = max_runs - run_count

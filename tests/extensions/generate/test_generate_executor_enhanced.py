@@ -54,7 +54,7 @@ class TestGenerateExecutorEnhanced:
         """Test multi-phase mode with CrewAI"""
         # Skip if crewai is not installed (required for multi-phase mode)
         pytest.importorskip("crewai")
-        
+
         with patch(
             "apflow.extensions.generate.multi_phase_crew.MultiPhaseGenerationCrew"
         ) as mock_crew_class:
@@ -314,7 +314,10 @@ class TestGenerateExecutorEnhanced:
             mock_unreachable.assert_called_once()
 
         with patch.object(executor, "_fix_root_executor_to_aggregator") as mock_aggregator:
-            executor._attempt_auto_fix(tasks, "Task tree uses 2 different executors but root task uses 'scrape_executor'. When multiple executors are needed, root should use an aggregator executor")
+            executor._attempt_auto_fix(
+                tasks,
+                "Task tree uses 2 different executors but root task uses 'scrape_executor'. When multiple executors are needed, root should use an aggregator executor",
+            )
             mock_aggregator.assert_called_once()
 
     def test_fix_root_executor_to_aggregator(self, executor):
@@ -349,7 +352,7 @@ class TestGenerateExecutorEnhanced:
         root_task = [t for t in fixed if not t.get("parent_id")][0]
         assert root_task["schemas"]["method"] == "aggregate_results_executor"
         assert root_task["inputs"] == {}  # Inputs cleared
-        
+
         # Check root task has dependencies on all direct children
         assert "dependencies" in root_task, "Root aggregator must have dependencies field"
         dependencies = root_task["dependencies"]

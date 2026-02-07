@@ -1,4 +1,3 @@
 """
 CLI tests for apflow
 """
-

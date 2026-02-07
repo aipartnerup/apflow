@@ -36,26 +36,39 @@ class DockerResourcesConfig(BaseModel):
 class DockerInputSchema(BaseModel):
     image: str = Field(description="Docker image name (required)")
     command: str = Field(description="Command to execute in container (required)")
-    env: Optional[Dict[str, str]] = Field(default=None, description="Environment variables dict (optional)")
+    env: Optional[Dict[str, str]] = Field(
+        default=None, description="Environment variables dict (optional)"
+    )
     volumes: Optional[Dict[str, str]] = Field(
         default=None,
         description='Volume mounts dict {"host_path": "container_path"} (optional)',
     )
-    working_dir: Optional[str] = Field(default=None, description="Working directory in container (optional)")
+    working_dir: Optional[str] = Field(
+        default=None, description="Working directory in container (optional)"
+    )
     timeout: float = Field(default=60, description="Command timeout in seconds (default: 60)")
-    remove: bool = Field(default=True, description="Remove container after execution (default: True)")
-    resources: Optional[DockerResourcesConfig] = Field(default=None, description="Resource limits dict (optional)")
+    remove: bool = Field(
+        default=True, description="Remove container after execution (default: True)"
+    )
+    resources: Optional[DockerResourcesConfig] = Field(
+        default=None, description="Resource limits dict (optional)"
+    )
 
 
 class DockerOutputSchema(BaseModel):
     success: bool = Field(description="Whether the Docker command executed successfully")
-    error: Optional[str] = Field(default=None, description="Error message (only present on cancellation)")
+    error: Optional[str] = Field(
+        default=None, description="Error message (only present on cancellation)"
+    )
     container_id: Optional[str] = Field(
         default=None, description="Docker container ID (present when container was created)"
     )
-    logs: Optional[str] = Field(default=None, description="Container logs combining stdout and stderr")
+    logs: Optional[str] = Field(
+        default=None, description="Container logs combining stdout and stderr"
+    )
     exit_code: Optional[int] = Field(
-        default=None, description="Container exit code (0 for success, present when execution completed)"
+        default=None,
+        description="Container exit code (0 for success, present when execution completed)",
     )
     image: str = Field(description="Docker image that was used")
     command: str = Field(description="Command that was executed in the container")

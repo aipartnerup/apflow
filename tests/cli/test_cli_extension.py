@@ -61,6 +61,7 @@ class TestCliRegisterDecorator:
 
     def test_cli_register_basic(self):
         """Test basic CLI extension registration."""
+
         @cli_register(name="test-basic")
         class TestCommand(CLIExtension):
             pass
@@ -71,6 +72,7 @@ class TestCliRegisterDecorator:
 
     def test_cli_register_default_name_from_class(self):
         """Test that name defaults to lowercase class name."""
+
         @cli_register()
         class MyTestCommand(CLIExtension):
             pass
@@ -80,6 +82,7 @@ class TestCliRegisterDecorator:
 
     def test_cli_register_underscore_to_hyphen(self):
         """Test that underscores in class name are converted to hyphens."""
+
         @cli_register()
         class my_test_command(CLIExtension):
             pass
@@ -89,6 +92,7 @@ class TestCliRegisterDecorator:
 
     def test_cli_register_with_help(self):
         """Test registration with help text."""
+
         @cli_register(name="test-help", help="My help text")
         class TestHelpCommand(CLIExtension):
             pass
@@ -99,6 +103,7 @@ class TestCliRegisterDecorator:
 
     def test_cli_register_duplicate_raises_error(self):
         """Test that duplicate registration logs a warning and does not override by default."""
+
         @cli_register(name="duplicate-test")
         class FirstCommand(CLIExtension):
             pass
@@ -114,6 +119,7 @@ class TestCliRegisterDecorator:
 
     def test_cli_register_override_allows_duplicate(self):
         """Test that override=True allows replacing registration."""
+
         @cli_register(name="override-test")
         class FirstCommand(CLIExtension):
             pass
@@ -128,6 +134,7 @@ class TestCliRegisterDecorator:
 
     def test_cli_register_returns_original_class(self):
         """Test that decorator returns the original class."""
+
         @cli_register(name="return-test")
         class OriginalCommand(CLIExtension):
             custom_attr = "test_value"
@@ -138,6 +145,7 @@ class TestCliRegisterDecorator:
     def test_cli_register_functional_command(self):
         """Test that registered CLI extension works with commands."""
         runner = CliRunner()
+
         @cli_register(name="func-test")
         class FuncTestCommand(CLIExtension):
             pass
@@ -183,6 +191,7 @@ class TestGetCliRegistry:
 
     def test_get_cli_registry_reflects_registrations(self):
         """Test that registry reflects all registrations."""
+
         @cli_register(name="reg-test-1")
         class Command1(CLIExtension):
             pass
@@ -211,6 +220,7 @@ class TestCLIExtensionIntegration:
     def test_cli_extension_with_multiple_commands(self):
         """Test CLI extension with multiple commands."""
         runner = CliRunner()
+
         @cli_register(name="multi-cmd")
         class MultiCommand(CLIExtension):
             pass
@@ -237,6 +247,7 @@ class TestCLIExtensionIntegration:
     def test_cli_extension_help_output(self):
         """Test CLI extension help output."""
         runner = CliRunner()
+
         @cli_register(name="help-test", help="Test help description")
         class HelpTestCommand(CLIExtension):
             pass

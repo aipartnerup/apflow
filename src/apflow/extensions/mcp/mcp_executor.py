@@ -36,29 +36,67 @@ except ImportError:
 
 
 class McpInputSchema(BaseModel):
-    transport: Literal["stdio", "http"] = Field(description="Transport mode - 'stdio' or 'http' (required)")
-    operation: Literal["list_tools", "call_tool", "list_resources", "read_resource"] = Field(description="MCP operation type (required)")
+    transport: Literal["stdio", "http"] = Field(
+        description="Transport mode - 'stdio' or 'http' (required)"
+    )
+    operation: Literal["list_tools", "call_tool", "list_resources", "read_resource"] = Field(
+        description="MCP operation type (required)"
+    )
     timeout: float = Field(default=30.0, description="Optional timeout in seconds (default: 30.0)")
-    command: Optional[list[str]] = Field(default=None, description="Command to run MCP server for stdio transport (list of strings, required for stdio)")
-    env: Optional[Dict[str, str]] = Field(default=None, description="Optional environment variables dict for stdio transport")
-    cwd: Optional[str] = Field(default=None, description="Optional working directory for stdio transport")
-    url: Optional[str] = Field(default=None, description="MCP server URL for http transport (required for http)")
-    headers: Optional[Dict[str, str]] = Field(default=None, description="Optional HTTP headers dict for http transport")
-    tool_name: Optional[str] = Field(default=None, description="Name of tool to call (required for call_tool operation)")
-    arguments: Optional[Dict[str, Any]] = Field(default=None, description="Tool arguments dict (required for call_tool operation)")
-    resource_uri: Optional[str] = Field(default=None, description="Resource URI (required for read_resource operation)")
+    command: Optional[list[str]] = Field(
+        default=None,
+        description="Command to run MCP server for stdio transport (list of strings, required for stdio)",
+    )
+    env: Optional[Dict[str, str]] = Field(
+        default=None, description="Optional environment variables dict for stdio transport"
+    )
+    cwd: Optional[str] = Field(
+        default=None, description="Optional working directory for stdio transport"
+    )
+    url: Optional[str] = Field(
+        default=None, description="MCP server URL for http transport (required for http)"
+    )
+    headers: Optional[Dict[str, str]] = Field(
+        default=None, description="Optional HTTP headers dict for http transport"
+    )
+    tool_name: Optional[str] = Field(
+        default=None, description="Name of tool to call (required for call_tool operation)"
+    )
+    arguments: Optional[Dict[str, Any]] = Field(
+        default=None, description="Tool arguments dict (required for call_tool operation)"
+    )
+    resource_uri: Optional[str] = Field(
+        default=None, description="Resource URI (required for read_resource operation)"
+    )
 
 
 class McpOutputSchema(BaseModel):
     success: bool = Field(description="Whether the MCP operation was successful")
-    error: Optional[str] = Field(default=None, description="Error message (only present on failure)")
-    error_code: Optional[int] = Field(default=None, description="MCP error code (optional, only for MCP protocol errors)")
-    error_data: Optional[Dict[str, Any]] = Field(default=None, description="MCP error data (optional, only for MCP protocol errors)")
-    status_code: Optional[int] = Field(default=None, description="HTTP status code (optional, only for HTTP transport errors)")
-    return_code: Optional[int] = Field(default=None, description="Process return code (optional, only for stdio transport errors)")
-    stderr: Optional[str] = Field(default=None, description="Process stderr output (optional, only for stdio transport errors)")
-    raw_response: Optional[str] = Field(default=None, description="Raw response text (optional, only for JSON parsing errors)")
-    result: Optional[Dict[str, Any]] = Field(default=None, description="MCP operation result (only present on success)")
+    error: Optional[str] = Field(
+        default=None, description="Error message (only present on failure)"
+    )
+    error_code: Optional[int] = Field(
+        default=None, description="MCP error code (optional, only for MCP protocol errors)"
+    )
+    error_data: Optional[Dict[str, Any]] = Field(
+        default=None, description="MCP error data (optional, only for MCP protocol errors)"
+    )
+    status_code: Optional[int] = Field(
+        default=None, description="HTTP status code (optional, only for HTTP transport errors)"
+    )
+    return_code: Optional[int] = Field(
+        default=None, description="Process return code (optional, only for stdio transport errors)"
+    )
+    stderr: Optional[str] = Field(
+        default=None,
+        description="Process stderr output (optional, only for stdio transport errors)",
+    )
+    raw_response: Optional[str] = Field(
+        default=None, description="Raw response text (optional, only for JSON parsing errors)"
+    )
+    result: Optional[Dict[str, Any]] = Field(
+        default=None, description="MCP operation result (only present on success)"
+    )
     operation: str = Field(description="The MCP operation that was performed")
     transport: str = Field(description="The transport mode used (stdio or http)")
 

@@ -70,9 +70,7 @@ def ensure_local_jwt_secret() -> str:
             if JWT_SECRET_KEY in config:
                 return config[JWT_SECRET_KEY]
         except Exception as e:
-            logger.warning(
-                f"Failed to load JWT secret from {secret_file}: {e}"
-            )
+            logger.warning(f"Failed to load JWT secret from {secret_file}: {e}")
 
     # Generate new secret
     secret = _generate_jwt_secret()
@@ -92,7 +90,7 @@ def ensure_local_jwt_secret() -> str:
 def _generate_jwt_secret() -> str:
     """
     Generate a random JWT secret.
-    
+
     Returns:
         Random secret string (32 bytes, hex encoded)
     """
@@ -108,20 +106,20 @@ def generate_token(
 ) -> str:
     """
     Generate a JWT token.
-    
+
     Args:
         subject: Token subject (typically username or app name)
         secret: JWT secret key. If None, uses local default
         algo: JWT algorithm (HS256, HS512, etc.). If None, reads from config or uses default
         expiry_days: Token expiration in days
         extra_claims: Additional JWT claims
-        
+
     Returns:
         JWT token string
     """
     if secret is None:
         secret = ensure_local_jwt_secret()
-    
+
     # Get algorithm from config if not provided
     if algo is None:
         try:
@@ -131,10 +129,10 @@ def generate_token(
             algo = config.get("jwt_algorithm", DEFAULT_JWT_ALGO)
         except Exception:
             algo = DEFAULT_JWT_ALGO
-    
+
     now = datetime.now(timezone.utc)
     expiry = now + timedelta(days=expiry_days)
-    
+
     payload = {
         "sub": subject,
         "iss": DEFAULT_JWT_ISSUER,
@@ -142,14 +140,14 @@ def generate_token(
         "exp": expiry,
         "jti": uuid.uuid4().hex,
     }
-    
+
     if extra_claims:
         payload.update(extra_claims)
-    
+
     token = jwt.encode(payload, secret, algorithm=algo)
-    
+
     logger.debug(f"Generated JWT token with algo={algo}, expiry={expiry_days} days")
-    
+
     return token
 
 
@@ -160,21 +158,21 @@ def verify_token(
 ) -> dict:
     """
     Verify and decode a JWT token.
-    
+
     Args:
         token: JWT token string
         secret: JWT secret key. If None, uses local default
         algo: JWT algorithm. If None, reads from config or uses default
-        
+
     Returns:
         Decoded token payload
-        
+
     Raises:
         jwt.InvalidTokenError: If token is invalid or expired
     """
     if secret is None:
         secret = ensure_local_jwt_secret()
-    
+
     # Get algorithm from config if not provided
     if algo is None:
         try:
@@ -184,7 +182,7 @@ def verify_token(
             algo = config.get("jwt_algorithm", DEFAULT_JWT_ALGO)
         except Exception:
             algo = DEFAULT_JWT_ALGO
-    
+
     try:
         payload = jwt.decode(token, secret, algorithms=[algo])
         logger.debug("Successfully verified JWT token")
@@ -200,18 +198,18 @@ def verify_token(
 def get_token_info(token: str) -> dict:
     """
     Get information about a token without verifying signature.
-    
+
     Useful for displaying token details.
-    
+
     Args:
         token: JWT token string
-        
+
     Returns:
         Dictionary with token info (subject, issuer, expiry, etc.)
     """
     try:
         payload = jwt.decode(token, options={"verify_signature": False})
-        
+
         info = {
             "subject": payload.get("sub"),
             "issuer": payload.get("iss"),
@@ -219,20 +217,18 @@ def get_token_info(token: str) -> dict:
             "expires_at": payload.get("exp"),
             "token_id": payload.get("jti"),
         }
-        
+
         # Format timestamps
         if info["issued_at"]:
             info["issued_at"] = datetime.fromtimestamp(
                 info["issued_at"], tz=timezone.utc
             ).isoformat()
-        
+
         if info["expires_at"]:
-            expires = datetime.fromtimestamp(
-                info["expires_at"], tz=timezone.utc
-            )
+            expires = datetime.fromtimestamp(info["expires_at"], tz=timezone.utc)
             info["expires_at"] = expires.isoformat()
             info["expires_in_days"] = (expires - datetime.now(timezone.utc)).days
-        
+
         return info
     except Exception as e:
         logger.error(f"Failed to decode token: {e}")

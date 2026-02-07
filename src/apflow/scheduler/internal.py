@@ -58,7 +58,7 @@ class InternalScheduler(BaseScheduler):
         apflow scheduler start --poll-interval 60 --max-concurrent 5
     """
 
-    def __init__(self, config: Optional[SchedulerConfig] = None):
+    def __init__(self, config: Optional[SchedulerConfig] = None, verbose: bool = False):
         super().__init__(config)
         self._poll_task: Optional[asyncio.Task[None]] = None
         self._stop_event: Optional[asyncio.Event] = None
@@ -66,6 +66,14 @@ class InternalScheduler(BaseScheduler):
         self._active_task_ids: Set[str] = set()
         self._semaphore: Optional[asyncio.Semaphore] = None
         self._use_api: bool = False
+        self._auto_auth_token: Optional[str] = None
+        self._verbose: bool = verbose
+        self._task_names: Dict[str, str] = {}
+        self._console: Any = None
+        if verbose:
+            from rich.console import Console
+
+            self._console = Console()
 
     async def start(self) -> None:
         """
@@ -91,6 +99,8 @@ class InternalScheduler(BaseScheduler):
         self._use_api = self._detect_api_mode()
         if self._use_api:
             logger.info("Scheduler using API mode (server detected)")
+            # Log auth identity for troubleshooting
+            self._log_auth_identity()
         else:
             logger.info("Scheduler using direct DB mode")
 
@@ -167,7 +177,6 @@ class InternalScheduler(BaseScheduler):
         logger.info("Pausing scheduler...")
         self._pause_event.clear()
         self.stats.state = SchedulerState.paused
-        logger.info("Scheduler paused")
 
     async def resume(self) -> None:
         """
@@ -181,7 +190,6 @@ class InternalScheduler(BaseScheduler):
         logger.info("Resuming scheduler...")
         self._pause_event.set()
         self.stats.state = SchedulerState.running
-        logger.info("Scheduler resumed")
 
     async def trigger(self, task_id: str) -> bool:
         """
@@ -222,15 +230,102 @@ class InternalScheduler(BaseScheduler):
         self.stats.active_tasks = len(self._active_task_ids)
         return self.stats
 
-    def _detect_api_mode(self) -> bool:
-        """Detect whether API server is available using the same logic as CLI commands."""
-        try:
-            from apflow.cli.api_gateway_helper import should_use_api
+    def _print_task_result(
+        self, task_id: str, task_name: str, status: str, error: Optional[str] = None
+    ) -> None:
+        """Print task execution result to console in verbose mode."""
+        if not self._console:
+            return
+        status_colors = {
+            "completed": "green",
+            "failed": "red",
+            "pending": "yellow",
+            "in_progress": "cyan",
+        }
+        color = status_colors.get(status, "red")
+        status_display = f"[{color}]{status}[/{color}]"
+        now = datetime.now(timezone.utc).strftime("%H:%M:%S")
+        line = f"  [blue][{now}][/blue]  {status_display}  {task_id}  {task_name}"
+        if error and status != "completed":
+            line += f"\n           [red]Error: {error}[/red]"
+        self._console.print(line)
 
-            return should_use_api()
+    def _log_auth_identity(self) -> None:
+        """Log the auth identity that will be used for API requests."""
+        from apflow.core.config_manager import get_config_manager
+
+        cm = get_config_manager()
+        if cm.admin_auth_token:
+            source = "config (admin_auth_token)"
+        else:
+            source = "auto-generated"
+
+        token = self._get_auth_token()
+        if token:
+            try:
+                from apflow.cli.jwt_token import get_token_info
+
+                info = get_token_info(token)
+                subject = info.get("subject", "unknown")
+                logger.info(f"Scheduler auth: subject={subject}, source={source}")
+            except Exception:
+                logger.info(f"Scheduler auth: token present, source={source}")
+        else:
+            logger.warning("Scheduler auth: no token (unauthenticated)")
+
+    def _detect_api_mode(self) -> bool:
+        """Detect whether API server is configured.
+
+        Checks ConfigManager for api_server_url directly.  Unlike the CLI
+        helper ``should_use_api()`` this does **not** run a health-check
+        probe — a failed probe would permanently disable API mode for the
+        session.  Instead, the scheduler trusts the user's configuration
+        and lets actual API calls surface connection errors naturally.
+        """
+        try:
+            from apflow.core.config_manager import get_config_manager
+
+            cm = get_config_manager()
+            if not cm.is_api_configured():
+                cm.load_cli_config()
+            return cm.is_api_configured()
         except Exception as e:
             logger.debug(f"API detection failed, using direct DB: {e}")
             return False
+
+    def _get_auth_token(self) -> Optional[str]:
+        """Get auth token for API requests.
+
+        Uses admin_auth_token from config if available.
+        Otherwise, auto-generates a JWT admin token using the local jwt_secret
+        from config.cli.yaml. This allows the scheduler to authenticate as admin
+        without requiring explicit token configuration.
+
+        Returns:
+            JWT token string, or None if generation fails.
+        """
+        from apflow.core.config_manager import get_config_manager
+
+        cm = get_config_manager()
+        token = cm.admin_auth_token
+        if token:
+            return token
+
+        # Auto-generate admin JWT from local jwt_secret (cached per session)
+        if self._auto_auth_token is None:
+            try:
+                from apflow.cli.jwt_token import generate_token
+
+                self._auto_auth_token = generate_token(
+                    subject="apflow-scheduler",
+                    extra_claims={"roles": ["admin"]},
+                )
+                logger.debug("Auto-generated admin JWT for scheduler API access")
+            except Exception as e:
+                logger.warning(f"Failed to auto-generate admin JWT: {e}")
+                return None
+
+        return self._auto_auth_token
 
     def _create_api_client(self, timeout: Optional[float] = None) -> "APIClient":
         """Create an APIClient configured from ConfigManager.
@@ -248,7 +343,7 @@ class InternalScheduler(BaseScheduler):
         cm = get_config_manager()
         return APIClient(
             server_url=cm.api_server_url or "http://localhost:8000",
-            auth_token=cm.admin_auth_token,
+            auth_token=self._get_auth_token(),
             timeout=timeout if timeout is not None else cm.api_timeout,
             retry_attempts=cm.api_retry_attempts,
             retry_backoff=cm.api_retry_backoff,
@@ -282,7 +377,12 @@ class InternalScheduler(BaseScheduler):
                 due_tasks = await self._get_due_tasks()
 
                 if due_tasks:
-                    logger.info(f"Found {len(due_tasks)} due tasks")
+                    logger.debug(f"Found {len(due_tasks)} due tasks")
+                    if self._console:
+                        now = datetime.now(timezone.utc).strftime("%H:%M:%S")
+                        self._console.print(
+                            f"[blue][{now}][/blue] Found {len(due_tasks)} due task(s)"
+                        )
 
                     # Execute due tasks (respecting concurrency limit)
                     for task in due_tasks:
@@ -290,6 +390,13 @@ class InternalScheduler(BaseScheduler):
                             break
 
                         task_id = task.get("id") or task.id
+                        if self._verbose:
+                            task_name = (
+                                task.get("name", "")
+                                if isinstance(task, dict)
+                                else getattr(task, "name", "")
+                            )
+                            self._task_names[task_id] = task_name
                         if task_id not in self._active_task_ids:
                             # Add to active set BEFORE creating task to prevent
                             # duplicate scheduling during semaphore wait
@@ -326,7 +433,9 @@ class InternalScheduler(BaseScheduler):
         """
         Get tasks that are due for execution.
 
-        Uses API when available, falls back to direct DB access.
+        Uses API when configured, direct DB access otherwise.
+        When API mode is active, does NOT fall back to DB — DuckDB's
+        single-writer lock means the API server already holds the lock.
 
         Returns:
             List of task dictionaries that are due
@@ -335,7 +444,8 @@ class InternalScheduler(BaseScheduler):
             try:
                 return await self._get_due_tasks_via_api()
             except Exception as e:
-                logger.warning(f"API call failed for due tasks, falling back to DB: {e}")
+                logger.error(f"API call failed for due tasks: {e}")
+                return []
 
         return await self._get_due_tasks_via_db()
 
@@ -382,7 +492,9 @@ class InternalScheduler(BaseScheduler):
         """
         Execute a single scheduled task.
 
-        Uses API when available, falls back to direct DB access.
+        Uses API when configured, direct DB access otherwise.
+        When API mode is active, does NOT fall back to DB — DuckDB's
+        single-writer lock means the API server already holds the lock.
 
         Args:
             task_id: The task ID to execute
@@ -400,11 +512,13 @@ class InternalScheduler(BaseScheduler):
                 if self._use_api:
                     try:
                         await self._execute_task_via_api(task_id)
-                        return
                     except Exception as e:
-                        logger.warning(
-                            f"API execution failed for task {task_id}, " f"falling back to DB: {e}"
-                        )
+                        logger.error(f"API execution failed for task {task_id}: {e}")
+                        self.stats.tasks_executed += 1
+                        self.stats.tasks_failed += 1
+                        task_name = self._task_names.pop(task_id, "")
+                        self._print_task_result(task_id, task_name, "failed", error=str(e))
+                    return
 
                 await self._execute_task_via_db(task_id)
 
@@ -422,7 +536,7 @@ class InternalScheduler(BaseScheduler):
         full execution cycle (mark_running + execute + complete_scheduled_run)
         atomically on the server side.
         """
-        logger.info(f"Executing scheduled task via API: {task_id}")
+        logger.debug(f"Executing scheduled task via API: {task_id}")
 
         # Use task_timeout as the HTTP timeout since execution is synchronous
         client = self._create_api_client(timeout=float(self.config.task_timeout))
@@ -442,14 +556,39 @@ class InternalScheduler(BaseScheduler):
             success = result.get("status") == "completed" or result.get("success", False)
             task_result = result.get("result")
             error = result.get("error")
+            logger.debug(f"API response for task {task_id}: {result}")
+        else:
+            logger.warning(f"Unexpected API response type for task {task_id}: {type(result)}")
 
         self.stats.tasks_executed += 1
         if success:
             self.stats.tasks_succeeded += 1
             logger.info(f"Task {task_id} completed successfully via API")
-        else:
+        elif error:
             self.stats.tasks_failed += 1
             logger.warning(f"Task {task_id} failed via API: {error}")
+        else:
+            # Task not completed but no error (e.g., still pending/not ready)
+            self.stats.tasks_failed += 1
+            status = result.get("status") if isinstance(result, dict) else "N/A"
+            logger.debug(f"Task {task_id} not completed via API (status={status})")
+
+        task_name = self._task_names.pop(task_id, "")
+        if isinstance(result, dict):
+            task_name = task_name or result.get("name", "")
+
+        # Print children results first, then parent
+        if self._console and isinstance(result, dict):
+            for child in result.get("children", []):
+                self._print_task_result(
+                    child.get("task_id", ""),
+                    child.get("name", ""),
+                    child.get("status", "unknown"),
+                    error=child.get("error"),
+                )
+        self._print_task_result(
+            task_id, task_name, "completed" if success else "failed", error=error
+        )
 
         self._notify_task_complete(task_id, success, task_result)
 
@@ -458,9 +597,10 @@ class InternalScheduler(BaseScheduler):
         success = False
         result = None
         error = None
+        task_name = self._task_names.pop(task_id, "")
 
         try:
-            logger.info(f"Executing scheduled task: {task_id}")
+            logger.debug(f"Executing scheduled task via DB: {task_id}")
 
             from apflow.core.storage import create_pooled_session
             from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
@@ -472,7 +612,7 @@ class InternalScheduler(BaseScheduler):
                 task = await task_repository.mark_scheduled_task_running(task_id)
 
                 if not task:
-                    logger.warning(f"Task {task_id} not found or not ready")
+                    logger.debug(f"Task {task_id} not found or not ready for execution")
                     return
 
             # Execute the task
@@ -487,16 +627,18 @@ class InternalScheduler(BaseScheduler):
                     logger.error(f"Task {task_id} not found")
                     return
 
-                # Auto-detect execution mode based on has_children
-                # If task has children, execute full tree; otherwise execute single
-                if task.has_children:
-                    logger.info(f"Executing task {task_id} in tree mode (has children)")
-                    task_tree = await task_repository.get_task_tree_for_api(task)
-                else:
-                    logger.info(f"Executing task {task_id} in single mode (no children)")
-                    from apflow.core.types import TaskTreeNode
+                # Always load task tree from DB — unified with tree execution model.
+                # For root tasks this returns the complete tree;
+                # for subtasks this returns the subtask's subtree.
+                # Dependency cascade is handled by execute_after_task.
+                task_tree = await task_repository.get_task_tree_for_api(task)
+                logger.debug(f"Loaded task tree for {task_id}: {len(task_tree.children)} children")
 
-                    task_tree = TaskTreeNode(task=task, children=[])
+                # Reset root task status for executor compatibility.
+                # mark_scheduled_task_running already set it to in_progress for
+                # duplicate prevention, but execute_task_tree skips in_progress
+                # tasks that aren't marked for re-execution.
+                task_tree.task.status = "pending"
 
                 # Execute the task tree
                 await task_executor.execute_task_tree(
@@ -511,16 +653,35 @@ class InternalScheduler(BaseScheduler):
                 if task:
                     success = task.status == "completed"
                     result = task.result
+                    task_name = task_name or getattr(task, "name", "")
                     if task.error:
                         error = task.error
+
+                    # Print children results in verbose mode
+                    if self._console and getattr(task, "has_children", False):
+                        children = await task_repository.get_child_tasks_by_parent_id(task_id)
+                        for child in children:
+                            self._print_task_result(
+                                child.id,
+                                getattr(child, "name", ""),
+                                child.status,
+                                error=child.error,
+                            )
 
             self.stats.tasks_executed += 1
             if success:
                 self.stats.tasks_succeeded += 1
                 logger.info(f"Task {task_id} completed successfully")
-            else:
+            elif error:
                 self.stats.tasks_failed += 1
                 logger.warning(f"Task {task_id} failed: {error}")
+            else:
+                self.stats.tasks_failed += 1
+                logger.debug(f"Task {task_id} not completed via DB")
+
+            self._print_task_result(
+                task_id, task_name, "completed" if success else "failed", error=error
+            )
 
         except Exception as e:
             success = False
@@ -528,6 +689,7 @@ class InternalScheduler(BaseScheduler):
             self.stats.tasks_executed += 1
             self.stats.tasks_failed += 1
             logger.error(f"Error executing task {task_id}: {e}", exc_info=True)
+            self._print_task_result(task_id, task_name, "failed", error=error)
 
         finally:
             # Complete the scheduled run (calculate next execution time)
@@ -551,7 +713,7 @@ class InternalScheduler(BaseScheduler):
             self._notify_task_complete(task_id, success, result)
 
 
-async def run_scheduler(config: Optional[SchedulerConfig] = None) -> None:
+async def run_scheduler(config: Optional[SchedulerConfig] = None, verbose: bool = False) -> None:
     """
     Run the internal scheduler (blocking).
 
@@ -560,6 +722,7 @@ async def run_scheduler(config: Optional[SchedulerConfig] = None) -> None:
 
     Args:
         config: Optional scheduler configuration
+        verbose: Show task execution results in console
 
     Usage:
         import asyncio
@@ -568,7 +731,7 @@ async def run_scheduler(config: Optional[SchedulerConfig] = None) -> None:
         config = SchedulerConfig(poll_interval=30)
         asyncio.run(run_scheduler(config))
     """
-    scheduler = InternalScheduler(config)
+    scheduler = InternalScheduler(config, verbose=verbose)
 
     # Handle shutdown signals
     import signal

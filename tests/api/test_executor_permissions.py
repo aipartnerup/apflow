@@ -123,9 +123,7 @@ class TestTaskExecutionPermissions:
             assert "allowed_executors" in result
             assert "crewai_executor" not in result["allowed_executors"]
 
-    async def test_execute_task_with_disallowed_executor_via_type(
-        self, task_manager_with_session
-    ):
+    async def test_execute_task_with_disallowed_executor_via_type(self, task_manager_with_session):
         """Test that disallowed executors are blocked when resolved via type"""
         from apflow.core.storage.sqlalchemy.models import TaskModel
 

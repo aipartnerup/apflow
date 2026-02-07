@@ -356,8 +356,8 @@ class TaskRoutes(BaseRouteHandler):
             # If method is tasks.create and params is a list, use it directly
             if method == "tasks.create" and isinstance(params, list):
                 # params is directly the tasks array
-                logger.info(
-                    f"🔍 [handle_task_requests] [{request_id}] Method: {method}, Tasks array: {len(params)} tasks"
+                logger.debug(
+                    f"[handle_task_requests] [{request_id}] Method: {method}, Tasks array: {len(params)} tasks"
                 )
                 result = await self.handle_task_create(params, request, request_id)
             else:
@@ -365,8 +365,8 @@ class TaskRoutes(BaseRouteHandler):
                 if not isinstance(params, dict):
                     params = {}  # Fallback to empty dict if params is not dict or list
 
-                logger.info(
-                    f"🔍 [handle_task_requests] [{request_id}] Method: {method}, Params: {params}"
+                logger.debug(
+                    f"[handle_task_requests] [{request_id}] Method: {method}, Params: {params}"
                 )
 
                 # Route to specific handler based on method
@@ -427,6 +427,11 @@ class TaskRoutes(BaseRouteHandler):
                     result = await self.handle_scheduled_task_init(params, request, request_id)
                 elif method == "tasks.scheduled.complete":
                     result = await self.handle_scheduled_task_complete(params, request, request_id)
+                # Export scheduled tasks as iCal
+                elif method == "tasks.scheduled.export-ical":
+                    result = await self.handle_scheduled_tasks_export_ical(
+                        params, request, request_id
+                    )
                 # Webhook trigger for external schedulers
                 elif method == "tasks.webhook.trigger":
                     result = await self.handle_webhook_trigger(params, request, request_id)
@@ -446,7 +451,7 @@ class TaskRoutes(BaseRouteHandler):
 
             end_time = time.time()
             duration = end_time - start_time
-            logger.info(f"🔍 [handle_task_requests] [{request_id}] Completed in {duration:.3f}s")
+            logger.debug(f"[handle_task_requests] [{request_id}] Completed in {duration:.3f}s")
 
             return JSONResponse(content={"jsonrpc": "2.0", "id": body.get("id"), "result": result})
 
@@ -1148,11 +1153,11 @@ class TaskRoutes(BaseRouteHandler):
             if isinstance(params, dict):
                 # Single task - convert to array
                 tasks_array = [params]
-                logger.info("Creating task tree from single task (converted to array)")
+                logger.debug("Creating task tree from single task (converted to array)")
             elif isinstance(params, list):
                 # Already an array
                 tasks_array = params
-                logger.info(f"Creating task tree from {len(tasks_array)} tasks")
+                logger.debug(f"Creating task tree from {len(tasks_array)} tasks")
             else:
                 raise ValueError("Params must be a dict (single task) or list (tasks array)")
 
@@ -1414,7 +1419,7 @@ class TaskRoutes(BaseRouteHandler):
                 if not updated_task:
                     raise ValueError(f"Task {task_id} not found after update")
 
-                logger.info(f"Updated task {task_id}")
+                logger.debug(f"Updated task {task_id}")
                 return updated_task.output()
 
         except ValueError:
@@ -1754,7 +1759,7 @@ class TaskRoutes(BaseRouteHandler):
                     )
                 else:
                     # Return task array directly
-                    logger.info(
+                    logger.debug(
                         f"Generated task copy preview for {task_id}: {task_count} tasks (not saved)"
                     )
                 if task_count == 1:
@@ -1910,9 +1915,9 @@ class TaskRoutes(BaseRouteHandler):
                         generated_tasks
                     )
                     response["root_task_id"] = final_task_tree.task.id
-                    response["message"] += (
-                        f" and saved to database (root_task_id: {final_task_tree.task.id})"
-                    )
+                    response[
+                        "message"
+                    ] += f" and saved to database (root_task_id: {final_task_tree.task.id})"
 
             logger.info(
                 f"Generated {len(generated_tasks)} task(s) from requirement: {requirement[:100]}..."
@@ -2324,6 +2329,7 @@ class TaskRoutes(BaseRouteHandler):
             enabled_only: If true, only return enabled schedules (default: true)
             user_id: Optional filter by user ID
             schedule_type: Optional filter by schedule type
+            status: Optional filter by task status (e.g. pending, running, completed)
             limit: Maximum number of tasks (default: 100)
             offset: Pagination offset (default: 0)
 
@@ -2334,6 +2340,7 @@ class TaskRoutes(BaseRouteHandler):
             enabled_only = params.get("enabled_only", True)
             user_id = params.get("user_id")
             schedule_type = params.get("schedule_type")
+            status = params.get("status")
             limit = params.get("limit", 100)
             offset = params.get("offset", 0)
 
@@ -2348,6 +2355,7 @@ class TaskRoutes(BaseRouteHandler):
                     enabled_only=enabled_only,
                     user_id=user_id,
                     schedule_type=schedule_type,
+                    status=status,
                     limit=limit,
                     offset=offset,
                 )
@@ -2383,10 +2391,12 @@ class TaskRoutes(BaseRouteHandler):
         try:
             from datetime import datetime, timezone
 
+            from apflow.core.utils.helpers import parse_iso_datetime
+
             before = params.get("before")
             if before:
                 if isinstance(before, str):
-                    before = datetime.fromisoformat(before.replace('Z', '+00:00'))
+                    before = parse_iso_datetime(before)
             else:
                 before = datetime.now(timezone.utc)
 
@@ -2429,7 +2439,8 @@ class TaskRoutes(BaseRouteHandler):
             Updated task dictionary with next_run_at calculated
         """
         try:
-            from datetime import datetime
+
+            from apflow.core.utils.helpers import parse_iso_datetime
 
             task_id = params.get("task_id")
             if not task_id:
@@ -2437,7 +2448,7 @@ class TaskRoutes(BaseRouteHandler):
 
             from_time = params.get("from_time")
             if from_time and isinstance(from_time, str):
-                from_time = datetime.fromisoformat(from_time.replace('Z', '+00:00'))
+                from_time = parse_iso_datetime(from_time)
 
             async with create_pooled_session() as db_session:
                 task_repository = self._get_task_repository(db_session)
@@ -2523,14 +2534,86 @@ class TaskRoutes(BaseRouteHandler):
             logger.error(f"Error completing scheduled task: {str(e)}", exc_info=True)
             raise
 
-    async def handle_webhook_trigger(
+    async def handle_scheduled_tasks_export_ical(
         self, params: dict, request: Request, request_id: str
     ) -> dict:
+        """
+        Export scheduled tasks as iCalendar format.
+
+        Non-admin users can only export their own tasks.
+        Admin users can export all tasks or filter by user_id.
+
+        Params:
+            user_id: Optional filter by user ID
+            schedule_type: Optional filter by schedule type
+            enabled_only: Only include enabled schedules (default: true)
+            limit: Maximum number of tasks (default: 100)
+            calendar_name: Calendar name (default: "APFlow Tasks")
+            base_url: Base URL for task links (optional)
+
+        Returns:
+            Dictionary with ical_content string
+        """
+        try:
+            user_id = params.get("user_id")
+            schedule_type = params.get("schedule_type")
+            enabled_only = params.get("enabled_only", True)
+            limit = params.get("limit", 100)
+            calendar_name = params.get("calendar_name", "APFlow Tasks")
+            base_url = params.get("base_url")
+
+            # Permission: non-admin users can only export their own tasks
+            if user_id:
+                self._check_permission(request, user_id, "export iCal for")
+            else:
+                authenticated_user_id, _ = self._get_user_info(request)
+                if authenticated_user_id:
+                    if self._is_admin(request):
+                        user_id = None
+                    else:
+                        user_id = authenticated_user_id
+
+            from apflow.scheduler.gateway.ical import ICalExporter
+
+            exporter = ICalExporter(
+                calendar_name=calendar_name,
+                base_url=base_url,
+            )
+
+            async with create_pooled_session() as db_session:
+                task_repository = self._get_task_repository(db_session)
+
+                tasks = await task_repository.get_scheduled_tasks(
+                    enabled_only=enabled_only,
+                    user_id=user_id,
+                    schedule_type=schedule_type,
+                    limit=limit,
+                    offset=0,
+                )
+
+                task_dicts = [task.to_dict() for task in tasks]
+                ical_content = exporter.generate_ical(task_dicts)
+
+                return {
+                    "ical_content": ical_content,
+                    "task_count": len(task_dicts),
+                }
+
+        except Exception as e:
+            logger.error(f"Error exporting scheduled tasks as iCal: {str(e)}", exc_info=True)
+            raise
+
+    async def handle_webhook_trigger(self, params: dict, request: Request, request_id: str) -> dict:
         """
         Handle webhook trigger for external schedulers.
 
         This endpoint allows external schedulers (cron, Kubernetes CronJob, etc.)
-        to trigger task execution via HTTP. Supports signature validation for security.
+        to trigger task execution via HTTP. Supports multiple authentication methods.
+
+        Authentication priority chain:
+        1. JWT (already handled by middleware)
+        2. webhook_verify_hook (tenant-level custom verification)
+        3. APFLOW_WEBHOOK_SECRET (internal system HMAC)
 
         Params:
             task_id: Task ID to trigger (required)
@@ -2553,44 +2636,90 @@ class TaskRoutes(BaseRouteHandler):
             # Get client IP for validation
             client_ip = request.client.host if request.client else "unknown"
 
-            # Import and use WebhookGateway
-            from apflow.scheduler.gateway.webhook import WebhookGateway, WebhookConfig
+            # 1. JWT (already handled by middleware)
+            user_id, _ = self._get_user_info(request)
 
-            # Get webhook config from environment or use defaults
+            # Admin users can trigger any task (bypass user_id permission check)
+            if user_id and self._is_admin(request):
+                user_id = None
+
+            if not user_id and signature:
+                # 2. webhook_verify_hook (tenant-level custom verification)
+                from apflow.core.config import get_webhook_verify_hook
+                from apflow.core.types import WebhookVerifyContext
+
+                webhook_hook = get_webhook_verify_hook()
+                if webhook_hook:
+                    ctx = WebhookVerifyContext(
+                        task_id=task_id,
+                        signature=signature,
+                        timestamp=timestamp,
+                        client_ip=client_ip,
+                    )
+                    result = webhook_hook(ctx)
+                    if asyncio.iscoroutine(result):
+                        result = await result
+                    if not result.valid:
+                        return {
+                            "success": False,
+                            "error": result.error or "Webhook verification failed",
+                            "task_id": task_id,
+                        }
+                    user_id = result.user_id
+                else:
+                    # 3. APFLOW_WEBHOOK_SECRET (internal system HMAC)
+                    import os
+
+                    from apflow.scheduler.gateway.webhook import (
+                        WebhookConfig,
+                        WebhookGateway,
+                    )
+
+                    secret_key = os.getenv("APFLOW_WEBHOOK_SECRET")
+                    if secret_key:
+                        config = WebhookConfig(secret_key=secret_key)
+                        gateway = WebhookGateway(config)
+                        validation = await gateway.validate_request(
+                            client_ip=client_ip,
+                            signature=signature,
+                            timestamp=timestamp,
+                        )
+                        if not validation.get("valid"):
+                            return {
+                                "success": False,
+                                "error": validation.get("error", "Request validation failed"),
+                                "task_id": task_id,
+                            }
+                    # user_id remains None — internal system, no permission check
+
+            # IP whitelist and rate limit as additional protection layer
             import os
-            secret_key = os.getenv("APFLOW_WEBHOOK_SECRET")
+
+            from apflow.scheduler.gateway.webhook import WebhookConfig, WebhookGateway
+
             allowed_ips_str = os.getenv("APFLOW_WEBHOOK_ALLOWED_IPS")
             allowed_ips = allowed_ips_str.split(",") if allowed_ips_str else None
             rate_limit = int(os.getenv("APFLOW_WEBHOOK_RATE_LIMIT", "0"))
 
-            config = WebhookConfig(
-                secret_key=secret_key,
-                allowed_ips=allowed_ips,
-                rate_limit=rate_limit,
-                async_execution=async_execution,
-            )
-
-            gateway = WebhookGateway(config)
-
-            # Validate request
-            validation = await gateway.validate_request(
-                client_ip=client_ip,
-                signature=signature,
-                timestamp=timestamp,
-            )
-
-            if not validation.get("valid"):
-                return {
-                    "success": False,
-                    "error": validation.get("error", "Request validation failed"),
-                    "task_id": task_id,
-                }
-
-            # Get user_id from JWT if available
-            user_id, _ = self._get_user_info(request)
+            if allowed_ips or rate_limit:
+                config = WebhookConfig(
+                    allowed_ips=allowed_ips,
+                    rate_limit=rate_limit,
+                )
+                gateway = WebhookGateway(config)
+                validation = await gateway.validate_request(client_ip=client_ip)
+                if not validation.get("valid"):
+                    return {
+                        "success": False,
+                        "error": validation.get("error", "Request validation failed"),
+                        "task_id": task_id,
+                    }
 
             # Trigger task execution
-            result = await gateway.trigger_task(
+            from apflow.scheduler.gateway.webhook import WebhookGateway
+
+            trigger_gateway = WebhookGateway()
+            result = await trigger_gateway.trigger_task(
                 task_id=task_id,
                 user_id=user_id,
                 execute_async=async_execution,

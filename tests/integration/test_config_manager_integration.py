@@ -17,9 +17,7 @@ from apflow.core.types import TaskTreeNode
 
 
 @pytest.mark.asyncio
-async def test_config_manager_env_and_hooks_integration(
-    tmp_path: Path, sync_db_session
-) -> None:
+async def test_config_manager_env_and_hooks_integration(tmp_path: Path, sync_db_session) -> None:
     clear_config()
     registry = get_registry()
     registry._executor_classes.clear()
@@ -65,7 +63,9 @@ async def test_config_manager_env_and_hooks_integration(
             def get_input_schema(self) -> Dict[str, Any]:
                 return {"type": "object"}
 
-        registry.register(ConfigManagerExecutor(), executor_class=ConfigManagerExecutor, override=True)
+        registry.register(
+            ConfigManagerExecutor(), executor_class=ConfigManagerExecutor, override=True
+        )
 
         task_manager = TaskManager(sync_db_session)
         task_repository = TaskRepository(sync_db_session)

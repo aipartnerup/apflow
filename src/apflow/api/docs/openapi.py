@@ -16,19 +16,19 @@ def generate_openapi_schema(
 ) -> Dict[str, Any]:
     """
     Generate OpenAPI 3.0 schema for AIPartnerUpFlow API
-    
+
     Args:
         base_url: Base URL of the API server
         title: API title
         version: API version (defaults to package version if not provided)
         description: API description
-        
+
     Returns:
         OpenAPI 3.0 schema dictionary
     """
     # Use provided version or default to package version
     api_version = version if version is not None else __version__
-    
+
     schema = {
         "openapi": "3.0.0",
         "info": {
@@ -112,7 +112,9 @@ def generate_openapi_schema(
                                                         "id": "task1",
                                                         "name": "my_task",
                                                         "user_id": "user123",
-                                                        "schemas": {"method": "system_info_executor"},
+                                                        "schemas": {
+                                                            "method": "system_info_executor"
+                                                        },
                                                         "inputs": {},
                                                     }
                                                 ]
@@ -131,7 +133,9 @@ def generate_openapi_schema(
                                                         "id": "task1",
                                                         "name": "my_task",
                                                         "user_id": "user123",
-                                                        "schemas": {"method": "system_info_executor"},
+                                                        "schemas": {
+                                                            "method": "system_info_executor"
+                                                        },
                                                         "inputs": {},
                                                     }
                                                 ]
@@ -151,7 +155,9 @@ def generate_openapi_schema(
                                                         "id": "task1",
                                                         "name": "my_task",
                                                         "user_id": "user123",
-                                                        "schemas": {"method": "system_info_executor"},
+                                                        "schemas": {
+                                                            "method": "system_info_executor"
+                                                        },
                                                         "inputs": {},
                                                     }
                                                 ]
@@ -161,7 +167,7 @@ def generate_openapi_schema(
                                                     "url": "https://your-server.com/callback",
                                                     "headers": {
                                                         "Authorization": "Bearer your-token"
-                                                    }
+                                                    },
                                                 }
                                             },
                                             "id": "request-123",
@@ -216,7 +222,7 @@ def generate_openapi_schema(
                                                     "parent_id": "root",
                                                     "schemas": {"method": "another_executor"},
                                                     "inputs": {},
-                                                }
+                                                },
                                             ],
                                             "id": "create-request-1",
                                         },
@@ -305,11 +311,9 @@ def generate_openapi_schema(
                                         "value": {
                                             "jsonrpc": "2.0",
                                             "method": "tasks.execute",
-                                            "params": {
-                                                "task_id": "task-abc-123"
-                                            },
-                                            "id": "execute-request-1"
-                                        }
+                                            "params": {"task_id": "task-abc-123"},
+                                            "id": "execute-request-1",
+                                        },
                                     },
                                     "executeTaskWithStreaming": {
                                         "summary": "Execute Task with SSE Streaming",
@@ -318,10 +322,10 @@ def generate_openapi_schema(
                                             "method": "tasks.execute",
                                             "params": {
                                                 "task_id": "task-abc-123",
-                                                "use_streaming": True
+                                                "use_streaming": True,
                                             },
-                                            "id": "execute-streaming-request-1"
-                                        }
+                                            "id": "execute-streaming-request-1",
+                                        },
                                     },
                                     "executeTaskWithWebhook": {
                                         "summary": "Execute Task with Webhook Callback",
@@ -337,11 +341,11 @@ def generate_openapi_schema(
                                                     },
                                                     "method": "POST",
                                                     "timeout": 30.0,
-                                                    "max_retries": 3
-                                                }
+                                                    "max_retries": 3,
+                                                },
                                             },
-                                            "id": "execute-webhook-request-1"
-                                        }
+                                            "id": "execute-webhook-request-1",
+                                        },
                                     },
                                     "executeTaskWithStreamingAndWebhook": {
                                         "summary": "Execute Task with SSE Streaming and Webhook",
@@ -355,11 +359,11 @@ def generate_openapi_schema(
                                                     "url": "https://your-server.com/callback",
                                                     "headers": {
                                                         "Authorization": "Bearer your-token"
-                                                    }
-                                                }
+                                                    },
+                                                },
                                             },
-                                            "id": "execute-combined-request-1"
-                                        }
+                                            "id": "execute-combined-request-1",
+                                        },
                                     },
                                 },
                             }
@@ -472,7 +476,10 @@ def generate_openapi_schema(
                             "type": "object",
                             "description": "Optional metadata (e.g., stream flag)",
                             "properties": {
-                                "stream": {"type": "boolean", "description": "Enable streaming mode"},
+                                "stream": {
+                                    "type": "boolean",
+                                    "description": "Enable streaming mode",
+                                },
                             },
                         },
                     },
@@ -588,6 +595,5 @@ def generate_openapi_schema(
             },
         },
     }
-    
-    return schema
 
+    return schema

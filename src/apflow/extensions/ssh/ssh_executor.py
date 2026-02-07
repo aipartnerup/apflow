@@ -33,22 +33,40 @@ class SshInputSchema(BaseModel):
     host: str = Field(description="Remote hostname or IP address to connect to")
     port: int = Field(default=22, description="SSH port number", ge=1, le=65535)
     username: str = Field(description="SSH username for authentication")
-    password: Optional[str] = Field(default=None, description="SSH password for authentication (optional if key_file provided)")
-    key_file: Optional[str] = Field(default=None, description="Path to SSH private key file (optional if password provided)")
+    password: Optional[str] = Field(
+        default=None, description="SSH password for authentication (optional if key_file provided)"
+    )
+    key_file: Optional[str] = Field(
+        default=None, description="Path to SSH private key file (optional if password provided)"
+    )
     command: str = Field(description="Command to execute on the remote server")
-    timeout: Union[int, float] = Field(default=30, description="Command execution timeout in seconds", ge=1)
-    env: Optional[Dict[str, str]] = Field(default=None, description="Environment variables to set for the command execution")
+    timeout: Union[int, float] = Field(
+        default=30, description="Command execution timeout in seconds", ge=1
+    )
+    env: Optional[Dict[str, str]] = Field(
+        default=None, description="Environment variables to set for the command execution"
+    )
 
 
 class SshOutputSchema(BaseModel):
     success: bool = Field(description="Whether the SSH command executed successfully")
-    error: Optional[str] = Field(default=None, description="Error message (only present on cancellation)")
+    error: Optional[str] = Field(
+        default=None, description="Error message (only present on cancellation)"
+    )
     command: str = Field(description="The command that was executed on the remote server")
-    stdout: Optional[str] = Field(default=None, description="Standard output from the executed command")
-    stderr: Optional[str] = Field(default=None, description="Standard error from the executed command")
-    return_code: Optional[int] = Field(default=None, description="Command exit code (0 for success)")
+    stdout: Optional[str] = Field(
+        default=None, description="Standard output from the executed command"
+    )
+    stderr: Optional[str] = Field(
+        default=None, description="Standard error from the executed command"
+    )
+    return_code: Optional[int] = Field(
+        default=None, description="Command exit code (0 for success)"
+    )
     host: str = Field(description="Remote host that was connected to")
-    username: Optional[str] = Field(default=None, description="SSH username used for the connection")
+    username: Optional[str] = Field(
+        default=None, description="SSH username used for the connection"
+    )
 
 
 @executor_register()
@@ -253,4 +271,3 @@ class SshExecutor(BaseTask):
             "success": True,
             "_demo_sleep": 0.5,  # Simulate SSH connection and command execution time
         }
-

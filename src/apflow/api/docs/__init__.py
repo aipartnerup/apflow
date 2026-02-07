@@ -15,4 +15,3 @@ __all__ = [
     "get_swagger_ui_route_handler",
     "get_openapi_json_route_handler",
 ]
-

@@ -40,6 +40,7 @@ class WebhookConfig:
         timeout: Timeout for task execution in seconds
         async_execution: If True, return immediately and execute in background
     """
+
     secret_key: Optional[str] = None
     allowed_ips: Optional[List[str]] = None
     rate_limit: int = 0
@@ -120,9 +121,7 @@ class WebhookGateway:
 
             # Compute expected signature
             expected = hmac.new(
-                self.config.secret_key.encode(),
-                message,
-                hashlib.sha256
+                self.config.secret_key.encode(), message, hashlib.sha256
             ).hexdigest()
 
             # Constant-time comparison
@@ -319,15 +318,21 @@ class WebhookGateway:
                         "task_id": task_id,
                     }
 
-                # Auto-detect execution mode based on has_children
-                # If task has children, execute full tree; otherwise execute single
-                if task.has_children:
-                    logger.info(f"Executing task {task_id} in tree mode (has children)")
-                    task_tree = await task_repository.get_task_tree_for_api(task)
-                else:
-                    logger.info(f"Executing task {task_id} in single mode (no children)")
-                    from apflow.core.types import TaskTreeNode
-                    task_tree = TaskTreeNode(task=task, children=[])
+                # Always load task tree from DB — unified with tree execution model.
+                # For root tasks this returns the complete tree;
+                # for subtasks this returns the subtask's subtree.
+                # Dependency cascade is handled by execute_after_task.
+                task_tree = await task_repository.get_task_tree_for_api(task)
+                logger.info(
+                    f"Loaded task tree for {task_id}: " f"{len(task_tree.children)} children"
+                )
+
+                # Reset root task status for executor compatibility.
+                # trigger_task already set it to in_progress via mark_scheduled_task_running
+                # for duplicate prevention, but execute_task_tree skips in_progress tasks
+                # that aren't marked for re-execution — which would cause the entire tree
+                # (including children) to be silently skipped.
+                task_tree.task.status = "pending"
 
                 # Execute
                 await task_executor.execute_task_tree(
@@ -339,12 +344,27 @@ class WebhookGateway:
 
                 # Get result
                 task = await task_repository.get_task_by_id(task_id)
+                task_result = task.result
+
+                # Collect children results for visibility
+                children_results = []
+                if getattr(task, "has_children", False):
+                    children = await task_repository.get_child_tasks_by_parent_id(task_id)
+                    for child in children:
+                        children_results.append(
+                            {
+                                "task_id": child.id,
+                                "name": getattr(child, "name", ""),
+                                "status": child.status,
+                                "error": child.error,
+                            }
+                        )
 
                 # Complete scheduled run
                 await task_repository.complete_scheduled_run(
                     task_id=task_id,
                     success=task.status == "completed",
-                    result=task.result,
+                    result=task_result,
                     error=task.error,
                     calculate_next_run=True,
                 )
@@ -353,8 +373,9 @@ class WebhookGateway:
                     "success": task.status == "completed",
                     "status": task.status,
                     "task_id": task_id,
-                    "result": task.result,
+                    "result": task_result,
                     "error": task.error,
+                    "children": children_results,
                 }
 
         except Exception as e:
@@ -503,8 +524,10 @@ def generate_kubernetes_cronjob(
                                     "name": "trigger",
                                     "image": "curlimages/curl:latest",
                                     "args": [
-                                        "-X", "POST",
-                                        "-H", "Content-Type: application/json",
+                                        "-X",
+                                        "POST",
+                                        "-H",
+                                        "Content-Type: application/json",
                                         webhook_url,
                                     ],
                                 }

@@ -46,7 +46,9 @@ class MigrationHistoryTable:
                             """
                         )
                     )
-                logger.info(f"✓ Created migration history table: {MigrationHistoryTable.TABLE_NAME}")
+                logger.info(
+                    f"✓ Created migration history table: {MigrationHistoryTable.TABLE_NAME}"
+                )
             except Exception as e:
                 logger.error(f"✗ Failed to create migration history table: {str(e)}")
                 raise
@@ -61,9 +63,7 @@ class MigrationHistoryTable:
 
         try:
             with engine.begin() as conn:
-                result = conn.execute(
-                    text(f"SELECT id FROM {MigrationHistoryTable.TABLE_NAME}")
-                )
+                result = conn.execute(text(f"SELECT id FROM {MigrationHistoryTable.TABLE_NAME}"))
                 return {row[0] for row in result}
         except Exception as e:
             logger.warning(f"⚠ Could not read migration history: {str(e)}")
@@ -87,9 +87,7 @@ class MigrationHistoryTable:
                         "version": __version__,
                     },
                 )
-            logger.info(
-                f"✓ Recorded migration '{migration.id}' (apflow v{__version__}) in history"
-            )
+            logger.info(f"✓ Recorded migration '{migration.id}' (apflow v{__version__}) in history")
         except Exception as e:
             logger.warning(f"⚠ Could not record migration in history: {str(e)}")
 
@@ -131,9 +129,7 @@ class MigrationManager:
                         discovered.append(obj)
                         logger.debug(f"Discovered migration class: {obj.__name__}")
             except Exception as e:
-                logger.warning(
-                    f"⚠ Could not load migration module {module_name}: {str(e)}"
-                )
+                logger.warning(f"⚠ Could not load migration module {module_name}: {str(e)}")
 
         # Instantiate migrations and sort by ID
         self._migrations = sorted(

@@ -37,9 +37,7 @@ class WebSocketInputSchema(BaseModel):
         default=True,
         description="Whether to wait for a response after sending the message",
     )
-    timeout: float = Field(
-        default=30.0, description="Connection and response timeout in seconds"
-    )
+    timeout: float = Field(default=30.0, description="Connection and response timeout in seconds")
     headers: Optional[Dict[str, str]] = Field(
         default=None,
         description="Optional HTTP headers to include in the WebSocket handshake",
@@ -47,15 +45,11 @@ class WebSocketInputSchema(BaseModel):
 
 
 class WebSocketOutputSchema(BaseModel):
-    success: bool = Field(
-        description="Whether the WebSocket communication was successful"
-    )
+    success: bool = Field(description="Whether the WebSocket communication was successful")
     error: Optional[str] = Field(
         default=None, description="Error message (only present on failure)"
     )
-    url: Optional[str] = Field(
-        default=None, description="WebSocket URL that was connected to"
-    )
+    url: Optional[str] = Field(default=None, description="WebSocket URL that was connected to")
     message_sent: Optional[str] = Field(
         default=None,
         description="Message that was sent (JSON string if object was sent)",
@@ -271,4 +265,3 @@ class WebSocketExecutor(BaseTask):
 
         result["_demo_sleep"] = 0.2  # Simulate WebSocket connection and message exchange
         return result
-

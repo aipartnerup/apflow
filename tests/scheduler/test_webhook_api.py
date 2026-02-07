@@ -6,6 +6,7 @@ Tests cover:
 - JSON-RPC endpoint: tasks.webhook.trigger
 - JWT bypass for webhook paths
 - Webhook signature validation
+- Webhook verify hook authentication
 """
 
 import pytest
@@ -14,6 +15,13 @@ import hashlib
 import time
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
+
+from apflow.core.config import (
+    clear_config,
+    register_webhook_verify_hook,
+    get_webhook_verify_hook,
+)
+from apflow.core.types import WebhookVerifyContext, WebhookVerifyResult
 
 
 class TestJWTMiddlewareWebhookBypass:
@@ -89,9 +97,7 @@ class TestWebhookSignatureValidation:
 
         # Compute correct signature
         message = f"{timestamp}.".encode() + payload
-        expected_sig = hmac.new(
-            secret.encode(), message, hashlib.sha256
-        ).hexdigest()
+        expected_sig = hmac.new(secret.encode(), message, hashlib.sha256).hexdigest()
 
         assert gateway.validate_signature(payload, expected_sig, timestamp) is True
 
@@ -118,9 +124,7 @@ class TestWebhookSignatureValidation:
         payload = b'{"task_id": "abc123"}'
 
         # Compute signature without timestamp
-        expected_sig = hmac.new(
-            secret.encode(), payload, hashlib.sha256
-        ).hexdigest()
+        expected_sig = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
 
         assert gateway.validate_signature(payload, expected_sig, None) is True
 
@@ -290,7 +294,10 @@ class TestWebhookTriggerHandler:
             mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_db)
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("apflow.core.storage.sqlalchemy.task_repository.TaskRepository", return_value=mock_repo):
+            with patch(
+                "apflow.core.storage.sqlalchemy.task_repository.TaskRepository",
+                return_value=mock_repo,
+            ):
                 with patch.object(gateway, "_execute_task_background", new_callable=AsyncMock):
                     result = await gateway.trigger_task("test-task-123", execute_async=True)
 
@@ -319,11 +326,14 @@ class TestWebhookEnvironmentConfig:
     def test_webhook_config_from_environment(self):
         """Test that webhook config can be loaded from environment variables"""
         # Set environment variables
-        with patch.dict(os.environ, {
-            "APFLOW_WEBHOOK_SECRET": "env-secret-key",
-            "APFLOW_WEBHOOK_ALLOWED_IPS": "10.0.0.1,10.0.0.2,10.0.0.3",
-            "APFLOW_WEBHOOK_RATE_LIMIT": "50",
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "APFLOW_WEBHOOK_SECRET": "env-secret-key",
+                "APFLOW_WEBHOOK_ALLOWED_IPS": "10.0.0.1,10.0.0.2,10.0.0.3",
+                "APFLOW_WEBHOOK_RATE_LIMIT": "50",
+            },
+        ):
             secret = os.getenv("APFLOW_WEBHOOK_SECRET")
             allowed_ips_str = os.getenv("APFLOW_WEBHOOK_ALLOWED_IPS")
             allowed_ips = allowed_ips_str.split(",") if allowed_ips_str else None
@@ -367,7 +377,10 @@ class TestWebhookGatewayTrigger:
             mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_db)
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("apflow.core.storage.sqlalchemy.task_repository.TaskRepository", return_value=mock_repo):
+            with patch(
+                "apflow.core.storage.sqlalchemy.task_repository.TaskRepository",
+                return_value=mock_repo,
+            ):
                 result = await gateway.trigger_task("non-existent-task")
 
             assert result["success"] is False
@@ -394,12 +407,113 @@ class TestWebhookGatewayTrigger:
             mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_db)
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-            with patch("apflow.core.storage.sqlalchemy.task_repository.TaskRepository", return_value=mock_repo):
+            with patch(
+                "apflow.core.storage.sqlalchemy.task_repository.TaskRepository",
+                return_value=mock_repo,
+            ):
                 with patch.object(gateway, "_execute_task_background", new_callable=AsyncMock):
                     result = await gateway.trigger_task("test-task-123", execute_async=True)
 
             assert result["success"] is True
             assert result["status"] == "triggered"
+
+
+class TestWebhookExecuteTaskStatusReset:
+    """Tests for _execute_task resetting root task status before execution.
+
+    trigger_task calls mark_scheduled_task_running which sets the root task
+    to in_progress.  execute_task_tree skips in_progress tasks that aren't
+    marked for re-execution, so _execute_task must reset the root to pending
+    before calling execute_task_tree — otherwise the entire tree (including
+    children) is silently skipped.
+    """
+
+    @pytest.mark.asyncio
+    async def test_execute_task_resets_root_status_to_pending(self):
+        """Verify _execute_task sets task_tree.task.status to pending before execution."""
+        from apflow.scheduler.gateway.webhook import WebhookGateway
+
+        gateway = WebhookGateway()
+
+        # Mock task in in_progress state (set by mark_scheduled_task_running)
+        mock_task = MagicMock()
+        mock_task.id = "parent1"
+        mock_task.status = "in_progress"
+        mock_task.result = {"output": "done"}
+        mock_task.error = None
+        mock_task.has_children = False
+
+        # Mock task tree — root node starts as in_progress
+        mock_tree = MagicMock()
+        mock_tree.task = MagicMock()
+        mock_tree.task.status = "in_progress"
+        mock_tree.children = []
+
+        mock_repo = MagicMock()
+        mock_repo.get_task_by_id = AsyncMock(return_value=mock_task)
+        mock_repo.get_task_tree_for_api = AsyncMock(return_value=mock_tree)
+        mock_repo.complete_scheduled_run = AsyncMock()
+
+        captured_status = {}
+
+        async def capture_execute(**kwargs):
+            captured_status["root_status"] = kwargs["task_tree"].task.status
+            return {}
+
+        mock_executor = MagicMock()
+        mock_executor.execute_task_tree = AsyncMock(side_effect=capture_execute)
+
+        with patch("apflow.core.storage.create_pooled_session") as mock_session:
+            mock_db = AsyncMock()
+            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+            mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            with patch(
+                "apflow.core.storage.sqlalchemy.task_repository.TaskRepository",
+                return_value=mock_repo,
+            ):
+                with patch(
+                    "apflow.core.execution.task_executor.TaskExecutor",
+                    return_value=mock_executor,
+                ):
+                    await gateway._execute_task("parent1")
+
+        # Root task status must be reset to pending before execute_task_tree
+        assert captured_status["root_status"] == "pending"
+
+    @pytest.mark.asyncio
+    async def test_mark_tasks_for_reexecution_skips_in_progress(self):
+        """Demonstrate the bug: in_progress root is not marked for re-execution."""
+        from apflow.core.execution.task_executor import TaskExecutor
+        from apflow.core.types import TaskTreeNode
+
+        # Build a minimal tree: parent (in_progress) with one pending child
+        parent_task = MagicMock()
+        parent_task.id = "parent1"
+        parent_task.status = "in_progress"
+        parent_task.name = "Parent"
+
+        child_task = MagicMock()
+        child_task.id = "child1"
+        child_task.status = "pending"
+        child_task.name = "Child"
+
+        root_node = TaskTreeNode(task=parent_task)
+        child_node = TaskTreeNode(task=child_task)
+        root_node.add_child(child_node)
+
+        executor = TaskExecutor()
+
+        # in_progress root is NOT marked for re-execution → tree would be skipped
+        reexec = executor._mark_tasks_for_reexecution(root_node)
+        assert "parent1" not in reexec
+        assert "child1" not in reexec
+
+        # After resetting to pending, root proceeds normally
+        root_node.task.status = "pending"
+        reexec = executor._mark_tasks_for_reexecution(root_node)
+        assert "parent1" not in reexec  # pending is still not marked (correct)
+        assert "child1" not in reexec  # pending children execute normally
 
 
 class TestWebhookHelperFunctions:
@@ -412,7 +526,7 @@ class TestWebhookHelperFunctions:
         cron = generate_cron_config(
             task_id="task-123",
             schedule_expression="0 9 * * 1-5",
-            webhook_url="https://api.example.com/webhook/trigger/task-123"
+            webhook_url="https://api.example.com/webhook/trigger/task-123",
         )
 
         assert "0 9 * * 1-5" in cron
@@ -429,7 +543,7 @@ class TestWebhookHelperFunctions:
             task_name="Daily Backup",
             schedule_expression="0 2 * * *",
             webhook_url="https://api.example.com/webhook/trigger/task-abc-123",
-            namespace="production"
+            namespace="production",
         )
 
         assert manifest["apiVersion"] == "batch/v1"
@@ -448,8 +562,7 @@ class TestWebhookHelperFunctions:
 
         gateway = WebhookGateway()
         url_info = gateway.generate_webhook_url(
-            task_id="my-task-id",
-            base_url="https://api.example.com"
+            task_id="my-task-id", base_url="https://api.example.com"
         )
 
         assert url_info["url"] == "https://api.example.com/webhook/trigger/my-task-id"
@@ -461,8 +574,7 @@ class TestWebhookHelperFunctions:
 
         gateway = WebhookGateway()
         url_info = gateway.generate_webhook_url(
-            task_id="task-123",
-            base_url="https://api.example.com/"  # Trailing slash
+            task_id="task-123", base_url="https://api.example.com/"  # Trailing slash
         )
 
         # Should not have double slashes
@@ -579,3 +691,246 @@ class TestWebhookIntegration:
         )
         assert result["valid"] is False
         assert "Rate limit" in result["error"]
+
+
+class TestWebhookVerifyHook:
+    """Tests for webhook_verify_hook authentication"""
+
+    def setup_method(self) -> None:
+        """Clear config before each test"""
+        clear_config()
+
+    def teardown_method(self) -> None:
+        """Clear config after each test"""
+        clear_config()
+
+    @pytest.mark.asyncio
+    async def test_webhook_verify_hook_valid(self) -> None:
+        """Test webhook verify hook returns valid with user_id"""
+        from apflow.api.routes.tasks import TaskRoutes
+        from apflow.core.storage.sqlalchemy.models import TaskModel
+
+        def my_verify(ctx: WebhookVerifyContext) -> WebhookVerifyResult:
+            return WebhookVerifyResult(valid=True, user_id="tenant-user-1")
+
+        register_webhook_verify_hook(my_verify)
+
+        routes = TaskRoutes(task_model_class=TaskModel)
+        request = MagicMock()
+        request.client = MagicMock()
+        request.client.host = "10.0.0.1"
+        request.state = MagicMock()
+        request.state.user_id = None
+        request.state.token_payload = None
+
+        mock_task = MagicMock()
+        mock_task.id = "test-task-123"
+        mock_task.user_id = None
+
+        with patch("apflow.core.storage.create_pooled_session") as mock_session:
+            mock_db = AsyncMock()
+            mock_repo = MagicMock()
+            mock_repo.get_task_by_id = AsyncMock(return_value=mock_task)
+            mock_repo.mark_scheduled_task_running = AsyncMock(return_value=mock_task)
+
+            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+            mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            with patch(
+                "apflow.core.storage.sqlalchemy.task_repository.TaskRepository",
+                return_value=mock_repo,
+            ):
+                with patch(
+                    "apflow.scheduler.gateway.webhook.WebhookGateway._execute_task_background",
+                    new_callable=AsyncMock,
+                ):
+                    result = await routes.handle_webhook_trigger(
+                        {"task_id": "test-task-123", "signature": "sig123"},
+                        request,
+                        "req-1",
+                    )
+
+        assert result["success"] is True
+        assert result["task_id"] == "test-task-123"
+
+    @pytest.mark.asyncio
+    async def test_webhook_verify_hook_invalid(self) -> None:
+        """Test webhook verify hook returns invalid with error"""
+        from apflow.api.routes.tasks import TaskRoutes
+        from apflow.core.storage.sqlalchemy.models import TaskModel
+
+        def my_verify(ctx: WebhookVerifyContext) -> WebhookVerifyResult:
+            return WebhookVerifyResult(valid=False, error="Invalid token")
+
+        register_webhook_verify_hook(my_verify)
+
+        routes = TaskRoutes(task_model_class=TaskModel)
+        request = MagicMock()
+        request.client = MagicMock()
+        request.client.host = "10.0.0.1"
+        request.state = MagicMock()
+        request.state.user_id = None
+        request.state.token_payload = None
+
+        result = await routes.handle_webhook_trigger(
+            {"task_id": "test-task-123", "signature": "bad-sig"},
+            request,
+            "req-1",
+        )
+
+        assert result["success"] is False
+        assert result["error"] == "Invalid token"
+
+    @pytest.mark.asyncio
+    async def test_webhook_verify_hook_priority_jwt_first(self) -> None:
+        """Test JWT takes priority over webhook_verify_hook"""
+        from apflow.api.routes.tasks import TaskRoutes
+        from apflow.core.storage.sqlalchemy.models import TaskModel
+
+        hook_called = False
+
+        def my_verify(ctx: WebhookVerifyContext) -> WebhookVerifyResult:
+            nonlocal hook_called
+            hook_called = True
+            return WebhookVerifyResult(valid=True, user_id="hook-user")
+
+        register_webhook_verify_hook(my_verify)
+
+        routes = TaskRoutes(task_model_class=TaskModel)
+        request = MagicMock()
+        request.client = MagicMock()
+        request.client.host = "10.0.0.1"
+        # JWT user_id already set by middleware
+        request.state = MagicMock()
+        request.state.user_id = "jwt-user-1"
+        request.state.token_payload = {"sub": "jwt-user-1"}
+
+        mock_task = MagicMock()
+        mock_task.id = "test-task-123"
+        mock_task.user_id = None
+
+        with patch("apflow.core.storage.create_pooled_session") as mock_session:
+            mock_db = AsyncMock()
+            mock_repo = MagicMock()
+            mock_repo.get_task_by_id = AsyncMock(return_value=mock_task)
+            mock_repo.mark_scheduled_task_running = AsyncMock(return_value=mock_task)
+
+            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+            mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            with patch(
+                "apflow.core.storage.sqlalchemy.task_repository.TaskRepository",
+                return_value=mock_repo,
+            ):
+                with patch(
+                    "apflow.scheduler.gateway.webhook.WebhookGateway._execute_task_background",
+                    new_callable=AsyncMock,
+                ):
+                    result = await routes.handle_webhook_trigger(
+                        {"task_id": "test-task-123", "signature": "sig123"},
+                        request,
+                        "req-1",
+                    )
+
+        assert result["success"] is True
+        # Hook should NOT be called since JWT user_id is already set
+        assert not hook_called
+
+    @pytest.mark.asyncio
+    async def test_webhook_verify_hook_fallback_to_hmac(self) -> None:
+        """Test fallback to APFLOW_WEBHOOK_SECRET when no hook registered"""
+        from apflow.api.routes.tasks import TaskRoutes
+        from apflow.core.storage.sqlalchemy.models import TaskModel
+
+        # No hook registered — should fall back to HMAC
+        assert get_webhook_verify_hook() is None
+
+        routes = TaskRoutes(task_model_class=TaskModel)
+        request = MagicMock()
+        request.client = MagicMock()
+        request.client.host = "10.0.0.1"
+        request.state = MagicMock()
+        request.state.user_id = None
+        request.state.token_payload = None
+
+        secret = "test-hmac-secret"
+        timestamp = "1234567890"
+
+        with patch.dict(os.environ, {"APFLOW_WEBHOOK_SECRET": secret}):
+            # With invalid signature — should fail HMAC
+            result = await routes.handle_webhook_trigger(
+                {"task_id": "test-task-123", "signature": "invalid-sig", "timestamp": timestamp},
+                request,
+                "req-1",
+            )
+
+        assert result["success"] is False
+
+    @pytest.mark.asyncio
+    async def test_webhook_verify_hook_async(self) -> None:
+        """Test async webhook verify hook works correctly"""
+        from apflow.api.routes.tasks import TaskRoutes
+        from apflow.core.storage.sqlalchemy.models import TaskModel
+
+        async def my_async_verify(ctx: WebhookVerifyContext) -> WebhookVerifyResult:
+            return WebhookVerifyResult(valid=True, user_id="async-user-1")
+
+        register_webhook_verify_hook(my_async_verify)
+
+        routes = TaskRoutes(task_model_class=TaskModel)
+        request = MagicMock()
+        request.client = MagicMock()
+        request.client.host = "10.0.0.1"
+        request.state = MagicMock()
+        request.state.user_id = None
+        request.state.token_payload = None
+
+        mock_task = MagicMock()
+        mock_task.id = "test-task-123"
+        mock_task.user_id = None
+
+        with patch("apflow.core.storage.create_pooled_session") as mock_session:
+            mock_db = AsyncMock()
+            mock_repo = MagicMock()
+            mock_repo.get_task_by_id = AsyncMock(return_value=mock_task)
+            mock_repo.mark_scheduled_task_running = AsyncMock(return_value=mock_task)
+
+            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_db)
+            mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            with patch(
+                "apflow.core.storage.sqlalchemy.task_repository.TaskRepository",
+                return_value=mock_repo,
+            ):
+                with patch(
+                    "apflow.scheduler.gateway.webhook.WebhookGateway._execute_task_background",
+                    new_callable=AsyncMock,
+                ):
+                    result = await routes.handle_webhook_trigger(
+                        {"task_id": "test-task-123", "signature": "sig123"},
+                        request,
+                        "req-1",
+                    )
+
+        assert result["success"] is True
+        assert result["task_id"] == "test-task-123"
+
+    def test_register_webhook_verify_hook_decorator(self) -> None:
+        """Test decorator-style registration of webhook verify hook"""
+
+        @register_webhook_verify_hook
+        def my_verify(ctx: WebhookVerifyContext) -> WebhookVerifyResult:
+            return WebhookVerifyResult(valid=True, user_id="decorator-user")
+
+        hook = get_webhook_verify_hook()
+        assert hook is not None
+        assert hook is my_verify
+
+        # Verify the hook works
+        ctx = WebhookVerifyContext(
+            task_id="test", signature="sig", timestamp="123", client_ip="10.0.0.1"
+        )
+        result = hook(ctx)
+        assert isinstance(result, WebhookVerifyResult)
+        assert result.valid is True
+        assert result.user_id == "decorator-user"

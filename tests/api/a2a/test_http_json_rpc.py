@@ -1774,9 +1774,7 @@ def test_a2a_execute_task_tree_with_use_demo(json_rpc_client):
                 "message_id": str(uuid.uuid4()),
                 "role": "user",
                 "parts": [{"kind": "data", "data": {"tasks": [task_data]}}],
-                "metadata": {
-                    "use_demo": True  # Pass use_demo via metadata
-                },
+                "metadata": {"use_demo": True},  # Pass use_demo via metadata
             }
         },
         "id": "a2a-demo-1",

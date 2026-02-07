@@ -16,12 +16,10 @@ class TestSystemInfoExecutor:
     async def test_system_info_always_available(self):
         """Test that system_info executor is always available (safe commands)"""
         executor = SystemInfoExecutor()
-        
+
         # system_info should work (safe predefined commands)
-        result = await executor.execute({
-            "resource": "cpu"
-        })
-        
+        result = await executor.execute({"resource": "cpu"})
+
         # Should succeed (may vary by system, but should not be security-blocked)
         assert "system" in result
         assert "security_blocked" not in result
@@ -30,11 +28,9 @@ class TestSystemInfoExecutor:
     async def test_get_cpu_info(self):
         """Test CPU information retrieval"""
         executor = SystemInfoExecutor()
-        
-        result = await executor.execute({
-            "resource": "cpu"
-        })
-        
+
+        result = await executor.execute({"resource": "cpu"})
+
         # Should contain system information
         assert "system" in result
         # May contain cores, brand, etc. depending on system
@@ -44,11 +40,9 @@ class TestSystemInfoExecutor:
     async def test_get_memory_info(self):
         """Test memory information retrieval"""
         executor = SystemInfoExecutor()
-        
-        result = await executor.execute({
-            "resource": "memory"
-        })
-        
+
+        result = await executor.execute({"resource": "memory"})
+
         # Should contain system information
         assert "system" in result
         assert isinstance(result, dict)
@@ -57,11 +51,9 @@ class TestSystemInfoExecutor:
     async def test_get_disk_info(self):
         """Test disk information retrieval"""
         executor = SystemInfoExecutor()
-        
-        result = await executor.execute({
-            "resource": "disk"
-        })
-        
+
+        result = await executor.execute({"resource": "disk"})
+
         # Should contain system information
         assert "system" in result
         assert isinstance(result, dict)
@@ -70,11 +62,9 @@ class TestSystemInfoExecutor:
     async def test_get_all_resources(self):
         """Test getting all system resources at once"""
         executor = SystemInfoExecutor()
-        
-        result = await executor.execute({
-            "resource": "all"
-        })
-        
+
+        result = await executor.execute({"resource": "all"})
+
         # Should contain cpu, memory, and disk
         assert "cpu" in result
         assert "memory" in result
@@ -88,9 +78,7 @@ class TestSystemInfoExecutor:
         """Test that invalid resource returns validation error"""
         executor = SystemInfoExecutor()
 
-        result = await executor.execute({
-            "resource": "invalid_resource"
-        })
+        result = await executor.execute({"resource": "invalid_resource"})
 
         assert "error" in result
         assert "validation_error" in result
@@ -99,12 +87,8 @@ class TestSystemInfoExecutor:
     async def test_timeout_parameter(self):
         """Test that timeout parameter is respected"""
         executor = SystemInfoExecutor()
-        
-        result = await executor.execute({
-            "resource": "cpu",
-            "timeout": 10
-        })
-        
+
+        result = await executor.execute({"resource": "cpu", "timeout": 10})
+
         # Should succeed with custom timeout
         assert "system" in result
-

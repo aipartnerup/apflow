@@ -14,4 +14,3 @@ except ImportError:
     pass
 
 __all__ = ["duckdb_storage"]
-

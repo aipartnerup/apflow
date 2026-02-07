@@ -22,20 +22,40 @@ logger = get_logger(__name__)
 
 
 class GenerateInputSchema(BaseModel):
-    requirement: str = Field(description="Natural language requirement describing the task tree to generate")
-    user_id: Optional[str] = Field(default=None, description="User ID for generated tasks (optional)")
-    generation_mode: Literal["single_shot", "multi_phase"] = Field(default="single_shot", description="Generation mode: 'single_shot' (default, faster) or 'multi_phase' (more accurate)")
-    llm_provider: Optional[Literal["openai", "anthropic"]] = Field(default=None, description="LLM provider to use (defaults to OPENAI_API_KEY or APFLOW_LLM_PROVIDER env var)")
-    model: Optional[str] = Field(default=None, description="LLM model name (optional, uses provider default)")
+    requirement: str = Field(
+        description="Natural language requirement describing the task tree to generate"
+    )
+    user_id: Optional[str] = Field(
+        default=None, description="User ID for generated tasks (optional)"
+    )
+    generation_mode: Literal["single_shot", "multi_phase"] = Field(
+        default="single_shot",
+        description="Generation mode: 'single_shot' (default, faster) or 'multi_phase' (more accurate)",
+    )
+    llm_provider: Optional[Literal["openai", "anthropic"]] = Field(
+        default=None,
+        description="LLM provider to use (defaults to OPENAI_API_KEY or APFLOW_LLM_PROVIDER env var)",
+    )
+    model: Optional[str] = Field(
+        default=None, description="LLM model name (optional, uses provider default)"
+    )
     temperature: float = Field(default=0.7, description="LLM temperature (default: 0.7)")
-    max_tokens: int = Field(default=4000, description="Maximum tokens for LLM response (default: 4000)")
+    max_tokens: int = Field(
+        default=4000, description="Maximum tokens for LLM response (default: 4000)"
+    )
 
 
 class GenerateOutputSchema(BaseModel):
     status: Literal["completed", "failed"] = Field(description="Execution status")
-    tasks: Optional[list[Dict[str, Any]]] = Field(default=None, description="Generated task array (only present on success)")
-    count: Optional[int] = Field(default=None, description="Number of generated tasks (only present on success)")
-    error: Optional[str] = Field(default=None, description="Error message (only present on failure)")
+    tasks: Optional[list[Dict[str, Any]]] = Field(
+        default=None, description="Generated task array (only present on success)"
+    )
+    count: Optional[int] = Field(
+        default=None, description="Number of generated tasks (only present on success)"
+    )
+    error: Optional[str] = Field(
+        default=None, description="Error message (only present on failure)"
+    )
 
 
 @executor_register()
@@ -238,7 +258,10 @@ class GenerateExecutor(BaseTask):
         # Exclude generate_executor itself to prevent recursion
         # Current system does NOT support recursive task generation
         executors_info = schema_formatter.format_for_requirement(
-            requirement, max_executors=15, include_examples=True, exclude_executors=["generate_executor"]
+            requirement,
+            max_executors=15,
+            include_examples=True,
+            exclude_executors=["generate_executor"],
         )
 
         principles = PrinciplesExtractor.build_complete_principles_section()
@@ -277,24 +300,24 @@ class GenerateExecutor(BaseTask):
             "🎯 DIRECT EXECUTION (Use these for simple tasks):",
             "",
             "□ For scraping/extracting website content → ALWAYS use 'scrape_executor' DIRECTLY",
-            "  ✓ RIGHT: {\"method\": \"scrape_executor\", \"inputs\": {\"url\": \"https://...\"}}",
-            "  ❌ WRONG: {\"method\": \"generate_executor\", \"inputs\": {\"requirement\": \"scrape https://...\"}}",
-            "  ❌ WRONG: {\"method\": \"command_executor\", \"inputs\": {\"command\": \"curl https://...\"}}",
+            '  ✓ RIGHT: {"method": "scrape_executor", "inputs": {"url": "https://..."}}',
+            '  ❌ WRONG: {"method": "generate_executor", "inputs": {"requirement": "scrape https://..."}}',
+            '  ❌ WRONG: {"method": "command_executor", "inputs": {"command": "curl https://..."}}',
             "  Why: scrape_executor is purpose-built, safe, and always enabled",
             "",
             "□ For REST API calls → ALWAYS use 'rest_executor' DIRECTLY",
-            "  ✓ RIGHT: {\"method\": \"rest_executor\", \"inputs\": {\"url\": \"https://api...\", \"method\": \"GET\"}}",
-            "  ❌ WRONG: {\"method\": \"generate_executor\", \"inputs\": {\"requirement\": \"fetch from API...\"}}",
+            '  ✓ RIGHT: {"method": "rest_executor", "inputs": {"url": "https://api...", "method": "GET"}}',
+            '  ❌ WRONG: {"method": "generate_executor", "inputs": {"requirement": "fetch from API..."}}',
             "  Example: GET/POST/PUT/DELETE requests, webhook calls, API interactions",
             "",
             "□ For system monitoring → ALWAYS use 'system_info_executor' DIRECTLY",
-            "  ✓ RIGHT: {\"method\": \"system_info_executor\", \"inputs\": {\"resource\": \"cpu\"}}",
-            "  ❌ WRONG: {\"method\": \"generate_executor\", \"inputs\": {\"requirement\": \"check CPU...\"}}",
+            '  ✓ RIGHT: {"method": "system_info_executor", "inputs": {"resource": "cpu"}}',
+            '  ❌ WRONG: {"method": "generate_executor", "inputs": {"requirement": "check CPU..."}}',
             "  Example: CPU, memory, disk, network usage",
             "",
             "□ For AI analysis with multiple agents → use 'crewai_executor' DIRECTLY",
             "  ✓ RIGHT: Define agents and tasks in crewai_executor inputs",
-            "  ❌ WRONG: {\"method\": \"generate_executor\", \"inputs\": {\"requirement\": \"analyze with AI...\"}}",
+            '  ❌ WRONG: {"method": "generate_executor", "inputs": {"requirement": "analyze with AI..."}}',
             "  Example: Content analysis, report generation, research tasks",
             "",
             "🚫 RECURSIVE GENERATION: NOT SUPPORTED",
@@ -437,7 +460,7 @@ class GenerateExecutor(BaseTask):
                         "dependencies": [
                             {"id": "cpu-check", "required": True},
                             {"id": "memory-check", "required": True},
-                            {"id": "disk-check", "required": True}
+                            {"id": "disk-check", "required": True},
                         ],
                     },
                     {
@@ -475,7 +498,7 @@ class GenerateExecutor(BaseTask):
                         "inputs": {
                             "url": "https://api.weather.com/v1/current",
                             "method": "GET",
-                            "params": {"location": "Beijing"}
+                            "params": {"location": "Beijing"},
                         },
                     },
                     {
@@ -489,7 +512,7 @@ class GenerateExecutor(BaseTask):
                         "inputs": {
                             "url": "https://api.internal.com/transform",
                             "method": "POST",
-                            "headers": {"Content-Type": "application/json"}
+                            "headers": {"Content-Type": "application/json"},
                         },
                     },
                     {
@@ -503,7 +526,7 @@ class GenerateExecutor(BaseTask):
                         "inputs": {
                             "url": "https://hooks.slack.com/services/XXX",
                             "method": "POST",
-                            "data": {"text": "Weather update processed"}
+                            "data": {"text": "Weather update processed"},
                         },
                     },
                 ],
@@ -520,7 +543,7 @@ class GenerateExecutor(BaseTask):
                         "inputs": {
                             "url": "https://example.com/products",
                             "extract": "prices",
-                            "selector": ".product-price"
+                            "selector": ".product-price",
                         },
                     }
                 ],
@@ -584,7 +607,7 @@ class GenerateExecutor(BaseTask):
                         "dependencies": [
                             {"id": "site-a", "required": True},
                             {"id": "site-b", "required": True},
-                            {"id": "site-c", "required": True}
+                            {"id": "site-c", "required": True},
                         ],
                     },
                     {
@@ -752,9 +775,7 @@ class GenerateExecutor(BaseTask):
             if repaired_response:
                 try:
                     tasks = json.loads(repaired_response)
-                    logger.warning(
-                        f"Repaired truncated JSON response. Original error: {e}"
-                    )
+                    logger.warning(f"Repaired truncated JSON response. Original error: {e}")
                 except json.JSONDecodeError:
                     raise ValueError(
                         f"Failed to parse JSON from LLM response: {e}. Response: {response[:500]}"
@@ -1112,7 +1133,7 @@ class GenerateExecutor(BaseTask):
                         "error": (
                             f"Task '{task_name}' using executor 'crewai_executor' "
                             f"is missing required field 'works'. "
-                            f"Expected: inputs.works = {{\"agents\": {{...}}, \"tasks\": {{...}}}}"
+                            f'Expected: inputs.works = {{"agents": {{...}}, "tasks": {{...}}}}'
                         ),
                     }
                 works = task_inputs.get("works", {})
@@ -1325,7 +1346,10 @@ class GenerateExecutor(BaseTask):
             logger.info("Auto-fix: Unreachable tasks detected, attempting fix...")
             return self._fix_invalid_parent_ids(tasks)
 
-        if "different executors" in error_message and "root should use an aggregator" in error_message:
+        if (
+            "different executors" in error_message
+            and "root should use an aggregator" in error_message
+        ):
             logger.info("Auto-fix: Multiple executors detected, converting root to aggregator...")
             return self._fix_root_executor_to_aggregator(tasks)
 
@@ -1450,18 +1474,20 @@ class GenerateExecutor(BaseTask):
             if len(non_aggregator_executors) < 2:
                 return None
 
-            logger.info(f"Detected {len(non_aggregator_executors)} different executors, "
-                       f"converting root from '{root_executor}' to aggregator")
+            logger.info(
+                f"Detected {len(non_aggregator_executors)} different executors, "
+                f"converting root from '{root_executor}' to aggregator"
+            )
 
             # Strategy: Convert the root task to use aggregate_results_executor
             # and make all direct children of the root point to it
             root_task["schemas"]["method"] = "aggregate_results_executor"
-            
+
             # Clear root task inputs if they are specific to the old executor
             # Keep only generic fields that aggregator can use
             old_inputs = root_task.get("inputs", {})
             root_task["inputs"] = {}
-            
+
             # Preserve user_id if present
             if "user_id" in old_inputs:
                 root_task["inputs"]["user_id"] = old_inputs["user_id"]
@@ -1470,17 +1496,20 @@ class GenerateExecutor(BaseTask):
             # aggregate_results_executor needs dependencies to know which tasks to aggregate
             root_id = root_task.get("id")
             child_tasks = [t for t in tasks if t.get("parent_id") == root_id]
-            
+
             if child_tasks:
                 root_task["dependencies"] = [
-                    {"id": child["id"], "required": True}
-                    for child in child_tasks
+                    {"id": child["id"], "required": True} for child in child_tasks
                 ]
-                logger.info(f"Added {len(child_tasks)} dependencies to root aggregator: "
-                           f"{[c['id'] for c in child_tasks]}")
+                logger.info(
+                    f"Added {len(child_tasks)} dependencies to root aggregator: "
+                    f"{[c['id'] for c in child_tasks]}"
+                )
 
-            logger.info(f"Converted root task '{root_task.get('name')}' to use 'aggregate_results_executor'")
-            
+            logger.info(
+                f"Converted root task '{root_task.get('name')}' to use 'aggregate_results_executor'"
+            )
+
             return tasks
 
         except Exception as e:
@@ -1518,4 +1547,3 @@ class GenerateExecutor(BaseTask):
             "task_count": len(demo_tasks),
             "_demo_sleep": 1.5,  # Simulate LLM generation time (longer for realistic demo)
         }
-

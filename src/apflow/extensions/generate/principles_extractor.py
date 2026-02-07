@@ -206,7 +206,7 @@ class PrinciplesExtractor:
             "",
             "**AI/LLM Tasks**:",
             "- Use 'crewai_executor' for AI agent crews (multi-step LLM workflows)",
-            "  Required: inputs.works = {\"agents\": {...}, \"tasks\": {...}}",
+            '  Required: inputs.works = {"agents": {...}, "tasks": {...}}',
             "  Each task prompt defines output format (JSON, text, etc.)",
             "  Example: prompt: 'Return analysis as JSON: {insights: string, score: number}'",
             "- Use 'llm_executor' for direct LLM calls",

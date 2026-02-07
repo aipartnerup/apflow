@@ -7,7 +7,7 @@ using their runtime schemas (not static docs).
 
 import sys
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any
 import json
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))

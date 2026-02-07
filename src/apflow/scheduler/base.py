@@ -13,12 +13,13 @@ from datetime import datetime
 
 class SchedulerState(StrEnum):
     """Scheduler runtime state"""
-    stopped = auto()    # Scheduler is not running
-    starting = auto()   # Scheduler is starting up
-    running = auto()    # Scheduler is running and processing tasks
-    stopping = auto()   # Scheduler is shutting down
-    paused = auto()     # Scheduler is paused (not processing but can resume)
-    error = auto()      # Scheduler encountered an error
+
+    stopped = auto()  # Scheduler is not running
+    starting = auto()  # Scheduler is starting up
+    running = auto()  # Scheduler is running and processing tasks
+    stopping = auto()  # Scheduler is shutting down
+    paused = auto()  # Scheduler is paused (not processing but can resume)
+    error = auto()  # Scheduler encountered an error
 
 
 class SchedulerConfig:

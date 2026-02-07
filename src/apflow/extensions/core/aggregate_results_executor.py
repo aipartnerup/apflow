@@ -32,9 +32,7 @@ class AggregateInputSchema(BaseModel):
 class AggregateOutputSchema(BaseModel):
     summary: str = Field(description="Summary of the aggregation operation")
     timestamp: str = Field(description="ISO timestamp when aggregation was performed")
-    results: Dict[str, Any] = Field(
-        description="Dictionary of dependency results keyed by task ID"
-    )
+    results: Dict[str, Any] = Field(description="Dictionary of dependency results keyed by task ID")
     result_count: int = Field(description="Number of aggregated results")
 
 
@@ -224,4 +222,3 @@ class AggregateResultsExecutor(BaseTask):
             "results": dependency_results,
             "result_count": result_count,
         }
-

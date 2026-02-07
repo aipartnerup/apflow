@@ -15,57 +15,57 @@ from apflow.core.storage.sqlalchemy.models import TaskModelType
 class HookExtension(Extension, ABC):
     """
     Base interface for hook extensions
-    
+
     Hook extensions provide lifecycle hooks for task execution.
     They are registered with ExtensionCategory.HOOK.
-    
+
     Example:
         @hook_register()
         class PreExecutionHook(HookExtension):
             id = "pre_exec_hook"
             name = "Pre-Execution Hook"
             type = "pre_execution"
-            
+
             async def execute(self, task: TaskModelType) -> None:
                 ...
     """
-    
+
     @property
     def category(self) -> ExtensionCategory:
         """Extension category - always HOOK for HookExtension"""
         return ExtensionCategory.HOOK
-    
+
     @abstractmethod
     async def execute(
         self,
         task: TaskModelType,
         inputs: Optional[Dict[str, Any]] = None,
-        result: Optional[Any] = None
+        result: Optional[Any] = None,
     ) -> None:
         """
         Execute the hook
-        
+
         Args:
             task: Task model instance
             inputs: Input parameters (for post hooks)
             result: Execution result (for post hooks)
-        
+
         Note:
             - Pre hooks: inputs and result are None
             - Post hooks: inputs and result are provided
         """
         pass
-    
+
     def is_async(self) -> bool:
         """
         Check if hook is async
-        
+
         Returns:
             True if hook is async, False if sync
         """
         import inspect
+
         return inspect.iscoroutinefunction(self.execute)
 
 
 __all__ = ["HookExtension"]
-

@@ -1795,7 +1795,7 @@ class TaskManager:
 
         Returns:
             Executor instance or None if not found
-            
+
         Note:
             This creates a lightweight executor instance for schema discovery only.
             The instance may not be fully initialized (e.g., crew not created for crewai_executor),

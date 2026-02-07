@@ -22,8 +22,11 @@ logger = get_logger(__name__)
 
 class AddTaskTreeFields(Migration):
     """Add task_tree_id, origin_type, has_references fields"""
+
     aliases = ["add_task_tree_fields"]
-    description = "Add task_tree_id, origin_type, has_references. Rename has_copy to has_references."
+    description = (
+        "Add task_tree_id, origin_type, has_references. Rename has_copy to has_references."
+    )
 
     def upgrade(self, engine: Engine) -> None:
         """Apply migration"""
@@ -59,6 +62,7 @@ class AddTaskTreeFields(Migration):
             # Fallback: try to get columns using inspector
             try:
                 from sqlalchemy import inspect as sa_inspect
+
                 inspector = sa_inspect(engine)
                 existing_columns = {col["name"] for col in inspector.get_columns(table_name)}
             except Exception as e:
@@ -70,9 +74,7 @@ class AddTaskTreeFields(Migration):
             try:
                 with engine.begin() as conn:
                     conn.execute(
-                        text(
-                            f"ALTER TABLE {table_name} RENAME COLUMN has_copy TO has_references"
-                        )
+                        text(f"ALTER TABLE {table_name} RENAME COLUMN has_copy TO has_references")
                     )
                 logger.info(
                     f"✓ {self.id}: Renamed column 'has_copy' to 'has_references' in '{table_name}'"
@@ -124,7 +126,6 @@ class AddTaskTreeFields(Migration):
 
         # Step 4: Auto-assign task_tree_id for existing tasks (ORM-based, DB-agnostic)
         self._update_task_trees(engine)
-        
 
         # Step 5: Create indexes
         indexes_to_create = [
@@ -137,9 +138,7 @@ class AddTaskTreeFields(Migration):
             with engine.begin() as conn:
                 for col_name, idx_name in indexes_to_create:
                     conn.execute(
-                        text(
-                            f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table_name} ({col_name})"
-                        )
+                        text(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table_name} ({col_name})")
                     )
             logger.info(f"✓ {self.id}: Created indexes for new columns")
         except Exception as e:
@@ -151,6 +150,7 @@ class AddTaskTreeFields(Migration):
         try:
             # Create a session from the engine
             from sqlalchemy.orm import sessionmaker
+
             SessionLocal = sessionmaker(bind=engine)
             session = SessionLocal()
             updated = (
@@ -176,64 +176,62 @@ class AddTaskTreeFields(Migration):
         finally:
             session.close()
 
-
     def _update_task_trees(self, engine: Engine) -> None:
         batch_size = 100
         offset = 0
-        
+
         try:
             # Create a session from the engine
             from sqlalchemy.orm import sessionmaker
+
             SessionLocal = sessionmaker(bind=engine)
             session = SessionLocal()
-            
+
             while True:
                 try:
                     # Get batch of root tasks using ORM
                     root_tasks = (
                         session.query(TaskModel)
-                        .filter(
-                            TaskModel.task_tree_id.is_(None),
-                            TaskModel.parent_id.is_(None)
-                        )
+                        .filter(TaskModel.task_tree_id.is_(None), TaskModel.parent_id.is_(None))
                         .order_by(TaskModel.created_at.asc())
                         .limit(batch_size)
                         .offset(offset)
                         .all()
                     )
-                    
+
                     if not root_tasks:
                         break  # No more root tasks
-                    
+
                     # Process each root task and its descendants
                     for root_task in root_tasks:
                         self._assign_task_tree_id_recursive(session, root_task.id, root_task.id)
-                    
+
                     # Commit batch
                     session.commit()
-                    
+
                     logger.info(
                         f"✓ {self.id}: Auto-assigned task_tree_id for {len(root_tasks)} root task(s) "
                         f"(offset: {offset})"
                     )
                     offset += batch_size
-                    
+
                 except Exception as batch_err:
                     session.rollback()
-                    logger.warning(f"⚠ {self.id}: Error in batch {offset // batch_size}: {str(batch_err)}")
+                    logger.warning(
+                        f"⚠ {self.id}: Error in batch {offset // batch_size}: {str(batch_err)}"
+                    )
                     raise
-                        
+
         except Exception as e:
             logger.warning(f"⚠ {self.id}: Could not auto-assign task_tree_id: {str(e)}")
             # Non-critical, continue
         finally:
             session.close()
-    
 
     def _assign_task_tree_id_recursive(self, session: Session, task_id: str, tree_id: str) -> None:
         """
         Recursively assign task_tree_id to a task and all its descendants
-        
+
         Args:
             session: SQLAlchemy session
             task_id: ID of current task to update
@@ -244,13 +242,14 @@ class AddTaskTreeFields(Migration):
         if task and task.task_tree_id is None:
             task.task_tree_id = tree_id
             session.flush()  # Flush but don't commit yet
-        
+
         # Recursively update all children
-        children = session.query(TaskModel).filter(
-            TaskModel.parent_id == task_id,
-            TaskModel.task_tree_id.is_(None)
-        ).all()
-        
+        children = (
+            session.query(TaskModel)
+            .filter(TaskModel.parent_id == task_id, TaskModel.task_tree_id.is_(None))
+            .all()
+        )
+
         for child in children:
             self._assign_task_tree_id_recursive(session, child.id, tree_id)
 
@@ -258,14 +257,19 @@ class AddTaskTreeFields(Migration):
         """Fallback for databases that block column rename when dependencies exist."""
         with engine.begin() as conn:
             conn.execute(
-                text(f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS has_references BOOLEAN DEFAULT FALSE")
+                text(
+                    f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS has_references BOOLEAN DEFAULT FALSE"
+                )
             )
         with engine.begin() as conn:
-            conn.execute(text(f"UPDATE {table_name} SET has_references = has_copy WHERE has_copy IS NOT NULL"))
+            conn.execute(
+                text(
+                    f"UPDATE {table_name} SET has_references = has_copy WHERE has_copy IS NOT NULL"
+                )
+            )
         logger.info(
             f"✓ {self.id}: Added 'has_references' alongside 'has_copy' and copied existing values"
         )
-
 
     def downgrade(self, engine: Engine) -> None:
         """Rollback migration (drop columns)"""
@@ -287,7 +291,9 @@ class AddTaskTreeFields(Migration):
                         conn.execute(text(f"ALTER TABLE {table_name} DROP COLUMN {col_name}"))
                     logger.info(f"✓ Downgrade {self.id}: Dropped column '{col_name}'")
                 except Exception as e:
-                    logger.warning(f"⚠ Downgrade {self.id}: Could not drop column '{col_name}': {str(e)}")
+                    logger.warning(
+                        f"⚠ Downgrade {self.id}: Could not drop column '{col_name}': {str(e)}"
+                    )
 
         # Rename has_references back to has_copy if needed
         if "has_references" not in existing_columns and "has_copy" not in existing_columns:

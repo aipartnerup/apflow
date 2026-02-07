@@ -66,6 +66,7 @@ def get_project_root() -> Optional[Path]:
         Project root path if found, None otherwise
     """
     from apflow.core.utils.project_detection import get_project_root as _get_project_root
+
     return _get_project_root()
 
 
@@ -80,6 +81,7 @@ def get_project_config_dir() -> Optional[Path]:
         <project_root>/.data if in project, None otherwise
     """
     from apflow.core.utils.project_detection import get_project_data_dir
+
     return get_project_data_dir()
 
 
@@ -386,9 +388,7 @@ def load_secrets_config() -> dict:
 
     Returns empty dict. Use load_cli_config() instead.
     """
-    logger.warning(
-        "load_secrets_config() is deprecated, use load_cli_config() instead"
-    )
+    logger.warning("load_secrets_config() is deprecated, use load_cli_config() instead")
     return {}
 
 
@@ -398,9 +398,7 @@ def save_secrets_config(secrets: dict) -> None:
 
     Use save_cli_config_yaml() instead.
     """
-    logger.warning(
-        "save_secrets_config() is deprecated, use save_cli_config_yaml() instead"
-    )
+    logger.warning("save_secrets_config() is deprecated, use save_cli_config_yaml() instead")
     config = load_cli_config()
     config.update(secrets)
     save_cli_config_yaml(config)

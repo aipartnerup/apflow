@@ -9,5 +9,6 @@ __all__ = ["CLIExtension", "cli_register", "get_cli_registry", "get_cli_group", 
 def __getattr__(name):
     if name == "app":
         from apflow.cli.main import app
+
         return app
     raise AttributeError(f"module {__name__} has no attribute {name}")

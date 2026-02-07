@@ -18,30 +18,27 @@ logger = get_logger(__name__)
 class PreExecutionHookExtension(HookExtension):
     """
     Pre-execution hook extension
-    
+
     Wraps all registered pre-execution hooks from ConfigRegistry.
     This allows hooks to be discovered and managed via ExtensionRegistry.
     """
-    
+
     id = "pre_execution_hooks"
     name = "Pre-Execution Hooks"
     description = "Pre-execution hooks from ConfigRegistry"
     version = "1.0.0"
-    
+
     @property
     def type(self) -> str:
         """Extension type identifier"""
         return "pre_execution"
-    
+
     async def execute(
-        self,
-        task: TaskModel,
-        inputs: Optional[Dict[str, Any]] = None,
-        result: Optional[Any] = None
+        self, task: TaskModel, inputs: Optional[Dict[str, Any]] = None, result: Optional[Any] = None
     ) -> None:
         """
         Execute all registered pre-execution hooks
-        
+
         Args:
             task: Task model instance
             inputs: Not used for pre hooks (always None)
@@ -50,12 +47,12 @@ class PreExecutionHookExtension(HookExtension):
         hooks = get_pre_hooks()
         if not hooks:
             return
-        
+
         import asyncio
         from inspect import iscoroutinefunction
-        
+
         logger.debug(f"Executing {len(hooks)} pre-execution hooks for task {task.id}")
-        
+
         for hook in hooks:
             try:
                 if iscoroutinefunction(hook):
@@ -72,4 +69,3 @@ class PreExecutionHookExtension(HookExtension):
 
 
 __all__ = ["PreExecutionHookExtension"]
-

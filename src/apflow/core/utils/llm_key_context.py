@@ -24,7 +24,7 @@ _context = threading.local()
 def set_llm_key_from_header(api_key: Optional[str], provider: Optional[str] = None) -> None:
     """
     Set LLM API key and provider from request header
-    
+
     Args:
         api_key: LLM API key from request header
         provider: Optional provider name from request header
@@ -39,27 +39,27 @@ def set_llm_key_from_header(api_key: Optional[str], provider: Optional[str] = No
 def get_llm_key_from_header() -> Optional[str]:
     """
     Get LLM API key from request header
-    
+
     Returns:
         LLM API key if set, None otherwise
     """
-    return getattr(_context, 'llm_key_header', None)
+    return getattr(_context, "llm_key_header", None)
 
 
 def get_llm_provider_from_header() -> Optional[str]:
     """
     Get LLM provider from request header
-    
+
     Returns:
         LLM provider name if set, None otherwise
     """
-    return getattr(_context, 'llm_provider_header', None)
+    return getattr(_context, "llm_provider_header", None)
 
 
 def set_llm_key_from_cli_params(api_key: Optional[str], provider: Optional[str] = None) -> None:
     """
     Set LLM API key and provider from CLI params
-    
+
     Args:
         api_key: LLM API key from CLI params
         provider: Optional provider name from CLI params
@@ -74,42 +74,45 @@ def set_llm_key_from_cli_params(api_key: Optional[str], provider: Optional[str] 
 def get_llm_key_from_cli_params() -> Optional[str]:
     """
     Get LLM API key from CLI params
-    
+
     Returns:
         LLM API key if set, None otherwise
     """
-    return getattr(_context, 'llm_key_cli', None)
+    return getattr(_context, "llm_key_cli", None)
 
 
 def get_llm_provider_from_cli_params() -> Optional[str]:
     """
     Get LLM provider from CLI params
-    
+
     Returns:
         LLM provider name if set, None otherwise
     """
-    return getattr(_context, 'llm_provider_cli', None)
+    return getattr(_context, "llm_provider_cli", None)
 
 
 def _get_key_from_user_config(user_id: str, provider: Optional[str] = None) -> Optional[str]:
     """
     Get LLM API key from user config (LLMKeyConfigManager)
-    
+
     Args:
         user_id: User ID for config lookup
         provider: Optional provider name
-        
+
     Returns:
         API key from user config, or None if not found
     """
     try:
         from apflow.extensions.llm_key_config import LLMKeyConfigManager
+
         config_manager = LLMKeyConfigManager()
         user_key = config_manager.get_key(user_id, provider=provider)
         if not user_key and provider:
             user_key = config_manager.get_key(user_id, provider=None)
         if user_key:
-            logger.debug(f"Using LLM key from user config for user {user_id}, provider {provider or 'default'}")
+            logger.debug(
+                f"Using LLM key from user config for user {user_id}, provider {provider or 'default'}"
+            )
             return user_key
     except ImportError:
         pass
@@ -122,17 +125,17 @@ def _get_key_from_source(
     get_key_func: Callable[[], Optional[str]],
     get_provider_func: Callable[[], Optional[str]],
     source_name: str,
-    provider: Optional[str] = None
+    provider: Optional[str] = None,
 ) -> tuple[Optional[str], Optional[str]]:
     """
     Get LLM key and provider from a source (header or CLI params)
-    
+
     Args:
         get_key_func: Function to get key from source
         get_provider_func: Function to get provider from source
         source_name: Name of the source (for logging)
         provider: Optional provider name (may be updated from source)
-        
+
     Returns:
         Tuple of (api_key, updated_provider)
     """
@@ -148,22 +151,22 @@ def _get_key_from_source(
 def get_llm_key(
     user_id: Optional[str] = None,
     provider: Optional[str] = None,
-    context: Literal["api", "cli", "auto"] = "auto"
+    context: Literal["api", "cli", "auto"] = "auto",
 ) -> Optional[str]:
     """
     Get LLM API key with configurable priority order based on context
-    
+
     Priority order:
     - API context: header -> LLMKeyConfigManager -> env
     - CLI context: params -> LLMKeyConfigManager -> env
     - auto: detect context automatically (header first, then CLI params)
-    
+
     Args:
         user_id: Optional user ID for user config lookup
         provider: Optional provider name for provider-specific key lookup.
                    If None, will use provider from header/CLI params if available.
         context: Execution context ("api", "cli", or "auto" for auto-detection)
-        
+
     Returns:
         LLM API key, or None if not found
     """
@@ -178,38 +181,32 @@ def get_llm_key(
         else:
             # Default to API context (most common)
             context = "api"
-    
+
     # Priority 1: Get key from source (header or CLI params)
     if context == "api":
         api_key, provider = _get_key_from_source(
-            get_llm_key_from_header,
-            get_llm_provider_from_header,
-            "request header",
-            provider
+            get_llm_key_from_header, get_llm_provider_from_header, "request header", provider
         )
     else:  # context == "cli"
         api_key, provider = _get_key_from_source(
-            get_llm_key_from_cli_params,
-            get_llm_provider_from_cli_params,
-            "CLI params",
-            provider
+            get_llm_key_from_cli_params, get_llm_provider_from_cli_params, "CLI params", provider
         )
-    
+
     if api_key:
         return api_key
-    
+
     # Priority 2: User config (LLMKeyConfigManager)
     if user_id:
         user_key = _get_key_from_user_config(user_id, provider)
         if user_key:
             return user_key
-    
+
     # Priority 3: Environment variables
     env_key = _get_key_from_env(provider)
     if env_key:
         logger.debug(f"Using LLM key from environment variable (provider: {provider or 'auto'})")
         return env_key
-    
+
     # Return None - some executors (like CrewAI) will automatically use env vars
     return None
 
@@ -217,10 +214,10 @@ def get_llm_key(
 def _get_key_from_env(provider: Optional[str] = None) -> Optional[str]:
     """
     Get LLM API key from environment variables
-    
+
     Args:
         provider: Optional provider name
-        
+
     Returns:
         API key from environment variable, or None if not found
     """
@@ -235,7 +232,7 @@ def _get_key_from_env(provider: Optional[str] = None) -> Optional[str]:
             api_key = os.getenv(env_var)
             if api_key:
                 return api_key
-    
+
     # Common env vars (try in order)
     common_vars = [
         "OPENAI_API_KEY",
@@ -246,24 +243,23 @@ def _get_key_from_env(provider: Optional[str] = None) -> Optional[str]:
         api_key = os.getenv(env_var)
         if api_key:
             return api_key
-    
+
     return None
 
 
 def clear_llm_key_context() -> None:
     """
     Clear LLM key context (mainly for testing)
-    
+
     Clears both API (header) and CLI (params) contexts.
     This should be called at the start of each request/execution
     to prevent using stale keys from previous requests.
     """
-    if hasattr(_context, 'llm_key_header'):
-        delattr(_context, 'llm_key_header')
-    if hasattr(_context, 'llm_provider_header'):
-        delattr(_context, 'llm_provider_header')
-    if hasattr(_context, 'llm_key_cli'):
-        delattr(_context, 'llm_key_cli')
-    if hasattr(_context, 'llm_provider_cli'):
-        delattr(_context, 'llm_provider_cli')
-
+    if hasattr(_context, "llm_key_header"):
+        delattr(_context, "llm_key_header")
+    if hasattr(_context, "llm_provider_header"):
+        delattr(_context, "llm_provider_header")
+    if hasattr(_context, "llm_key_cli"):
+        delattr(_context, "llm_key_cli")
+    if hasattr(_context, "llm_provider_cli"):
+        delattr(_context, "llm_provider_cli")

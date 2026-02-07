@@ -22,4 +22,3 @@ __all__ = [
     "resolve_tool",
     "tool_register",
 ]
-

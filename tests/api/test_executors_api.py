@@ -57,7 +57,7 @@ class TestGetAvailableExecutors:
         # Create a mock httpx module so the import succeeds
         mock_httpx = MagicMock()
         mock_httpx.AsyncClient = MagicMock()
-        
+
         # Store original httpx if it exists
         original_httpx = sys.modules.get("httpx")
         sys.modules["httpx"] = mock_httpx
@@ -73,7 +73,10 @@ class TestGetAvailableExecutors:
                     del sys.modules[module_name]
 
             with patch.dict(os.environ, {"APFLOW_EXTENSIONS": "stdio,http"}):
-                with patch("apflow.core.extensions.manager._is_package_installed", side_effect=mock_is_package_installed):
+                with patch(
+                    "apflow.core.extensions.manager._is_package_installed",
+                    side_effect=mock_is_package_installed,
+                ):
                     # Reset loaded extensions state to ensure http extension is loaded
                     # Remove http from loaded extensions if it was previously skipped
                     if "http" in _loaded_extensions:

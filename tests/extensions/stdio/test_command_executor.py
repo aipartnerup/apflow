@@ -23,20 +23,21 @@ class TestCommandExecutorSecurity:
     async def test_command_disabled_with_various_values(self, env_value):
         """Test that command execution is disabled with various false values"""
         from apflow.core.execution.errors import ConfigurationError
+
         # Set environment variable to disabled value
         env_dict = {}
         if env_value is not None:
             env_dict["APFLOW_STDIO_ALLOW_COMMAND"] = env_value
-        
+
         with patch.dict(os.environ, env_dict, clear=False):
             # Reload the module to pick up the disabled state
             import apflow.extensions.stdio.command_executor as command_module
-            
+
             # Temporarily suppress duplicate registration error during reload
             logger = logging.getLogger("apflow.core.extensions.decorators")
             original_level = logger.level
             logger.setLevel(logging.CRITICAL)
-            
+
             try:
                 importlib.reload(command_module)
             except ValueError:
@@ -44,15 +45,13 @@ class TestCommandExecutorSecurity:
                 pass
             finally:
                 logger.setLevel(original_level)
-            
+
             # Create a new executor instance (will use the reloaded module's STDIO_ALLOW_COMMAND)
             executor = command_module.CommandExecutor()
-            
+
             # Should raise ConfigurationError when disabled
             with pytest.raises(ConfigurationError, match="disabled"):
-                await executor.execute({
-                    "command": "echo test"
-                })
+                await executor.execute({"command": "echo test"})
 
     @pytest.mark.parametrize("env_value", ["1", "true", "yes", "on"])
     @pytest.mark.asyncio
@@ -61,12 +60,12 @@ class TestCommandExecutorSecurity:
         with patch.dict(os.environ, {"APFLOW_STDIO_ALLOW_COMMAND": env_value}, clear=False):
             # Reload the module to pick up the enabled state
             import apflow.extensions.stdio.command_executor as command_module
-            
+
             # Temporarily suppress duplicate registration error during reload
             logger = logging.getLogger("apflow.core.extensions.decorators")
             original_level = logger.level
             logger.setLevel(logging.CRITICAL)
-            
+
             try:
                 importlib.reload(command_module)
             except ValueError:
@@ -74,14 +73,12 @@ class TestCommandExecutorSecurity:
                 pass
             finally:
                 logger.setLevel(original_level)
-            
+
             # Create a new executor instance
             executor = command_module.CommandExecutor()
-            
-            result = await executor.execute({
-                "command": "echo test"
-            })
-            
+
+            result = await executor.execute({"command": "echo test"})
+
             # Should succeed when enabled
             assert result["success"] is True
             assert "security_blocked" not in result
@@ -95,12 +92,12 @@ class TestCommandExecutorSecurity:
         with patch.dict(os.environ, {"APFLOW_STDIO_ALLOW_COMMAND": env_value}, clear=False):
             # Reload the module to pick up the enabled state
             import apflow.extensions.stdio.command_executor as command_module
-            
+
             # Temporarily suppress duplicate registration error during reload
             logger = logging.getLogger("apflow.core.extensions.decorators")
             original_level = logger.level
             logger.setLevel(logging.CRITICAL)
-            
+
             try:
                 importlib.reload(command_module)
             except ValueError:
@@ -108,14 +105,11 @@ class TestCommandExecutorSecurity:
                 pass
             finally:
                 logger.setLevel(original_level)
-            
+
             executor = command_module.CommandExecutor()
-            
-            result = await executor.execute({
-                "command": "echo test",
-                "timeout": 5
-            })
-            
+
+            result = await executor.execute({"command": "echo test", "timeout": 5})
+
             # Should succeed with custom timeout
             assert result["success"] is True
 
@@ -124,15 +118,16 @@ class TestCommandExecutorSecurity:
     async def test_command_required_when_enabled(self, env_value):
         """Test that command parameter is required when execution is enabled"""
         from apflow.core.execution.errors import ValidationError
+
         with patch.dict(os.environ, {"APFLOW_STDIO_ALLOW_COMMAND": env_value}, clear=False):
             # Reload the module to pick up the enabled state
             import apflow.extensions.stdio.command_executor as command_module
-            
+
             # Temporarily suppress duplicate registration error during reload
             logger = logging.getLogger("apflow.core.extensions.decorators")
             original_level = logger.level
             logger.setLevel(logging.CRITICAL)
-            
+
             try:
                 importlib.reload(command_module)
             except ValueError:
@@ -140,9 +135,9 @@ class TestCommandExecutorSecurity:
                 pass
             finally:
                 logger.setLevel(original_level)
-            
+
             executor = command_module.CommandExecutor()
-            
+
             # When command execution is enabled, missing command should raise ValidationError
             with pytest.raises(ValidationError, match="command is required"):
                 await executor.execute({})
@@ -152,19 +147,24 @@ class TestCommandExecutorSecurity:
     async def test_command_whitelist_validation_when_enabled(self, env_value):
         """Test that whitelist validation works when command execution is enabled"""
         from apflow.core.execution.errors import ConfigurationError
+
         # Set both allow command and whitelist
-        with patch.dict(os.environ, {
-            "APFLOW_STDIO_ALLOW_COMMAND": env_value,
-            "APFLOW_STDIO_COMMAND_WHITELIST": "echo,ls,cat"
-        }, clear=False):
+        with patch.dict(
+            os.environ,
+            {
+                "APFLOW_STDIO_ALLOW_COMMAND": env_value,
+                "APFLOW_STDIO_COMMAND_WHITELIST": "echo,ls,cat",
+            },
+            clear=False,
+        ):
             # Reload the module to pick up the enabled state and whitelist
             import apflow.extensions.stdio.command_executor as command_module
-            
+
             # Temporarily suppress duplicate registration error during reload
             logger = logging.getLogger("apflow.core.extensions.decorators")
             original_level = logger.level
             logger.setLevel(logging.CRITICAL)
-            
+
             try:
                 importlib.reload(command_module)
             except ValueError:
@@ -172,30 +172,26 @@ class TestCommandExecutorSecurity:
                 pass
             finally:
                 logger.setLevel(original_level)
-            
+
             executor = command_module.CommandExecutor()
-            
+
             # Try a command in whitelist - should succeed
-            result = await executor.execute({
-                "command": "echo test"
-            })
+            result = await executor.execute({"command": "echo test"})
             assert result["success"] is True
-            
+
             # Try a command not in whitelist - should raise ConfigurationError
             with pytest.raises(ConfigurationError, match="whitelist"):
-                await executor.execute({
-                    "command": "nonexistent_command_xyz"
-                })
+                await executor.execute({"command": "nonexistent_command_xyz"})
 
     def test_whitelist_validation_structure(self):
         """Test that whitelist validation structure is correct"""
         # This test validates the whitelist checking logic structure
         # without requiring actual whitelist configuration
         from apflow.extensions.stdio import CommandExecutor
-        executor = CommandExecutor()
-        
-        # Verify executor has the security mechanisms in place
-        assert hasattr(executor, 'execute')
-        
-        # The actual whitelist validation is tested in integration tests above
 
+        executor = CommandExecutor()
+
+        # Verify executor has the security mechanisms in place
+        assert hasattr(executor, "execute")
+
+        # The actual whitelist validation is tested in integration tests above

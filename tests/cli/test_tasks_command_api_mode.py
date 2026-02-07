@@ -4,6 +4,7 @@ API-mode tests for CLI tasks commands.
 These tests verify that CLI commands call the API client when configured and
 properly surface the API responses.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -24,14 +25,16 @@ runner = CliRunner()
 def api_mock_client():
     """Provide an AsyncMock with task API methods."""
     client = AsyncMock()
-    client.count_tasks = AsyncMock(return_value={
-        "total": 2,
-        "pending": 1,
-        "in_progress": 1,
-        "completed": 0,
-        "failed": 0,
-        "cancelled": 0,
-    })
+    client.count_tasks = AsyncMock(
+        return_value={
+            "total": 2,
+            "pending": 1,
+            "in_progress": 1,
+            "completed": 0,
+            "failed": 0,
+            "cancelled": 0,
+        }
+    )
     client.list_tasks = AsyncMock(return_value=[{"id": "t1"}, {"id": "t2"}])
     client.get_tasks_status = AsyncMock(return_value=[{"task_id": "t1", "status": "pending"}])
     client.cancel_tasks = AsyncMock(return_value=[{"task_id": "t1", "status": "cancelled"}])
@@ -103,8 +106,8 @@ def test_tasks_copy_uses_api_preview(force_api_mode: AsyncMock, tmp_path: Path):
         cli,
         ["tasks", "clone", "t1", "--dry-run", "--output", str(output_file)],
     )
-    print('stdout:', result.stdout)    
-    print('exit code:', result.exit_code)
+    print("stdout:", result.stdout)
+    print("exit code:", result.exit_code)
     assert result.exit_code == 0
     saved = json.loads(output_file.read_text())
     assert len(saved) > 0

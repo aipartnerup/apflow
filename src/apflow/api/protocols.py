@@ -61,9 +61,7 @@ def get_protocol_dependency_info(protocol: str) -> tuple[str, str, str]:
     """
     if protocol not in PROTOCOL_DEPENDENCIES:
         supported = ", ".join(get_supported_protocols())
-        raise ValueError(
-            f"Unsupported protocol '{protocol}'. " f"Supported protocols: {supported}"
-        )
+        raise ValueError(f"Unsupported protocol '{protocol}'. " f"Supported protocols: {supported}")
     return PROTOCOL_DEPENDENCIES[protocol]
 
 
@@ -113,4 +111,3 @@ def check_protocol_dependency(protocol: str) -> None:
                 f"Please install them using: pip install apflow[{extra_name}]"
             ) from e
         raise
-

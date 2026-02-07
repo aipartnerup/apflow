@@ -14,36 +14,35 @@ app = typer.Typer(name="serve", help="Start API server", invoke_without_command=
 def _check_protocol_dependency(protocol: str):
     """
     Check if dependencies for the specified protocol are installed
-    
+
     Args:
         protocol: Protocol name (e.g., "a2a")
-    
+
     Raises:
         typer.Exit: If protocol dependencies are not installed
     """
     # For now, only a2a protocol is supported
     # This will be expanded as more protocols are added
     protocol = protocol.lower()
-    
+
     if protocol not in ("a2a", "mcp"):
         typer.echo(
-            f"Error: Protocol '{protocol}' is not supported.\n"
-            f"Supported protocols: a2a, mcp",
+            f"Error: Protocol '{protocol}' is not supported.\n" f"Supported protocols: a2a, mcp",
             err=True,
         )
         raise typer.Exit(1)
 
 
-
 def _check_uvicorn_installed() -> bool:
     """
     Check if uvicorn is installed
-    
+
     Returns:
         True if uvicorn is installed, False otherwise
     """
     try:
         import uvicorn  # noqa: F401
+
         return True
     except ImportError:
         typer.echo(
@@ -67,7 +66,7 @@ def _start_server(
 ):
     """
     Internal function to start the API server
-    
+
     Args:
         host: Host address
         port: Port number
@@ -78,33 +77,34 @@ def _start_server(
     try:
         # Use provided protocol (defaults to "a2a")
         protocol = protocol.lower()
-        
+
         # Check if protocol is valid
         _check_protocol_dependency(protocol)
-        
+
         # Check uvicorn is installed (do this after protocol check)
         if not _check_uvicorn_installed():
             raise typer.Exit(1)
-        
+
         typer.echo(f"Starting API server on {host}:{port} (protocol: {protocol})")
         if reload:
             typer.echo("Auto-reload enabled (development mode)")
         if workers > 1 and not reload:
             typer.echo(f"Starting with {workers} workers")
-        
+
         # Dynamic import of uvicorn (only when needed)
         import uvicorn
         import os
-        
+
         # Determine log level from environment (defaults to info)
         # Priority: APFLOW_LOG_LEVEL > LOG_LEVEL > INFO
         log_level = (os.getenv("APFLOW_LOG_LEVEL") or os.getenv("LOG_LEVEL", "INFO")).lower()
-        
+
         # Create app using create_runnable_app to ensure full initialization
         # (includes .env loading, extension initialization, custom TaskModel, etc.)
         from apflow.api.main import create_runnable_app
+
         api_app = create_runnable_app(protocol=protocol)
-        
+
         # Run server
         uvicorn.run(
             api_app,
@@ -114,7 +114,7 @@ def _start_server(
             workers=workers if not reload else 1,
             log_level=log_level,
         )
-        
+
     except KeyboardInterrupt:
         typer.echo("\nServer stopped by user")
     except Exception as e:
@@ -139,24 +139,24 @@ def serve_callback(
 ):
     """
     Start API server
-    
+
     Protocol selection:
     - Default: a2a
     - Use --protocol to specify: a2a or mcp
-    
+
     Examples:
         # Use default protocol (a2a)
         apflow serve
-        
+
         # Specify port
         apflow serve --port 8000
-        
+
         # Use A2A protocol (default)
         apflow serve --protocol a2a
-        
+
         # Use MCP protocol
         apflow serve --protocol mcp
-        
+
         # Use subcommand (also supported)
         apflow serve start --port 8000 --protocol mcp
     """
@@ -180,21 +180,21 @@ def start(
 ):
     """
     Start API server (subcommand - same as running 'serve' directly)
-    
+
     Protocol selection:
     - Default: a2a
     - Use --protocol to specify: a2a or mcp
-    
+
     Examples:
         # Use default protocol (a2a)
         apflow serve start
-        
+
         # Use A2A protocol
         apflow serve start --protocol a2a
-        
+
         # Use MCP protocol
         apflow serve start --protocol mcp
-    
+
     Args:
         host: Host address
         port: Port number
@@ -207,33 +207,27 @@ def start(
 
 if __name__ == "__main__":
     # Allow direct execution for development/debugging
-    # 
+    #
     # Usage examples:
     # 1. Via main CLI (requires 'start' subcommand):
     #    apflow serve start --protocol a2a
-    # 
+    #
     # 2. Direct module execution (Typer auto-calls the only command, no 'start' needed):
     #    python -m apflow.cli.commands.serve --protocol a2a
     #    python src/apflow/cli/commands/serve.py --protocol a2a
-    # 
+    #
     # 3. No arguments (calls start with defaults):
     #    python -m apflow.cli.commands.serve
     #    python src/apflow/cli/commands/serve.py
     import sys
+
     # If no arguments provided (only script name), default to 'start' command
     # sys.argv[0] is the script name, so len == 1 means no arguments
     if len(sys.argv) == 1:
         # No arguments: call start() directly with default values
         # Pass actual default values, not Typer Option objects
-        start(
-            host="0.0.0.0",
-            port=8000,
-            reload=False,
-            workers=1,
-            protocol="a2a"
-        )
+        start(host="0.0.0.0", port=8000, reload=False, workers=1, protocol="a2a")
     else:
         # Has arguments: let Typer handle it
         # Typer will automatically call the 'start' command since it's the only command
         app()
-

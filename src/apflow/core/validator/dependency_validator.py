@@ -78,12 +78,17 @@ def _build_dependency_graph(
         tid = task["id"] if isinstance(task, dict) else task.id
         if task_id is not None and new_dependencies is not None and tid == task_id:
             continue  # Already handled above
-        task_deps = task.get("dependencies", []) if isinstance(task, dict) else getattr(task, "dependencies", []) or []
+        task_deps = (
+            task.get("dependencies", [])
+            if isinstance(task, dict)
+            else getattr(task, "dependencies", []) or []
+        )
         for dep in task_deps:
             dep_id = dep.get("id") if isinstance(dep, dict) else dep
             if dep_id and dep_id in dependency_graph:
                 dependency_graph[tid].add(dep_id)
     return dependency_graph
+
 
 def _detect_circular_dependencies_fast(dependency_graph: Dict[str, Set[str]]) -> None:
     """
@@ -115,6 +120,7 @@ def _detect_circular_dependencies_fast(dependency_graph: Dict[str, Set[str]]) ->
     for identifier in dependency_graph.keys():
         if identifier not in visited:
             dfs(identifier)
+
 
 def _detect_circular_dependencies_detail(dependency_graph: Dict[str, Set[str]]) -> None:
     """
@@ -156,10 +162,7 @@ def _detect_circular_dependencies_detail(dependency_graph: Dict[str, Set[str]]) 
                 )
 
 
-
-def validate_dependent_task_inclusion(
-    tasks: List[Dict[str, Any]]
-) -> None:
+def validate_dependent_task_inclusion(tasks: List[Dict[str, Any]]) -> None:
     """
     Validate that all tasks which depend (directly or transitively) on any task in the provided tasks array
     are also included in the array.
@@ -179,22 +182,19 @@ def validate_dependent_task_inclusion(
         provided_id = task_data.get("id")
         if provided_id:
             tree_identifiers.add(provided_id)
-        
-    
+
     # Find all tasks that depend on tasks in the tree (including transitive)
-    all_dependent_tasks = _find_transitive_dependents(
-        tree_identifiers, tasks
-    )
-    
+    all_dependent_tasks = _find_transitive_dependents(tree_identifiers, tasks)
+
     # Check if all dependent tasks are included in the tree
     included_identifiers = tree_identifiers.copy()
     missing_dependents = []
-    
+
     for dep_task in all_dependent_tasks:
         dep_identifier = dep_task.get("id")
         if dep_identifier and dep_identifier not in included_identifiers:
             missing_dependents.append(dep_task)
-    
+
     if missing_dependents:
         missing_ids = [task.get("id", "Unknown") for task in missing_dependents]
         raise ValueError(
@@ -205,45 +205,44 @@ def validate_dependent_task_inclusion(
 
 
 def _find_transitive_dependents(
-    task_identifiers: Set[str],
-    all_tasks: List[Dict[str, Any]]
+    task_identifiers: Set[str], all_tasks: List[Dict[str, Any]]
 ) -> List[Dict[str, Any]]:
     """
     Find all tasks that depend on any of the specified task identifiers (including transitive).
-    
+
     Args:
         task_identifiers: Set of task identifiers (id or name) to find dependents for
         all_tasks: All tasks in the array
-        
+
     Returns:
         List of tasks that depend on any of the specified task identifiers (directly or transitively)
     """
     # Track all dependent tasks found (to avoid duplicates)
     found_dependents: Set[int] = set()  # Track by index to avoid duplicates
     dependent_tasks: List[Dict[str, Any]] = []
-    
+
     # Start with the initial set of task identifiers
     current_identifiers = task_identifiers.copy()
     processed_identifiers: Set[str] = set()
-    
+
     # Recursively find all transitive dependents
     while current_identifiers:
         next_identifiers: Set[str] = set()
-        
+
         for identifier in current_identifiers:
             if identifier in processed_identifiers:
                 continue
             processed_identifiers.add(identifier)
-            
+
             # Find direct dependents
             for index, task_data in enumerate(all_tasks):
                 if index in found_dependents:
                     continue
-                
+
                 dependencies = task_data.get("dependencies")
                 if not dependencies:
                     continue
-                
+
                 # Check if this task depends on the current identifier
                 depends_on_identifier = False
                 for dep in dependencies:
@@ -257,20 +256,20 @@ def _find_transitive_dependents(
                         if dep_ref == identifier:
                             depends_on_identifier = True
                             break
-                
+
                 if depends_on_identifier:
                     found_dependents.add(index)
                     dependent_tasks.append(task_data)
-                    
+
                     # Add this task's identifier to next iteration
                     task_identifier = task_data.get("id")
                     if task_identifier and task_identifier not in processed_identifiers:
                         next_identifiers.add(task_identifier)
-        
+
         current_identifiers = next_identifiers
-    
+
     return dependent_tasks
-   
+
 
 async def validate_dependency_references(
     task_id: str,
@@ -338,8 +337,7 @@ async def validate_dependency_references(
 
 
 async def check_dependent_tasks_executing(
-    task_id: str,
-    task_repository: TaskRepository
+    task_id: str, task_repository: TaskRepository
 ) -> List[str]:
     """
     Check if any tasks that depend on this task are currently executing.
@@ -366,25 +364,23 @@ async def check_dependent_tasks_executing(
 
 
 async def are_dependencies_satisfied(
-    task: TaskModelType,
-    task_repository: TaskRepository,
-    tasks_to_reexecute: set[str]
+    task: TaskModelType, task_repository: TaskRepository, tasks_to_reexecute: set[str]
 ) -> bool:
     """
     Check if all dependencies for a task are satisfied
-    
+
     Re-execution Logic:
     - A dependency is satisfied if the dependency task is `completed`
     - Even if a dependency is marked for re-execution, if it's already `completed`,
       its result is available and can satisfy dependent tasks
     - This allows dependent tasks to proceed while still allowing re-execution
       of dependencies if needed
-    
+
     Args:
         task: Task to check dependencies for
         task_repository: TaskRepository instance for querying tasks
         tasks_to_reexecute: Set of task IDs marked for re-execution
-        
+
     Returns:
         True if all dependencies are satisfied, False otherwise
     """
@@ -392,21 +388,25 @@ async def are_dependencies_satisfied(
     if not task_dependencies:
         logger.info(f"🔍 [DEBUG] No dependencies for task {task.id}, ready to execute")
         return True
-    
+
     # Get all completed tasks by id in the same task tree using repository
     completed_tasks_by_id = await task_repository.get_completed_tasks_by_id(task)
     logger.info(f"🔍 [DEBUG] Available tasks for {task.id}: {list(completed_tasks_by_id.keys())}")
-    
+
     # Check each dependency
     for dep in task_dependencies:
         if isinstance(dep, dict):
             dep_id = dep.get("id")  # This is the task id of the dependency
             dep_required = dep.get("required", True)
-            
-            logger.info(f"🔍 [DEBUG] Checking dependency {dep_id} (required: {dep_required}) for task {task.id}")
-            
+
+            logger.info(
+                f"🔍 [DEBUG] Checking dependency {dep_id} (required: {dep_required}) for task {task.id}"
+            )
+
             if dep_required and dep_id not in completed_tasks_by_id:
-                logger.info(f"❌ Task {task.id} dependency {dep_id} not satisfied (not found in tasks: {list(completed_tasks_by_id.keys())})")
+                logger.info(
+                    f"❌ Task {task.id} dependency {dep_id} not satisfied (not found in tasks: {list(completed_tasks_by_id.keys())})"
+                )
                 return False
             elif dep_required and dep_id in completed_tasks_by_id:
                 # Check if the dependency task is actually completed
@@ -418,15 +418,23 @@ async def are_dependencies_satisfied(
                     # Check current status from database to see if it's actually completed
                     # If it's completed, we can use the result even if marked for re-execution
                     if dep_task.status == "completed":
-                        logger.info(f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed, marked for re-execution but result available)")
+                        logger.info(
+                            f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed, marked for re-execution but result available)"
+                        )
                     else:
-                        logger.info(f"❌ Task {task.id} dependency {dep_id} is marked for re-execution and not completed yet (status: {dep_task.status})")
+                        logger.info(
+                            f"❌ Task {task.id} dependency {dep_id} is marked for re-execution and not completed yet (status: {dep_task.status})"
+                        )
                         return False
                 elif dep_task.status != "completed":
-                    logger.info(f"❌ Task {task.id} dependency {dep_id} found but not completed (status: {dep_task.status})")
+                    logger.info(
+                        f"❌ Task {task.id} dependency {dep_id} found but not completed (status: {dep_task.status})"
+                    )
                     return False
                 else:
-                    logger.info(f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed)")
+                    logger.info(
+                        f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed)"
+                    )
         elif isinstance(dep, str):
             # Simple string dependency (just the id) - backward compatibility
             dep_id = dep
@@ -439,15 +447,23 @@ async def are_dependencies_satisfied(
             if dep_task_id in tasks_to_reexecute:
                 # If it's completed, we can use the result even if marked for re-execution
                 if dep_task.status == "completed":
-                    logger.info(f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed, marked for re-execution but result available)")
+                    logger.info(
+                        f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed, marked for re-execution but result available)"
+                    )
                 else:
-                    logger.info(f"❌ Task {task.id} dependency {dep_id} is marked for re-execution and not completed yet (status: {dep_task.status})")
+                    logger.info(
+                        f"❌ Task {task.id} dependency {dep_id} is marked for re-execution and not completed yet (status: {dep_task.status})"
+                    )
                     return False
             elif dep_task.status != "completed":
-                logger.info(f"❌ Task {task.id} dependency {dep_id} found but not completed (status: {dep_task.status})")
+                logger.info(
+                    f"❌ Task {task.id} dependency {dep_id} found but not completed (status: {dep_task.status})"
+                )
                 return False
             else:
-                logger.info(f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed)")
-    
+                logger.info(
+                    f"✅ Task {task.id} dependency {dep_id} satisfied (task {dep_task.id} completed)"
+                )
+
     logger.info(f"✅ All dependencies satisfied for task {task.id}")
     return True

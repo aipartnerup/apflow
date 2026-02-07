@@ -26,18 +26,31 @@ class BatchCrewaiInputSchema(BaseModel):
 
 
 class BatchCrewaiTokenUsage(BaseModel):
-    total_tokens: Optional[int] = Field(default=None, description="Total tokens used across all works")
+    total_tokens: Optional[int] = Field(
+        default=None, description="Total tokens used across all works"
+    )
     prompt_tokens: Optional[int] = Field(default=None, description="Tokens used for prompts")
-    completion_tokens: Optional[int] = Field(default=None, description="Tokens used for completions")
+    completion_tokens: Optional[int] = Field(
+        default=None, description="Tokens used for completions"
+    )
     cached_prompt_tokens: Optional[int] = Field(default=None, description="Cached prompt tokens")
-    successful_requests: Optional[int] = Field(default=None, description="Number of successful requests")
+    successful_requests: Optional[int] = Field(
+        default=None, description="Number of successful requests"
+    )
 
 
 class BatchCrewaiOutputSchema(BaseModel):
     status: Literal["success", "failed", "cancelled"] = Field(description="Execution status")
-    result: Optional[Dict[str, Any]] = Field(default=None, description="Dictionary mapping work names to their execution results (only present on success)")
-    error: Optional[str] = Field(default=None, description="Error message (only present on failure or cancellation)")
-    token_usage: Optional[BatchCrewaiTokenUsage] = Field(default=None, description="Aggregated token usage from all works (optional)")
+    result: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Dictionary mapping work names to their execution results (only present on success)",
+    )
+    error: Optional[str] = Field(
+        default=None, description="Error message (only present on failure or cancellation)"
+    )
+    token_usage: Optional[BatchCrewaiTokenUsage] = Field(
+        default=None, description="Aggregated token usage from all works (optional)"
+    )
 
 
 @executor_register()

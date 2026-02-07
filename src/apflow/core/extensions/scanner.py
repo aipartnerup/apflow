@@ -292,13 +292,13 @@ class ExtensionScanner:
             # Find the last occurrence of "apflow" in the path to handle nested apflow directories
             # e.g., /path/to/apflow/src/apflow/extensions/... -> start from the last "apflow"
             apflow_indices = [i for i, part in enumerate(parts) if part == "apflow"]
-            
+
             if not apflow_indices:
                 raise ValueError("No 'apflow' in path")
-            
+
             # Use the last occurrence of "apflow" as the start
             apflow_index = apflow_indices[-1]
-            
+
             module_parts = parts[apflow_index:-1] + (file_path.stem,)
             return ".".join(module_parts)
         except ValueError:
@@ -531,7 +531,9 @@ class ExtensionScanner:
         for executor_id, metadata in cls._metadata_cache.items():
             # Check if the extension name is in the module path
             # e.g., "apflow.extensions.stdio.system_info_executor" contains "stdio"
-            if f".{extension_name}." in metadata.module_path or metadata.module_path.endswith(f".{extension_name}"):
+            if f".{extension_name}." in metadata.module_path or metadata.module_path.endswith(
+                f".{extension_name}"
+            ):
                 result.append(executor_id)
 
         return result
