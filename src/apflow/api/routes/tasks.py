@@ -2489,7 +2489,6 @@ class TaskRoutes(BaseRouteHandler):
         Params:
             task_id: Task ID that completed (required)
             success: Whether execution succeeded (default: true)
-            result: Optional result data
             error: Optional error message
             calculate_next_run: Calculate next_run_at (default: true)
 
@@ -2502,7 +2501,6 @@ class TaskRoutes(BaseRouteHandler):
                 raise ValueError("task_id is required")
 
             success = params.get("success", True)
-            result = params.get("result")
             error = params.get("error")
             calculate_next_run = params.get("calculate_next_run", True)
 
@@ -2519,7 +2517,6 @@ class TaskRoutes(BaseRouteHandler):
                 updated_task = await task_repository.complete_scheduled_run(
                     task_id=task_id,
                     success=success,
-                    result=result,
                     error=error,
                     calculate_next_run=calculate_next_run,
                 )
