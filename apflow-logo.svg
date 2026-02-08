@@ -1,0 +1,136 @@
+<svg width="512" height="512" viewBox="50 36 412 412" xmlns="http://www.w3.org/2000/svg">
+  <!-- apflow starfish logo v3 - with gradient effects -->
+
+  <defs>
+    <!-- Body radial gradient: warm center → deeper coral at edges -->
+    <radialGradient id="bodyGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FF7B6B"/>
+      <stop offset="100%" stop-color="#D94030"/>
+    </radialGradient>
+
+    <!-- Arm radial gradient: bright coral near center → deeper coral at tips -->
+    <radialGradient id="armGrad" cx="256" cy="256" r="190" fx="256" fy="256"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FF8A70"/>
+      <stop offset="40%" stop-color="#FF6347"/>
+      <stop offset="100%" stop-color="#E04535"/>
+    </radialGradient>
+
+    <!-- Warm glow overlay (same coral family) -->
+    <radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFB4A2" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#FFB4A2" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Arm highlight gradient: visible near body → fades toward tip -->
+    <radialGradient id="highlightGrad" cx="256" cy="256" r="180"
+                    gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFB088" stop-opacity="0.5"/>
+      <stop offset="60%" stop-color="#FF8066" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#FF8066" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Five arms (same shape, rotated 72° each) -->
+  <g fill="url(#armGrad)">
+    <path d="M 229,200 C 218,155 232,115 248,88 Q 256,68 264,88 C 280,115 294,155 283,200 Z"/>
+    <path d="M 229,200 C 218,155 232,115 248,88 Q 256,68 264,88 C 280,115 294,155 283,200 Z"
+          transform="rotate(72, 256, 256)"/>
+    <path d="M 229,200 C 218,155 232,115 248,88 Q 256,68 264,88 C 280,115 294,155 283,200 Z"
+          transform="rotate(144, 256, 256)"/>
+    <path d="M 229,200 C 218,155 232,115 248,88 Q 256,68 264,88 C 280,115 294,155 283,200 Z"
+          transform="rotate(216, 256, 256)"/>
+    <path d="M 229,200 C 218,155 232,115 248,88 Q 256,68 264,88 C 280,115 294,155 283,200 Z"
+          transform="rotate(288, 256, 256)"/>
+  </g>
+
+  <!-- Center body (same gradient as arms for seamless junction) -->
+  <circle cx="256" cy="256" r="68" fill="url(#armGrad)"/>
+
+  <!-- Warm glow overlay on body -->
+  <circle cx="256" cy="256" r="65" fill="url(#glowGrad)"/>
+
+  <!-- Arm highlights (inner lighter strip with gradient) -->
+  <g fill="url(#highlightGrad)">
+    <path d="M 242,205 C 237,168 244,130 252,98 Q 256,85 260,98 C 268,130 275,168 270,205 Z"/>
+    <path d="M 242,205 C 237,168 244,130 252,98 Q 256,85 260,98 C 268,130 275,168 270,205 Z"
+          transform="rotate(72, 256, 256)"/>
+    <path d="M 242,205 C 237,168 244,130 252,98 Q 256,85 260,98 C 268,130 275,168 270,205 Z"
+          transform="rotate(144, 256, 256)"/>
+    <path d="M 242,205 C 237,168 244,130 252,98 Q 256,85 260,98 C 268,130 275,168 270,205 Z"
+          transform="rotate(216, 256, 256)"/>
+    <path d="M 242,205 C 237,168 244,130 252,98 Q 256,85 260,98 C 268,130 275,168 270,205 Z"
+          transform="rotate(288, 256, 256)"/>
+  </g>
+
+  <!-- Arm texture dots (per arm, then rotated) -->
+  <!-- Top arm dots -->
+  <g fill="#FFD5C8" opacity="0.55">
+    <circle cx="246" cy="175" r="3.5"/>
+    <circle cx="266" cy="170" r="3"/>
+    <circle cx="252" cy="148" r="3.2"/>
+    <circle cx="263" cy="142" r="2.8"/>
+    <circle cx="248" cy="122" r="2.8"/>
+    <circle cx="260" cy="118" r="2.5"/>
+    <circle cx="254" cy="100" r="2.2"/>
+  </g>
+  <!-- Arm 2 dots (72°) -->
+  <g fill="#FFD5C8" opacity="0.55" transform="rotate(72, 256, 256)">
+    <circle cx="246" cy="175" r="3.5"/>
+    <circle cx="266" cy="170" r="3"/>
+    <circle cx="252" cy="148" r="3.2"/>
+    <circle cx="263" cy="142" r="2.8"/>
+    <circle cx="248" cy="122" r="2.8"/>
+    <circle cx="260" cy="118" r="2.5"/>
+    <circle cx="254" cy="100" r="2.2"/>
+  </g>
+  <!-- Arm 3 dots (144°) -->
+  <g fill="#FFD5C8" opacity="0.55" transform="rotate(144, 256, 256)">
+    <circle cx="246" cy="175" r="3.5"/>
+    <circle cx="266" cy="170" r="3"/>
+    <circle cx="252" cy="148" r="3.2"/>
+    <circle cx="263" cy="142" r="2.8"/>
+    <circle cx="248" cy="122" r="2.8"/>
+    <circle cx="260" cy="118" r="2.5"/>
+    <circle cx="254" cy="100" r="2.2"/>
+  </g>
+  <!-- Arm 4 dots (216°) -->
+  <g fill="#FFD5C8" opacity="0.55" transform="rotate(216, 256, 256)">
+    <circle cx="246" cy="175" r="3.5"/>
+    <circle cx="266" cy="170" r="3"/>
+    <circle cx="252" cy="148" r="3.2"/>
+    <circle cx="263" cy="142" r="2.8"/>
+    <circle cx="248" cy="122" r="2.8"/>
+    <circle cx="260" cy="118" r="2.5"/>
+    <circle cx="254" cy="100" r="2.2"/>
+  </g>
+  <!-- Arm 5 dots (288°) -->
+  <g fill="#FFD5C8" opacity="0.55" transform="rotate(288, 256, 256)">
+    <circle cx="246" cy="175" r="3.5"/>
+    <circle cx="266" cy="170" r="3"/>
+    <circle cx="252" cy="148" r="3.2"/>
+    <circle cx="263" cy="142" r="2.8"/>
+    <circle cx="248" cy="122" r="2.8"/>
+    <circle cx="260" cy="118" r="2.5"/>
+    <circle cx="254" cy="100" r="2.2"/>
+  </g>
+
+  <!-- Center body highlight -->
+  <ellipse cx="244" cy="240" rx="28" ry="22" fill="#FFB088" opacity="0.3"/>
+
+  <!-- Eyes -->
+  <ellipse cx="236" cy="247" rx="19" ry="20" fill="white"/>
+  <ellipse cx="276" cy="247" rx="19" ry="20" fill="white"/>
+  <circle cx="241" cy="250" r="11" fill="#2D3748"/>
+  <circle cx="281" cy="250" r="11" fill="#2D3748"/>
+  <circle cx="245" cy="244" r="5" fill="white"/>
+  <circle cx="285" cy="244" r="5" fill="white"/>
+
+  <!-- Smile -->
+  <path d="M 245,273 Q 256,286 267,273"
+        stroke="#C0392B" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+
+  <!-- Cheek blush -->
+  <ellipse cx="220" cy="268" rx="12" ry="8" fill="#FF9999" opacity="0.4"/>
+  <ellipse cx="292" cy="268" rx="12" ry="8" fill="#FF9999" opacity="0.4"/>
+</svg>

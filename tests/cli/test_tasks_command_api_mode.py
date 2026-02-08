@@ -51,6 +51,11 @@ def api_mock_client():
 @pytest.fixture()
 def force_api_mode(monkeypatch: pytest.MonkeyPatch, api_mock_client: AsyncMock):
     """Force CLI to use API and yield the mock client used by commands."""
+    import logging
+
+    # Disable all logging to prevent pollution of CLI output
+    # This is critical for tests that parse stdout as JSON
+    logging.disable(logging.CRITICAL)
 
     @asynccontextmanager
     async def fake_client_cm():
@@ -61,7 +66,11 @@ def force_api_mode(monkeypatch: pytest.MonkeyPatch, api_mock_client: AsyncMock):
     # Ensure CLI thinks API is configured and uses our fake client context manager.
     monkeypatch.setattr(tasks_module, "should_use_api", lambda: True)
     monkeypatch.setattr(tasks_module, "get_api_client_if_configured", fake_client_cm)
-    return api_mock_client
+
+    yield api_mock_client
+
+    # Re-enable logging after test
+    logging.disable(logging.NOTSET)
 
 
 def test_tasks_count_uses_api(force_api_mode: AsyncMock):

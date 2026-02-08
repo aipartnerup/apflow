@@ -60,7 +60,7 @@ def should_use_api() -> bool:
             is_accessible = run_async_safe(cm.check_api_server_accessible(default_url, timeout=1.0))
             if is_accessible:
                 cm.set_api_server_url(default_url)
-                logger.info("Auto-configured API server URL: %s", default_url)
+                logger.debug("Auto-configured API server URL: %s", default_url)
                 _api_accessible = True
                 return True
         except Exception as discover_exc:  # pragma: no cover - defensive
@@ -213,7 +213,7 @@ def log_api_usage(command_name: str, using_api: bool) -> None:
     """
     if using_api:
         cm = get_config_manager()
-        logger.info(f"Command '{command_name}' using API gateway: " f"{cm.api_server_url}")
+        logger.debug(f"Command '{command_name}' using API gateway: " f"{cm.api_server_url}")
     # Don't log when using local database to avoid polluting test output
 
 

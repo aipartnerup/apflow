@@ -1,5 +1,10 @@
 # apflow
 
+<p align="center">
+  <img src="apflow-logo.svg" alt="apflow Logo" width="128" height="128" />
+</p>
+
+
 **Task Orchestration and Execution Framework**
 
 ## Core Positioning

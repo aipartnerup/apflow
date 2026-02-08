@@ -40,7 +40,7 @@ def setup_logging(level: str = None) -> None:
     logging.basicConfig(
         level=numeric_level,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-        stream=sys.stdout,
+        stream=sys.stderr,
         force=True,  # Force reconfiguration even if basicConfig was called before
     )
 
