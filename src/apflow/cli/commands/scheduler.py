@@ -105,7 +105,7 @@ def start(
     ),
     timeout: int = typer.Option(3600, "--timeout", "-t", help="Default task timeout in seconds"),
     verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Show task execution results (id, name, status)"
+        False, "--verbose", "-v", help="Enable DEBUG-level logging and show task execution details"
     ),
 ):
     """

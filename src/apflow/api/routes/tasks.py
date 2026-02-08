@@ -26,7 +26,6 @@ from apflow.logger import get_logger
 logger = get_logger(__name__)
 
 # Global event storage for task streaming (keyed by root_task_id)
-# Global event storage for task streaming (keyed by root_task_id)
 _task_streaming_events: Dict[str, List[Dict[str, Any]]] = {}
 _task_streaming_events_lock: Optional[asyncio.Lock] = None
 
@@ -2625,6 +2624,10 @@ class TaskRoutes(BaseRouteHandler):
             Trigger result with task status
         """
         try:
+            import os
+
+            from apflow.scheduler.gateway.webhook import WebhookConfig, WebhookGateway
+
             task_id = params.get("task_id")
             if not task_id:
                 raise ValueError("task_id is required")
@@ -2668,13 +2671,6 @@ class TaskRoutes(BaseRouteHandler):
                     user_id = result.user_id
                 else:
                     # 3. APFLOW_WEBHOOK_SECRET (internal system HMAC)
-                    import os
-
-                    from apflow.scheduler.gateway.webhook import (
-                        WebhookConfig,
-                        WebhookGateway,
-                    )
-
                     secret_key = os.getenv("APFLOW_WEBHOOK_SECRET")
                     if secret_key:
                         config = WebhookConfig(secret_key=secret_key)
@@ -2693,10 +2689,6 @@ class TaskRoutes(BaseRouteHandler):
                     # user_id remains None — internal system, no permission check
 
             # IP whitelist and rate limit as additional protection layer
-            import os
-
-            from apflow.scheduler.gateway.webhook import WebhookConfig, WebhookGateway
-
             allowed_ips_str = os.getenv("APFLOW_WEBHOOK_ALLOWED_IPS")
             allowed_ips = allowed_ips_str.split(",") if allowed_ips_str else None
             rate_limit = int(os.getenv("APFLOW_WEBHOOK_RATE_LIMIT", "0"))
@@ -2716,8 +2708,6 @@ class TaskRoutes(BaseRouteHandler):
                     }
 
             # Trigger task execution
-            from apflow.scheduler.gateway.webhook import WebhookGateway
-
             trigger_gateway = WebhookGateway()
             result = await trigger_gateway.trigger_task(
                 task_id=task_id,

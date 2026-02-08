@@ -59,19 +59,22 @@ WebhookVerifyHook = Callable[
     [WebhookVerifyContext], Union[WebhookVerifyResult, Awaitable[WebhookVerifyResult]]
 ]
 """
-Type alias for post-execution hook functions.
+Type alias for webhook verification hook functions.
 
-Post-hooks are called after task execution completes, receiving the task,
-final input data, and execution result. Useful for logging, notifications, etc.
+Webhook verify hooks are called during webhook trigger authentication to perform
+custom verification. They receive a WebhookVerifyContext and return a
+WebhookVerifyResult indicating whether the request is valid.
 
 Args:
-    task: The TaskModelType instance
-    inputs: The final input parameters used for execution
-    result: The execution result (or error information)
+    context: WebhookVerifyContext with task_id, signature, timestamp, client_ip
+
+Returns:
+    WebhookVerifyResult with valid (bool), optional user_id, and optional error
 
 Example:
-    async def my_post_hook(task: TaskModelType, inputs: Dict[str, Any], result: Any) -> None:
-        logger.info(f"Task {task.id} completed with result: {result}")
+    async def my_verify_hook(ctx: WebhookVerifyContext) -> WebhookVerifyResult:
+        valid = verify_signature(ctx.signature, ctx.timestamp)
+        return WebhookVerifyResult(valid=valid, user_id="user123")
 """
 
 

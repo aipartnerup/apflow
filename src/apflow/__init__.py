@@ -18,7 +18,7 @@ Optional extensions (require extras):
 Protocol Standard: A2A (Agent-to-Agent) Protocol
 """
 
-__version__ = "0.14.0"
+__version__ = "0.15.0"
 
 # Lazy imports to keep package import fast and avoid circular dependencies
 # Core framework exports are loaded on first access via __getattr__
@@ -50,6 +50,8 @@ __all__ = [
     "get_require_existing_tasks",
     "register_webhook_verify_hook",
     "get_webhook_verify_hook",
+    "WebhookVerifyContext",
+    "WebhookVerifyResult",
     "executor_register",
     "storage_register",
     "hook_register",
@@ -132,6 +134,15 @@ def __getattr__(name):
             storage_register,  # noqa: F401
             hook_register,  # noqa: F401
             tool_register,  # noqa: F401
+        )
+
+        return locals()[name]
+
+    # Core types
+    if name in ("WebhookVerifyContext", "WebhookVerifyResult"):
+        from apflow.core.types import (
+            WebhookVerifyContext,  # noqa: F401
+            WebhookVerifyResult,  # noqa: F401
         )
 
         return locals()[name]

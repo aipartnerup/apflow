@@ -656,7 +656,6 @@ apflow tasks list --user-id user123
 
 # Generate and preview task tree
 apflow generate task-tree "Fetch data from API and process it"
-```
 
 # Complex processing flow
 apflow generate task-tree "Call REST API to get user data, process response with Python script, validate processed data, and save to file"
