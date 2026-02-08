@@ -332,7 +332,12 @@ class WebhookGateway:
                 # for duplicate prevention, but execute_task_tree skips in_progress tasks
                 # that aren't marked for re-execution — which would cause the entire tree
                 # (including children) to be silently skipped.
-                task_tree.task.status = "pending"
+                #
+                # Must persist to DB (not just in-memory) because child task execution
+                # calls expire_all() which discards unpersisted dirty changes. Without
+                # this, the parent reverts to "in_progress" and is skipped by
+                # _check_task_execution_preconditions.
+                await task_repository.update_task(task_id=task_id, status="pending")
 
                 # Execute
                 await task_executor.execute_task_tree(
@@ -342,9 +347,13 @@ class WebhookGateway:
                     db_session=db_session,
                 )
 
-                # Get result
+                # Get result — capture status/error before complete_scheduled_run
+                # resets the task object via SQLAlchemy identity map
                 task = await task_repository.get_task_by_id(task_id)
+                task_status = task.status
                 task_result = task.result
+                task_error = task.error
+                execution_success = task_status == "completed"
 
                 # Collect children results for visibility
                 children_results = []
@@ -360,28 +369,27 @@ class WebhookGateway:
                             }
                         )
 
-                # Complete scheduled run
+                # Complete scheduled run (update schedule tracking for next run)
                 await task_repository.complete_scheduled_run(
                     task_id=task_id,
-                    success=task.status == "completed",
-                    result=task_result,
-                    error=task.error,
+                    success=execution_success,
+                    error=task_error,
                     calculate_next_run=True,
                 )
 
                 return {
-                    "success": task.status == "completed",
-                    "status": task.status,
+                    "success": execution_success,
+                    "status": task_status,
                     "task_id": task_id,
                     "result": task_result,
-                    "error": task.error,
+                    "error": task_error,
                     "children": children_results,
                 }
 
         except Exception as e:
             logger.error(f"Task execution error: {e}", exc_info=True)
 
-            # Try to mark as failed
+            # Try to complete schedule tracking even on failure
             try:
                 async with create_pooled_session() as db_session:
                     task_repository = TaskRepository(db_session)
@@ -389,7 +397,6 @@ class WebhookGateway:
                         task_id=task_id,
                         success=False,
                         error=str(e),
-                        calculate_next_run=True,
                     )
             except Exception:
                 pass

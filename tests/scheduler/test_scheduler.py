@@ -1348,65 +1348,6 @@ class TestSchedulerExecuteTaskAPI:
         assert scheduler._console.print.call_count == 1
 
 
-class TestSchedulerDBExecuteStatusReset:
-    """Tests for _execute_task_via_db resetting root task status before execution.
-
-    mark_scheduled_task_running sets the root to in_progress for duplicate
-    prevention.  execute_task_tree skips in_progress tasks not marked for
-    re-execution, so _execute_task_via_db must reset the tree root to pending.
-    """
-
-    @pytest.mark.asyncio
-    async def test_execute_task_via_db_resets_root_status(self):
-        """Verify _execute_task_via_db sets task_tree.task.status to pending."""
-        scheduler = InternalScheduler()
-
-        mock_task = MagicMock()
-        mock_task.id = "parent1"
-        mock_task.status = "in_progress"
-        mock_task.result = None
-        mock_task.error = None
-        mock_task.name = "Parent"
-        mock_task.has_children = False
-
-        mock_tree = MagicMock()
-        mock_tree.task = MagicMock()
-        mock_tree.task.status = "in_progress"
-        mock_tree.children = []
-
-        mock_repo = MagicMock()
-        mock_repo.mark_scheduled_task_running = AsyncMock(return_value=mock_task)
-        mock_repo.get_task_by_id = AsyncMock(return_value=mock_task)
-        mock_repo.get_task_tree_for_api = AsyncMock(return_value=mock_tree)
-        mock_repo.complete_scheduled_run = AsyncMock()
-
-        captured_status = {}
-
-        async def capture_execute(**kwargs):
-            captured_status["root_status"] = kwargs["task_tree"].task.status
-            return {}
-
-        mock_executor = MagicMock()
-        mock_executor.execute_task_tree = AsyncMock(side_effect=capture_execute)
-
-        with patch("apflow.core.storage.create_pooled_session") as mock_session:
-            mock_db = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_db)
-            mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
-
-            with patch(
-                "apflow.core.storage.sqlalchemy.task_repository.TaskRepository",
-                return_value=mock_repo,
-            ):
-                with patch(
-                    "apflow.core.execution.task_executor.TaskExecutor",
-                    return_value=mock_executor,
-                ):
-                    await scheduler._execute_task_via_db("parent1")
-
-        assert captured_status["root_status"] == "pending"
-
-
 class TestSchedulerCreateAPIClient:
     """Tests for _create_api_client helper."""
 

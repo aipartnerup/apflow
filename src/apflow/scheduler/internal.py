@@ -638,7 +638,12 @@ class InternalScheduler(BaseScheduler):
                 # mark_scheduled_task_running already set it to in_progress for
                 # duplicate prevention, but execute_task_tree skips in_progress
                 # tasks that aren't marked for re-execution.
-                task_tree.task.status = "pending"
+                #
+                # Must persist to DB (not just in-memory) because child task execution
+                # calls expire_all() which discards unpersisted dirty changes. Without
+                # this, the parent reverts to "in_progress" and is skipped by
+                # _check_task_execution_preconditions.
+                await task_repository.update_task(task_id=task_id, status="pending")
 
                 # Execute the task tree
                 await task_executor.execute_task_tree(
@@ -702,7 +707,6 @@ class InternalScheduler(BaseScheduler):
                     await task_repository.complete_scheduled_run(
                         task_id=task_id,
                         success=success,
-                        result=result,
                         error=error,
                         calculate_next_run=True,
                     )

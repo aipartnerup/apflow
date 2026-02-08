@@ -781,6 +781,6 @@ apflow tasks watch --task-id task-001
 - ✅ **Manage tasks**: `create`, `update`, `delete`, `copy`
 - ✅ **Cancel tasks**: `apflow tasks cancel` with force option
 - ✅ **Monitor flows**: `apflow flow` commands
-- ✅ **Debug issues**: Enable debug mode and check logs
+- ✅ **Debug issues**: `apflow config set log-level DEBUG` Enable debug mode and check logs
 
 All commands support JSON input/output for integration with other tools.

@@ -535,7 +535,7 @@ class TaskRepository:
         It resets each child task's status, result, error, timestamps, and progress
         so the tree starts fresh, just like a new tasks.execute call.
 
-        The root task itself is NOT reset here — it is handled by complete_scheduled_run().
+        The root task itself is NOT reset here — it is handled by mark_scheduled_task_running().
 
         Args:
             root_task_id: The root task ID of the tree
@@ -553,7 +553,7 @@ class TaskRepository:
 
             reset_count = 0
             for task in all_tasks:
-                # Skip the root task — it is handled by complete_scheduled_run
+                # Skip the root task — it is handled by mark_scheduled_task_running
                 if str(task.id) == str(root_task_id):
                     continue
 
@@ -594,9 +594,7 @@ class TaskRepository:
         to be executed. A task is considered "due" when:
         - schedule_enabled is True
         - next_run_at is not None and <= before (default: now)
-        - status is 'pending', 'completed', or 'failed' (not 'running'/'in_progress')
-          'completed'/'failed' covers recovery when complete_scheduled_run was
-          missed (e.g. scheduler crash or restart).
+        - status is not 'in_progress' (to avoid double-execution of running tasks)
         - max_runs is None or run_count < max_runs
         - schedule_end_at is None or schedule_end_at > now
 
@@ -616,15 +614,13 @@ class TaskRepository:
                 before = datetime.now(tz.utc)
 
             # Build query for due scheduled tasks
-            # Include completed/failed for recovery: if complete_scheduled_run was
-            # missed (scheduler crash), the task is stuck in a terminal status but
-            # the schedule is still active.  Exclude running/in_progress to avoid
-            # double-execution.
+            # Schedule eligibility is determined by schedule_* fields.
+            # Only exclude in_progress to avoid double-execution of running tasks.
             stmt = select(self.task_model_class).filter(
                 self.task_model_class.schedule_enabled == True,  # noqa: E712
                 self.task_model_class.next_run_at.isnot(None),
                 self.task_model_class.next_run_at <= before,
-                self.task_model_class.status.in_(["pending", "completed", "failed"]),
+                self.task_model_class.status != "in_progress",
             )
 
             # Filter by max_runs (if set, run_count must be less)
@@ -727,47 +723,48 @@ class TaskRepository:
 
     async def mark_scheduled_task_running(self, task_id: str) -> Optional[TaskModelType]:
         """
-        Mark a scheduled task as running (in_progress).
+        Mark a scheduled task as running (in_progress) and reset for clean re-execution.
 
-        This is called by the scheduler before executing a task.
-        Updates status to 'in_progress' and sets started_at.
+        This is called by the scheduler before executing a task. It resets
+        execution state (status, result, error, progress, timestamps) so the
+        task starts fresh, just like a new tasks.execute call. Also resets
+        child tasks if the task has children.
 
-        Recovery handling: if the task is not in 'pending' state (e.g. stuck
-        in 'completed'/'failed' after a scheduler crash where
-        complete_scheduled_run was missed), child tasks are reset so the
-        tree can be re-executed cleanly.
+        If the task is already in_progress, returns None to avoid double-execution.
 
         Args:
             task_id: Task ID to mark as running
 
         Returns:
-            Updated task, or None if task not found
+            Updated task, or None if task not found or already running
         """
         try:
             task = await self.get_task_by_id(task_id)
             if not task:
                 return None
 
+            # Guard: skip if task is still running to avoid double-execution
+            if task.status == "in_progress":
+                logger.info(f"Task {task_id} is already in_progress, skipping")
+                return None
+
             from datetime import timezone as tz
 
             now = datetime.now(tz.utc)
 
-            # Recovery: if task was stuck in completed/failed
-            # (complete_scheduled_run missed), reset children for clean re-execution
-            is_recovery = task.status != "pending"
-            if is_recovery and getattr(task, "has_children", False):
-                await self.reset_task_tree_for_reexecution(task_id)
-                logger.info(
-                    f"Recovery: reset children of task {task_id} " f"(was stuck in '{task.status}')"
-                )
-
             task.status = "in_progress"
             task.started_at = now
+            task.completed_at = None
+            task.result = None  # Clear previous result for clean re-execution
             task.error = None
             task.progress = 0.0
 
             await self.db.commit()
             await self.db.refresh(task)
+
+            # Reset child tasks for clean re-execution
+            if getattr(task, "has_children", False):
+                await self.reset_task_tree_for_reexecution(task_id)
 
             logger.info(f"Marked scheduled task {task_id} as running")
             return task
@@ -781,26 +778,30 @@ class TaskRepository:
         self,
         task_id: str,
         success: bool = True,
-        result: Optional[Any] = None,
         error: Optional[str] = None,
         calculate_next_run: bool = True,
     ) -> Optional[TaskModelType]:
         """
-        Complete a scheduled task run and prepare for next execution.
+        Complete a scheduled task run and update schedule tracking.
 
-        This method should be called after a scheduled task execution completes.
-        It updates:
-        - status back to 'pending' (for next run) or 'completed'/'failed'
+        This method only manages schedule-related fields. It does NOT touch
+        execution state (status, result, progress, started_at, completed_at)
+        — the executor sets those, and they should remain as-is so users
+        can see execution results between runs.
+
+        Updates:
         - last_run_at to current time
         - run_count incremented by 1
         - next_run_at calculated for next execution (if calculate_next_run=True)
-        - result/error fields
         - schedule_enabled to False if max_runs reached or schedule expired
+
+        If the task is still in_progress when this is called with success=False,
+        it means the task never reached the executor (pre-execution failure),
+        so status and error are set here as a fallback.
 
         Args:
             task_id: Task ID that completed
             success: Whether the execution was successful
-            result: Optional result data
             error: Optional error message (if failed)
             calculate_next_run: If True, calculate and set next_run_at
 
@@ -816,16 +817,15 @@ class TaskRepository:
 
             now = datetime.now(tz.utc)
 
-            # Update execution tracking
+            # Update schedule tracking
             task.last_run_at = now
             task.run_count = (task.run_count or 0) + 1
-            task.completed_at = now
 
-            # Set result/error
-            if result is not None:
-                task.result = result
-            if error is not None:
-                task.error = error
+            # Handle pre-execution failure: task never reached executor
+            if not success and task.status == "in_progress":
+                task.status = "failed"
+                if error is not None:
+                    task.error = error
 
             # Check if schedule should be disabled
             should_disable = False
@@ -847,7 +847,6 @@ class TaskRepository:
             if should_disable:
                 task.schedule_enabled = False
                 task.next_run_at = None
-                task.status = "completed" if success else "failed"
             else:
                 # Calculate next run time
                 if calculate_next_run and task.schedule_type and task.schedule_expression:
@@ -861,19 +860,6 @@ class TaskRepository:
                         from_time=now,
                     )
                     task.next_run_at = next_run
-
-                # Reset status to pending for next run
-                task.status = "pending"
-                task.started_at = None
-                task.error = None  # Clear previous error for next run
-                task.result = None  # Clear previous result for clean re-execution
-                task.progress = 0.0  # Reset progress for next run
-
-                # Reset child tasks if this is a parent task with children
-                if getattr(task, "has_children", False):
-                    await self.db.commit()
-                    await self.db.refresh(task)
-                    await self.reset_task_tree_for_reexecution(task_id)
 
             await self.db.commit()
             await self.db.refresh(task)

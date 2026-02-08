@@ -857,8 +857,8 @@ class TestSchedulingRepositoryMethods:
         assert due_tasks[0].id == active_task.id
 
     @pytest.mark.asyncio
-    async def test_get_due_scheduled_tasks_recovery_completed(self, sync_db_session):
-        """Test that completed tasks with active schedule are picked up (recovery)."""
+    async def test_get_due_scheduled_tasks_completed_status(self, sync_db_session):
+        """Test that completed tasks with active schedule are picked up for next run."""
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
         repo = TaskRepository(sync_db_session)
@@ -866,9 +866,9 @@ class TestSchedulingRepositoryMethods:
         now = datetime.now(timezone.utc)
         past = now - timedelta(hours=1)
 
-        # Simulate a task stuck in completed (complete_scheduled_run missed)
-        stuck_task = await repo.create_task(
-            name="Stuck Completed Task",
+        # After execution, task stays in completed status — scheduler picks it up
+        completed_task = await repo.create_task(
+            name="Completed Scheduled Task",
             user_id="test-user",
             status="completed",
             schedule_type="interval",
@@ -882,11 +882,11 @@ class TestSchedulingRepositoryMethods:
         due_tasks = await repo.get_due_scheduled_tasks()
 
         assert len(due_tasks) == 1
-        assert due_tasks[0].id == stuck_task.id
+        assert due_tasks[0].id == completed_task.id
 
     @pytest.mark.asyncio
-    async def test_get_due_scheduled_tasks_recovery_failed(self, sync_db_session):
-        """Test that failed tasks with active schedule are picked up (recovery)."""
+    async def test_get_due_scheduled_tasks_failed_status(self, sync_db_session):
+        """Test that failed tasks with active schedule are picked up for retry."""
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
         repo = TaskRepository(sync_db_session)
@@ -894,8 +894,8 @@ class TestSchedulingRepositoryMethods:
         now = datetime.now(timezone.utc)
         past = now - timedelta(hours=1)
 
-        stuck_task = await repo.create_task(
-            name="Stuck Failed Task",
+        failed_task = await repo.create_task(
+            name="Failed Scheduled Task",
             user_id="test-user",
             status="failed",
             schedule_type="interval",
@@ -909,7 +909,7 @@ class TestSchedulingRepositoryMethods:
         due_tasks = await repo.get_due_scheduled_tasks()
 
         assert len(due_tasks) == 1
-        assert due_tasks[0].id == stuck_task.id
+        assert due_tasks[0].id == failed_task.id
 
     @pytest.mark.asyncio
     async def test_get_due_scheduled_tasks_excludes_running(self, sync_db_session):
@@ -935,15 +935,17 @@ class TestSchedulingRepositoryMethods:
         assert len(due_tasks) == 0
 
     @pytest.mark.asyncio
-    async def test_mark_scheduled_task_running_recovery_resets_children(self, sync_db_session):
-        """Test that mark_scheduled_task_running resets children in recovery case."""
+    async def test_mark_scheduled_task_running_resets_completed_parent_and_children(
+        self, sync_db_session
+    ):
+        """Test that mark_scheduled_task_running resets a completed parent and its children."""
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
         repo = TaskRepository(sync_db_session)
 
-        # Create parent stuck in "completed"
+        # Parent in completed state (normal post-execution state)
         parent = await repo.create_task(
-            name="Stuck Parent",
+            name="Completed Parent",
             user_id="test-user",
             status="completed",
             has_children=True,
@@ -961,11 +963,12 @@ class TestSchedulingRepositoryMethods:
             result={"data": "old"},
         )
 
-        # mark_scheduled_task_running should reset children
+        # mark_scheduled_task_running should reset parent and children
         updated = await repo.mark_scheduled_task_running(parent.id)
 
         assert updated is not None
         assert updated.status == "in_progress"
+        assert updated.completed_at is None
 
         # Verify child was reset
         refreshed_child = await repo.get_task_by_id(child.id)
@@ -973,13 +976,13 @@ class TestSchedulingRepositoryMethods:
         assert refreshed_child.result is None
 
     @pytest.mark.asyncio
-    async def test_mark_scheduled_task_running_normal_skips_child_reset(self, sync_db_session):
-        """Test that mark_scheduled_task_running skips child reset for normal pending case."""
+    async def test_mark_scheduled_task_running_always_resets_children(self, sync_db_session):
+        """Test that mark_scheduled_task_running always resets children for clean re-execution."""
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
         repo = TaskRepository(sync_db_session)
 
-        # Create parent in normal "pending" state
+        # Create parent in normal "pending" state (after complete_scheduled_run)
         parent = await repo.create_task(
             name="Normal Parent",
             user_id="test-user",
@@ -988,24 +991,54 @@ class TestSchedulingRepositoryMethods:
             schedule_type="interval",
             schedule_expression="5",
             schedule_enabled=True,
+            result={"output": "previous-run"},
         )
 
-        # Create pending child (already in correct state)
+        # Create child with results from previous run (not reset by complete_scheduled_run)
         child = await repo.create_task(
             name="Child Task",
             user_id="test-user",
-            status="pending",
+            status="completed",
             parent_id=parent.id,
+            result={"data": "old"},
         )
 
         updated = await repo.mark_scheduled_task_running(parent.id)
 
         assert updated is not None
         assert updated.status == "in_progress"
+        assert updated.result is None  # Cleared for new execution
+        assert updated.completed_at is None  # Cleared for new execution
 
-        # Child should remain pending (no reset needed)
+        # Child should be reset to pending with result cleared
         refreshed_child = await repo.get_task_by_id(child.id)
         assert refreshed_child.status == "pending"
+        assert refreshed_child.result is None
+
+    @pytest.mark.asyncio
+    async def test_mark_scheduled_task_running_skips_in_progress(self, sync_db_session):
+        """Test that mark_scheduled_task_running returns None for in_progress tasks."""
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+
+        # Create a task already in_progress (currently executing)
+        task = await repo.create_task(
+            name="Running Task",
+            user_id="test-user",
+            status="in_progress",
+            schedule_type="interval",
+            schedule_expression="5",
+            schedule_enabled=True,
+        )
+
+        # Should return None to avoid double-execution
+        result = await repo.mark_scheduled_task_running(task.id)
+        assert result is None
+
+        # Task should remain in_progress
+        refreshed = await repo.get_task_by_id(task.id)
+        assert refreshed.status == "in_progress"
 
     @pytest.mark.asyncio
     async def test_get_scheduled_tasks(self, sync_db_session):
@@ -1084,7 +1117,7 @@ class TestSchedulingRepositoryMethods:
 
     @pytest.mark.asyncio
     async def test_complete_scheduled_run(self, sync_db_session):
-        """Test completing a scheduled run"""
+        """Test completing a scheduled run preserves execution state"""
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
         from datetime import datetime, timezone
 
@@ -1092,10 +1125,12 @@ class TestSchedulingRepositoryMethods:
 
         now = datetime.now(timezone.utc)
 
-        # Create a scheduled task
+        # Create a scheduled task that has been executed (status=completed by executor)
         task = await repo.create_task(
-            name="Running Task",
+            name="Completed Task",
             user_id="test-user",
+            status="completed",
+            result={"processed": 100},
             schedule_type="interval",
             schedule_expression="3600",  # 1 hour
             schedule_enabled=True,
@@ -1103,11 +1138,10 @@ class TestSchedulingRepositoryMethods:
             run_count=0,
         )
 
-        # Complete the run
+        # Complete the scheduled run — only updates schedule tracking
         updated = await repo.complete_scheduled_run(
             task.id,
             success=True,
-            result={"processed": 100},
         )
 
         assert updated is not None
@@ -1115,8 +1149,8 @@ class TestSchedulingRepositoryMethods:
         assert updated.last_run_at is not None
         assert updated.next_run_at is not None
         assert updated.next_run_at > now  # Next run should be in the future
-        assert updated.status == "pending"  # Reset for next run
-        assert updated.result is None  # Cleared for clean re-execution
+        assert updated.status == "completed"  # Preserved from executor
+        assert updated.result == {"processed": 100}  # Preserved from executor
 
     @pytest.mark.asyncio
     async def test_complete_scheduled_run_max_runs_reached(self, sync_db_session):
@@ -1128,10 +1162,12 @@ class TestSchedulingRepositoryMethods:
 
         now = datetime.now(timezone.utc)
 
-        # Create a task with max_runs=1 and run_count=0
+        # Create a task with max_runs=1 and run_count=0 (executor already set completed)
         task = await repo.create_task(
             name="One-time Task",
             user_id="test-user",
+            status="completed",
+            result={"output": "final"},
             schedule_type="interval",
             schedule_expression="3600",
             schedule_enabled=True,
@@ -1147,7 +1183,8 @@ class TestSchedulingRepositoryMethods:
         assert updated.run_count == 1
         assert updated.schedule_enabled is False  # Should be disabled
         assert updated.next_run_at is None  # No more runs
-        assert updated.status == "completed"
+        assert updated.status == "completed"  # Preserved from executor
+        assert updated.result == {"output": "final"}  # Preserved from executor
 
     @pytest.mark.asyncio
     async def test_complete_scheduled_run_once_type(self, sync_db_session):
@@ -1162,6 +1199,7 @@ class TestSchedulingRepositoryMethods:
         task = await repo.create_task(
             name="Once Task",
             user_id="test-user",
+            status="completed",
             schedule_type="once",
             schedule_expression=now.isoformat(),
             schedule_enabled=True,
@@ -1171,15 +1209,16 @@ class TestSchedulingRepositoryMethods:
         updated = await repo.complete_scheduled_run(task.id, success=True)
 
         assert updated.schedule_enabled is False
-        assert updated.status == "completed"
+        assert updated.status == "completed"  # Preserved from executor
 
     @pytest.mark.asyncio
-    async def test_complete_scheduled_run_resets_task_tree(self, sync_db_session):
-        """Test that complete_scheduled_run resets child tasks for re-execution.
+    async def test_complete_scheduled_run_preserves_result_and_children(self, sync_db_session):
+        """Test that complete_scheduled_run preserves execution state and children.
 
-        Simulates interval=1s, max_runs=2: after the first run completes,
-        the parent should be reset to pending and all children should be
-        reset to clean pending state (result/error/timestamps cleared).
+        After a run completes, the parent status/result and children state should be
+        preserved so users can query the last execution's results (identical to
+        tasks.execute output). The reset happens later in mark_scheduled_task_running
+        when the next run starts.
         """
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
@@ -1187,10 +1226,13 @@ class TestSchedulingRepositoryMethods:
 
         now = datetime.now(timezone.utc)
 
-        # Create a parent task with children, interval=1s, max_runs=2
+        # Create a parent task with children, simulating post-execution state
         parent = await repo.create_task(
             name="Parent Scheduled Task",
             user_id="test-user",
+            status="completed",
+            result={"output": "parent-result-run1"},
+            progress=1.0,
             schedule_type="interval",
             schedule_expression="1",
             schedule_enabled=True,
@@ -1200,7 +1242,7 @@ class TestSchedulingRepositoryMethods:
             has_children=True,
         )
 
-        # Create two child tasks (simulating a completed first run)
+        # Create two child tasks (completed by executor)
         child1 = await repo.create_task(
             name="Child Task 1",
             user_id="test-user",
@@ -1226,34 +1268,25 @@ class TestSchedulingRepositoryMethods:
         updated_parent = await repo.complete_scheduled_run(
             parent.id,
             success=True,
-            result={"output": "parent-result-run1"},
         )
 
-        # Parent should be reset to pending for the next run
+        # Parent execution state should be preserved (matches tasks.execute output)
         assert updated_parent is not None
-        assert updated_parent.status == "pending"
+        assert updated_parent.status == "completed"  # Preserved from executor
         assert updated_parent.run_count == 1
         assert updated_parent.schedule_enabled is True
         assert updated_parent.next_run_at is not None
-        assert updated_parent.result is None  # Cleared for next run
-        assert updated_parent.progress == 0.0  # Reset for next run
+        assert updated_parent.result == {"output": "parent-result-run1"}  # Preserved
+        assert updated_parent.progress == 1.0  # Preserved from executor
 
-        # Children should be fully reset to pending
+        # Children should NOT be reset — results stay visible until next execution
         refreshed_child1 = await repo.get_task_by_id(child1.id)
-        assert refreshed_child1.status == "pending"
-        assert refreshed_child1.result is None
-        assert refreshed_child1.error is None
-        assert refreshed_child1.started_at is None
-        assert refreshed_child1.completed_at is None
-        assert refreshed_child1.progress == 0.0
+        assert refreshed_child1.status == "completed"
+        assert refreshed_child1.result == {"output": "child1-result"}
 
         refreshed_child2 = await repo.get_task_by_id(child2.id)
-        assert refreshed_child2.status == "pending"
-        assert refreshed_child2.result is None
-        assert refreshed_child2.error is None
-        assert refreshed_child2.started_at is None
-        assert refreshed_child2.completed_at is None
-        assert refreshed_child2.progress == 0.0
+        assert refreshed_child2.status == "completed"
+        assert refreshed_child2.result == {"output": "child2-result"}
 
     @pytest.mark.asyncio
     async def test_complete_scheduled_run_disables_after_max_runs_with_tree(self, sync_db_session):
@@ -1270,9 +1303,12 @@ class TestSchedulingRepositoryMethods:
         now = datetime.now(timezone.utc)
 
         # Create parent at run_count=1, max_runs=2 (this is the final run)
+        # Executor already set status=completed and result
         parent = await repo.create_task(
             name="Parent Last Run",
             user_id="test-user",
+            status="completed",
+            result={"output": "parent-result-run2"},
             schedule_type="interval",
             schedule_expression="1",
             schedule_enabled=True,
@@ -1293,20 +1329,19 @@ class TestSchedulingRepositoryMethods:
             progress=1.0,
         )
 
-        # Complete the second (final) run
+        # Complete the second (final) run — only updates schedule tracking
         updated_parent = await repo.complete_scheduled_run(
             parent.id,
             success=True,
-            result={"output": "parent-result-run2"},
         )
 
         # Parent should be completed and disabled (max_runs reached)
         assert updated_parent is not None
-        assert updated_parent.status == "completed"
+        assert updated_parent.status == "completed"  # Preserved from executor
         assert updated_parent.run_count == 2
         assert updated_parent.schedule_enabled is False
         assert updated_parent.next_run_at is None
-        assert updated_parent.result == {"output": "parent-result-run2"}
+        assert updated_parent.result == {"output": "parent-result-run2"}  # Preserved
 
         # Child should NOT be reset (no more runs)
         refreshed_child = await repo.get_task_by_id(child.id)
@@ -1314,18 +1349,21 @@ class TestSchedulingRepositoryMethods:
         assert refreshed_child.result == {"output": "child-final"}
 
     @pytest.mark.asyncio
-    async def test_complete_scheduled_run_no_children_skips_tree_reset(self, sync_db_session):
-        """Test that tree reset is skipped for tasks without children."""
+    async def test_complete_scheduled_run_preserves_result_for_solo_task(self, sync_db_session):
+        """Test that execution state is preserved for tasks without children."""
         from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 
         repo = TaskRepository(sync_db_session)
 
         now = datetime.now(timezone.utc)
 
-        # Create a single task with no children
+        # Create a single task with no children (executor already set completed + result)
         task = await repo.create_task(
             name="Solo Scheduled Task",
             user_id="test-user",
+            status="completed",
+            result={"output": "solo-result"},
+            progress=1.0,
             schedule_type="interval",
             schedule_expression="1",
             schedule_enabled=True,
@@ -1338,14 +1376,51 @@ class TestSchedulingRepositoryMethods:
         updated = await repo.complete_scheduled_run(
             task.id,
             success=True,
-            result={"output": "solo-result"},
         )
 
         assert updated is not None
-        assert updated.status == "pending"
+        assert updated.status == "completed"  # Preserved from executor
         assert updated.run_count == 1
-        assert updated.result is None  # Cleared for next run
-        assert updated.progress == 0.0
+        assert updated.result == {"output": "solo-result"}  # Preserved from executor
+        assert updated.progress == 1.0  # Preserved from executor
+
+    @pytest.mark.asyncio
+    async def test_complete_scheduled_run_pre_execution_failure(self, sync_db_session):
+        """Test that pre-execution failure sets status=failed when task is still in_progress.
+
+        If the task never reached the executor (e.g., exception before execute_task_tree),
+        complete_scheduled_run should set status=failed as a fallback.
+        """
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+
+        now = datetime.now(timezone.utc)
+
+        # Create a task that was marked running but never executed
+        task = await repo.create_task(
+            name="Failed Before Execution",
+            user_id="test-user",
+            status="in_progress",
+            schedule_type="interval",
+            schedule_expression="3600",
+            schedule_enabled=True,
+            next_run_at=now,
+            run_count=0,
+        )
+
+        # Complete with failure — task is still in_progress (never reached executor)
+        updated = await repo.complete_scheduled_run(
+            task.id,
+            success=False,
+            error="Connection timeout before execution",
+        )
+
+        assert updated is not None
+        assert updated.status == "failed"  # Set by complete_scheduled_run as fallback
+        assert updated.error == "Connection timeout before execution"
+        assert updated.run_count == 1
+        assert updated.schedule_enabled is True  # Still has runs left
 
 
 class TestSchedulingMigration:
@@ -1414,3 +1489,224 @@ class TestSchedulingMigration:
         migration = AddSchedulingFields()
         assert hasattr(migration, "downgrade")
         assert callable(migration.downgrade)
+
+
+class TestScheduledTaskStatusPersistence:
+    """Regression tests for scheduled task execution with real DB.
+
+    Two bugs were discovered in the scheduler's task execution path:
+
+    Bug 1 — Identity map side-effect in complete_scheduled_run:
+        complete_scheduled_run resets task.status to 'pending' for the next run.
+        SQLAlchemy's identity map returns the same Python object for the same
+        primary key within a session, so reading task.status after the call
+        returns 'pending' instead of the actual execution result 'completed'.
+        Fix: capture status/result/error into local variables BEFORE calling
+        complete_scheduled_run.
+
+    Bug 2 — expire_all() discards in-memory status change:
+        mark_scheduled_task_running sets the parent to 'in_progress' in DB.
+        The scheduler then sets task_tree.task.status = 'pending' in-memory
+        to allow the executor to run it. But during child task execution,
+        _check_cancellation_and_refresh_task calls expire_all() which discards
+        ALL unpersisted dirty changes. The parent reverts to 'in_progress'
+        from DB, and _check_task_execution_preconditions skips it.
+        Fix: use update_task() to persist the status change to DB.
+    """
+
+    @pytest.mark.asyncio
+    async def test_complete_scheduled_run_preserves_execution_state(self, sync_db_session):
+        """Verify that complete_scheduled_run does not mutate execution state."""
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+        now = datetime.now(timezone.utc)
+
+        # Create a scheduled parent task marked as completed (post-execution state)
+        parent = await repo.create_task(
+            name="Parent Task",
+            user_id="test-user",
+            status="completed",
+            result={"output": "aggregated"},
+            schedule_type="interval",
+            schedule_expression="3600",
+            schedule_enabled=True,
+            next_run_at=now,
+            run_count=0,
+            has_children=True,
+        )
+
+        child = await repo.create_task(
+            name="Child Task",
+            user_id="test-user",
+            parent_id=parent.id,
+            status="completed",
+            result={"cpu": "8 cores"},
+            started_at=now,
+            completed_at=now,
+            progress=1.0,
+        )
+
+        # Reload from DB after execution
+        task = await repo.get_task_by_id(parent.id)
+        assert task is not None
+        assert task.status == "completed"
+        assert task.result == {"output": "aggregated"}
+
+        # complete_scheduled_run only updates schedule tracking
+        await repo.complete_scheduled_run(
+            parent.id,
+            success=True,
+            calculate_next_run=True,
+        )
+
+        # Execution state should be preserved (no reset)
+        assert task.status == "completed", "Status should remain completed"
+        assert task.result == {"output": "aggregated"}, "Result should be preserved"
+
+        # Children should NOT be reset by complete_scheduled_run
+        refreshed_child = await repo.get_task_by_id(child.id)
+        assert refreshed_child is not None
+        assert refreshed_child.status == "completed"
+        assert refreshed_child.result == {"cpu": "8 cores"}
+
+    @pytest.mark.asyncio
+    async def test_reading_task_after_complete_scheduled_run_preserves_status(
+        self, sync_db_session
+    ):
+        """Verify that reading task.status after complete_scheduled_run is correct.
+
+        Previously (Bug 1), complete_scheduled_run would reset status to 'pending',
+        causing identity map to return wrong status. Now it preserves execution state.
+        """
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+        now = datetime.now(timezone.utc)
+
+        parent = await repo.create_task(
+            name="Parent Task",
+            user_id="test-user",
+            status="completed",
+            result={"output": "done"},
+            error=None,
+            schedule_type="interval",
+            schedule_expression="60",
+            schedule_enabled=True,
+            next_run_at=now,
+            run_count=0,
+            has_children=False,
+        )
+
+        task = await repo.get_task_by_id(parent.id)
+        assert task is not None
+
+        # After complete_scheduled_run, status should stay "completed"
+        await repo.complete_scheduled_run(parent.id, success=True)
+
+        # Status is preserved — no more identity map confusion
+        assert task.status == "completed", "Status should remain completed after schedule update"
+        assert task.result == {"output": "done"}, "Result should be preserved"
+
+    @pytest.mark.asyncio
+    async def test_in_memory_status_change_lost_after_expire_all(self, sync_db_session):
+        """Demonstrate Bug 2: in-memory status change is discarded by expire_all().
+
+        This is the root cause of the scheduled parent task "always failed" bug.
+        The scheduler flow is:
+          1. mark_scheduled_task_running → DB status = 'in_progress'
+          2. task_tree.task.status = 'pending' (in-memory only)
+          3. Child execution triggers expire_all()
+          4. Parent status reverts to 'in_progress' from DB
+          5. _check_task_execution_preconditions skips 'in_progress' tasks
+        """
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+        now = datetime.now(timezone.utc)
+
+        parent = await repo.create_task(
+            name="Scheduled Parent",
+            user_id="test-user",
+            status="pending",
+            schedule_type="interval",
+            schedule_expression="3600",
+            schedule_enabled=True,
+            next_run_at=now,
+            run_count=0,
+            has_children=True,
+        )
+
+        # Step 1: mark_scheduled_task_running sets status to 'in_progress' in DB
+        running_task = await repo.mark_scheduled_task_running(parent.id)
+        assert running_task is not None
+        assert running_task.status == "in_progress"
+
+        # Reload to simulate how the scheduler gets the task object
+        task = await repo.get_task_by_id(parent.id)
+        assert task is not None
+        assert task.status == "in_progress"
+
+        # Step 2: OLD code — in-memory only status change (the bug)
+        task.status = "pending"  # type: ignore[assignment]
+        assert task.status == "pending"  # Looks correct in-memory
+
+        # Step 3: expire_all() is called during child execution
+        # (simulates _check_cancellation_and_refresh_task behavior)
+        sync_db_session.expire_all()
+
+        # Step 4: Status reverts to 'in_progress' from DB
+        reloaded = await repo.get_task_by_id(parent.id)
+        assert reloaded is not None
+        assert (
+            reloaded.status == "in_progress"
+        ), "expire_all() discards in-memory change; DB still has 'in_progress'"
+
+    @pytest.mark.asyncio
+    async def test_update_task_persists_status_through_expire_all(self, sync_db_session):
+        """Demonstrate the fix: update_task() persists status change to DB.
+
+        After the fix, the scheduler uses:
+          await task_repository.update_task(task_id=task_id, status='pending')
+        instead of:
+          task_tree.task.status = 'pending'
+
+        This commits to DB, so expire_all() cannot discard it.
+        """
+        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
+
+        repo = TaskRepository(sync_db_session)
+        now = datetime.now(timezone.utc)
+
+        parent = await repo.create_task(
+            name="Scheduled Parent",
+            user_id="test-user",
+            status="pending",
+            schedule_type="interval",
+            schedule_expression="3600",
+            schedule_enabled=True,
+            next_run_at=now,
+            run_count=0,
+            has_children=True,
+        )
+
+        # Step 1: mark_scheduled_task_running sets status to 'in_progress' in DB
+        await repo.mark_scheduled_task_running(parent.id)
+
+        # Step 2: FIX — use update_task to persist status change to DB
+        await repo.update_task(task_id=parent.id, status="pending")
+
+        # Verify it's persisted
+        task = await repo.get_task_by_id(parent.id)
+        assert task is not None
+        assert task.status == "pending"
+
+        # Step 3: expire_all() is called during child execution
+        sync_db_session.expire_all()
+
+        # Step 4: Status survives because it was committed to DB
+        reloaded = await repo.get_task_by_id(parent.id)
+        assert reloaded is not None
+        assert (
+            reloaded.status == "pending"
+        ), "update_task() commits to DB; status survives expire_all()"

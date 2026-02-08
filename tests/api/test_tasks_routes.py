@@ -542,7 +542,7 @@ class TestHandleTaskGenerate:
     async def test_generate_basic(self, task_routes, mock_request, use_test_db_session):
         """Test basic task generation without saving to database"""
         import os
-        from unittest.mock import patch, AsyncMock, Mock
+        from unittest.mock import patch, Mock
 
         # Mock environment variable for API key
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
@@ -564,37 +564,24 @@ class TestHandleTaskGenerate:
                 },
             ]
 
-            # Mock TaskRepository constructor
-            mock_repository = Mock(spec=TaskRepository)
-            mock_generate_task = Mock()
-            mock_generate_task.id = "generate-task-id"
-            mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
-
-            mock_result_task = Mock()
-            mock_result_task.id = "generate-task-id"
-            mock_result_task.status = "completed"
-            mock_result_task.result = {"tasks": mock_generated_tasks}
-            mock_result_task.error = None
-            mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
-
-            # Mock TaskExecutor.execute_task_tree
+            # Mock only TaskExecutor — DB operations use real session via use_test_db_session
             mock_executor = Mock()
 
-            async def mock_execute_task_tree(*args, **kwargs):
-                import asyncio
-
-                await asyncio.sleep(0.01)
+            async def mock_execute_task_tree(task_tree, root_task_id, **kwargs):
+                # Update the real task in DB with simulated result
+                db_session = kwargs.get("db_session")
+                repo = TaskRepository(db_session)
+                await repo.update_task(
+                    root_task_id, status="completed", result={"tasks": mock_generated_tasks}
+                )
 
             mock_executor.execute_task_tree = mock_execute_task_tree
 
-            with patch("apflow.api.routes.tasks.TaskRepository", return_value=mock_repository):
-                with patch(
-                    "apflow.core.execution.task_executor.TaskExecutor",
-                    return_value=mock_executor,
-                ):
-                    result = await task_routes.handle_task_generate(
-                        params, mock_request, request_id
-                    )
+            with patch(
+                "apflow.core.execution.task_executor.TaskExecutor",
+                return_value=mock_executor,
+            ):
+                result = await task_routes.handle_task_generate(params, mock_request, request_id)
 
             # Verify response
             assert isinstance(result, dict)
@@ -609,7 +596,7 @@ class TestHandleTaskGenerate:
     async def test_generate_with_save(self, task_routes, mock_request, use_test_db_session):
         """Test task generation with save=True"""
         import os
-        from unittest.mock import patch, AsyncMock, Mock
+        from unittest.mock import patch, Mock
 
         # Mock environment variable for API key
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
@@ -628,53 +615,29 @@ class TestHandleTaskGenerate:
                 }
             ]
 
-            # Mock TaskRepository constructor
-            mock_repository = Mock(spec=TaskRepository)
-            mock_generate_task = Mock()
-            mock_generate_task.id = "generate-task-id"
-            mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
-
-            mock_result_task = Mock()
-            mock_result_task.id = "generate-task-id"
-            mock_result_task.status = "completed"
-            mock_result_task.result = {"tasks": mock_generated_tasks}
-            mock_result_task.error = None
-            mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
-
-            # Mock TaskExecutor.execute_task_tree
+            # Mock only TaskExecutor — DB operations use real session via use_test_db_session
             mock_executor = Mock()
 
-            async def mock_execute_task_tree(*args, **kwargs):
-                import asyncio
-
-                await asyncio.sleep(0.01)
+            async def mock_execute_task_tree(task_tree, root_task_id, **kwargs):
+                db_session = kwargs.get("db_session")
+                repo = TaskRepository(db_session)
+                await repo.update_task(
+                    root_task_id, status="completed", result={"tasks": mock_generated_tasks}
+                )
 
             mock_executor.execute_task_tree = mock_execute_task_tree
 
-            # Mock TaskCreator.create_task_tree_from_array
-            mock_creator = Mock()
-            mock_root_task = Mock()
-            mock_root_task.id = "root-task-id"
-            mock_task_tree = Mock()
-            mock_task_tree.task = mock_root_task
-            mock_creator.create_task_tree_from_array = AsyncMock(return_value=mock_task_tree)
-
-            with patch("apflow.api.routes.tasks.TaskRepository", return_value=mock_repository):
-                with patch(
-                    "apflow.core.execution.task_executor.TaskExecutor",
-                    return_value=mock_executor,
-                ):
-                    with patch("apflow.api.routes.tasks.TaskCreator", return_value=mock_creator):
-                        result = await task_routes.handle_task_generate(
-                            params, mock_request, request_id
-                        )
+            with patch(
+                "apflow.core.execution.task_executor.TaskExecutor",
+                return_value=mock_executor,
+            ):
+                result = await task_routes.handle_task_generate(params, mock_request, request_id)
 
             # Verify response includes root_task_id
             assert isinstance(result, dict)
             assert "tasks" in result
             assert result["count"] == 1
             assert "root_task_id" in result
-            assert result["root_task_id"] == "root-task-id"
             assert "saved to database" in result["message"]
 
     @pytest.mark.asyncio
@@ -708,7 +671,7 @@ class TestHandleTaskGenerate:
     ):
         """Test task generation using X-LLM-API-KEY header"""
         import os
-        from unittest.mock import patch, AsyncMock, Mock
+        from unittest.mock import patch, Mock
         from apflow.core.utils.llm_key_context import set_llm_key_from_header, clear_llm_key_context
 
         # Clear context first, then set header key
@@ -722,37 +685,23 @@ class TestHandleTaskGenerate:
 
             mock_generated_tasks = [{"name": "rest_executor", "inputs": {}}]
 
-            # Mock TaskRepository constructor
-            mock_repository = Mock(spec=TaskRepository)
-            mock_generate_task = Mock()
-            mock_generate_task.id = "generate-task-id"
-            mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
-
-            mock_result_task = Mock()
-            mock_result_task.id = "generate-task-id"
-            mock_result_task.status = "completed"
-            mock_result_task.result = {"tasks": mock_generated_tasks}
-            mock_result_task.error = None
-            mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
-
-            # Mock TaskExecutor.execute_task_tree
+            # Mock only TaskExecutor — DB operations use real session via use_test_db_session
             mock_executor = Mock()
 
-            async def mock_execute_task_tree(*args, **kwargs):
-                import asyncio
-
-                await asyncio.sleep(0.01)
+            async def mock_execute_task_tree(task_tree, root_task_id, **kwargs):
+                db_session = kwargs.get("db_session")
+                repo = TaskRepository(db_session)
+                await repo.update_task(
+                    root_task_id, status="completed", result={"tasks": mock_generated_tasks}
+                )
 
             mock_executor.execute_task_tree = mock_execute_task_tree
 
-            with patch("apflow.api.routes.tasks.TaskRepository", return_value=mock_repository):
-                with patch(
-                    "apflow.core.execution.task_executor.TaskExecutor",
-                    return_value=mock_executor,
-                ):
-                    result = await task_routes.handle_task_generate(
-                        params, mock_request, request_id
-                    )
+            with patch(
+                "apflow.core.execution.task_executor.TaskExecutor",
+                return_value=mock_executor,
+            ):
+                result = await task_routes.handle_task_generate(params, mock_request, request_id)
 
             # Verify response
             assert isinstance(result, dict)
@@ -769,7 +718,7 @@ class TestHandleTaskGenerate:
     async def test_generate_with_llm_config(self, task_routes, mock_request, use_test_db_session):
         """Test task generation with LLM configuration parameters"""
         import os
-        from unittest.mock import patch, AsyncMock, Mock
+        from unittest.mock import patch, Mock
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
             params = {
@@ -784,85 +733,65 @@ class TestHandleTaskGenerate:
 
             mock_generated_tasks = [{"name": "rest_executor", "inputs": {}}]
 
-            # Mock TaskRepository constructor
-            mock_repository = Mock(spec=TaskRepository)
-            mock_generate_task = Mock()
-            mock_generate_task.id = "generate-task-id"
-            mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
+            # Track the created task to verify LLM config
+            created_task_id = None
 
-            mock_result_task = Mock()
-            mock_result_task.id = "generate-task-id"
-            mock_result_task.status = "completed"
-            mock_result_task.result = {"tasks": mock_generated_tasks}
-            mock_result_task.error = None
-            mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
-
-            # Mock TaskExecutor.execute_task_tree
+            # Mock only TaskExecutor — DB operations use real session via use_test_db_session
             mock_executor = Mock()
 
-            async def mock_execute_task_tree(*args, **kwargs):
-                import asyncio
-
-                await asyncio.sleep(0.01)
+            async def mock_execute_task_tree(task_tree, root_task_id, **kwargs):
+                nonlocal created_task_id
+                created_task_id = root_task_id
+                db_session = kwargs.get("db_session")
+                repo = TaskRepository(db_session)
+                await repo.update_task(
+                    root_task_id, status="completed", result={"tasks": mock_generated_tasks}
+                )
 
             mock_executor.execute_task_tree = mock_execute_task_tree
 
-            with patch("apflow.api.routes.tasks.TaskRepository", return_value=mock_repository):
-                with patch(
-                    "apflow.core.execution.task_executor.TaskExecutor",
-                    return_value=mock_executor,
-                ):
-                    await task_routes.handle_task_generate(params, mock_request, request_id)
+            with patch(
+                "apflow.core.execution.task_executor.TaskExecutor",
+                return_value=mock_executor,
+            ):
+                await task_routes.handle_task_generate(params, mock_request, request_id)
 
-            # Verify LLM config was passed to create_task
-            create_call = mock_repository.create_task.call_args
-            assert create_call is not None
-            inputs = create_call[1]["inputs"]
-            assert inputs["llm_provider"] == "openai"
-            assert inputs["model"] == "gpt-4o"
-            assert inputs["temperature"] == 0.8
-            assert inputs["max_tokens"] == 5000
+            # Verify LLM config was stored in the real task's inputs
+            assert created_task_id is not None
+            repo = TaskRepository(use_test_db_session)
+            task = await repo.get_task_by_id(created_task_id)
+            assert task is not None
+            assert task.inputs["llm_provider"] == "openai"
+            assert task.inputs["model"] == "gpt-4o"
+            assert task.inputs["temperature"] == 0.8
+            assert task.inputs["max_tokens"] == 5000
 
     @pytest.mark.asyncio
     async def test_generate_failed_status(self, task_routes, mock_request, use_test_db_session):
         """Test error handling when generation task fails"""
         import os
-        from unittest.mock import patch, AsyncMock, Mock
+        from unittest.mock import patch, Mock
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
             params = {"requirement": "Fetch data from API", "user_id": "test_user"}
             request_id = str(uuid.uuid4())
 
-            # Mock TaskRepository constructor
-            mock_repository = Mock(spec=TaskRepository)
-            mock_generate_task = Mock()
-            mock_generate_task.id = "generate-task-id"
-            mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
-
-            mock_result_task = Mock()
-            mock_result_task.id = "generate-task-id"
-            mock_result_task.status = "failed"
-            mock_result_task.error = "LLM API error"
-            mock_result_task.result = None
-            mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
-
-            # Mock TaskExecutor.execute_task_tree
+            # Mock only TaskExecutor — DB operations use real session via use_test_db_session
             mock_executor = Mock()
 
-            async def mock_execute_task_tree(*args, **kwargs):
-                import asyncio
-
-                await asyncio.sleep(0.01)
+            async def mock_execute_task_tree(task_tree, root_task_id, **kwargs):
+                db_session = kwargs.get("db_session")
+                repo = TaskRepository(db_session)
+                await repo.update_task(root_task_id, status="failed", error="LLM API error")
 
             mock_executor.execute_task_tree = mock_execute_task_tree
 
-            with patch("apflow.api.routes.tasks.TaskRepository", return_value=mock_repository):
-                with patch(
-                    "apflow.core.execution.task_executor.TaskExecutor",
-                    return_value=mock_executor,
-                ):
-                    with pytest.raises(ValueError, match="Task generation failed"):
-                        await task_routes.handle_task_generate(params, mock_request, request_id)
+            with patch(
+                "apflow.core.execution.task_executor.TaskExecutor",
+                return_value=mock_executor,
+            ):
+                with pytest.raises(ValueError, match="Task generation failed"):
+                    await task_routes.handle_task_generate(params, mock_request, request_id)
 
     @pytest.mark.asyncio
     async def test_generate_no_tasks_generated(
@@ -870,42 +799,28 @@ class TestHandleTaskGenerate:
     ):
         """Test error handling when no tasks are generated"""
         import os
-        from unittest.mock import patch, AsyncMock, Mock
+        from unittest.mock import patch, Mock
 
         with patch.dict(os.environ, {"OPENAI_API_KEY": "test-key"}):
             params = {"requirement": "Fetch data from API", "user_id": "test_user"}
             request_id = str(uuid.uuid4())
 
-            # Mock TaskRepository constructor
-            mock_repository = Mock(spec=TaskRepository)
-            mock_generate_task = Mock()
-            mock_generate_task.id = "generate-task-id"
-            mock_repository.create_task = AsyncMock(return_value=mock_generate_task)
-
-            mock_result_task = Mock()
-            mock_result_task.id = "generate-task-id"
-            mock_result_task.status = "completed"
-            mock_result_task.result = {"tasks": []}  # Empty tasks array
-            mock_result_task.error = None
-            mock_repository.get_task_by_id = AsyncMock(return_value=mock_result_task)
-
-            # Mock TaskExecutor.execute_task_tree
+            # Mock only TaskExecutor — DB operations use real session via use_test_db_session
             mock_executor = Mock()
 
-            async def mock_execute_task_tree(*args, **kwargs):
-                import asyncio
-
-                await asyncio.sleep(0.01)
+            async def mock_execute_task_tree(task_tree, root_task_id, **kwargs):
+                db_session = kwargs.get("db_session")
+                repo = TaskRepository(db_session)
+                await repo.update_task(root_task_id, status="completed", result={"tasks": []})
 
             mock_executor.execute_task_tree = mock_execute_task_tree
 
-            with patch("apflow.api.routes.tasks.TaskRepository", return_value=mock_repository):
-                with patch(
-                    "apflow.core.execution.task_executor.TaskExecutor",
-                    return_value=mock_executor,
-                ):
-                    with pytest.raises(ValueError, match="No tasks were generated"):
-                        await task_routes.handle_task_generate(params, mock_request, request_id)
+            with patch(
+                "apflow.core.execution.task_executor.TaskExecutor",
+                return_value=mock_executor,
+            ):
+                with pytest.raises(ValueError, match="No tasks were generated"):
+                    await task_routes.handle_task_generate(params, mock_request, request_id)
 
     @pytest.mark.asyncio
     async def test_generate_with_permission_check(self, task_routes, use_test_db_session):

@@ -730,7 +730,8 @@ def use_test_db_session(sync_db_session, temp_db_path):
     def mock_create_pooled_session(*args, **kwargs):
         return mock_create_pooled_session_impl()
 
-    # Patch both the factory function and the import in routes and executor
+    # Patch the factory function, route/executor imports, and the public re-export
+    # so that lazy imports (webhook.py, internal.py, ical.py) also resolve to the test session
     with (
         patch(
             "apflow.core.storage.factory.create_pooled_session",
@@ -741,6 +742,10 @@ def use_test_db_session(sync_db_session, temp_db_path):
         ),
         patch(
             "apflow.core.execution.task_executor.create_pooled_session",
+            side_effect=mock_create_pooled_session,
+        ),
+        patch(
+            "apflow.core.storage.create_pooled_session",
             side_effect=mock_create_pooled_session,
         ),
     ):

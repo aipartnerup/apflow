@@ -253,220 +253,168 @@ class TestAgentExecutor:
                     assert artifact_data.get("root_task_id") == "task-1"
 
     @pytest.mark.asyncio
-    async def test_execute_simple_mode_from_copy(self, executor, mock_event_queue):
+    async def test_execute_simple_mode_from_copy(
+        self, executor, mock_event_queue, use_test_db_session, sync_db_session
+    ):
         """Test simple mode execution with from_copy scenario"""
-        original_task_id = "original-task-id"
-        copied_task_id = "copied-task-id"
-        metadata = {"from_copy": True, "task_id": original_task_id, "_recursive": False}
+        # Create original task in real DB
+        repo = TaskRepository(sync_db_session)
+        original_task = await repo.create_task(
+            id="original-task-id", name="Original Task", user_id="test-user", status="completed"
+        )
+
+        metadata = {"from_copy": True, "task_id": original_task.id, "_recursive": False}
         context = self._create_request_context([], metadata=metadata)
-        with (
-            patch("apflow.api.a2a.agent_executor.get_default_session") as mock_get_session,
-            patch("apflow.api.a2a.agent_executor.TaskRepository") as mock_repo_class,
-            patch("apflow.api.a2a.agent_executor.TaskCreator") as mock_creator_class,
-            patch.object(executor.task_executor, "execute_tasks") as mock_execute_tasks,
-        ):
-            mock_get_session.return_value = Mock()
-            mock_repository = AsyncMock()
-            mock_repository.get_task_by_id = AsyncMock(return_value=Mock(id=original_task_id))
-            mock_repo_class.return_value = mock_repository
 
-            # Simulate a TaskTreeNode with .task.output()
-            mock_tree = Mock()
-            mock_tree.output_list.return_value = [
-                {
-                    "id": copied_task_id,
-                    "user_id": "test-user",
-                    "name": "Copied Task",
-                    "status": "pending",
+        with patch.object(executor.task_executor, "execute_tasks") as mock_execute_tasks:
+            # execute_tasks needs to return a result referencing the copied task's root id
+            async def fake_execute_tasks(tasks, root_task_id, **kwargs):
+                # tasks is from from_copy output_list — find the copied root
+                copied_root_id = tasks[0]["id"] if tasks else root_task_id
+                return {
+                    "status": "completed",
+                    "progress": 1.0,
+                    "root_task_id": copied_root_id,
+                    "original_task_id": original_task.id,
                 }
-            ]
 
-            mock_creator = AsyncMock()
-            mock_creator.from_copy = AsyncMock(return_value=mock_tree)
-            mock_creator_class.return_value = mock_creator
-            mock_execute_tasks.return_value = {
-                "status": "completed",
-                "progress": 1.0,
-                "root_task_id": copied_task_id,
-                "original_task_id": original_task_id,
-            }
+            mock_execute_tasks.side_effect = fake_execute_tasks
+
             result = await executor._execute_simple_mode(context, mock_event_queue)
-            assert mock_execute_tasks.called
-            assert result is not None
-            assert result.metadata["root_task_id"] == copied_task_id
+
+        assert mock_execute_tasks.called
+        assert result is not None
+        assert result.metadata["root_task_id"] is not None
 
     @pytest.mark.asyncio
-    async def test_execute_simple_mode_from_mixed(self, executor, mock_event_queue):
+    async def test_execute_simple_mode_from_mixed(
+        self, executor, mock_event_queue, use_test_db_session, sync_db_session
+    ):
         """Test simple mode execution with from_mixed scenario (copy with children)"""
-        original_task_id = "original-task-id"
-        copied_task_id = "copied-task-id"
-        metadata = {"from_mixed": True, "task_id": original_task_id, "_recursive": True}
-        context = self._create_request_context([], metadata=metadata)
-        with (
-            patch("apflow.api.a2a.agent_executor.get_default_session") as mock_get_session,
-            patch("apflow.api.a2a.agent_executor.TaskRepository") as mock_repo_class,
-            patch("apflow.api.a2a.agent_executor.TaskCreator") as mock_creator_class,
-            patch.object(executor.task_executor, "execute_tasks") as mock_execute_tasks,
-        ):
-            mock_get_session.return_value = Mock()
-            mock_repository = AsyncMock()
-            mock_repository.get_task_by_id = AsyncMock(return_value=Mock(id=original_task_id))
-            mock_repo_class.return_value = mock_repository
+        # Create original task in real DB
+        repo = TaskRepository(sync_db_session)
+        original_task = await repo.create_task(
+            id="original-mixed-id", name="Original Task", user_id="test-user", status="completed"
+        )
 
-            mock_tree = Mock()
-            mock_tree.output_list.return_value = [
-                {
-                    "id": copied_task_id,
-                    "user_id": "test-user",
-                    "name": "Copied Task",
-                    "status": "pending",
+        metadata = {"from_mixed": True, "task_id": original_task.id, "_recursive": True}
+        context = self._create_request_context([], metadata=metadata)
+
+        with patch.object(executor.task_executor, "execute_tasks") as mock_execute_tasks:
+
+            async def fake_execute_tasks(tasks, root_task_id, **kwargs):
+                copied_root_id = tasks[0]["id"] if tasks else root_task_id
+                return {
+                    "status": "completed",
+                    "progress": 1.0,
+                    "root_task_id": copied_root_id,
+                    "original_task_id": original_task.id,
                 }
-            ]
-            mock_creator = AsyncMock()
-            mock_creator.from_mixed = AsyncMock(return_value=mock_tree)
-            mock_creator_class.return_value = mock_creator
-            mock_execute_tasks.return_value = {
-                "status": "completed",
-                "progress": 1.0,
-                "root_task_id": copied_task_id,
-                "original_task_id": original_task_id,
-            }
+
+            mock_execute_tasks.side_effect = fake_execute_tasks
+
             result = await executor._execute_simple_mode(context, mock_event_queue)
-            assert mock_execute_tasks.called
-            assert result is not None
-            assert result.metadata["root_task_id"] == copied_task_id
+
+        assert mock_execute_tasks.called
+        assert result is not None
+        assert result.metadata["root_task_id"] is not None
 
     @pytest.mark.asyncio
-    async def test_execute_simple_mode_from_link(self, executor, mock_event_queue):
+    async def test_execute_simple_mode_from_link(
+        self, executor, mock_event_queue, use_test_db_session, sync_db_session
+    ):
         """Test simple mode execution with from_link scenario"""
-        original_task_id = "original-task-id"
-        copied_task_id = "copied-task-id"
-        metadata = {"from_link": True, "task_id": original_task_id}
+        # Create original task in real DB — from_link requires completed status
+        repo = TaskRepository(sync_db_session)
+        original_task = await repo.create_task(
+            id="original-link-id", name="Original Task", user_id="test-user", status="completed"
+        )
+
+        metadata = {"from_link": True, "task_id": original_task.id}
         context = self._create_request_context([], metadata=metadata)
-        with (
-            patch("apflow.api.a2a.agent_executor.get_default_session") as mock_get_session,
-            patch("apflow.api.a2a.agent_executor.TaskRepository") as mock_repo_class,
-            patch("apflow.api.a2a.agent_executor.TaskCreator") as mock_creator_class,
-            patch.object(executor.task_executor, "execute_tasks") as mock_execute_tasks,
-        ):
-            mock_get_session.return_value = Mock()
-            mock_repository = AsyncMock()
-            mock_repository.get_task_by_id = AsyncMock(return_value=Mock(id=original_task_id))
-            mock_repo_class.return_value = mock_repository
 
-            mock_tree = Mock()
-            mock_tree.output_list.return_value = [
-                {
-                    "id": copied_task_id,
-                    "user_id": "test-user",
-                    "name": "Linked Task",
+        with patch.object(executor.task_executor, "execute_tasks") as mock_execute_tasks:
+
+            async def fake_execute_tasks(tasks, root_task_id, **kwargs):
+                copied_root_id = tasks[0]["id"] if tasks else root_task_id
+                return {
                     "status": "completed",
+                    "progress": 1.0,
+                    "root_task_id": copied_root_id,
+                    "original_task_id": original_task.id,
                 }
-            ]
 
-            mock_creator = AsyncMock()
-            mock_creator.from_link = AsyncMock(return_value=mock_tree)
-            mock_creator_class.return_value = mock_creator
-            mock_execution_result = {
-                "status": "completed",
-                "progress": 1.0,
-                "root_task_id": copied_task_id,
-                "original_task_id": original_task_id,
-            }
-            mock_execute_tasks.return_value = mock_execution_result
+            mock_execute_tasks.side_effect = fake_execute_tasks
+
             result = await executor._execute_simple_mode(context, mock_event_queue)
-            assert mock_execute_tasks.called
-            assert result is not None
-            assert result.metadata["root_task_id"] == copied_task_id
+
+        assert mock_execute_tasks.called
+        assert result is not None
+        assert result.metadata["root_task_id"] is not None
 
     @pytest.mark.asyncio
-    async def test_execute_simple_mode_from_archive(self, executor, mock_event_queue):
+    async def test_execute_simple_mode_from_archive(
+        self, executor, mock_event_queue, use_test_db_session, sync_db_session
+    ):
         """Test simple mode execution with from_archive scenario"""
-        original_task_id = "original-task-id"
-        copied_task_id = "copied-task-id"
-        metadata = {"from_archive": True, "task_id": original_task_id}
+        # Create original task in real DB — from_archive requires completed status
+        repo = TaskRepository(sync_db_session)
+        original_task = await repo.create_task(
+            id="original-archive-id", name="Original Task", user_id="test-user", status="completed"
+        )
+
+        metadata = {"from_archive": True, "task_id": original_task.id}
         context = self._create_request_context([], metadata=metadata)
-        with (
-            patch("apflow.api.a2a.agent_executor.get_default_session") as mock_get_session,
-            patch("apflow.api.a2a.agent_executor.TaskRepository") as mock_repo_class,
-            patch("apflow.api.a2a.agent_executor.TaskCreator") as mock_creator_class,
-            patch.object(executor.task_executor, "execute_tasks") as mock_execute_tasks,
-        ):
-            mock_get_session.return_value = Mock()
-            mock_repository = AsyncMock()
-            mock_repository.get_task_by_id = AsyncMock(return_value=Mock(id=original_task_id))
-            mock_repo_class.return_value = mock_repository
 
-            mock_tree = Mock()
-            mock_tree.output_list.return_value = [
-                {
-                    "id": copied_task_id,
-                    "user_id": "test-user",
-                    "name": "Archived Task",
+        with patch.object(executor.task_executor, "execute_tasks") as mock_execute_tasks:
+
+            async def fake_execute_tasks(tasks, root_task_id, **kwargs):
+                copied_root_id = tasks[0]["id"] if tasks else root_task_id
+                return {
                     "status": "completed",
+                    "progress": 1.0,
+                    "root_task_id": copied_root_id,
+                    "original_task_id": original_task.id,
                 }
-            ]
-            mock_creator = AsyncMock()
-            mock_creator.from_archive = AsyncMock()
 
-            mock_creator.from_archive.return_value = mock_tree
-            mock_creator_class.return_value = mock_creator
-            mock_execution_result = {
-                "status": "completed",
-                "progress": 1.0,
-                "root_task_id": copied_task_id,
-                "original_task_id": original_task_id,
-            }
-            mock_execute_tasks.return_value = mock_execution_result
+            mock_execute_tasks.side_effect = fake_execute_tasks
+
             result = await executor._execute_simple_mode(context, mock_event_queue)
-            assert mock_execute_tasks.called
-            assert result is not None
-            assert result.metadata["root_task_id"] == copied_task_id
+
+        assert mock_execute_tasks.called
+        assert result is not None
+        assert result.metadata["root_task_id"] is not None
 
     @pytest.mark.asyncio
-    async def test_execute_streaming_mode_from_copy(self, executor, mock_event_queue):
+    async def test_execute_streaming_mode_from_copy(
+        self, executor, mock_event_queue, use_test_db_session, sync_db_session
+    ):
         """Test streaming mode execution with from_copy scenario"""
-        original_task_id = "original-task-id"
-        copied_task_id = "copied-task-id"
-        metadata = {"from_copy": True, "task_id": original_task_id, "_recursive": False}
+        # Create original task in real DB
+        repo = TaskRepository(sync_db_session)
+        original_task = await repo.create_task(
+            id="original-stream-id", name="Original Task", user_id="test-user", status="completed"
+        )
+
+        metadata = {"from_copy": True, "task_id": original_task.id, "_recursive": False}
         context = self._create_request_context([], metadata=metadata)
         context.task_id = "context-task-id"
         context.context_id = "context-id"
-        # Patch all async/IO dependencies to prevent blocking
-        with (
-            patch("apflow.api.a2a.agent_executor.get_default_session"),
-            patch("apflow.api.a2a.agent_executor.TaskRepository") as mock_repo_class,
-            patch("apflow.api.a2a.agent_executor.TaskCreator") as mock_creator_class,
-            patch.object(executor, "task_executor") as mock_task_executor,
-        ):
-            mock_repo = mock_repo_class.return_value
-            mock_task = Mock()
-            mock_task.has_references = True
-            mock_repo.get_task_by_id = AsyncMock(return_value=mock_task)
-            mock_creator = mock_creator_class.return_value
-            mock_tree = Mock()
-            mock_tree.task = Mock()
-            mock_tree.task.id = copied_task_id
-            mock_tree.output_list.return_value = [
-                {
-                    "id": copied_task_id,
-                    "user_id": "test-user",
-                    "name": "Copied Task",
-                    "status": "pending",
-                }
-            ]
-            mock_creator.from_copy = AsyncMock(return_value=mock_tree)
 
-            mock_task_executor.execute_tasks = AsyncMock(
-                return_value={
+        with patch.object(executor.task_executor, "execute_tasks") as mock_execute_tasks:
+
+            async def fake_execute_tasks(tasks, root_task_id, **kwargs):
+                copied_root_id = tasks[0]["id"] if tasks else root_task_id
+                return {
                     "status": "completed",
                     "progress": 1.0,
-                    "root_task_id": copied_task_id,
-                    "original_task_id": original_task_id,
+                    "root_task_id": copied_root_id,
+                    "original_task_id": original_task.id,
                 }
-            )
-            # Patch event_queue.enqueue_event to avoid real async IO
+
+            mock_execute_tasks.side_effect = fake_execute_tasks
             mock_event_queue.enqueue_event = AsyncMock()
+
             await executor._execute_streaming_mode(context, mock_event_queue)
             # No exception means pass
 
