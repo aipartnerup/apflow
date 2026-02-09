@@ -7,6 +7,7 @@ via SSH with password or key-based authentication.
 
 import asyncio
 import os
+import shlex
 import stat
 from typing import ClassVar, Dict, Any, Optional, Union
 from pydantic import BaseModel, Field
@@ -231,7 +232,11 @@ class SshExecutor(BaseTask):
                 }
 
             # Prepare environment variables
-            env_vars = " ".join([f"{k}={v}" for k, v in env.items()]) if env else ""
+            env_vars = (
+                " ".join([f"{shlex.quote(k)}={shlex.quote(v)}" for k, v in env.items()])
+                if env
+                else ""
+            )
             full_command = f"{env_vars} {command}".strip() if env_vars else command
 
             # Execute command with timeout

@@ -6,7 +6,8 @@ with custom images, environment variables, and volume mounts.
 """
 
 import asyncio
-from typing import ClassVar, Dict, Any, Optional
+import os
+from typing import ClassVar, Dict, Any, List, Optional
 
 from pydantic import BaseModel, Field
 from apflow.core.base import BaseTask
@@ -139,6 +140,72 @@ class DockerExecutor(BaseTask):
 
         return self._client
 
+    _SENSITIVE_PREFIXES: List[str] = [
+        "/etc",
+        "/var/run",
+        "/proc",
+        "/sys",
+        "/dev",
+        "/root",
+    ]
+
+    _BLOCKED_PATHS: List[str] = [
+        "/var/run/docker.sock",
+    ]
+
+    def _validate_volume_mounts(self, volumes: Dict[str, str]) -> List[str]:
+        """Validate volume mounts and return sanitized mount strings.
+
+        Rejects mounts to sensitive host paths unless
+        APFLOW_DOCKER_ALLOW_SENSITIVE_MOUNTS=1 is set.
+        Appends :ro (read-only) by default unless the container path
+        already includes a mode suffix (:rw).
+
+        Raises:
+            ValidationError: If a mount targets a sensitive path.
+
+        Returns:
+            List of sanitized volume mount strings.
+        """
+        allow_sensitive = os.environ.get("APFLOW_DOCKER_ALLOW_SENSITIVE_MOUNTS") == "1"
+        volume_mounts: List[str] = []
+
+        for host_path, container_path in volumes.items():
+            resolved = os.path.realpath(host_path)
+            absolute = os.path.abspath(host_path)
+
+            if not allow_sensitive:
+                # Check both resolved (symlink-followed) and absolute paths
+                paths_to_check = {resolved, absolute}
+
+                # Check exact blocked paths
+                for blocked in self._BLOCKED_PATHS:
+                    resolved_blocked = os.path.realpath(blocked)
+                    if resolved == resolved_blocked or absolute == blocked:
+                        raise ValidationError(
+                            f"[{self.id}] Volume mount blocked: {host_path} resolves to "
+                            f"sensitive path {resolved}"
+                        )
+
+                # Check sensitive prefixes
+                for prefix in self._SENSITIVE_PREFIXES:
+                    for path in paths_to_check:
+                        if path == prefix or path.startswith(prefix + "/"):
+                            raise ValidationError(
+                                f"[{self.id}] Volume mount blocked: {host_path} resolves to "
+                                f"sensitive path {path}"
+                            )
+
+            # Default to read-only unless container_path already specifies :rw
+            if container_path.endswith(":rw"):
+                mount_str = f"{host_path}:{container_path}"
+            else:
+                mount_str = f"{host_path}:{container_path}:ro"
+
+            volume_mounts.append(mount_str)
+
+        return volume_mounts
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute a command in a Docker container
@@ -197,11 +264,10 @@ class DockerExecutor(BaseTask):
                 "command": command,
             }
 
-        # Prepare volume mounts
-        volume_mounts = []
+        # Validate and prepare volume mounts
+        volume_mounts: List[str] = []
         if volumes:
-            for host_path, container_path in volumes.items():
-                volume_mounts.append(f"{host_path}:{container_path}")
+            volume_mounts = self._validate_volume_mounts(volumes)
 
         # Prepare resource limits
         mem_limit = resources_config.get("memory")

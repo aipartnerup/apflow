@@ -131,6 +131,8 @@ class TaskManager:
         self._executor_instances: Dict[str, Any] = (
             executor_instances if executor_instances is not None else {}
         )
+        # Lock to protect concurrent access to _executor_instances from parallel tasks
+        self._executor_lock = asyncio.Lock()
         # Track tasks that should be re-executed (even if they are completed or failed)
         # This allows re-executing failed tasks and ensures dependencies are also re-executed
         self._tasks_to_reexecute: set[str] = set()
@@ -186,7 +188,8 @@ class TaskManager:
             result_data = None
 
             if task.status == "in_progress":
-                executor = self._executor_instances.get(task_id)
+                async with self._executor_lock:
+                    executor = self._executor_instances.get(task_id)
                 if executor and hasattr(executor, "cancel"):
                     try:
                         logger.info(f"Calling executor.cancel() for task {task_id}")
@@ -242,9 +245,9 @@ class TaskManager:
             # Update task status in one call (combines status, error, result, token_usage)
             await self.task_repository.update_task(task_id=task_id, **update_data)
 
-            # Clear executor reference
             # Clear executor reference and task context to prevent memory leaks
-            executor = self._executor_instances.pop(task_id, None)
+            async with self._executor_lock:
+                executor = self._executor_instances.pop(task_id, None)
             if executor and hasattr(executor, "clear_task_context"):
                 executor.clear_task_context()
                 logger.debug(f"Cleared task context for task {task_id} during cancellation")
@@ -861,7 +864,8 @@ class TaskManager:
         if task and task.status == "cancelled":
             logger.info(f"Task {task_id} was cancelled during execution, stopping")
             # Clear executor reference
-            executor = self._executor_instances.pop(task_id, None)
+            async with self._executor_lock:
+                executor = self._executor_instances.pop(task_id, None)
             if executor and hasattr(executor, "clear_task_context"):
                 executor.clear_task_context()
                 logger.debug(f"Cleared task context for task {task_id} after cancellation")
@@ -874,7 +878,8 @@ class TaskManager:
             return
 
         # Clear executor reference after successful execution
-        executor = self._executor_instances.pop(task_id, None)
+        async with self._executor_lock:
+            executor = self._executor_instances.pop(task_id, None)
         if executor and hasattr(executor, "clear_task_context"):
             executor.clear_task_context()
             logger.debug(f"Cleared task context for task {task_id} after successful execution")
@@ -1470,7 +1475,8 @@ class TaskManager:
 
         # Store executor for cancellation support
         if hasattr(executor, "cancel"):
-            self._executor_instances[task.id] = executor
+            async with self._executor_lock:
+                self._executor_instances[task.id] = executor
             logger.debug(f"Stored executor instance for task {task.id} (supports cancellation)")
 
         # ============================================================
@@ -1627,7 +1633,8 @@ class TaskManager:
             if hasattr(executor, "clear_task_context"):
                 executor.clear_task_context()
             # Clear executor reference on error
-            self._executor_instances.pop(task.id, None)
+            async with self._executor_lock:
+                self._executor_instances.pop(task.id, None)
             # Re-raise the exception to let TaskManager mark the task as failed
             raise
 

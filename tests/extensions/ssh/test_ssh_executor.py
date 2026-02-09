@@ -402,6 +402,53 @@ class TestSshExecutor:
             if os.path.exists(key_file):
                 os.unlink(key_file)
 
+    @pytest.mark.skipif(not ASYNCSSH_AVAILABLE, reason="asyncssh not installed")
+    @pytest.mark.asyncio
+    async def test_execute_command_with_malicious_env_vars(self):
+        """Test that shell metacharacters in env var values are safely escaped"""
+        executor = SshExecutor()
+
+        mock_result = MagicMock()
+        mock_result.stdout = "output"
+        mock_result.stderr = ""
+        mock_result.exit_status = 0
+
+        with (
+            patch("os.path.exists", return_value=True),
+            patch("os.stat") as mock_stat,
+            patch("asyncssh.connect") as mock_connect,
+        ):
+            mock_stat_result = MagicMock()
+            mock_stat_result.st_mode = 0o600
+            mock_stat.return_value = mock_stat_result
+
+            mock_conn = AsyncMock()
+            mock_conn.__aenter__ = AsyncMock(return_value=mock_conn)
+            mock_conn.__aexit__ = AsyncMock(return_value=None)
+            mock_conn.run = AsyncMock(return_value=mock_result)
+            mock_connect.return_value = mock_conn
+
+            result = await executor.execute(
+                {
+                    "host": "example.com",
+                    "username": "user",
+                    "key_file": "/path/to/key",
+                    "command": "echo $MY_VAR",
+                    "env": {
+                        "MY_VAR": "safe_value; rm -rf /",
+                        "ANOTHER$(whoami)": "val",
+                    },
+                }
+            )
+
+            assert result["success"] is True
+            # Verify the command passed to conn.run has quoted env vars
+            executed_command = mock_conn.run.call_args[0][0]
+            # The malicious value should be shell-quoted (wrapped in single quotes)
+            assert "rm -rf /" not in executed_command or "'" in executed_command
+            # The key with $() should also be quoted
+            assert "$(whoami)" not in executed_command or "'" in executed_command
+
     @pytest.mark.asyncio
     async def test_get_input_schema(self):
         """Test input schema generation"""

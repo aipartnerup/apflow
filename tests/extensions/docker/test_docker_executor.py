@@ -7,6 +7,7 @@ Tests for Docker container execution functionality.
 import pytest
 import asyncio
 from unittest.mock import patch, MagicMock
+from apflow.core.execution.errors import ValidationError
 from apflow.extensions.docker.docker_executor import DockerExecutor, DOCKER_AVAILABLE
 
 
@@ -120,7 +121,7 @@ class TestDockerExecutor:
 
         assert result["success"] is True
         call_kwargs = mock_client.containers.create.call_args[1]
-        assert "/host/data:/data" in call_kwargs["volumes"]
+        assert "/host/data:/data:ro" in call_kwargs["volumes"]
 
     @pytest.mark.skipif(not DOCKER_AVAILABLE, reason="docker not installed")
     @pytest.mark.asyncio
@@ -270,6 +271,96 @@ class TestDockerExecutor:
         assert "cancelled" in result["error"].lower()
         # Container was created, so remove should be called
         mock_container.remove.assert_called_once()
+
+    @pytest.mark.skipif(not DOCKER_AVAILABLE, reason="docker not installed")
+    @pytest.mark.asyncio
+    async def test_execute_rejects_sensitive_volume_mount(self):
+        """Test that mounts to sensitive host paths like /etc are rejected"""
+        executor = DockerExecutor()
+        mock_client = MagicMock()
+        executor._client = mock_client
+
+        with pytest.raises(ValidationError, match="sensitive path"):
+            await executor.execute(
+                {
+                    "image": "python:3.11",
+                    "command": "cat /data/passwd",
+                    "volumes": {"/etc/passwd": "/data"},
+                }
+            )
+
+    @pytest.mark.skipif(not DOCKER_AVAILABLE, reason="docker not installed")
+    @pytest.mark.asyncio
+    async def test_execute_rejects_docker_socket_mount(self):
+        """Test that mounting the Docker socket is rejected"""
+        executor = DockerExecutor()
+        mock_client = MagicMock()
+        executor._client = mock_client
+
+        with pytest.raises(ValidationError, match="sensitive path"):
+            await executor.execute(
+                {
+                    "image": "python:3.11",
+                    "command": "ls",
+                    "volumes": {"/var/run/docker.sock": "/sock"},
+                }
+            )
+
+    @pytest.mark.skipif(not DOCKER_AVAILABLE, reason="docker not installed")
+    @pytest.mark.asyncio
+    async def test_execute_allows_sensitive_mount_when_env_set(self):
+        """Test that sensitive mounts are allowed when APFLOW_DOCKER_ALLOW_SENSITIVE_MOUNTS=1"""
+        executor = DockerExecutor()
+
+        mock_container = MagicMock()
+        mock_container.id = "container-123"
+        mock_container.logs.return_value = b"output"
+        mock_container.wait.return_value = {"StatusCode": 0}
+
+        mock_client = MagicMock()
+        mock_client.containers.create.return_value = mock_container
+
+        executor._client = mock_client
+
+        with patch.dict("os.environ", {"APFLOW_DOCKER_ALLOW_SENSITIVE_MOUNTS": "1"}):
+            result = await executor.execute(
+                {
+                    "image": "python:3.11",
+                    "command": "cat /data/hosts",
+                    "volumes": {"/etc/hosts": "/data"},
+                }
+            )
+
+            assert result["success"] is True
+
+    @pytest.mark.skipif(not DOCKER_AVAILABLE, reason="docker not installed")
+    @pytest.mark.asyncio
+    async def test_execute_volume_mount_default_readonly(self):
+        """Test that volume mounts default to read-only unless :rw is specified"""
+        executor = DockerExecutor()
+
+        mock_container = MagicMock()
+        mock_container.id = "container-123"
+        mock_container.logs.return_value = b"output"
+        mock_container.wait.return_value = {"StatusCode": 0}
+
+        mock_client = MagicMock()
+        mock_client.containers.create.return_value = mock_container
+
+        executor._client = mock_client
+
+        result = await executor.execute(
+            {
+                "image": "python:3.11",
+                "command": "ls /data",
+                "volumes": {"/tmp/safe": "/data", "/tmp/writable": "/output:rw"},
+            }
+        )
+
+        assert result["success"] is True
+        call_kwargs = mock_client.containers.create.call_args[1]
+        assert "/tmp/safe:/data:ro" in call_kwargs["volumes"]
+        assert "/tmp/writable:/output:rw" in call_kwargs["volumes"]
 
     @pytest.mark.asyncio
     async def test_get_input_schema(self):

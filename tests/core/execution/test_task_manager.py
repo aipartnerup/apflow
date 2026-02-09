@@ -2,6 +2,7 @@
 Test TaskManager functionality
 """
 
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, patch
 
@@ -467,3 +468,44 @@ class TestTaskManager:
 
             # Should have executed child tasks
             assert mock_execute.call_count >= 1
+
+
+class TestTaskManagerExecutorLock:
+    """Test _executor_lock protects _executor_instances from race conditions"""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_cancel_and_execute(self, sync_db_session):
+        """Test that concurrent cancel and execute don't race on _executor_instances"""
+        task_manager = TaskManager(sync_db_session, pre_hooks=[], post_hooks=[])
+
+        # Simulate concurrent writes and reads
+        errors: list[Exception] = []
+
+        async def write_executor(task_id: str) -> None:
+            try:
+                async with task_manager._executor_lock:
+                    task_manager._executor_instances[task_id] = f"executor-{task_id}"
+                await asyncio.sleep(0)  # Yield to event loop
+                async with task_manager._executor_lock:
+                    task_manager._executor_instances.pop(task_id, None)
+            except Exception as e:
+                errors.append(e)
+
+        async def read_executor(task_id: str) -> None:
+            try:
+                async with task_manager._executor_lock:
+                    task_manager._executor_instances.get(task_id)
+            except Exception as e:
+                errors.append(e)
+
+        # Run many concurrent operations
+        tasks = []
+        for i in range(50):
+            task_id = f"task-{i}"
+            tasks.append(write_executor(task_id))
+            tasks.append(read_executor(task_id))
+
+        await asyncio.gather(*tasks)
+
+        assert errors == [], f"Race condition detected: {errors}"
+        assert task_manager._executor_instances == {}

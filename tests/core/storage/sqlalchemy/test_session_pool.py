@@ -8,6 +8,7 @@ to ensure proper session management, limits, and cleanup.
 import pytest
 import asyncio
 import time
+from unittest.mock import MagicMock
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -166,6 +167,30 @@ class TestSessionPoolManager:
 
         # Should be different instances after reset
         assert manager1 is not manager2
+
+    def test_release_session_close_before_untrack(self, tmp_path):
+        """Test that session is still tracked if close() raises an exception"""
+        db_path = tmp_path / "test.duckdb"
+        manager = SessionPoolManager()
+        manager.initialize(path=str(db_path))
+
+        # Create a real session first
+        session = manager.create_session()
+        assert manager.get_active_session_count() == 1
+
+        # Replace close with a mock that raises
+        original_close = session.close
+        session.close = MagicMock(side_effect=RuntimeError("close failed"))
+
+        # release_session should handle the error and still remove from tracking
+        manager.release_session(session)
+
+        # Session should be removed from tracking even if close failed
+        # (the warning is logged but session is still cleaned up)
+        assert manager.get_active_session_count() == 0
+
+        # Restore original close for cleanup
+        session.close = original_close
 
 
 class TestTaskTreeSession:

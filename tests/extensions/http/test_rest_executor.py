@@ -7,11 +7,25 @@ Tests for HTTP/REST API executor functionality.
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 import httpx
+from apflow.core.execution.errors import ValidationError
 from apflow.extensions.http.rest_executor import RestExecutor
 
 
 class TestRestExecutor:
     """Test RestExecutor functionality"""
+
+    @pytest.fixture(autouse=True)
+    def _mock_dns_resolution(self):
+        """Mock DNS resolution to return a public IP for test URLs.
+
+        This prevents the SSRF validation from failing on fictional hostnames
+        like api.example.com used in existing tests.
+        """
+        with patch(
+            "socket.getaddrinfo",
+            return_value=[(None, None, None, None, ("93.184.216.34", 0))],
+        ):
+            yield
 
     @pytest.mark.asyncio
     async def test_execute_get_request(self):
@@ -427,6 +441,61 @@ class TestRestExecutor:
             # verify is passed to AsyncClient constructor, not request method
             client_call_kwargs = mock_client.call_args[1]
             assert client_call_kwargs["verify"] is False
+
+    @pytest.mark.asyncio
+    async def test_execute_rejects_private_ip(self):
+        """Test that requests to private IP addresses are rejected"""
+        executor = RestExecutor()
+
+        with patch(
+            "socket.getaddrinfo", return_value=[(None, None, None, None, ("192.168.1.1", 0))]
+        ):
+            with pytest.raises(ValidationError, match="private/reserved address"):
+                await executor.execute({"url": "http://internal.corp/api"})
+
+    @pytest.mark.asyncio
+    async def test_execute_rejects_localhost(self):
+        """Test that requests to localhost are rejected"""
+        executor = RestExecutor()
+
+        with patch("socket.getaddrinfo", return_value=[(None, None, None, None, ("127.0.0.1", 0))]):
+            with pytest.raises(ValidationError, match="private/reserved address"):
+                await executor.execute({"url": "http://localhost.localdomain/admin"})
+
+    @pytest.mark.asyncio
+    async def test_execute_rejects_metadata_endpoint(self):
+        """Test that requests to cloud metadata endpoints are rejected"""
+        executor = RestExecutor()
+
+        with patch(
+            "socket.getaddrinfo", return_value=[(None, None, None, None, ("169.254.169.254", 0))]
+        ):
+            with pytest.raises(ValidationError, match="private/reserved address"):
+                await executor.execute({"url": "http://metadata.google.internal/latest/meta-data/"})
+
+    @pytest.mark.asyncio
+    async def test_execute_allows_private_when_env_set(self):
+        """Test that private URLs are allowed when APFLOW_REST_ALLOW_PRIVATE_URLS=1"""
+        executor = RestExecutor()
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.url = "http://192.168.1.1/api"
+        mock_response.headers = {}
+        mock_response.text = "OK"
+        mock_response.json.side_effect = Exception("Not JSON")
+
+        with (
+            patch.dict("os.environ", {"APFLOW_REST_ALLOW_PRIVATE_URLS": "1"}),
+            patch("httpx.AsyncClient") as mock_client,
+        ):
+            mock_client_instance = AsyncMock()
+            mock_client.return_value.__aenter__.return_value = mock_client_instance
+            mock_client_instance.request = AsyncMock(return_value=mock_response)
+
+            result = await executor.execute({"url": "http://192.168.1.1/api"})
+
+            assert result["success"] is True
 
     @pytest.mark.asyncio
     async def test_get_input_schema(self):

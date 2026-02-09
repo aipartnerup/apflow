@@ -3,6 +3,7 @@ Lightweight task tracker for in-memory task tracking
 Separated from TaskExecutor to avoid blocking issues and improve performance
 """
 
+import threading
 from typing import Set, List, Dict, Any
 from apflow.logger import get_logger
 
@@ -14,12 +15,13 @@ class TaskTracker:
 
     _instance = None
     _initialized = False
-    _lock = None
+    _lock = threading.Lock()
 
     def __new__(cls):
-        if cls._instance is None:
-            cls._instance = object.__new__(cls)
-        return cls._instance
+        with cls._lock:
+            if cls._instance is None:
+                cls._instance = object.__new__(cls)
+            return cls._instance
 
     def __init__(self):
         if not TaskTracker._initialized:

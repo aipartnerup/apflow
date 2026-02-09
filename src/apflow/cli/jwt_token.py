@@ -11,6 +11,7 @@ Supports multiple config locations with priority:
 from __future__ import annotations
 
 import jwt
+import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -94,7 +95,7 @@ def _generate_jwt_secret() -> str:
     Returns:
         Random secret string (32 bytes, hex encoded)
     """
-    return uuid.uuid4().hex
+    return secrets.token_hex(32)
 
 
 def generate_token(

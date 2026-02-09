@@ -363,22 +363,21 @@ class SessionPoolManager:
             session: Session to release
         """
         with self._lock:
-            if session in self._active_sessions:
-                del self._active_sessions[session]
-                logger.debug(
-                    f"Released session: {len(self._active_sessions)}/{self._max_sessions} active"
-                )
+            if session not in self._active_sessions:
+                return
 
-            # Close session
-            try:
-                if isinstance(session, AsyncSession):
-                    # For async sessions, we need to close in async context
-                    # This will be handled by the context manager
-                    pass
-                else:
+            # Close sync sessions before removing from tracking
+            if not isinstance(session, AsyncSession):
+                try:
                     session.close()
-            except Exception as e:
-                logger.warning(f"Error closing session: {str(e)}")
+                except Exception as e:
+                    logger.warning(f"Error closing session: {str(e)}")
+
+            # Remove from tracking after successful close (or for async sessions)
+            del self._active_sessions[session]
+            logger.debug(
+                f"Released session: {len(self._active_sessions)}/{self._max_sessions} active"
+            )
 
     def _cleanup_expired_sessions(self) -> None:
         """Clean up sessions that have exceeded timeout"""
@@ -391,7 +390,7 @@ class SessionPoolManager:
 
         for session in expired_sessions:
             logger.warning(f"Closing expired session (timeout: {self._session_timeout}s)")
-            del self._active_sessions[session]
+            # Close before removing from tracking
             try:
                 if isinstance(session, AsyncSession):
                     # Async session cleanup will be handled by context manager
@@ -400,6 +399,7 @@ class SessionPoolManager:
                     session.close()
             except Exception as e:
                 logger.warning(f"Error closing expired session: {str(e)}")
+            del self._active_sessions[session]
 
     def get_active_session_count(self) -> int:
         """Get current number of active sessions"""
@@ -1039,18 +1039,18 @@ class PooledSessionContext:
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         """Exit context manager and release session"""
         if self._session is not None:
-            # Release session back to pool
+            # For async sessions, close before releasing from pool
+            if isinstance(self._session, AsyncSession):
+                try:
+                    await self._session.close()
+                except Exception as e:
+                    logger.warning(f"Error closing async session: {str(e)}")
+
+            # Release session from pool tracking
+            # For sync sessions, release_session() handles closing
+            # For async sessions, already closed above; release just removes from tracking
             if self._pool_manager:
                 self._pool_manager.release_session(self._session)
-
-            # Close session
-            try:
-                if isinstance(self._session, AsyncSession):
-                    await self._session.close()
-                else:
-                    self._session.close()
-            except Exception as e:
-                logger.warning(f"Error closing session in context manager: {str(e)}")
 
             self._session = None
 

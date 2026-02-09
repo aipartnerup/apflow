@@ -5,6 +5,11 @@ This executor is designed to make HTTP requests to third-party REST API services
 It supports authentication, custom headers, query parameters, and request bodies, making it suitable for integrating with external APIs such as SaaS platforms, cloud services, or any HTTP-based API provider.
 """
 
+import ipaddress
+import os
+import socket
+from urllib.parse import urlparse
+
 import httpx
 from typing import Any, ClassVar, Dict, Literal, Optional
 from pydantic import BaseModel, Field
@@ -110,6 +115,38 @@ class RestExecutor(BaseTask):
         """Extension type identifier for categorization"""
         return "http"
 
+    def _validate_url_not_private(self, url: str) -> None:
+        """Validate that a URL does not target private or internal network addresses.
+
+        Resolves the hostname to IP addresses and checks against private, loopback,
+        link-local, and reserved ranges to prevent SSRF attacks.
+
+        Can be bypassed by setting env var APFLOW_REST_ALLOW_PRIVATE_URLS=1.
+
+        Raises:
+            ValidationError: If the URL targets a private/reserved address.
+        """
+        if os.environ.get("APFLOW_REST_ALLOW_PRIVATE_URLS") == "1":
+            return
+
+        parsed = urlparse(url)
+        hostname = parsed.hostname
+        if not hostname:
+            raise ValidationError(f"[{self.id}] URL has no hostname: {url}")
+
+        try:
+            addr_infos = socket.getaddrinfo(hostname, None)
+        except socket.gaierror:
+            raise ValidationError(f"[{self.id}] Cannot resolve hostname: {hostname}")
+
+        for addr_info in addr_infos:
+            ip_str = addr_info[4][0]
+            ip = ipaddress.ip_address(ip_str)
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                raise ValidationError(
+                    f"[{self.id}] URL targets a private/reserved address: {hostname} -> {ip_str}"
+                )
+
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute an HTTP request
@@ -130,6 +167,8 @@ class RestExecutor(BaseTask):
         url = inputs.get("url")
         if not url:
             raise ValidationError(f"[{self.id}] url is required in inputs")
+
+        self._validate_url_not_private(url)
 
         method = inputs.get("method", "GET").upper()
         headers = {**self.default_headers, **inputs.get("headers", {})}
