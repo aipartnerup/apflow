@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Changed
+
+- Enhanced executor security and validation; added tests for JWT secret generation and TaskManager locking
+- Updated token claims to use `roles` as a list; added tests for role-claim handling
+
+
 ## [0.15.0] 2026-02-08
 
 ### Fixed
