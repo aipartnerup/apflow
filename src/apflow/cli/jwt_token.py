@@ -216,6 +216,7 @@ def get_token_info(token: str) -> dict:
             "issued_at": payload.get("iat"),
             "expires_at": payload.get("exp"),
             "token_id": payload.get("jti"),
+            "roles": payload.get("roles") or payload.get("role"),
         }
 
         # Format timestamps

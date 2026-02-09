@@ -3,6 +3,7 @@ Tests for CLI config command.
 """
 
 from click.testing import CliRunner
+import jwt
 import pytest
 from apflow.cli.main import cli
 from apflow.cli.cli_config import load_cli_config
@@ -181,6 +182,21 @@ class TestConfigCommand:
         result = runner.invoke(cli, ["config", "get", "admin_auth_token"])
         assert result.exit_code == 0
         assert "***" in result.stdout  # Masked
+
+    def test_config_gen_token_roles_claim(self):
+        """Test that gen-token stores roles as a list claim."""
+        result = runner.invoke(cli, ["config", "gen-token", "--role", "admin"])
+        assert result.exit_code == 0
+
+        token = None
+        for line in result.stdout.splitlines():
+            if line.startswith("Token: "):
+                token = line.split("Token: ", 1)[1].strip()
+                break
+
+        assert token
+        payload = jwt.decode(token, options={"verify_signature": False})
+        assert payload.get("roles") == ["admin"]
 
 
 class TestInitServerEnvSync:

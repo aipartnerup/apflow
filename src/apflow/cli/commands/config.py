@@ -279,7 +279,7 @@ def gen_token(
         # Build extra claims
         extra_claims = {}
         if role:
-            extra_claims["role"] = role
+            extra_claims["roles"] = [role]
 
         # Generate token
         token = generate_token(
@@ -432,7 +432,7 @@ def init_server(
                 subject="apflow-cli",
                 secret=config.get("jwt_secret"),
                 algo=config.get("jwt_algorithm", "HS256"),
-                extra_claims={"role": role},
+                extra_claims={"roles": [role]},
                 expiry_days=365,
             )
             config["admin_auth_token"] = token
@@ -609,8 +609,11 @@ def verify_token_cmd(
                 typer.echo(f"   Status: ✅ Valid ({days} days remaining)")
 
         # Show role if present
-        if "role" in info:
-            typer.echo(f"   Role: {info.get('role')}")
+        roles = info.get("roles")
+        if roles:
+            if not isinstance(roles, list):
+                roles = [roles]
+            typer.echo(f"   Roles: {', '.join(roles)}")
 
         # Try to verify with local secret (if available)
         try:
@@ -846,7 +849,7 @@ def init_interactive():
 
         token = generate_token(
             subject="apflow-cli",
-            extra_claims={"role": role},
+            extra_claims={"roles": [role]},
             expiry_days=expiry,
         )
         config["admin_auth_token"] = token
