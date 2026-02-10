@@ -16,7 +16,7 @@ For a high-level overview and quick start, see **[CLI Usage Guide](../guides/cli
   - Best practices
 
 - **[commands.md](./commands.md)** - Complete command reference
-  - Task execution (run, list, status, watch, history)
+  - Task execution (run, list, status, watch)
   - Task management (create, update, delete, copy)
   - Flow management
   - Executor methods

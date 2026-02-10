@@ -6,7 +6,7 @@ import typer
 import json
 import time
 from pathlib import Path
-from typing import Optional, List
+from typing import Any, Optional, List
 
 # TaskExecutor imported on-demand to avoid loading extensions at CLI startup
 from apflow.core.utils.helpers import parse_iso_datetime
@@ -30,66 +30,6 @@ scheduled_app = typer.Typer(
 )
 app.add_typer(scheduled_app, name="scheduled")
 console = Console()
-
-
-# --- Added: history subcommand ---
-@app.command("history")
-def history(
-    task_id: str = typer.Argument(..., help="Task ID to show history for"),
-    user_id: Optional[str] = typer.Option(None, "--user-id", help="Filter by user ID"),
-    days: Optional[int] = typer.Option(7, "--days", help="Show last N days (default: 7)"),
-    limit: Optional[int] = typer.Option(100, "--limit", help="Limit results (default: 100)"),
-):
-    """
-    Show execution history for a specific task (status changes, retries, logs).
-    Args:
-        task_id: Task ID to show history for
-        user_id: Filter by user ID
-        days: Show last N days
-        limit: Limit results
-    """
-    try:
-        from apflow.core.storage import get_default_session
-        from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
-        from apflow.core.config import get_task_model_class
-        from datetime import datetime, timedelta
-
-        db_session = get_default_session()
-        task_repository = TaskRepository(db_session, task_model_class=get_task_model_class())
-
-        # Get the task
-        task = run_async_safe(task_repository.get_task_by_id(task_id))
-        if not task:
-            typer.echo(f"Task {task_id} not found", err=True)
-            raise typer.Exit(1)
-
-        # Calculate time window
-        since = None
-        if days:
-            since = datetime.utcnow() - timedelta(days=days)
-
-        # Query history (status changes, logs, retries)
-        # This assumes a method get_task_history exists; if not, fallback to status log
-        try:
-            history_items = run_async_safe(
-                task_repository.get_task_history(
-                    task_id=task_id, user_id=user_id, since=since, limit=limit
-                )
-            )
-        except AttributeError:
-            # Fallback: show status change log if get_task_history not implemented
-            history_items = getattr(task, "status_log", [])
-
-        if not history_items:
-            typer.echo(f"No history found for task {task_id}")
-            return
-
-        typer.echo(json.dumps(history_items, indent=2, default=str))
-
-    except Exception as e:
-        typer.echo(f"Error: {str(e)}", err=True)
-        logger.exception("Error getting task history")
-        raise typer.Exit(1)
 
 
 @app.command("status")
@@ -252,9 +192,6 @@ def count(
             TaskStatus.CANCELLED,
         ]
 
-        # parent_id filter: "" means root tasks (parent_id is None), None means all tasks
-        parent_id_filter = "" if root_only else None
-
         async def get_counts():
             async with get_api_client_if_configured() as client:
                 if client:
@@ -271,20 +208,11 @@ def count(
                 )
 
                 try:
-                    counts = {}
-                    total = 0
-
-                    for status in all_statuses:
-                        tasks = await task_repository.query_tasks(
-                            user_id=user_id,
-                            status=status,
-                            parent_id=parent_id_filter,
-                            limit=10000,
-                        )
-                        counts[status] = len(tasks)
-                        total += len(tasks)
-
-                    return {"total": total, **counts}
+                    return await task_repository.count_tasks_by_status(
+                        statuses=all_statuses,
+                        user_id=user_id,
+                        root_only=root_only,
+                    )
                 finally:
                     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -353,6 +281,12 @@ def cancel(
         "-f",
         help="Force cancellation (immediate stop)",
     ),
+    error_message: Optional[str] = typer.Option(
+        None,
+        "--error-message",
+        "-m",
+        help="Custom error message for cancellation",
+    ),
 ):
     """
     Cancel one or more running tasks
@@ -364,6 +298,7 @@ def cancel(
     Args:
         task_ids: List of task IDs to cancel
         force: If True, force immediate cancellation (may lose data)
+        error_message: Custom error message (default: "Cancelled by user" / "Force cancelled by user")
     """
     try:
         using_api = should_use_api()
@@ -374,10 +309,16 @@ def cancel(
 
             async with get_api_client_if_configured() as client:
                 if client:
-                    api_results = await client.cancel_tasks(task_ids, force=force)
+                    api_results = await client.cancel_tasks(
+                        task_ids, force=force, error_message=error_message
+                    )
                     results.extend(api_results)
                 else:
-                    error_message = "Cancelled by user" if not force else "Force cancelled by user"
+                    effective_message = error_message
+                    if not effective_message:
+                        effective_message = (
+                            "Force cancelled by user" if force else "Cancelled by user"
+                        )
 
                     from apflow.core.execution.task_executor import TaskExecutor
 
@@ -385,7 +326,9 @@ def cancel(
 
                     for task_id in task_ids:
                         try:
-                            cancel_result = await task_executor.cancel_task(task_id, error_message)
+                            cancel_result = await task_executor.cancel_task(
+                                task_id, effective_message
+                            )
 
                             cancel_result["task_id"] = task_id
                             cancel_result["force"] = force
@@ -1553,6 +1496,9 @@ def _print_scheduled_tasks_table(tasks: list) -> None:
 @scheduled_app.command("due")
 def scheduled_due(
     user_id: Optional[str] = typer.Option(None, "--user-id", "-u", help="Filter by user ID"),
+    before: Optional[str] = typer.Option(
+        None, "--before", "-b", help="Get tasks due before this time (ISO datetime, default: now)"
+    ),
     limit: int = typer.Option(100, "--limit", "-l", help="Maximum number of tasks"),
     output_format: str = typer.Option(
         "json", "--format", "-f", help="Output format: json or table"
@@ -1561,12 +1507,13 @@ def scheduled_due(
     """
     Get scheduled tasks that are due for execution.
 
-    Returns tasks where next_run_at <= now and schedule is enabled.
-    This is the primary command for external schedulers to poll for
-    tasks that need to be executed.
+    Returns tasks where next_run_at <= now (or specified --before time)
+    and schedule is enabled. This is the primary command for external
+    schedulers to poll for tasks that need to be executed.
 
     Examples:
         apflow tasks scheduled due
+        apflow tasks scheduled due --before "2024-12-31T23:59:59Z"
         apflow tasks scheduled due --limit 10
         apflow tasks scheduled due -f table
     """
@@ -1578,14 +1525,23 @@ def scheduled_due(
         using_api = should_use_api()
         log_api_usage("scheduled.due", using_api)
 
+        before_dt = parse_iso_datetime(before) if before else None
+
         async def get_due_tasks():
             async with get_api_client_if_configured() as client:
                 if client:
+                    params: dict[str, Any] = {
+                        "user_id": user_id,
+                        "limit": limit,
+                    }
+                    if before:
+                        params["before"] = before
                     return await client.call_method(
                         "tasks.scheduled.due",
-                        user_id=user_id,
-                        limit=limit,
+                        **params,
                     )
+
+            from datetime import datetime, timezone
 
             db_session = get_default_session()
             task_repository = TaskRepository(
@@ -1594,6 +1550,7 @@ def scheduled_due(
             )
 
             tasks = await task_repository.get_due_scheduled_tasks(
+                before=before_dt if before_dt else datetime.now(timezone.utc),
                 user_id=user_id,
                 limit=limit,
             )
@@ -1678,6 +1635,11 @@ def scheduled_complete(
     success: bool = typer.Option(True, "--success/--failed", help="Whether execution succeeded"),
     result: Optional[str] = typer.Option(None, "--result", "-r", help="Result data (JSON string)"),
     error: Optional[str] = typer.Option(None, "--error", "-e", help="Error message (if failed)"),
+    calculate_next_run: bool = typer.Option(
+        True,
+        "--calculate-next-run/--no-calculate-next-run",
+        help="Calculate next_run_at after completion (default: True)",
+    ),
 ):
     """
     Complete a scheduled task run and prepare for next execution.
@@ -1711,6 +1673,7 @@ def scheduled_complete(
                         success=success,
                         result=result_data,
                         error=error,
+                        calculate_next_run=calculate_next_run,
                     )
 
             db_session = get_default_session()
@@ -1722,8 +1685,8 @@ def scheduled_complete(
             task = await task_repository.complete_scheduled_run(
                 task_id=task_id,
                 success=success,
-                result=result_data,
                 error=error,
+                calculate_next_run=calculate_next_run,
             )
 
             if not task:

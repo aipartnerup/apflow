@@ -165,6 +165,9 @@ apflow tasks status <task_id>
 
 # Cancel stuck tasks
 apflow tasks cancel <task_id> --force
+
+# Cancel with custom error message
+apflow tasks cancel <task_id> --error-message "Timed out"
 ```
 
 ## Database Configuration

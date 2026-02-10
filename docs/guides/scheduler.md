@@ -89,6 +89,9 @@ apflow scheduler list --type daily --all
 # Check for due tasks
 apflow tasks scheduled due
 
+# Check for tasks due before a specific time
+apflow tasks scheduled due --before "2024-12-31T23:59:59Z"
+
 # Check scheduler status
 apflow scheduler status
 ```
@@ -228,7 +231,7 @@ manifest = generate_kubernetes_cronjob(
 | `tasks.scheduled.list` | JSON-RPC | List all scheduled tasks (supports `status` filter) |
 | `tasks.scheduled.due` | JSON-RPC | Get tasks due for execution |
 | `tasks.scheduled.init` | JSON-RPC | Initialize/recalculate next_run_at |
-| `tasks.scheduled.complete` | JSON-RPC | Mark task completed, calculate next run |
+| `tasks.scheduled.complete` | JSON-RPC | Mark task completed, calculate next run (supports `calculate_next_run` flag) |
 | `tasks.scheduled.export-ical` | JSON-RPC | Export scheduled tasks as iCalendar format |
 | `tasks.webhook.trigger` | JSON-RPC | Trigger task execution via webhook |
 | `/webhook/trigger/{task_id}` | REST POST | Simple REST endpoint for external schedulers |

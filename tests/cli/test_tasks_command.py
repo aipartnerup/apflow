@@ -29,52 +29,6 @@ def extract_first_json_object(text: str):
     raise ValueError("No JSON object found in text")
 
 
-# History tests for CLI tasks
-class TestTasksHistoryCommands:
-
-    @pytest.mark.parametrize("cmd", ["history"])
-    def test_tasks_history_not_found(self, disable_api_for_tests, cmd):
-        result = runner.invoke(cli, ["tasks", cmd, "nonexistent_id"])
-        assert result.exit_code == 1
-        assert "not found" in result.output or "No history" in result.output
-
-    @pytest.mark.asyncio
-    async def test_tasks_history_with_records(
-        self, use_test_db_session, disable_api_for_tests, monkeypatch
-    ):
-        """Return stored history when repository provides records."""
-
-        task_repository = TaskRepository(
-            use_test_db_session, task_model_class=get_task_model_class()
-        )
-        task_id = f"history-{uuid.uuid4()}"
-        await task_repository.create_task(
-            id=task_id,
-            name="History Task",
-            user_id="test_user",
-            status="in_progress",
-            priority=1,
-            has_children=False,
-        )
-
-        history_items = [
-            {"status": "in_progress", "message": "started", "timestamp": "2024-01-01T00:00:00Z"}
-        ]
-
-        async def fake_get_task_history(self, task_id: str, user_id=None, since=None, limit=None):
-            return history_items
-
-        monkeypatch.setattr(
-            TaskRepository, "get_task_history", fake_get_task_history, raising=False
-        )
-
-        result = runner.invoke(cli, ["tasks", "history", task_id])
-
-        assert result.exit_code == 0
-        output = json.loads(result.stdout)
-        assert isinstance(output, list)
-        assert output == history_items
-
 
 @pytest_asyncio.fixture
 async def sample_task(use_test_db_session):

@@ -173,45 +173,19 @@ Watch with slower polling:
 apflow tasks watch --all --interval 5
 ```
 
-### apflow tasks history
-
-View task execution history:
-
-```bash
-apflow tasks history <task_id> [OPTIONS]
-```
-
-**Options**:
-- `--user-id <id>` - Filter by user
-- `--days <n>` - Show last N days (default: 7)
-- `--limit <count>` - Limit results (default: 100)
-
-**Examples**:
-
-View task history:
-```bash
-apflow tasks history task-001
-```
-
-View recent history:
-```bash
-apflow tasks history task-001 --days 30
-```
-
 ## Task Cancellation
 
 ### apflow tasks cancel
 
-Cancel a running task:
+Cancel one or more running tasks:
 
 ```bash
-apflow tasks cancel <task_id> [OPTIONS]
+apflow tasks cancel <task_ids>... [OPTIONS]
 ```
 
 **Options**:
-- `--force` - Force cancellation even if stuck
-- `--reason <text>` - Cancellation reason
-- `--wait` - Wait for cancellation to complete (default: 5 seconds)
+- `--force` / `-f` - Force immediate cancellation
+- `--error-message` / `-m` - Custom error message for cancellation (default: "Cancelled by user" or "Force cancelled by user")
 
 **Examples**:
 
@@ -220,14 +194,19 @@ Cancel task:
 apflow tasks cancel task-001
 ```
 
+Cancel multiple tasks:
+```bash
+apflow tasks cancel task-001 task-002 task-003
+```
+
 Force cancel:
 ```bash
 apflow tasks cancel task-001 --force
 ```
 
-Cancel with reason:
+Cancel with custom message:
 ```bash
-apflow tasks cancel task-001 --reason "Incorrect parameters"
+apflow tasks cancel task-001 --error-message "Incorrect parameters"
 ```
 
 ## Task Management

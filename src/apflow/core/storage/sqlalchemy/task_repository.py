@@ -527,6 +527,53 @@ class TaskRepository:
             logger.error(f"Error querying tasks: {str(e)}")
             return []
 
+    async def count_tasks_by_status(
+        self,
+        statuses: List[str],
+        user_id: Optional[str] = None,
+        root_only: bool = False,
+    ) -> Dict[str, int]:
+        """
+        Count tasks grouped by status using efficient SQL COUNT queries.
+
+        Args:
+            statuses: List of status values to count
+            user_id: Optional user ID filter
+            root_only: If True, only count root tasks (parent_id is None)
+
+        Returns:
+            Dict with counts per status and "total" key
+        """
+        try:
+            from sqlalchemy import func
+
+            base_filters = []
+            if user_id is not None:
+                base_filters.append(self.task_model_class.user_id == user_id)
+            if root_only:
+                base_filters.append(self.task_model_class.parent_id.is_(None))
+
+            counts: Dict[str, int] = {}
+            total = 0
+
+            for status in statuses:
+                stmt = select(func.count()).select_from(self.task_model_class)
+                for filter_clause in base_filters:
+                    stmt = stmt.where(filter_clause)
+                stmt = stmt.where(self.task_model_class.status == status)
+
+                result = await self.db.execute(stmt)
+                count = result.scalar_one()
+                counts[status] = int(count or 0)
+                total += count or 0
+
+            counts["total"] = int(total)
+            return counts
+
+        except Exception as e:
+            logger.error(f"Error counting tasks: {str(e)}")
+            return {"total": 0}
+
     async def reset_task_tree_for_reexecution(self, root_task_id: str) -> int:
         """
         Reset all child tasks in a tree to clean pending state for re-execution.

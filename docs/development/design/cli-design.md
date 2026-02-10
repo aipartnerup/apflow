@@ -81,7 +81,7 @@ CLI → Parse tasks (JSON array) → Group by root → TaskExecutor.execute_task
 - `tasks create --file <file>|--stdin` - Create task tree
 - `tasks update <task_id> [options]` - Update task fields
 - `tasks delete <task_id> [--force]` - Delete task
-- `tasks cancel <task_id>...` - Cancel running tasks
+- `tasks cancel <task_id>... [--force] [--error-message]` - Cancel running tasks
 - `tasks clone <task_id> [--children]` - Clone/copy task tree (copy is an alias)
 - `tasks watch [--task-id <id>|--all]` - Watch task status in real-time
 
@@ -449,7 +449,7 @@ apflow run flow --tasks '[
 | **Multiple Unrelated Tasks** | ✅ Supported (CLI groups by root) | ❌ Not supported (single root only) |
 | **Streaming** | Not yet supported | Supported via EventQueue |
 | **Status Query** | `TaskTracker + Database` | `TaskTracker + Database` |
-| **Cancellation** | ✅ Implemented | To be implemented |
+| **Cancellation** | ✅ Implemented | ✅ Implemented |
 | **Hooks** | Supported (via TaskExecutor) | Supported (via TaskExecutor) |
 | **Database** | Same database | Same database |
 
@@ -458,8 +458,5 @@ apflow run flow --tasks '[
 1. **Interactive Mode**: REPL for continuous task management
 2. **Watch Mode**: Real-time status monitoring
 3. **Streaming Support**: Real-time progress updates in CLI
-4. **Task Cancellation**: Graceful and force cancellation
-5. **Task History**: Query historical tasks
-6. **Task Filtering**: Filter by status, user, date range
-7. **Batch Operations**: Cancel multiple tasks, query multiple tasks
+4. **Task Filtering**: Filter by status, user, date range
 

@@ -1,6 +1,36 @@
 # Changelog
 
-## [Unreleased]
+## [0.16.0] 2026-02-10
+
+### Fixed
+
+- **CLI `tasks scheduled complete` passing unsupported `result` parameter to repository**
+  - `complete_scheduled_run()` does not accept a `result` parameter; removed the incorrect kwarg from the CLI direct-path call
+
+- **CLI `tasks count` inefficient in-memory counting**
+  - Replaced `query_tasks()` + `len()` per-status loop (which loaded all records into memory) with new `TaskRepository.count_tasks_by_status()` using `SELECT COUNT(*)` SQL queries, matching the API's efficient implementation
+
+### Added
+
+- **`--error-message` / `-m` option for `apflow tasks cancel`**
+  - Allows specifying a custom cancellation error message, consistent with the API `error_message` parameter
+  - Defaults to `"Cancelled by user"` / `"Force cancelled by user"` when not provided
+
+- **`--calculate-next-run / --no-calculate-next-run` option for `apflow tasks scheduled complete`**
+  - Controls whether `next_run_at` is recalculated after completing a scheduled run (default: `True`), consistent with the API `calculate_next_run` parameter
+
+- **`--before` / `-b` option for `apflow tasks scheduled due`**
+  - Allows specifying a custom cutoff time (ISO datetime) to query due tasks, consistent with the API `before` parameter
+  - Defaults to current UTC time when not provided
+
+- **`TaskRepository.count_tasks_by_status()` method**
+  - Efficient SQL `COUNT(*)` grouped-by-status query with `user_id` and `root_only` filters
+
+### Removed
+
+- **`apflow tasks history` CLI command**
+  - Removed non-functional stub command; underlying `TaskRepository.get_task_history()` and `TaskModel.status_log` were never implemented
+  - Task history is managed at the A2A Protocol TaskStore layer, not TaskModel
 
 ### Changed
 
