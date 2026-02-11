@@ -65,6 +65,22 @@ This avoids consensus complexity while supporting auto‑scaling and leader fail
 
 ---
 
+## 3.1 Architecture Philosophy (Rationale)
+
+### Why not full distributed consensus?
+
+Distributed consensus (Raft/Paxos) adds significant complexity without clear benefit for task orchestration. A single‑writer leader provides strong consistency, while external HA (k8s/HAProxy) provides acceptable availability.
+
+### Why lease‑based, not lock‑based?
+
+Leases auto‑expire on node failure and prevent deadlocks. A lease renewal loop is simpler and safer than lock release semantics for distributed workers.
+
+### Why PostgreSQL?
+
+PostgreSQL provides the transactional primitives required for lease acquisition/renewal. DuckDB is single‑writer and is therefore unsuitable for multi‑node coordination.
+
+---
+
 ## 4. Data Model Extensions (PostgreSQL‑only)
 
 ### Task Fields (extend `TaskModel`)
@@ -214,6 +230,23 @@ Placement is enforced by coordinator when returning executable tasks.
 4. Renews lease periodically during long tasks.
 5. Reports completion (`report_completion`) with idempotency key.
 6. Coordinator persists result and releases lease.
+
+---
+
+## 7.1 Failure Scenarios (Examples)
+
+### Worker crash during execution
+- Lease expires.
+- Leader reverts task to pending and increments `attempt_id`.
+- Another worker acquires the lease and retries (idempotency safe).
+
+### Long‑running task
+- Worker renews lease periodically.
+- If renewal fails, task becomes eligible for reassignment after expiry.
+
+### Leader failure
+- No new leases can be granted until leader is re‑elected.
+- Workers can continue current tasks; expired tasks are recovered by the next leader.
 
 ---
 
