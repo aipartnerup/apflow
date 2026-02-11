@@ -8,6 +8,7 @@ Core orchestration is stable with 800+ tests. Key capabilities:
 - Task orchestration with dependency trees and priority execution
 - 12+ executors (REST, WebSocket, gRPC, SSH, Docker, CrewAI, LiteLLM, MCP)
 - Multi-protocol API (A2A, MCP, JSON-RPC)
+- Built-in scheduler (internal polling + external gateway)
 - CLI and ConfigManager
 - DuckDB + PostgreSQL storage
 
@@ -96,3 +97,4 @@ These are application-level concerns, not orchestration:
 | ConfigManager | v1.x | Unified configuration management |
 | Task Model Extensions | v1.x | task_tree_id, origin_type, migrations |
 | Executor Access Control | v1.x | Environment-based filtering |
+| Scheduler | v1.x | Internal scheduler + external gateway integration |
