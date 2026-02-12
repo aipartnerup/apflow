@@ -64,9 +64,10 @@ Here's the real impact of using our framework:
 
 Start here if you're completely new:
 
-1. **[Core Concepts](concepts.md)** - Learn the fundamental ideas (5 min read)
-2. **[Quick Start Guide](quick-start.md)** - Build your first task (10 min)
-3. **[First Steps Tutorial](tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
+1. **[Hello World](hello-world.md)** - Get started in 5 minutes
+2. **[Core Concepts](concepts.md)** - Learn the fundamental ideas (5 min read)
+3. **[Quick Start Guide](quick-start.md)** - Build your first task (10 min)
+4. **[First Steps Tutorial](tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
 
 ### 📚 Already familiar?
 
@@ -185,16 +186,18 @@ asyncio.run(main())
 ## Learning Paths
 
 ### Path 1: Quick Learner (30 minutes)
-1. [Core Concepts](concepts.md) (5 min)
-2. [Quick Start](quick-start.md) (10 min)
-3. [Basic Examples](../examples/basic_task.md) (15 min)
+1. [Hello World](hello-world.md) (5 min)
+2. [Core Concepts](concepts.md) (5 min)
+3. [Quick Start](quick-start.md) (10 min)
+4. [Basic Examples](../examples/basic_task.md) (10 min)
 
 ### Path 2: Comprehensive (2 hours)
-1. [Core Concepts](concepts.md)
-2. [Quick Start](quick-start.md)
-3. [First Steps Tutorial](tutorials/tutorial-01-first-steps.md)
-4. [Task Trees Tutorial](tutorials/tutorial-02-task-trees.md)
-5. [Dependencies Tutorial](tutorials/tutorial-03-dependencies.md)
+1. [Hello World](hello-world.md)
+2. [Core Concepts](concepts.md)
+3. [Quick Start](quick-start.md)
+4. [First Steps Tutorial](tutorials/tutorial-01-first-steps.md)
+5. [Task Trees Tutorial](tutorials/tutorial-02-task-trees.md)
+6. [Dependencies Tutorial](tutorials/tutorial-03-dependencies.md)
 
 ### Path 3: Professional Developer (4+ hours)
 1. Complete Path 2

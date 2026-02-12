@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.17.0] 2026-02-12
+
+### Added
+
+- **CLI monitoring commands** (`apflow monitor`)
+  - `apflow monitor status` - Display current task status with rich tables
+  - `apflow monitor watch <task-id>` - Real-time task monitoring with live updates
+  - `apflow monitor trace <task-id>` - Execution timeline with dependency tree visualization
+  - `apflow monitor db` - Database connection status and statistics
+  - Supports both API and local database modes
+  - Rich terminal UI with tables, trees, panels, and live updates
+
+- **Structured error handling with enhanced context**
+  - `ApflowError` base class now supports structured format with `what`, `why`, `how_to_fix`, and `context` fields
+  - Error messages include emoji indicators and formatted troubleshooting guidance
+  - Backward compatible with existing error handling code
+  - `NetworkError` and `AuthenticationError` classes with detailed context
+
+- **Memory leak testing infrastructure**
+  - Performance test suite in `tests/performance/test_memory_leaks.py`
+  - Tests for memory stability over 1000+ task executions
+  - Executor instance cleanup verification
+  - Database file growth monitoring
+  - Added `memory-profiler>=0.61.0` and `psutil>=5.9.0` to dev dependencies
+
+- **Comprehensive documentation and examples**
+  - **[Hello World Guide](docs/getting-started/hello-world.md)** - 5-minute quick start tutorial
+  - **[Executor Selection Guide](docs/guides/executor-selection.md)** - Decision tree, comparison matrix, and detailed scenarios for all 8 executor types
+  - Example code files in `examples/hello_world/`:
+    - `simple.py` - Basic custom executor example
+    - `with_dependencies.py` - Task dependencies example
+    - `built_in_executors.py` - REST executor examples
+  - Example code files in `examples/executor_examples/`:
+    - `rest_executor_example.py` - HTTP API integration patterns
+    - `ssh_executor_example.py` - Remote command execution examples
+    - `docker_executor_example.py` - Container execution examples
+  - Updated documentation indexes to reference new guides and examples
+
+- **Enhanced error handling in executors**
+  - REST executor: Improved exception handling for timeout, connection errors, SSL errors, and HTTP errors with structured context
+  - SSH executor: Enhanced authentication error handling with key permission checks and troubleshooting guidance
+
+### Changed
+
+- **TaskRepository improvements**
+  - Added `query_tasks_by_statuses()` method for efficient multi-status queries using SQLAlchemy IN clause
+  - Optimized status filtering in monitoring commands
+
 ## [0.16.0] 2026-02-10
 
 ### Fixed

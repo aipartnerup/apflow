@@ -9,15 +9,25 @@ Exception Hierarchy:
     ApflowError (base)
         ├── BusinessError (user/expected errors, no stack trace)
         │   ├── ValidationError (input validation failures)
-        │   └── ConfigurationError (config/environment issues)
+        │   ├── ConfigurationError (config/environment issues)
+        │   ├── NetworkError (network/connection failures)
+        │   └── AuthenticationError (auth failures)
         └── SystemError (unexpected errors, with stack trace)
             ├── ExecutorError (executor runtime failures)
             └── StorageError (database/storage failures)
 
 Usage Guidelines:
     - Raise BusinessError subclasses for expected failures (bad input, missing config)
+    - Use structured error format: what/why/how_to_fix/context
     - Let system exceptions (TimeoutError, ConnectionError) propagate naturally
     - TaskManager logs BusinessError without exc_info, others with exc_info
+
+Structured Error Format:
+    All error classes support optional structured information:
+    - what: What went wrong (brief description)
+    - why: Why it happened (root cause)
+    - how_to_fix: How to resolve it (actionable steps)
+    - context: Additional context (dict with relevant details)
 """
 
 
@@ -27,9 +37,51 @@ class ApflowError(RuntimeError):
 
     This serves as the root of the exception hierarchy and allows
     catching all framework-specific exceptions if needed.
+
+    Supports structured error information:
+    - what: What went wrong
+    - why: Why it happened
+    - how_to_fix: How to resolve it
+    - context: Additional context dict
     """
 
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        what: str | None = None,
+        why: str | None = None,
+        how_to_fix: str | None = None,
+        context: dict | None = None,
+    ):
+        """
+        Initialize error with optional structured information.
+
+        Args:
+            message: Error message (used if structured info not provided)
+            what: Brief description of what went wrong
+            why: Root cause explanation
+            how_to_fix: Actionable resolution steps
+            context: Additional context dictionary
+        """
+        self.what = what
+        self.why = why
+        self.how_to_fix = how_to_fix
+        self.context = context or {}
+
+        # Build formatted message
+        if what:
+            formatted_msg = f"❌ {what}"
+            if why:
+                formatted_msg += f"\n\n💡 Reason: {why}"
+            if how_to_fix:
+                formatted_msg += f"\n\n✅ Solution: {how_to_fix}"
+            if context:
+                context_str = "\n".join(f"  - {k}: {v}" for k, v in context.items())
+                formatted_msg += f"\n\n📝 Context:\n{context_str}"
+            super().__init__(formatted_msg)
+        else:
+            super().__init__(message)
 
 
 class BusinessError(ApflowError):
@@ -82,6 +134,46 @@ class ConfigurationError(BusinessError):
     Example:
         >>> if not LITELLM_AVAILABLE:
         >>>     raise ConfigurationError("litellm is not installed")
+    """
+
+    pass
+
+
+class NetworkError(BusinessError):
+    """
+    Network or connection-related business error.
+
+    Use this for network failures, connection timeouts,
+    or unreachable services that are expected failure modes.
+
+    Example:
+        >>> raise NetworkError(
+        >>>     "Failed to connect",
+        >>>     what="HTTP request failed",
+        >>>     why=f"Cannot connect to {url}: Connection timeout",
+        >>>     how_to_fix="1. Check URL\n2. Verify service is running\n3. Check firewall",
+        >>>     context={"url": url, "timeout": 30}
+        >>> )
+    """
+
+    pass
+
+
+class AuthenticationError(BusinessError):
+    """
+    Authentication or authorization error.
+
+    Use this for auth failures, invalid credentials,
+    or permission denials.
+
+    Example:
+        >>> raise AuthenticationError(
+        >>>     "Authentication failed",
+        >>>     what="SSH authentication failed",
+        >>>     why=f"Cannot authenticate with key {key_path}",
+        >>>     how_to_fix="1. Check key permissions (chmod 600)\n2. Add key to ssh-agent",
+        >>>     context={"host": host, "key_path": key_path}
+        >>> )
     """
 
     pass

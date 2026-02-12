@@ -13,7 +13,12 @@ from typing import ClassVar, Dict, Any, Optional, Union
 from pydantic import BaseModel, Field
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
-from apflow.core.execution.errors import ValidationError, ConfigurationError
+from apflow.core.execution.errors import (
+    ValidationError,
+    ConfigurationError,
+    NetworkError,
+    AuthenticationError,
+)
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
@@ -218,50 +223,99 @@ class SshExecutor(BaseTask):
                 "command": command,
             }
 
-        # Exceptions (e.g., asyncssh.Error, asyncio.TimeoutError)
-        # will propagate to TaskManager
-        async with asyncssh.connect(**client_kwargs) as conn:
-            # Check for cancellation after connection
-            if self.cancellation_checker and self.cancellation_checker():
-                logger.info("SSH command cancelled after connection")
+        try:
+            async with asyncssh.connect(**client_kwargs) as conn:
+                # Check for cancellation after connection
+                if self.cancellation_checker and self.cancellation_checker():
+                    logger.info("SSH command cancelled after connection")
+                    return {
+                        "success": False,
+                        "error": "Command was cancelled",
+                        "host": host,
+                        "command": command,
+                    }
+
+                # Prepare environment variables
+                env_vars = (
+                    " ".join([f"{shlex.quote(k)}={shlex.quote(v)}" for k, v in env.items()])
+                    if env
+                    else ""
+                )
+                full_command = f"{env_vars} {command}".strip() if env_vars else command
+
+                # Execute command with timeout
+                result = await asyncio.wait_for(conn.run(full_command), timeout=timeout)
+
+                # Check for cancellation after execution
+                if self.cancellation_checker and self.cancellation_checker():
+                    logger.info("SSH command cancelled after execution")
+                    return {
+                        "success": False,
+                        "error": "Command was cancelled",
+                        "host": host,
+                        "command": command,
+                        "return_code": result.exit_status,
+                    }
+
                 return {
-                    "success": False,
-                    "error": "Command was cancelled",
-                    "host": host,
                     "command": command,
-                }
-
-            # Prepare environment variables
-            env_vars = (
-                " ".join([f"{shlex.quote(k)}={shlex.quote(v)}" for k, v in env.items()])
-                if env
-                else ""
-            )
-            full_command = f"{env_vars} {command}".strip() if env_vars else command
-
-            # Execute command with timeout
-            result = await asyncio.wait_for(conn.run(full_command), timeout=timeout)
-
-            # Check for cancellation after execution
-            if self.cancellation_checker and self.cancellation_checker():
-                logger.info("SSH command cancelled after execution")
-                return {
-                    "success": False,
-                    "error": "Command was cancelled",
-                    "host": host,
-                    "command": command,
+                    "stdout": result.stdout,
+                    "stderr": result.stderr,
                     "return_code": result.exit_status,
+                    "success": result.exit_status == 0,
+                    "host": host,
+                    "username": username,
                 }
-
-            return {
-                "command": command,
-                "stdout": result.stdout,
-                "stderr": result.stderr,
-                "return_code": result.exit_status,
-                "success": result.exit_status == 0,
-                "host": host,
-                "username": username,
-            }
+        except asyncssh.PermissionDenied:
+            raise AuthenticationError(
+                f"[{self.id}] SSH authentication failed",
+                what="SSH authentication failed",
+                why=f"Permission denied when connecting to {username}@{host}:{port}",
+                how_to_fix="1. Check SSH key permissions: chmod 600 <key_file>\n2. Verify key is added to ssh-agent: ssh-add <key_file>\n3. Check if key is authorized on remote server: ~/.ssh/authorized_keys\n4. Verify username is correct",
+                context={"host": host, "port": port, "username": username, "key_file": key_file},
+            )
+        except asyncssh.ConnectionLost as e:
+            raise NetworkError(
+                f"[{self.id}] SSH connection lost",
+                what="SSH connection lost",
+                why=f"Connection to {host}:{port} was lost: {str(e)}",
+                how_to_fix="1. Check network connectivity\n2. Verify server is running\n3. Check if connection was interrupted by firewall",
+                context={"host": host, "port": port, "error": str(e)},
+            )
+        except asyncio.TimeoutError:
+            raise NetworkError(
+                f"[{self.id}] SSH command timeout",
+                what="SSH command execution timed out",
+                why=f"Command did not complete within {timeout} seconds",
+                how_to_fix="1. Increase timeout value\n2. Check if command is hanging\n3. Optimize command execution",
+                context={"host": host, "command": command, "timeout": timeout},
+            )
+        except asyncssh.Error as e:
+            error_msg = str(e).lower()
+            if "connection refused" in error_msg:
+                raise NetworkError(
+                    f"[{self.id}] SSH connection refused",
+                    what="Cannot connect to SSH server",
+                    why=f"Connection to {host}:{port} was refused",
+                    how_to_fix="1. Verify SSH server is running: systemctl status sshd\n2. Check if port {port} is correct\n3. Verify firewall allows connections",
+                    context={"host": host, "port": port},
+                )
+            elif "host key" in error_msg:
+                raise AuthenticationError(
+                    f"[{self.id}] SSH host key verification failed",
+                    what="Host key verification failed",
+                    why=f"Host key for {host} does not match known_hosts",
+                    how_to_fix="1. Remove old host key: ssh-keygen -R {host}\n2. Connect manually to accept new key: ssh {username}@{host}\n3. Update known_hosts file",
+                    context={"host": host, "error": str(e)},
+                )
+            else:
+                raise NetworkError(
+                    f"[{self.id}] SSH error",
+                    what="SSH operation failed",
+                    why=f"Error during SSH operation: {str(e)}",
+                    how_to_fix="1. Check SSH configuration\n2. Verify credentials\n3. Check server logs",
+                    context={"host": host, "port": port, "error": str(e)},
+                )
 
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo SSH command execution result"""

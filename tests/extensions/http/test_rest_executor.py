@@ -142,6 +142,8 @@ class TestRestExecutor:
     @pytest.mark.asyncio
     async def test_execute_timeout_error(self):
         """Test handling timeout errors"""
+        from apflow.core.execution.errors import NetworkError
+
         executor = RestExecutor()
 
         with patch("httpx.AsyncClient") as mock_client:
@@ -149,8 +151,8 @@ class TestRestExecutor:
             mock_client.return_value.__aenter__.return_value = mock_client_instance
             mock_client_instance.request = AsyncMock(side_effect=httpx.TimeoutException("Timeout"))
 
-            # httpx.TimeoutException should propagate
-            with pytest.raises(httpx.TimeoutException, match="Timeout"):
+            # TimeoutException should be wrapped in NetworkError with helpful context
+            with pytest.raises(NetworkError, match="HTTP request timed out"):
                 await executor.execute({"url": "https://api.example.com/test", "timeout": 5.0})
 
     @pytest.mark.asyncio
@@ -308,6 +310,8 @@ class TestRestExecutor:
     @pytest.mark.asyncio
     async def test_execute_request_error(self):
         """Test handling request errors"""
+        from apflow.core.execution.errors import NetworkError
+
         executor = RestExecutor()
 
         with patch("httpx.AsyncClient") as mock_client:
@@ -317,8 +321,8 @@ class TestRestExecutor:
                 side_effect=httpx.RequestError("Connection error")
             )
 
-            # RequestError should propagate
-            with pytest.raises(httpx.RequestError, match="Connection error"):
+            # RequestError should be wrapped in NetworkError with helpful context
+            with pytest.raises(NetworkError, match="HTTP request failed"):
                 await executor.execute({"url": "https://api.example.com/test"})
 
     @pytest.mark.asyncio

@@ -9,6 +9,7 @@ EMOJI_RANGES = [
     (0x1F300, 0x1F5FF),  # Symbols and Pictographs
     (0x1F600, 0x1F64F),  # Emoticons (Emoji)
     (0x1F680, 0x1F6FF),  # Transport and Map Symbols
+    (0x1F780, 0x1F7FF),  # Geometric Shapes Extended (includes 🟢 🔴 🟡 etc.)
     (0x1F900, 0x1F9FF),  # Supplemental Symbols and Pictographs
     (0x2600, 0x26FF),  # Miscellaneous Symbols (part of common emojis)
     (0x2700, 0x27BF),  # Dingbats (Decorative Symbols)

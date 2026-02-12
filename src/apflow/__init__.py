@@ -18,7 +18,7 @@ Optional extensions (require extras):
 Protocol Standard: A2A (Agent-to-Agent) Protocol
 """
 
-__version__ = "0.16.0"
+__version__ = "0.17.0"
 
 # Lazy imports to keep package import fast and avoid circular dependencies
 # Core framework exports are loaded on first access via __getattr__

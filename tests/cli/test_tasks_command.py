@@ -29,7 +29,6 @@ def extract_first_json_object(text: str):
     raise ValueError("No JSON object found in text")
 
 
-
 @pytest_asyncio.fixture
 async def sample_task(use_test_db_session):
     """Create a sample task in database for testing"""

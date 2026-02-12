@@ -15,7 +15,7 @@ from typing import Any, ClassVar, Dict, Literal, Optional
 from pydantic import BaseModel, Field
 from apflow.core.base import BaseTask
 from apflow.core.extensions.decorators import executor_register
-from apflow.core.execution.errors import ValidationError
+from apflow.core.execution.errors import ValidationError, NetworkError
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
@@ -222,54 +222,84 @@ class RestExecutor(BaseTask):
 
         logger.info(f"Executing HTTP {method} request to {url}")
 
-        async with httpx.AsyncClient(
-            verify=inputs.get("verify", self.default_verify), timeout=timeout
-        ) as client:
-            # Check for cancellation before making request
-            if self.cancellation_checker and self.cancellation_checker():
-                return {"success": False, "error": "Request was cancelled", "method": method}
+        try:
+            async with httpx.AsyncClient(
+                verify=inputs.get("verify", self.default_verify), timeout=timeout
+            ) as client:
+                # Check for cancellation before making request
+                if self.cancellation_checker and self.cancellation_checker():
+                    return {"success": False, "error": "Request was cancelled", "method": method}
 
-            response = await client.request(**request_kwargs)
+                response = await client.request(**request_kwargs)
 
-            # Check for cancellation after request
-            if self.cancellation_checker and self.cancellation_checker():
-                return {"success": False, "error": "Request was cancelled", "method": method}
+                # Check for cancellation after request
+                if self.cancellation_checker and self.cancellation_checker():
+                    return {"success": False, "error": "Request was cancelled", "method": method}
 
-            if not (200 <= response.status_code < 300):
-                return {
-                    "success": False,
-                    "status_code": response.status_code,
-                    "url": str(response.url),
-                    "headers": dict(response.headers),
-                    "text": response.text,
+                if not (200 <= response.status_code < 300):
+                    return {
+                        "success": False,
+                        "status_code": response.status_code,
+                        "url": str(response.url),
+                        "headers": dict(response.headers),
+                        "text": response.text,
+                        "method": method,
+                    }
+
+                # Try to parse JSON response
+                json_response = None
+                try:
+                    json_response = response.json()
+                except Exception:
+                    pass
+
+                if json_response is not None:
+                    return {
+                        "success": True,
+                        "status_code": response.status_code,
+                        "url": str(response.url),
+                        "headers": dict(response.headers),
+                        "json": json_response,
+                        "method": method,
+                    }
+                else:
+                    return {
+                        "success": True,
+                        "status_code": response.status_code,
+                        "url": str(response.url),
+                        "headers": dict(response.headers),
+                        "text": response.text,
+                        "method": method,
+                    }
+        except httpx.TimeoutException:
+            raise NetworkError(
+                f"[{self.id}] Request timeout",
+                what="HTTP request timed out",
+                why=f"No response from {url} within {timeout} seconds",
+                how_to_fix="1. Check if the target service is running\n2. Increase timeout value\n3. Verify network connectivity",
+                context={"url": url, "method": method, "timeout": timeout},
+            )
+        except httpx.ConnectError as e:
+            raise NetworkError(
+                f"[{self.id}] Connection failed",
+                what="Failed to connect to server",
+                why=f"Cannot establish connection to {url}: {str(e)}",
+                how_to_fix="1. Verify the URL is correct\n2. Check if the service is running\n3. Check firewall and network settings",
+                context={"url": url, "method": method, "error": str(e)},
+            )
+        except httpx.HTTPError as e:
+            raise NetworkError(
+                f"[{self.id}] HTTP error",
+                what="HTTP request failed",
+                why=f"Error during request to {url}: {type(e).__name__}",
+                how_to_fix="1. Check the URL and request parameters\n2. Verify authentication if required\n3. Check server logs for details",
+                context={
+                    "url": url,
                     "method": method,
-                }
-
-            # Try to parse JSON response
-            json_response = None
-            try:
-                json_response = response.json()
-            except Exception:
-                pass
-
-            if json_response is not None:
-                return {
-                    "success": True,
-                    "status_code": response.status_code,
-                    "url": str(response.url),
-                    "headers": dict(response.headers),
-                    "json": json_response,
-                    "method": method,
-                }
-            else:
-                return {
-                    "success": True,
-                    "status_code": response.status_code,
-                    "url": str(response.url),
-                    "headers": dict(response.headers),
-                    "text": response.text,
-                    "method": method,
-                }
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                },
+            )
 
     def get_demo_result(self, task: Any, inputs: Dict[str, Any]) -> Optional[Dict[str, Any]]:
         """Provide demo HTTP response data"""

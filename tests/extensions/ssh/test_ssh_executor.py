@@ -277,8 +277,10 @@ class TestSshExecutor:
             mock_connect.return_value = mock_conn
             mock_wait.side_effect = asyncio.TimeoutError()
 
-            # asyncio.TimeoutError should propagate
-            with pytest.raises(asyncio.TimeoutError):
+            # TimeoutError should be wrapped in NetworkError with helpful context
+            from apflow.core.execution.errors import NetworkError
+
+            with pytest.raises(NetworkError, match="SSH command execution timed out"):
                 await executor.execute(
                     {
                         "host": "example.com",

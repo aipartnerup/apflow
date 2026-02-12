@@ -527,6 +527,61 @@ class TaskRepository:
             logger.error(f"Error querying tasks: {str(e)}")
             return []
 
+    async def query_tasks_by_statuses(
+        self,
+        statuses: List[str],
+        user_id: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+        order_by: str = "created_at",
+        order_desc: bool = True,
+    ) -> List[TaskModelType]:
+        """
+        Query tasks by multiple statuses
+
+        Args:
+            statuses: List of status values to filter by
+            user_id: Optional user ID filter
+            limit: Maximum number of tasks to return
+            offset: Number of tasks to skip
+            order_by: Field to order by
+            order_desc: If True, order descending
+
+        Returns:
+            List of TaskModel instances matching any of the statuses
+        """
+        try:
+            from sqlalchemy import select
+
+            stmt = select(self.task_model_class)
+
+            # Apply filters
+            if user_id is not None:
+                stmt = stmt.filter(self.task_model_class.user_id == user_id)
+
+            # Filter by statuses (IN clause)
+            if statuses:
+                stmt = stmt.filter(self.task_model_class.status.in_(statuses))
+
+            # Apply ordering
+            order_column = getattr(self.task_model_class, order_by, None)
+            if order_column is not None:
+                if order_desc:
+                    stmt = stmt.order_by(order_column.desc())
+                else:
+                    stmt = stmt.order_by(order_column.asc())
+
+            # Apply pagination
+            stmt = stmt.offset(offset).limit(limit)
+            result = await self.db.execute(stmt)
+            tasks = result.scalars().all()
+
+            return list(tasks)
+
+        except Exception as e:
+            logger.error(f"Error querying tasks by statuses: {str(e)}")
+            return []
+
     async def count_tasks_by_status(
         self,
         statuses: List[str],

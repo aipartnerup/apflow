@@ -48,10 +48,11 @@ Here's what makes apflow the right choice:
 
 **Start here if you're new:**
 
-1. **[Getting Started](getting-started/index.md)** - Overview and learning paths
-2. **[Quick Start Guide](getting-started/quick-start.md)** - Get running in 10 minutes
-3. **[First Steps Tutorial](getting-started/tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
-4. **[Core Concepts](getting-started/concepts.md)** - Understand the fundamentals
+1. **[Hello World](getting-started/hello-world.md)** - 5-minute quick start
+2. **[Getting Started](getting-started/index.md)** - Overview and learning paths
+3. **[Quick Start Guide](getting-started/quick-start.md)** - Get running in 10 minutes
+4. **[First Steps Tutorial](getting-started/tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
+5. **[Core Concepts](getting-started/concepts.md)** - Understand the fundamentals
 
 **Quick Installation:**
 ```bash
@@ -63,6 +64,7 @@ pip install apflow
 ### For Beginners
 
 **Start Here:**
+- **[Hello World](getting-started/hello-world.md)** - 5-minute quick start
 - **[Getting Started](getting-started/index.md)** - Your starting point
 - **[Quick Start](getting-started/quick-start.md)** - 10-minute quick start
 - **[First Steps Tutorial](getting-started/tutorials/tutorial-01-first-steps.md)** - Complete beginner tutorial
@@ -70,11 +72,13 @@ pip install apflow
 
 **Learn by Doing:**
 - **[Basic Examples](examples/basic_task.md)** - Copy-paste ready examples
+- **[Executor Selection Guide](guides/executor-selection.md)** - Choose the right executor
 - **[Installation Guide](getting-started/installation.md)** - Installation options
 
 ### For Developers
 
 **Guides:**
+- **[Executor Selection](guides/executor-selection.md)** - Choose the right executor for your use case
 - **[Task Orchestration](guides/task-orchestration.md)** - Master task trees, dependencies, and priorities
 - **[Custom Tasks](guides/custom-tasks.md)** - Create your own executors
 - **[Best Practices](guides/best-practices.md)** - Design patterns and optimization
@@ -136,6 +140,7 @@ pip install apflow
 
 ### Getting Started
 Essential guides for new users:
+- **[Hello World](getting-started/hello-world.md)** - 5-minute quick start
 - **[Getting Started Index](getting-started/index.md)** - Overview and learning paths
 - **[Quick Start](getting-started/quick-start.md)** - Get running in 10 minutes
 - **[Installation](getting-started/installation.md)** - Installation options
@@ -150,6 +155,7 @@ Step-by-step tutorials:
 
 ### Guides
 Comprehensive guides for developers:
+- **[Executor Selection](guides/executor-selection.md)** - Choose the right executor
 - **[Task Orchestration](guides/task-orchestration.md)** - Task trees, dependencies, priorities
 - **[Custom Tasks](guides/custom-tasks.md)** - Creating custom executors
 - **[Best Practices](guides/best-practices.md)** - Design patterns and optimization
@@ -195,17 +201,18 @@ For contributors:
 ## 💡 Learning Path
 
 ### Path 1: Quick Start (15 minutes)
-1. [Quick Start](getting-started/quick-start.md) - Get running
-2. [Basic Examples](examples/basic_task.md) - Try examples
-3. [Core Concepts](getting-started/concepts.md) - Understand basics
+1. [Hello World](getting-started/hello-world.md) - Get running in 5 minutes
+2. [Executor Selection](guides/executor-selection.md) - Choose the right executor
+3. [Basic Examples](examples/basic_task.md) - Try examples
 
 ### Path 2: Complete Beginner (1-2 hours)
-1. [Getting Started Index](getting-started/index.md) - Overview
-2. [First Steps Tutorial](getting-started/tutorials/tutorial-01-first-steps.md) - Complete tutorial
-3. [Task Trees Tutorial](getting-started/tutorials/tutorial-02-task-trees.md) - Build task trees
-4. [Dependencies Tutorial](getting-started/tutorials/tutorial-03-dependencies.md) - Master dependencies
-5. [Core Concepts](getting-started/concepts.md) - Deep dive
-6. [Basic Examples](examples/basic_task.md) - Practice
+1. [Hello World](getting-started/hello-world.md) - Quick start
+2. [Getting Started Index](getting-started/index.md) - Overview
+3. [First Steps Tutorial](getting-started/tutorials/tutorial-01-first-steps.md) - Complete tutorial
+4. [Task Trees Tutorial](getting-started/tutorials/tutorial-02-task-trees.md) - Build task trees
+5. [Dependencies Tutorial](getting-started/tutorials/tutorial-03-dependencies.md) - Master dependencies
+6. [Core Concepts](getting-started/concepts.md) - Deep dive
+7. [Basic Examples](examples/basic_task.md) - Practice
 
 ### Path 3: Professional Developer (2-4 hours)
 1. [Quick Start](getting-started/quick-start.md) - Quick refresher
@@ -223,18 +230,20 @@ For contributors:
 ## 🎓 Recommended Reading Order
 
 **For New Users:**
-1. [Getting Started Index](getting-started/index.md)
-2. [Quick Start](getting-started/quick-start.md)
-3. [First Steps Tutorial](getting-started/tutorials/tutorial-01-first-steps.md)
-4. [Core Concepts](getting-started/concepts.md)
-5. [Basic Examples](examples/basic_task.md)
+1. [Hello World](getting-started/hello-world.md)
+2. [Getting Started Index](getting-started/index.md)
+3. [Quick Start](getting-started/quick-start.md)
+4. [First Steps Tutorial](getting-started/tutorials/tutorial-01-first-steps.md)
+5. [Core Concepts](getting-started/concepts.md)
+6. [Basic Examples](examples/basic_task.md)
 
 **For Developers:**
-1. [Quick Start](getting-started/quick-start.md) (if new)
-2. [Task Orchestration](guides/task-orchestration.md)
-3. [Custom Tasks](guides/custom-tasks.md)
-4. [Best Practices](guides/best-practices.md)
-5. [API Reference](api/python.md)
+1. [Hello World](getting-started/hello-world.md) (if new)
+2. [Executor Selection](guides/executor-selection.md)
+3. [Task Orchestration](guides/task-orchestration.md)
+4. [Custom Tasks](guides/custom-tasks.md)
+5. [Best Practices](guides/best-practices.md)
+6. [API Reference](api/python.md)
 
 **For Contributors:**
 1. [Development Setup](development/setup.md)
