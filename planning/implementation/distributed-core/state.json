@@ -1,0 +1,60 @@
+{
+  "feature": "distributed-core",
+  "created": "2026-02-14T00:00:00Z",
+  "updated": "2026-02-14T00:00:00Z",
+  "status": "pending",
+  "execution_order": ["storage-schema", "leader-services", "worker-runtime", "integration"],
+  "progress": {
+    "total_tasks": 4,
+    "completed": 0,
+    "in_progress": 0,
+    "pending": 4
+  },
+  "tasks": [
+    {
+      "id": "storage-schema",
+      "file": "tasks/storage-schema.md",
+      "title": "Storage Schema, Data Models & Configuration",
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "assignee": null,
+      "commits": []
+    },
+    {
+      "id": "leader-services",
+      "file": "tasks/leader-services.md",
+      "title": "Leader Services (NodeRegistry, LeaseManager, LeaderElection, PlacementEngine, IdempotencyManager)",
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "assignee": null,
+      "commits": []
+    },
+    {
+      "id": "worker-runtime",
+      "file": "tasks/worker-runtime.md",
+      "title": "Worker Runtime",
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "assignee": null,
+      "commits": []
+    },
+    {
+      "id": "integration",
+      "file": "tasks/integration.md",
+      "title": "Integration, Role Selection & End-to-End Validation",
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "assignee": null,
+      "commits": []
+    }
+  ],
+  "metadata": {
+    "source_doc": "planning/features/distributed-core.md",
+    "created_by": "code-forge",
+    "version": "1.0"
+  }
+}

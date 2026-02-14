@@ -1,0 +1,60 @@
+{
+  "feature": "graphql-adapter",
+  "created": "2026-02-14T00:00:00Z",
+  "updated": "2026-02-14T00:00:00Z",
+  "status": "pending",
+  "execution_order": ["schema-types", "resolvers", "subscriptions", "adapter-integration"],
+  "progress": {
+    "total_tasks": 4,
+    "completed": 0,
+    "in_progress": 0,
+    "pending": 4
+  },
+  "tasks": [
+    {
+      "id": "schema-types",
+      "file": "tasks/schema-types.md",
+      "title": "Define GraphQL Types and Schema",
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "assignee": null,
+      "commits": []
+    },
+    {
+      "id": "resolvers",
+      "file": "tasks/resolvers.md",
+      "title": "Implement Query and Mutation Resolvers with DataLoaders",
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "assignee": null,
+      "commits": []
+    },
+    {
+      "id": "subscriptions",
+      "file": "tasks/subscriptions.md",
+      "title": "Implement Subscription Resolvers",
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "assignee": null,
+      "commits": []
+    },
+    {
+      "id": "adapter-integration",
+      "file": "tasks/adapter-integration.md",
+      "title": "Protocol Adapter, Server Integration, and End-to-End Tests",
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "assignee": null,
+      "commits": []
+    }
+  ],
+  "metadata": {
+    "source_doc": "planning/features/graphql-adapter.md",
+    "created_by": "code-forge",
+    "version": "1.0"
+  }
+}

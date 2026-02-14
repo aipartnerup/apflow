@@ -1,0 +1,60 @@
+{
+  "feature": "protocol-abstraction-phase2",
+  "created": "2026-02-14T00:00:00Z",
+  "updated": "2026-02-14T00:00:00Z",
+  "status": "pending",
+  "execution_order": ["protocol-adapter-interface", "adapter-implementations", "protocol-registry", "discovery-validation"],
+  "progress": {
+    "total_tasks": 4,
+    "completed": 0,
+    "in_progress": 0,
+    "pending": 4
+  },
+  "tasks": [
+    {
+      "id": "protocol-adapter-interface",
+      "file": "tasks/protocol-adapter-interface.md",
+      "title": "Define ProtocolAdapter Protocol and ProtocolAdapterConfig",
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "assignee": null,
+      "commits": []
+    },
+    {
+      "id": "adapter-implementations",
+      "file": "tasks/adapter-implementations.md",
+      "title": "Implement A2AProtocolAdapter and MCPProtocolAdapter",
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "assignee": null,
+      "commits": []
+    },
+    {
+      "id": "protocol-registry",
+      "file": "tasks/protocol-registry.md",
+      "title": "Build ProtocolRegistry and unified server factory",
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "assignee": null,
+      "commits": []
+    },
+    {
+      "id": "discovery-validation",
+      "file": "tasks/discovery-validation.md",
+      "title": "Enhanced discovery endpoint and backward compatibility validation",
+      "status": "pending",
+      "started_at": null,
+      "completed_at": null,
+      "assignee": null,
+      "commits": []
+    }
+  ],
+  "metadata": {
+    "source_doc": "planning/features/protocol-abstraction-phase2.md",
+    "created_by": "code-forge",
+    "version": "1.0"
+  }
+}
