@@ -282,15 +282,15 @@ wheels = [
 
 [[package]]
 name = "apdev"
-version = "0.1.2"
+version = "0.1.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "build" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/57/50/64a23d2c32eb2455ceb8e1f884889894f955f8e5baba77ecc181cbd8c8bc/apdev-0.1.2.tar.gz", hash = "sha256:870e49855a3aad40d254878d163a678abc477f000840efae8aef2453be05dfd0", size = 17063, upload-time = "2026-02-14T08:50:24.788Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d8/c3/8dbba1012c4a52c06ece3889feb1ab0ef5855703b7b164fb4a6fd8220f13/apdev-0.1.6.tar.gz", hash = "sha256:a7d0edd9852366de69e09806829630d9f48ac079b7ee33c8d66c92180ae3b00f", size = 19969, upload-time = "2026-02-16T07:50:38.447Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f3/64/b8e8218a5bda5f67af45b08587b6839f0bf27f1262e07eb4e2ab336a4cf5/apdev-0.1.2-py3-none-any.whl", hash = "sha256:3f981701f639cbad87b39d7bc9cfeb096992f93cba17b7318e6143fb0b822228", size = 14649, upload-time = "2026-02-14T08:50:23.223Z" },
+    { url = "https://files.pythonhosted.org/packages/e9/7d/8982f3dfe2d4a7a69f81cb2fb3344da0f7741967428763f9a9ca6d4d7310/apdev-0.1.6-py3-none-any.whl", hash = "sha256:4a767a96913b37c6ed4ebabc206a4821938429275308f9add71184c7baf186a2", size = 16613, upload-time = "2026-02-16T07:50:36.524Z" },
 ]
 
 [package.optional-dependencies]
@@ -473,7 +473,7 @@ requires-dist = [
     { name = "aiosmtplib", marker = "extra == 'email'", specifier = ">=3.0.0" },
     { name = "alembic", specifier = ">=1.13.0" },
     { name = "anthropic", marker = "extra == 'crewai'", specifier = ">=0.34.0" },
-    { name = "apdev", extras = ["dev"], marker = "extra == 'dev'", specifier = ">=0.1.2" },
+    { name = "apdev", extras = ["dev"], marker = "extra == 'dev'", specifier = ">=0.1.6" },
     { name = "apflow", extras = ["a2a", "cli", "crewai", "llm", "tools", "scheduling"], marker = "extra == 'standard'" },
     { name = "apflow", extras = ["crewai", "a2a", "cli", "postgres", "llm-key-config", "email", "ssh", "docker", "grpc", "mcp", "graphql", "llm", "tools", "scheduling"], marker = "extra == 'all'" },
     { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.29.0" },
