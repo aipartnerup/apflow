@@ -460,24 +460,23 @@ def normalize_postgresql_url(url: str, async_mode: bool) -> str:
     """
     Normalize PostgreSQL connection string to use appropriate driver
 
+    Always ensures the correct driver is used based on async_mode,
+    even if a driver is already specified in the URL.
+
     Args:
         url: PostgreSQL connection string
         async_mode: Whether to use async driver (asyncpg) or sync (psycopg2)
 
     Returns:
-        Normalized connection string
+        Normalized connection string with the correct driver
     """
-    # If already has driver specified, use as-is
-    if "+" in url.split("://")[0]:
-        return url
+    # Extract the part after the scheme (user:pass@host:port/db?params)
+    scheme_part, sep, rest = url.partition("://")
+    if not sep:
+        rest = scheme_part
+    # rest is now everything after "://"
 
-    # Extract scheme and rest
-    if url.startswith("postgresql://"):
-        rest = url[13:]  # Remove "postgresql://"
-    else:
-        rest = url.split("://", 1)[1] if "://" in url else url
-
-    # Add appropriate driver
+    # Add appropriate driver based on async_mode
     if async_mode:
         return f"postgresql+asyncpg://{rest}"
     else:
