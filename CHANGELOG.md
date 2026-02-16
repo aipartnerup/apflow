@@ -35,10 +35,19 @@
   - [GraphQL API guide](docs/api/graphql.md) with schema reference and usage examples
   - [Distributed cluster guide](docs/guides/distributed-cluster.md) covering setup, configuration, and operation
   - Reorganized architecture docs: `exception-handling.md` and `task-manager.md` moved to `docs/architecture/`
+  - Consolidated documentation from `apflow-docs` repo into `apflow` for single-repo deployment
+  - [Protocol specification](docs/protocol/) (10 files): overview, core concepts, data model, execution lifecycle, examples, interfaces, conformance, errors, validation
+  - Rich homepage (`docs/index.md`) with Material grid cards, learning paths, and quick navigation
+  - Site assets: logo (`docs/assets/logo.svg`) and favicon (`docs/assets/favicon.ico`)
+  - MkDocs configuration (`mkdocs.yml`) with Material theme, mermaid2 diagrams, code highlighting, and explicit nav structure
+  - GitHub Actions workflow (`.github/workflows/docs.yml`) for automatic GitHub Pages deployment on push to `main`
+  - New `[docs]` optional dependency group: `mkdocs`, `mkdocs-material`, `mkdocs-mermaid2-plugin`, `mkdocs-minify-plugin`, `pymdown-extensions`
 
 ### Changed
 
-- `pyproject.toml`: Added `graphql` optional dependency group, added `greenlet>=3.0.0` to `postgres` extras, added `apdev[dev]>=0.1.2` to dev dependencies, included `graphql` in `[all]` extras
+- `pyproject.toml`: Added `graphql` optional dependency group, added `greenlet>=3.0.0` to `postgres` extras, added `apdev[dev]>=0.1.2` to dev dependencies, included `graphql` in `[all]` extras, added `[docs]` optional dependency group
+- `docs/README.md`: Simplified to point to the live documentation site with local development instructions
+- `.gitignore`: Added `site/` for MkDocs build output
 - `api/app.py`: Refactored to protocol registry pattern for mounting A2A, MCP, and GraphQL adapters
 - `api/main.py`: Updated startup to support distributed mode with `--distributed` flag
 - `core/execution/task_executor.py`: Added distributed-aware task execution with lease acquisition

@@ -42,6 +42,7 @@ htmlcov/
 
 # Documentation
 docs/_build/
+site/
 
 # Database
 *.db

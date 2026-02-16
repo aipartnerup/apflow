@@ -61,6 +61,15 @@ cli = [
     "pyyaml>=6.0.0",  # For YAML configuration file support
 ]
 
+# Documentation (MkDocs with Material theme)
+docs = [
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
+    "mkdocs-mermaid2-plugin>=1.0.0",
+    "mkdocs-minify-plugin>=0.7.0",
+    "pymdown-extensions>=10.0.0",
+]
+
 # PostgreSQL storage (enterprise/distributed scenarios)
 postgres = [
     "asyncpg>=0.29.0",

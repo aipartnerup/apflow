@@ -1,0 +1,165 @@
+site_name: apflow Documentation
+site_description: Task Orchestration and Execution Framework Documentation
+site_url: https://aipartnerup.github.io/apflow/
+repo_url: https://github.com/aipartnerup/apflow
+repo_name: aipartnerup/apflow
+edit_uri: edit/main/docs/
+
+# Copyright
+copyright: Copyright &copy; 2025 aipartnerup
+
+# Theme
+theme:
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/favicon.ico
+  palette:
+    # Light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.annotate
+    - content.code.copy
+    - content.code.select
+  icon:
+    repo: fontawesome/brands/github
+
+# Navigation
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Overview: getting-started/index.md
+    - Hello World: getting-started/hello-world.md
+    - Quick Start: getting-started/quick-start.md
+    - Installation: getting-started/installation.md
+    - Core Concepts: getting-started/concepts.md
+    - Examples: getting-started/examples.md
+    - Tutorials:
+      - First Steps: getting-started/tutorials/tutorial-01-first-steps.md
+      - Task Trees: getting-started/tutorials/tutorial-02-task-trees.md
+      - Dependencies: getting-started/tutorials/tutorial-03-dependencies.md
+  - Guides:
+    - Task Orchestration: guides/task-orchestration.md
+    - Executor Selection: guides/executor-selection.md
+    - Custom Tasks: guides/custom-tasks.md
+    - Best Practices: guides/best-practices.md
+    - CLI: guides/cli.md
+    - API Server: guides/api-server.md
+    - Distributed Cluster: guides/distributed-cluster.md
+    - Library Usage: guides/library-usage.md
+    - Scheduler: guides/scheduler.md
+    - Extensions: guides/extensions.md
+    - Environment Variables: guides/environment-variables.md
+    - FAQ: guides/faq.md
+  - CLI:
+    - Overview: cli/index.md
+    - Commands: cli/commands.md
+    - Configuration: cli/configuration.md
+    - Examples: cli/examples.md
+    - API Gateway: cli/api-gateway.md
+  - API Reference:
+    - Python API: api/python.md
+    - HTTP API: api/http.md
+    - GraphQL API: api/graphql.md
+    - Quick Reference: api/quick-reference.md
+  - Examples:
+    - Basic Tasks: examples/basic_task.md
+    - Task Trees: examples/task-tree.md
+    - Real World: examples/real-world.md
+    - Email Executor: examples/email-executor.md
+    - Generate Executor: examples/generate-executor.md
+  - Architecture:
+    - Overview: architecture/overview.md
+    - Diagrams: architecture/diagrams.md
+    - Directory Structure: architecture/directory-structure.md
+    - Extension Registry: architecture/extension-registry-design.md
+    - Task Manager: architecture/task-manager.md
+    - Exception Handling: architecture/exception-handling.md
+    - Configuration: architecture/configuration.md
+    - Task Tree Lifecycle: architecture/task-tree-lifecycle.md
+  - Protocol:
+    - Overview: protocol/index.md
+    - Introduction: protocol/01-overview.md
+    - Core Concepts: protocol/02-core-concepts.md
+    - Data Model: protocol/03-data-model.md
+    - Execution Lifecycle: protocol/04-execution-lifecycle.md
+    - Examples: protocol/05-examples.md
+    - Interfaces: protocol/06-interfaces.md
+    - Conformance: protocol/07-conformance.md
+    - Errors: protocol/08-errors.md
+    - Validation: protocol/09-validation.md
+  - Development:
+    - Setup: development/setup.md
+    - Contributing: development/contributing.md
+    - Roadmap: development/roadmap.md
+    - Design:
+      - CLI Design: development/design/cli-design.md
+      - Aggregate Results: development/design/aggregate-results-design.md
+
+# Plugins
+plugins:
+  - search
+  - mermaid2:
+      arguments:
+        theme: base
+        themeVariables:
+          primaryColor: '#6366f1'
+          primaryTextColor: '#fff'
+          primaryBorderColor: '#6366f1'
+          lineColor: '#F8B229'
+          secondaryColor: '#006100'
+          tertiaryColor: '#fff'
+  - minify:
+      minify_html: true
+
+# Extensions
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - admonition
+  - pymdownx.details
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+# Extra
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/aipartnerup/apflow
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/apflow/
