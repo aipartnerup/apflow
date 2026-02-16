@@ -33,6 +33,19 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def as_utc(dt: datetime) -> datetime:
+    """Normalize a datetime to timezone-aware UTC.
+
+    SQLite does not preserve timezone info for ``DateTime(timezone=True)``
+    columns, so values read back are offset-naive.  This helper ensures
+    consistent comparison with :func:`utcnow` results by assuming naive
+    datetimes are already in UTC.
+    """
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
 @dataclass
 class DistributedConfig:
     """Configuration for distributed task orchestration.

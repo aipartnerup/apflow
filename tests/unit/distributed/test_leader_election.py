@@ -3,6 +3,7 @@
 import pytest
 from datetime import datetime, timedelta, timezone
 
+from apflow.core.distributed.config import as_utc
 from apflow.core.distributed.leader_election import LeaderElection
 from apflow.core.storage.sqlalchemy.models import ClusterLeader, DistributedNode
 
@@ -76,7 +77,7 @@ class TestLeaderElection:
         assert result is True
 
         session.refresh(old_leader)
-        assert old_leader.expires_at > old_expiry
+        assert as_utc(old_leader.expires_at) > as_utc(old_expiry)
 
     def test_renew_wrong_token_fails(self, session_factory, config, leader_node):
         """Renewing with the wrong token returns False."""

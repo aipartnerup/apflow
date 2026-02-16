@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from apflow.core.distributed.config import DistributedConfig, utcnow as _utcnow
+from apflow.core.distributed.config import DistributedConfig, as_utc, utcnow as _utcnow
 from apflow.core.distributed.events import emit_task_event
 from apflow.core.storage.sqlalchemy.models import TaskLease, TaskModel
 from apflow.logger import get_logger
@@ -100,7 +100,7 @@ class LeaseManager:
         existing = session.get(TaskLease, task_id)
         now = _utcnow()
 
-        if existing is not None and existing.expires_at > now:  # type: ignore[operator]
+        if existing is not None and as_utc(existing.expires_at) > now:  # type: ignore[operator]
             logger.info(
                 "Lease already held for task %s by node %s",
                 task_id,

@@ -26,6 +26,8 @@ class TestInitDistributedRuntime:
 
     @patch("apflow.core.execution.task_executor.TaskExecutor")
     @patch("apflow.core.distributed.runtime.DistributedRuntime", autospec=False)
+    @patch("sqlalchemy.orm.sessionmaker")
+    @patch("sqlalchemy.create_engine")
     @patch("apflow.core.storage.factory.normalize_postgresql_url", return_value="postgresql://test")
     @patch("apflow.core.storage.factory.is_postgresql_url", return_value=True)
     @patch(
@@ -38,6 +40,8 @@ class TestInitDistributedRuntime:
         mock_get_db_url: MagicMock,
         mock_is_pg: MagicMock,
         mock_normalize: MagicMock,
+        mock_create_engine: MagicMock,
+        mock_sessionmaker: MagicMock,
         mock_runtime_cls: MagicMock,
         mock_executor_cls: MagicMock,
     ) -> None:

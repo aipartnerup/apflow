@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from apflow.core.distributed.config import DistributedConfig, utcnow as _utcnow
+from apflow.core.distributed.config import DistributedConfig, as_utc, utcnow as _utcnow
 from apflow.core.storage.sqlalchemy.models import ClusterLeader
 from apflow.logger import get_logger
 
@@ -92,7 +92,7 @@ class LeaderElection:
         existing = session.get(ClusterLeader, SINGLETON_LEADER_ID)
         now = _utcnow()
 
-        if existing is not None and existing.expires_at > now:  # type: ignore[operator]
+        if existing is not None and as_utc(existing.expires_at) > now:  # type: ignore[operator]
             logger.info(
                 "Leadership acquisition failed for %s: held by %s",
                 node_id,
@@ -222,7 +222,7 @@ class LeaderElection:
                 return None
 
             now = _utcnow()
-            if leader.expires_at <= now:
+            if as_utc(leader.expires_at) <= now:
                 return None
 
             return leader.node_id

@@ -3,6 +3,7 @@
 import pytest
 from datetime import datetime, timedelta, timezone
 
+from apflow.core.distributed.config import as_utc
 from apflow.core.distributed.node_registry import NodeRegistry, NodeNotFoundError
 from apflow.core.storage.sqlalchemy.models import DistributedNode
 
@@ -60,7 +61,7 @@ class TestNodeRegistry:
         registry.heartbeat("worker-1")
 
         session.refresh(sample_node)
-        assert sample_node.heartbeat_at >= old_heartbeat
+        assert as_utc(sample_node.heartbeat_at) >= as_utc(old_heartbeat)
         assert sample_node.status == "healthy"
 
     def test_heartbeat_nonexistent_node_raises(self, session_factory, config):
