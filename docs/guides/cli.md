@@ -261,7 +261,7 @@ If a plugin registers a command group called `users`, a user can simply run:
 apflow users stat
 ```
 
-For more details on how to develop these extensions, see the [Extending Guide](../development/extending.md#creating-cli-extensions).
+For more details on how to develop these extensions, see the [Custom Tasks Guide](../guides/custom-tasks.md).
 
 ## Extending and Overriding CLI Commands
 

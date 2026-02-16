@@ -1,0 +1,249 @@
+"""Distributed runtime coordinator with role selection state machine.
+
+Manages the node lifecycle: registration, role selection (leader/worker/observer),
+background task management (lease cleanup, node health, leader renewal),
+and graceful shutdown.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import timedelta
+
+from sqlalchemy.orm import sessionmaker
+
+from apflow.core.distributed.config import DistributedConfig, utcnow as _utcnow
+from apflow.core.distributed.idempotency import IdempotencyManager
+from apflow.core.distributed.leader_election import LeaderElection
+from apflow.core.distributed.lease_manager import LeaseManager
+from apflow.core.distributed.node_registry import NodeRegistry
+from apflow.core.distributed.types import TaskExecutorFn
+from apflow.core.distributed.worker import WorkerRuntime
+from apflow.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+class DistributedRuntime:
+    """Distributed runtime coordinator: role selection, lifecycle, background tasks.
+
+    Manages the full distributed node lifecycle including:
+    - Node registration and heartbeat
+    - Role selection (auto/leader/worker/observer)
+    - Leader background tasks (lease cleanup, node health checks, lease renewal)
+    - Worker runtime management
+    - Graceful shutdown with lease release and node deregistration
+    """
+
+    def __init__(
+        self,
+        config: DistributedConfig,
+        session_factory: sessionmaker,
+        task_executor: TaskExecutorFn | None = None,
+    ) -> None:
+        self._config = config
+        self._node_id = config.node_id or "unknown"
+        self._session_factory = session_factory
+
+        self._node_registry = NodeRegistry(session_factory, config)
+        self._leader_election = LeaderElection(session_factory, config)
+        self._lease_manager = LeaseManager(session_factory, config)
+        self._idempotency = IdempotencyManager(session_factory)
+        self._task_executor = task_executor
+
+        self._role: str = "initializing"
+        self._lease_token: str | None = None
+        self._lease_expires_at: float | None = None
+        self._worker_runtime: WorkerRuntime | None = None
+        self._background_tasks: list[asyncio.Task[None]] = []
+        self._shutdown_event = asyncio.Event()
+
+    @property
+    def is_leader(self) -> bool:
+        """Check if this node is currently the leader.
+
+        Also checks the in-memory lease expiry timestamp so that a
+        stale leader is immediately rejected without waiting for the
+        next renewal loop iteration (fencing).
+        """
+        if self._role != "leader":
+            return False
+        if self._lease_expires_at is not None and _utcnow().timestamp() >= self._lease_expires_at:
+            logger.warning("Leader lease expired for node %s, demoting", self._node_id)
+            self._role = "worker"
+            self._lease_token = None
+            self._lease_expires_at = None
+            return False
+        return True
+
+    @property
+    def current_role(self) -> str:
+        """Return the current role of this node."""
+        return self._role
+
+    async def start(self) -> None:
+        """Register node, select role, launch background tasks."""
+        self._node_registry.register_node(
+            node_id=self._node_id,
+            executor_types=["default"],
+            capabilities={},
+        )
+        logger.info("Node %s registered", self._node_id)
+
+        await self._select_role()
+        logger.info("Node %s selected role: %s", self._node_id, self._role)
+
+        if self._role == "worker":
+            self._start_worker_runtime()
+
+        await self._shutdown_event.wait()
+
+        await self._cancel_background_tasks()
+
+    async def shutdown(self) -> None:
+        """Cancel background tasks, release leadership, deregister node."""
+        self._shutdown_event.set()
+
+        if self._worker_runtime is not None:
+            await self._worker_runtime.shutdown()
+
+        if self._role == "leader" and self._lease_token is not None:
+            self._leader_election.release_leadership(self._node_id, self._lease_token)
+            logger.info("Leadership released by node %s", self._node_id)
+
+        self._node_registry.deregister_node(self._node_id)
+        logger.info("Node %s shut down gracefully", self._node_id)
+
+    async def _select_role(self) -> None:
+        """Role selection state machine based on config.node_role."""
+        role_config = self._config.node_role
+
+        if role_config == "observer":
+            self._role = "observer"
+            return
+
+        if role_config == "worker":
+            self._role = "worker"
+            return
+
+        if role_config in ("auto", "leader"):
+            acquired, token = self._leader_election.try_acquire(self._node_id)
+
+            if acquired:
+                self._role = "leader"
+                self._lease_token = token
+                self._lease_expires_at = (
+                    _utcnow() + timedelta(seconds=self._config.leader_lease_seconds)
+                ).timestamp()
+                self._start_leader_background_tasks()
+                return
+
+            if role_config == "leader":
+                raise RuntimeError(
+                    f"Node {self._node_id} configured as leader but "
+                    "could not acquire leadership. Another leader is active."
+                )
+
+            # auto: fall back to worker
+            self._role = "worker"
+
+    def _start_worker_runtime(self) -> None:
+        """Start the worker runtime if a task executor is configured."""
+        if self._task_executor is None:
+            return
+        self._worker_runtime = WorkerRuntime(
+            node_id=self._node_id,
+            config=self._config,
+            session_factory=self._session_factory,
+            node_registry=self._node_registry,
+            lease_manager=self._lease_manager,
+            idempotency_manager=self._idempotency,
+            task_executor=self._task_executor,
+        )
+        worker_task = asyncio.create_task(self._worker_runtime.start())
+        self._background_tasks.append(worker_task)
+
+    def _start_leader_background_tasks(self) -> None:
+        """Launch leader-specific background loops."""
+        self._background_tasks.append(asyncio.create_task(self._leader_renewal_loop()))
+        self._background_tasks.append(asyncio.create_task(self._lease_cleanup_loop()))
+        self._background_tasks.append(asyncio.create_task(self._node_cleanup_loop()))
+
+    async def _leader_renewal_loop(self) -> None:
+        """Renew leader lease periodically. Demotes to worker on failure."""
+        while not self._shutdown_event.is_set():
+            try:
+                await asyncio.wait_for(
+                    self._shutdown_event.wait(),
+                    timeout=self._config.leader_renew_seconds,
+                )
+                break
+            except asyncio.TimeoutError:
+                pass
+
+            if self._lease_token is None:
+                break
+
+            success = self._leader_election.renew_leadership(self._node_id, self._lease_token)
+            if success:
+                self._lease_expires_at = (
+                    _utcnow() + timedelta(seconds=self._config.leader_lease_seconds)
+                ).timestamp()
+            else:
+                logger.error(
+                    "Leader lease renewal failed for node %s, demoting to worker",
+                    self._node_id,
+                )
+                self._role = "worker"
+                self._lease_token = None
+                self._lease_expires_at = None
+                self._start_worker_runtime()
+                return
+
+    async def _lease_cleanup_loop(self) -> None:
+        """Clean expired leases periodically."""
+        while not self._shutdown_event.is_set():
+            try:
+                await asyncio.wait_for(
+                    self._shutdown_event.wait(),
+                    timeout=self._config.lease_cleanup_interval_seconds,
+                )
+                break
+            except asyncio.TimeoutError:
+                pass
+
+            try:
+                self._lease_manager.cleanup_expired_leases()
+            except Exception:
+                logger.error("Lease cleanup failed", exc_info=True)
+
+    async def _node_cleanup_loop(self) -> None:
+        """Detect stale and dead nodes periodically."""
+        while not self._shutdown_event.is_set():
+            try:
+                await asyncio.wait_for(
+                    self._shutdown_event.wait(),
+                    timeout=self._config.heartbeat_interval_seconds,
+                )
+                break
+            except asyncio.TimeoutError:
+                pass
+
+            try:
+                self._node_registry.detect_stale_nodes()
+                self._node_registry.detect_dead_nodes()
+            except Exception:
+                logger.error("Node cleanup failed", exc_info=True)
+
+    async def _cancel_background_tasks(self) -> None:
+        """Cancel all background tasks and wait for completion."""
+        for task in self._background_tasks:
+            task.cancel()
+
+        for task in self._background_tasks:
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        self._background_tasks.clear()

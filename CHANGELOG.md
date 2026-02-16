@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.18.0] 2026-02-16
+
+### Added
+
+- **Distributed cluster support** (`apflow.core.distributed`)
+  - Leader election with PostgreSQL advisory locks
+  - Lease-based task ownership with automatic expiration and renewal
+  - Node registry with heartbeat-based health monitoring
+  - Task placement strategies: round-robin, least-loaded, random, affinity-based
+  - Distributed worker with configurable concurrency and graceful shutdown
+  - Distributed runtime orchestrating node lifecycle, leader election, and task distribution
+  - Idempotency store for at-least-once delivery with deduplication
+  - Event bus for inter-node communication (task assigned/completed/failed, node join/leave, leader change)
+  - Database migration `003_add_distributed_support` adding node, lease, and idempotency tables
+  - Configuration via `DistributedConfig` with environment variable support (`APFLOW_DISTRIBUTED_*`)
+
+- **GraphQL API adapter** (`apflow.api.graphql`)
+  - Strawberry GraphQL schema with queries, mutations, and subscriptions
+  - Task CRUD operations: create, get, list, cancel, retry
+  - Real-time task status subscriptions via WebSocket
+  - GraphQL server mountable as FastAPI sub-application
+  - New `[graphql]` optional dependency group (`strawberry-graphql>=0.220.0`)
+
+- **Protocol abstraction layer** (`apflow.api.protocols`)
+  - `ProtocolAdapter` base class for multi-protocol support
+  - A2A protocol adapter (`apflow.api.a2a.protocol_adapter`)
+  - MCP protocol adapter (`apflow.api.mcp.protocol_adapter`)
+  - Unified protocol types (`apflow.api.protocol_types`)
+  - Protocol discovery and capability reporting in `capabilities.py`
+  - Refactored `app.py` to use protocol registry for dynamic protocol mounting
+
+- **Documentation**
+  - [GraphQL API guide](docs/api/graphql.md) with schema reference and usage examples
+  - [Distributed cluster guide](docs/guides/distributed-cluster.md) covering setup, configuration, and operation
+  - Reorganized architecture docs: `exception-handling.md` and `task-manager.md` moved to `docs/architecture/`
+
+### Changed
+
+- `pyproject.toml`: Added `graphql` optional dependency group, added `greenlet>=3.0.0` to `postgres` extras, added `apdev[dev]>=0.1.2` to dev dependencies, included `graphql` in `[all]` extras
+- `api/app.py`: Refactored to protocol registry pattern for mounting A2A, MCP, and GraphQL adapters
+- `api/main.py`: Updated startup to support distributed mode with `--distributed` flag
+- `core/execution/task_executor.py`: Added distributed-aware task execution with lease acquisition
+- `core/storage/sqlalchemy/models.py`: Extended with distributed node, lease, and idempotency models
+- `core/config/registry.py`: Added distributed configuration support
+
+### Fixed
+
+- Test mocking in `test_multi_phase_crew.py`: Added missing `crewai.Agent` and `crewai.Task` patches to prevent `OPENAI_API_KEY` errors in unit tests
+- Integration test `test_scrape_crewai_chain_schema_based`: Added `api_keys_available` fixture to skip when API keys are not set
+
+### Removed
+
+- `scripts/` directory: Removed legacy utility scripts (`release.sh`, `check_allowed_chars.py`, `check_heavy_imports.py`, `check_import_performance.sh`, `detect_circular_imports.py`, `quick_import_check.py`)
+- `docs/development/extending.md`: Removed in favor of reorganized architecture docs
+
 ## [0.17.0] 2026-02-12
 
 ### Added

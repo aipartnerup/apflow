@@ -6,6 +6,7 @@ like task model class and hooks. Components can access configuration without
 passing parameters through multiple layers.
 """
 
+import importlib
 import os
 from threading import local
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional
@@ -14,8 +15,8 @@ from apflow.core.types import TaskPreHook, TaskPostHook, WebhookVerifyHook
 from apflow.logger import get_logger
 
 if TYPE_CHECKING:
+    from apflow.core.distributed.config import DistributedConfig
     from apflow.core.storage.sqlalchemy.models import TaskModel, TaskModelType
-    from apflow.core.execution.task_creator import TaskCreatorType
 
 logger = get_logger(__name__)
 
@@ -40,9 +41,7 @@ class ConfigRegistry:
         self._task_model_class: Optional["TaskModelType"] = None
         self._pre_hooks: List[TaskPreHook] = []
         self._post_hooks: List[TaskPostHook] = []
-        self._use_task_creator: Optional["TaskCreatorType"] = (
-            None  # Default to True for rigorous task creation
-        )
+        self._use_task_creator: Optional[type] = None  # Default to True for rigorous task creation
         self._require_existing_tasks: bool = False  # Default to False for convenience (auto-create)
         # Task tree lifecycle hooks
         self._task_tree_hooks: Dict[str, List[Callable]] = {
@@ -57,6 +56,8 @@ class ConfigRegistry:
         # Default: read from environment variable APFLOW_DEMO_SLEEP_SCALE, or 1.0 (no scaling)
         # Example: executor returns _demo_sleep=2.0, global scale=0.5 → actual sleep=1.0s
         self._demo_sleep_scale: float = float(os.getenv("APFLOW_DEMO_SLEEP_SCALE", "1.0"))
+        # Distributed config (lazy-loaded)
+        self._distributed_config: Optional["DistributedConfig"] = None
 
     def set_task_model_class(self, task_model_class: Optional["TaskModel"]) -> None:
         """
@@ -172,7 +173,7 @@ class ConfigRegistry:
         """
         return self._post_hooks.copy()
 
-    def set_use_task_creator(self, use_task_creator: Optional["TaskCreatorType"]) -> None:
+    def set_use_task_creator(self, use_task_creator: Optional[type]) -> None:
         """
         Set whether to use TaskCreator for rigorous task creation
 
@@ -184,7 +185,7 @@ class ConfigRegistry:
         self._use_task_creator = use_task_creator
         logger.debug(f"Set use_task_creator: {use_task_creator}")
 
-    def get_use_task_creator(self) -> "TaskCreatorType":
+    def get_use_task_creator(self) -> type:
         """
         Get whether to use TaskCreator for task creation
 
@@ -193,10 +194,9 @@ class ConfigRegistry:
         """
         if self._use_task_creator is not None:
             return self._use_task_creator
-        # Lazy import TaskCreator on first access
-        from apflow.core.execution.task_creator import TaskCreator
-
-        return TaskCreator
+        # Use importlib to avoid circular import with task_creator module
+        module = importlib.import_module("apflow.core.execution.task_creator")
+        return module.TaskCreator
 
     def set_require_existing_tasks(self, require_existing_tasks: bool) -> None:
         """
@@ -307,8 +307,27 @@ class ConfigRegistry:
         """
         return self._webhook_verify_hook
 
+    def set_distributed_config(self, config: "DistributedConfig") -> None:
+        """Set the distributed cluster configuration."""
+        self._distributed_config = config
+        logger.debug(
+            f"Set distributed config: enabled={config.enabled}, " f"node_id={config.node_id}"
+        )
+
+    def get_distributed_config(self) -> "DistributedConfig":
+        """Get the distributed cluster configuration.
+
+        Returns a disabled DistributedConfig if not explicitly set.
+        """
+        if self._distributed_config is not None:
+            return self._distributed_config
+        from apflow.core.distributed.config import DistributedConfig
+
+        return DistributedConfig()
+
     def clear(self) -> None:
         """Clear all configuration (useful for testing)"""
+        self._distributed_config = None
         self._task_model_class = None
         self._pre_hooks.clear()
         self._post_hooks.clear()
@@ -319,11 +338,11 @@ class ConfigRegistry:
         for hook_list in self._task_tree_hooks.values():
             hook_list.clear()
         # Reset TaskExecutor singleton to avoid test pollution
+        # Use importlib to avoid circular import with task_executor module
         try:
-            from apflow.core.execution.task_executor import TaskExecutor
-
-            TaskExecutor._instance = None
-            TaskExecutor._initialized = False
+            module = importlib.import_module("apflow.core.execution.task_executor")
+            module.TaskExecutor._instance = None
+            module.TaskExecutor._initialized = False
         except ImportError:
             pass
         logger.debug("Cleared configuration registry and reset TaskExecutor singleton")
@@ -477,7 +496,7 @@ def set_use_task_creator(use_task_creator: bool) -> None:
     _get_registry().set_use_task_creator(use_task_creator)
 
 
-def get_use_task_creator() -> "TaskCreatorType":
+def get_use_task_creator() -> type:
     """
     Get whether to use TaskCreator for task creation
 
@@ -589,6 +608,19 @@ def get_webhook_verify_hook() -> Optional[WebhookVerifyHook]:
     return _get_registry().get_webhook_verify_hook()
 
 
+def set_distributed_config(config: "DistributedConfig") -> None:
+    """Set the distributed cluster configuration."""
+    _get_registry().set_distributed_config(config)
+
+
+def get_distributed_config() -> "DistributedConfig":
+    """Get the distributed cluster configuration.
+
+    Returns a disabled DistributedConfig if not explicitly set.
+    """
+    return _get_registry().get_distributed_config()
+
+
 def register_task_tree_hook(hook_type: Optional[str] = None):
     """
     Register a task tree lifecycle hook using decorator syntax
@@ -693,4 +725,6 @@ __all__ = [
     "task_model_register",
     "register_webhook_verify_hook",
     "get_webhook_verify_hook",
+    "set_distributed_config",
+    "get_distributed_config",
 ]

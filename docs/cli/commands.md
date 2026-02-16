@@ -631,7 +631,7 @@ apflow run batch --tasks '[{
 
 Custom business logic:
 
-Implement custom executors by extending the executor framework. See [Extending Guide](../development/extending.md) for details.
+Implement custom executors by extending the executor framework. See [Custom Tasks Guide](../guides/custom-tasks.md) for details.
 
 ## Task Input Format
 

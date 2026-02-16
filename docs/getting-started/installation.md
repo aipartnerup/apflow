@@ -122,6 +122,17 @@ pip install apflow[email]
 - Email executor for sending emails via Resend API or SMTP
 - Send transactional and notification emails from task workflows
 
+### GraphQL API
+
+```bash
+pip install apflow[graphql]
+```
+
+**Includes:**
+- GraphQL API server with Strawberry GraphQL
+- Typed schema with queries, mutations, and subscriptions
+- GraphiQL interactive playground
+
 ### Everything
 
 ```bash
@@ -129,7 +140,7 @@ pip install apflow[all]
 ```
 
 **Includes:**
-- All optional features (crewai, a2a, cli, postgres, email, ssh, docker, grpc)
+- All optional features (crewai, a2a, cli, postgres, email, ssh, docker, grpc, graphql)
 
 ## Requirements
 

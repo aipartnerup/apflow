@@ -41,7 +41,7 @@ For any requirement involving extracting the main text or metadata from a websit
 - Only use `rest_executor` for raw HTTP APIs, and `command_executor` for unrelated shell commands.
 # Custom Tasks Guide
 
-> **For contributors:** See [Extending apflow](../development/extending.md) for advanced extension patterns and framework internals. This guide is focused on user-level custom executor development.
+> **For contributors:** See the [Extension Registry Design](../architecture/extension-registry-design.md) for advanced extension patterns and framework internals. This guide is focused on user-level custom executor development.
 
 Learn how to create your own custom executors (tasks) in apflow. This guide will walk you through everything from simple tasks to advanced patterns.
 

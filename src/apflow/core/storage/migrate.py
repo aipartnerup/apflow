@@ -72,7 +72,9 @@ class MigrationHistoryTable:
     @staticmethod
     def record(engine: Engine, migration: Migration) -> None:
         """Record migration as applied with apflow version"""
-        from apflow import __version__
+        from importlib.metadata import version
+
+        __version__ = version("apflow")
 
         try:
             with engine.begin() as conn:

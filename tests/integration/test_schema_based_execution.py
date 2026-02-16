@@ -83,7 +83,7 @@ class TestSchemaBasedTaskExecution:
             assert scrape_task.id in resolved_inputs
             assert resolved_inputs[scrape_task.id] == "Scraped content from example.com"
 
-    async def test_scrape_crewai_chain_schema_based(self, sync_db_session):
+    async def test_scrape_crewai_chain_schema_based(self, sync_db_session, api_keys_available):
         """Test scrape_executor -> crewai_executor with schema-based dependency mapping"""
         # Check if scrape_executor is available
         try:

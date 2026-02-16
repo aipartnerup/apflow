@@ -55,7 +55,7 @@ def rest_api_with_auth_example():
 
     print("Task created (would execute with valid token)")
     print(f"Task ID: {task.id}")
-    print(f"URL: https://api.example.com/data")
+    print("URL: https://api.example.com/data")
 
 
 def rest_api_post_example():

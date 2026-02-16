@@ -5,8 +5,13 @@ Single source of truth for all task operations. Generates both A2A AgentSkill
 definitions and MCP tool definitions from the same registry.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+if TYPE_CHECKING:
+    from apflow.api.protocol_types import ProtocolRegistry
 
 
 # Operation categories
@@ -563,8 +568,14 @@ def get_all_mcp_tool_dicts() -> list[Dict[str, Any]]:
     return [op.to_mcp_tool_dict() for op in get_all_operations()]
 
 
-def get_methods_discovery() -> Dict[str, Any]:
+def get_methods_discovery(
+    registry: ProtocolRegistry | None = None,
+) -> Dict[str, Any]:
     """Generate discovery response for GET /tasks/methods endpoint.
+
+    Args:
+        registry: Optional ProtocolRegistry. When provided, includes
+                  per-protocol availability info in the response.
 
     Returns a structured summary of all available methods grouped by category,
     suitable for both human inspection and programmatic discovery.
@@ -574,8 +585,78 @@ def get_methods_discovery() -> Dict[str, Any]:
     for op in ops:
         by_category.setdefault(op.category, []).append(op.to_discovery_dict())
 
-    return {
+    result: Dict[str, Any] = {
         "total": len(ops),
         "categories": list(by_category.keys()),
         "methods": by_category,
+    }
+
+    if registry is not None:
+        result["protocols"] = registry.get_discovery()
+    else:
+        result["protocols"] = {}
+
+    return result
+
+
+async def dispatch_operation(
+    operation_id: str,
+    params: Dict[str, Any],
+    verify_token_func: Any = None,
+    verify_permission_func: Any = None,
+) -> Dict[str, Any]:
+    """Dispatch an operation by looking up its handler in TaskRoutes.
+
+    Shared implementation used by all protocol adapters for handle_request.
+    In distributed mode, mutating operations are rejected on non-leader nodes.
+    """
+    from apflow.api.routes.tasks import TaskRoutes
+    from apflow.core.config import get_task_model_class
+
+    op = get_operation_by_id(operation_id)
+    if op is None:
+        raise ValueError(f"Unknown operation: {operation_id}")
+
+    # In distributed mode, enforce leader-only for mutating operations
+    if op.category in (CATEGORY_AGENT_ACTION, CATEGORY_CRUD):
+        rejection = _check_distributed_leader(op)
+        if rejection is not None:
+            return rejection
+
+    handler_name = op.get_handler_method()
+    task_routes = TaskRoutes(
+        task_model_class=get_task_model_class(),  # type: ignore[arg-type]
+        verify_token_func=verify_token_func,
+        verify_permission_func=verify_permission_func,
+    )
+    handler = getattr(task_routes, handler_name, None)
+    if handler is None:
+        raise ValueError(f"No handler for operation: {operation_id}")
+
+    return await handler(params, None, "")
+
+
+def _check_distributed_leader(op: OperationDef) -> Optional[Dict[str, Any]]:
+    """Return an error dict if distributed mode is active and this node is not leader."""
+    from apflow.core.distributed.config import DistributedConfig
+
+    config = DistributedConfig.from_env()
+    if not config.enabled:
+        return None
+
+    from apflow.core.execution.task_executor import TaskExecutor
+
+    executor = TaskExecutor()
+    if executor._is_leader_or_single_node():
+        return None
+
+    current_role = (
+        executor.distributed_runtime.current_role if executor.distributed_runtime else "unknown"
+    )
+    return {
+        "error": "operation_rejected",
+        "operation": op.id,
+        "message": "This node is not the cluster leader. "
+        "Mutating operations are only allowed on the leader node.",
+        "current_role": current_role,
     }

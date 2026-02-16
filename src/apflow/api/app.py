@@ -4,8 +4,10 @@ Application creation for apflow
 This module provides functions to create API applications based on different protocols.
 """
 
+from __future__ import annotations
+
 import os
-from typing import Any, Optional, Type, List, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from apflow import __version__
 from apflow.api.protocols import (
@@ -17,57 +19,38 @@ from apflow.core.utils.helpers import get_url_with_host_and_port
 from apflow.logger import get_logger
 
 if TYPE_CHECKING:
+    from apflow.api.protocol_types import ProtocolAdapterConfig
     from apflow.api.routes.tasks import TaskRoutes
 
 logger = get_logger(__name__)
 
 
 def create_a2a_server(
-    jwt_secret_key: Optional[str],
+    jwt_secret_key: str | None,
     jwt_algorithm: str,
     base_url: str,
     enable_system_routes: bool,
     enable_docs: bool = True,
-    task_routes_class: Optional["Type[TaskRoutes]"] = None,
-    custom_routes: Optional[List] = None,
-    custom_middleware: Optional[List] = None,
-    verify_token_func: Optional[Any] = None,
-    verify_permission_func: Optional[Any] = None,
+    task_routes_class: type[TaskRoutes] | None = None,
+    custom_routes: list[Any] | None = None,
+    custom_middleware: list[Any] | None = None,
+    verify_token_func: Any | None = None,
+    verify_permission_func: Any | None = None,
 ) -> Any:
-    """
-    Create A2A Protocol Server
-
-    Args:
-        jwt_secret_key: JWT secret key for token verification (used if verify_token_func is None)
-        jwt_algorithm: JWT algorithm (default: "HS256")
-        base_url: Base URL of the service
-        enable_system_routes: Whether to enable system routes
-        enable_docs: Whether to enable API documentation
-        task_routes_class: Optional custom TaskRoutes class
-        custom_routes: Optional list of custom Starlette Route objects
-        custom_middleware: Optional list of custom Starlette BaseHTTPMiddleware classes
-        verify_token_func: Optional custom JWT token verification function.
-                         If provided, it will be used to verify JWT tokens.
-                         If None and jwt_secret_key is provided, a default verifier will be created.
-                         Signature: verify_token_func(token: str) -> Optional[dict]
-        verify_permission_func: Optional function to verify user permissions.
-                              If provided, it will be used to verify user permissions for accessing resources.
-                              If None, permission checking is disabled.
-                              Signature: verify_permission_func(user_id: str, target_user_id: Optional[str], roles: Optional[list]) -> bool
-    """
+    """Create A2A Protocol Server."""
     from apflow.api.a2a.server import create_a2a_server
 
-    # Get TaskModel class from registry for logging
     from apflow.core.config import get_task_model_class
 
     task_model_class = get_task_model_class()
 
     logger.info(
-        f"A2A Protocol Server configuration: "
-        f"JWT enabled={bool(jwt_secret_key or verify_token_func)}, "
-        f"System routes={enable_system_routes}, "
-        f"Docs={enable_docs}, "
-        f"TaskModel={task_model_class.__name__}"
+        "A2A Protocol Server configuration: "
+        "JWT enabled=%s, System routes=%s, Docs=%s, TaskModel=%s",
+        bool(jwt_secret_key or verify_token_func),
+        enable_system_routes,
+        enable_docs,
+        task_model_class.__name__,
     )
 
     a2a_server_instance = create_a2a_server(
@@ -83,8 +66,6 @@ def create_a2a_server(
         verify_permission_func=verify_permission_func,
     )
 
-    # Note: build() is now optional - CustomA2AStarletteApplication is directly ASGI callable
-    # We call it explicitly here for backward compatibility and to get the built app immediately
     return a2a_server_instance.build()
 
 
@@ -92,156 +73,95 @@ def create_mcp_server(
     base_url: str,
     enable_system_routes: bool,
     enable_docs: bool = True,
-    task_routes_class: Optional["Type[TaskRoutes]"] = None,
+    task_routes_class: type[TaskRoutes] | None = None,
 ) -> Any:
-    """Create MCP (Model Context Protocol) Server"""
+    """Create MCP (Model Context Protocol) Server."""
     from fastapi import FastAPI
+
     from apflow.api.mcp.server import McpServer
 
     logger.info(
-        f"MCP Server configuration: "
-        f"System routes={enable_system_routes}, "
-        f"Docs={enable_docs}"
+        "MCP Server configuration: System routes=%s, Docs=%s",
+        enable_system_routes,
+        enable_docs,
     )
 
-    # Create FastAPI app
     app = FastAPI(
         title="apflow MCP Server",
         description="Model Context Protocol server for task orchestration",
         version=__version__,
     )
 
-    # Create MCP server instance
     mcp_server = McpServer(task_routes_class=task_routes_class)
 
-    # Add MCP HTTP routes
     mcp_routes = mcp_server.get_http_routes()
     for route in mcp_routes:
         app.routes.append(route)
 
-    # Add system routes if enabled
     if enable_system_routes:
         from starlette.routing import Route
+
         from apflow.api.routes.system import SystemRoutes
+        from apflow.core.config import get_task_model_class
 
-        system_routes = SystemRoutes()
+        system_routes = SystemRoutes(task_model_class=get_task_model_class())  # type: ignore[arg-type]
 
-        async def system_handler(request):
+        async def system_handler(request: Any) -> Any:
             return await system_routes.handle_system_requests(request)
 
         app.routes.append(Route("/system", system_handler, methods=["POST"]))
 
-    # Add docs if enabled
     if enable_docs:
-        from apflow.api.docs.swagger_ui import setup_swagger_ui
+        try:
+            from apflow.api.docs.swagger_ui import setup_swagger_ui  # type: ignore[attr-defined]
 
-        setup_swagger_ui(app)
+            setup_swagger_ui(app)
+        except ImportError:
+            logger.debug("Swagger UI setup not available for MCP server")
 
     return app
 
 
 def create_rest_server() -> Any:
-    """Create REST API Server (future implementation)"""
-    # TODO: Implement REST API server when ready
+    """Create REST API Server (future implementation)."""
     raise NotImplementedError(
         "REST API server is not yet implemented. "
         "Please use A2A Protocol Server (set APFLOW_API_PROTOCOL=a2a or leave unset)."
     )
 
 
-def create_app_by_protocol(
-    protocol: Optional[str] = None,
-    task_routes_class: Optional["Type[TaskRoutes]"] = None,
-    custom_routes: Optional[List] = None,
-    custom_middleware: Optional[List] = None,
-    verify_token_func: Optional[Any] = None,
-    verify_permission_func: Optional[Any] = None,
-) -> Any:
-    """
-    Create application based on protocol type
-
-    This is the main function for creating API applications. It should be used
-    by both CLI commands and programmatic API usage.
-
-    Args:
-        protocol: Protocol type. If None, uses environment variable
-                  APFLOW_API_PROTOCOL or defaults to "a2a"
-        task_routes_class: Optional custom TaskRoutes class to use instead of default TaskRoutes.
-                         Allows extending TaskRoutes functionality without monkey patching.
-                         Example: task_routes_class=MyCustomTaskRoutes
-        custom_routes: Optional list of custom Starlette Route objects to add to the application.
-                      Routes are merged after default routes (custom routes can override defaults if needed).
-                      Example: [Route("/custom", custom_handler, methods=["GET"])]
-        custom_middleware: Optional list of custom Starlette BaseHTTPMiddleware classes to add to the application.
-                          Middleware will be added in the order provided, after default middleware (CORS, LLM API key, JWT).
-                          Each middleware class should be a subclass of BaseHTTPMiddleware.
-                          Example: [MyCustomMiddleware, AnotherMiddleware]
-        verify_token_func: Optional custom JWT token verification function.
-                         If provided, it will be used to verify JWT tokens.
-                         If None and APFLOW_JWT_SECRET is set, a default verifier will be created.
-                         Signature: verify_token_func(token: str) -> Optional[dict]
-        verify_permission_func: Optional function to verify user permissions.
-                               If provided, it will be used to verify user permissions for accessing resources.
-                               If None, permission checking is disabled.
-                               Signature: verify_permission_func(user_id: str, target_user_id: Optional[str], roles: Optional[list]) -> bool
-
-    Returns:
-        Starlette/FastAPI application instance
-
-    Raises:
-        ValueError: If protocol is not supported
-        ImportError: If protocol dependencies are not installed
-    """
-
-    # Determine protocol
+def _resolve_protocol(protocol: str | None) -> str:
+    """Resolve and validate the protocol name."""
     if protocol is None:
-        protocol = get_protocol_from_env()
+        resolved = get_protocol_from_env()
     else:
-        protocol = protocol.lower()
+        resolved = protocol.lower()
 
-    # Check if protocol is supported and dependencies are installed
-    check_protocol_dependency(protocol)
+    check_protocol_dependency(resolved)
 
-    # Get protocol dependency info for logging
-    _, _, description = get_protocol_dependency_info(protocol)
-    logger.info(f"Creating {description} application")
+    _, _, description = get_protocol_dependency_info(resolved)
+    logger.info("Creating %s application", description)
+    return resolved
 
-    # Check if APFLOW_JWT_SECRET is actually in .env file
-    # This handles the case where env var was previously set but is now commented out
-    env_file_has_jwt_secret = False
-    try:
-        from pathlib import Path
 
-        env_path = Path.cwd() / ".env"
-        if env_path.exists():
-            env_content = env_path.read_text()
-            for line in env_content.splitlines():
-                line = line.strip()
-                if line and not line.startswith("#"):
-                    if line.startswith("APFLOW_JWT_SECRET="):
-                        env_file_has_jwt_secret = True
-                        break
-    except Exception:
-        pass
+def _load_env_config(
+    task_routes_class: type[TaskRoutes] | None,
+    custom_routes: list[Any] | None,
+    custom_middleware: list[Any] | None,
+    verify_token_func: Any | None,
+    verify_permission_func: Any | None,
+) -> ProtocolAdapterConfig:
+    """Load protocol adapter configuration from environment variables."""
+    from apflow.api.protocol_types import ProtocolAdapterConfig
 
-    # If .env doesn't have APFLOW_JWT_SECRET, remove it from environment
-    if not env_file_has_jwt_secret and "APFLOW_JWT_SECRET" in os.environ:
-        del os.environ["APFLOW_JWT_SECRET"]
-        logger.info("Cleared APFLOW_JWT_SECRET from environment (not found in .env file)")
-
-    # Common configuration
     jwt_secret_key = os.getenv("APFLOW_JWT_SECRET")
     jwt_algorithm = os.getenv("APFLOW_JWT_ALGORITHM", "HS256")
 
-    # Log JWT configuration status for debugging
     if jwt_secret_key:
-        logger.info(
-            f"JWT secret key found: {'*' * min(len(jwt_secret_key), 8)}... (length: {len(jwt_secret_key)})"
-        )
+        logger.info("JWT secret key found (length: %d)", len(jwt_secret_key))
     else:
-        logger.info(
-            "JWT secret key not found (APFLOW_JWT_SECRET not set) - authentication will be disabled"
-        )
+        logger.info("JWT secret key not set - authentication disabled")
+
     enable_system_routes = os.getenv("APFLOW_ENABLE_SYSTEM_ROUTES", "true").lower() in (
         "true",
         "1",
@@ -250,35 +170,44 @@ def create_app_by_protocol(
     enable_docs = os.getenv("APFLOW_ENABLE_DOCS", "true").lower() in ("true", "1", "yes")
     host = os.getenv("APFLOW_API_HOST", os.getenv("API_HOST", "0.0.0.0"))
     port = int(os.getenv("APFLOW_API_PORT", os.getenv("API_PORT", "8000")))
-    default_url = get_url_with_host_and_port(host, port)
-    base_url = os.getenv("APFLOW_BASE_URL", default_url)
+    base_url = os.getenv("APFLOW_BASE_URL", get_url_with_host_and_port(host, port))
 
-    # Create app based on protocol
-    if protocol == "a2a":
-        return create_a2a_server(
-            jwt_secret_key=jwt_secret_key,
-            jwt_algorithm=jwt_algorithm,
-            base_url=base_url,
-            enable_system_routes=enable_system_routes,
-            enable_docs=enable_docs,
-            task_routes_class=task_routes_class,
-            custom_routes=custom_routes,
-            custom_middleware=custom_middleware,
-            verify_token_func=verify_token_func,
-            verify_permission_func=verify_permission_func,
-        )
-    elif protocol == "mcp":
-        return create_mcp_server(
-            base_url=base_url,
-            enable_system_routes=enable_system_routes,
-            enable_docs=enable_docs,
-            task_routes_class=task_routes_class,
-        )
-    elif protocol == "rest":
-        return create_rest_server()
-    else:
-        raise ValueError(
-            f"Unknown protocol: {protocol}. "
-            f"Supported protocols: 'a2a', 'mcp', 'rest' (future). "
-            f"Set APFLOW_API_PROTOCOL environment variable."
-        )
+    return ProtocolAdapterConfig(
+        base_url=base_url,
+        enable_system_routes=enable_system_routes,
+        enable_docs=enable_docs,
+        jwt_secret_key=jwt_secret_key,
+        jwt_algorithm=jwt_algorithm,
+        task_routes_class=task_routes_class,
+        custom_routes=custom_routes,
+        custom_middleware=custom_middleware,
+        verify_token_func=verify_token_func,
+        verify_permission_func=verify_permission_func,
+    )
+
+
+def create_app_by_protocol(
+    protocol: str | None = None,
+    task_routes_class: type[TaskRoutes] | None = None,
+    custom_routes: list[Any] | None = None,
+    custom_middleware: list[Any] | None = None,
+    verify_token_func: Any | None = None,
+    verify_permission_func: Any | None = None,
+) -> Any:
+    """Create application based on protocol type.
+
+    This is the main entry point for creating API applications.
+    Delegates to the protocol registry to find the appropriate adapter.
+    """
+    from apflow.api.protocols import get_protocol_registry
+
+    resolved = _resolve_protocol(protocol)
+    config = _load_env_config(
+        task_routes_class=task_routes_class,
+        custom_routes=custom_routes,
+        custom_middleware=custom_middleware,
+        verify_token_func=verify_token_func,
+        verify_permission_func=verify_permission_func,
+    )
+    adapter = get_protocol_registry().get_adapter(resolved)
+    return adapter.create_app(config)

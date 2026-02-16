@@ -69,7 +69,7 @@ LOG_LEVEL=INFO
 | `APFLOW_API_PORT` | integer | 8000 | API server port. Takes precedence over `API_PORT` |
 | `API_PORT` | integer | 8000 | Fallback API port |
 | `APFLOW_BASE_URL` | string | auto | Base URL for API service |
-| `APFLOW_API_PROTOCOL` | string | a2a | API protocol type: `a2a` or `mcp` |
+| `APFLOW_API_PROTOCOL` | string | a2a | API protocol type: `a2a`, `mcp`, or `graphql` |
 
 **Examples:**
 ```bash
@@ -77,6 +77,8 @@ LOG_LEVEL=INFO
 APFLOW_API_HOST=127.0.0.1
 APFLOW_API_PORT=9000
 APFLOW_API_PROTOCOL=mcp
+# Or GraphQL
+APFLOW_API_PROTOCOL=graphql
 
 # Or generic fallback
 API_HOST=0.0.0.0
@@ -231,6 +233,56 @@ APFLOW_WEBHOOK_RATE_LIMIT=60
 | `APFLOW_DAEMON_PID_FILE` | string | auto | Custom daemon PID file location |
 | `APFLOW_DAEMON_LOG_FILE` | string | auto | Custom daemon log file location |
 
+## Distributed Cluster
+
+These variables configure distributed cluster mode. Set `APFLOW_CLUSTER_ENABLED=true` to activate. Requires PostgreSQL. See the [Distributed Cluster Guide](./distributed-cluster.md) for details.
+
+### Cluster Identity
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `APFLOW_CLUSTER_ENABLED` | boolean | false | Enable distributed cluster mode |
+| `APFLOW_NODE_ID` | string | auto-generated | Unique identifier for this node |
+| `APFLOW_NODE_ROLE` | string | auto | Node role: `auto`, `leader`, `worker`, or `observer` |
+
+### Leader Election
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `APFLOW_LEADER_LEASE` | integer | 30 | Leader lease duration in seconds |
+| `APFLOW_LEADER_RENEW` | integer | 10 | Leader lease renewal interval in seconds |
+
+### Task Lease Management
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `APFLOW_LEASE_DURATION` | integer | 30 | Task lease duration in seconds |
+| `APFLOW_LEASE_CLEANUP_INTERVAL` | integer | 10 | Expired lease cleanup interval in seconds |
+
+### Worker Polling
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `APFLOW_POLL_INTERVAL` | integer | 5 | Worker task poll interval in seconds |
+| `APFLOW_MAX_PARALLEL_TASKS` | integer | 4 | Maximum concurrent tasks per worker node |
+
+### Node Health Monitoring
+
+| Variable | Type | Default | Description |
+|----------|------|---------|-------------|
+| `APFLOW_HEARTBEAT_INTERVAL` | integer | 10 | Heartbeat signal interval in seconds |
+| `APFLOW_NODE_STALE_THRESHOLD` | integer | 30 | Seconds without heartbeat before node is `stale` |
+| `APFLOW_NODE_DEAD_THRESHOLD` | integer | 120 | Seconds without heartbeat before node is `dead` |
+
+**Example:**
+```bash
+APFLOW_CLUSTER_ENABLED=true
+APFLOW_NODE_ID=node-1
+APFLOW_NODE_ROLE=auto
+APFLOW_LEADER_LEASE=30
+APFLOW_MAX_PARALLEL_TASKS=8
+```
+
 ## Development & Testing
 
 | Variable | Type | Default | Description |
@@ -289,6 +341,11 @@ APFLOW_CORS_ORIGINS=http://localhost:3000,https://app.example.com
 # Features
 APFLOW_ENABLE_SYSTEM_ROUTES=true
 APFLOW_ENABLE_DOCS=true
+
+# Distributed Cluster (optional)
+# APFLOW_CLUSTER_ENABLED=true
+# APFLOW_NODE_ROLE=auto
+# APFLOW_MAX_PARALLEL_TASKS=4
 
 # LLM Services (if using AI extensions)
 OPENAI_API_KEY=sk-...

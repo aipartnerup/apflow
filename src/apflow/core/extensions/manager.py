@@ -362,7 +362,7 @@ def _load_custom_task_model() -> None:
         try:
             from importlib import import_module
 
-            from apflow import set_task_model_class
+            from apflow.core.config.registry import set_task_model_class
 
             module_path, class_name = task_model_class_path.rsplit(".", 1)
             module = import_module(module_path)

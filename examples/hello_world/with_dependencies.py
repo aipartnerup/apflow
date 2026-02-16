@@ -62,9 +62,7 @@ class DataSaver(BaseTask):
 
 if __name__ == "__main__":
     # Task 1: Fetch data
-    fetch_task = (
-        TaskBuilder("fetch_data", "data_fetcher").with_inputs({"source": "api"}).build()
-    )
+    fetch_task = TaskBuilder("fetch_data", "data_fetcher").with_inputs({"source": "api"}).build()
 
     # Task 2: Process data (depends on Task 1)
     process_task = (

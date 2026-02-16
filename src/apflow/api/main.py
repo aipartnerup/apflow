@@ -13,13 +13,14 @@ Protocol selection via APFLOW_API_PROTOCOL environment variable:
 - "rest" (future): REST API server
 """
 
+import asyncio
 import os
 import sys
 import time
 import uvicorn
 import warnings
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from apflow.api.app import create_app_by_protocol
 from apflow.core.extensions.manager import initialize_extensions, _load_custom_task_model
@@ -154,6 +155,96 @@ def _setup_development_environment():
         sys.path.insert(0, project_root)
 
 
+def _init_distributed_runtime() -> tuple[Any, Any]:
+    """Initialize distributed runtime if cluster mode is enabled.
+
+    Loads DistributedConfig from environment, creates a sync SQLAlchemy
+    session factory for distributed services, and injects the runtime
+    into the TaskExecutor singleton.
+
+    Returns:
+        Tuple of (DistributedRuntime | None, sessionmaker | None).
+        Both are None when cluster mode is disabled or initialization fails.
+    """
+    from apflow.core.distributed.config import DistributedConfig
+
+    config = DistributedConfig.from_env()
+    if not config.enabled:
+        logger.debug("Distributed cluster mode is disabled")
+        return None, None
+
+    config.validate_and_initialize()
+
+    from apflow.core.storage.factory import (
+        _get_database_url_from_env,
+        is_postgresql_url,
+        normalize_postgresql_url,
+    )
+
+    db_url = _get_database_url_from_env()
+    if not db_url or not is_postgresql_url(db_url):
+        logger.warning(
+            "Distributed cluster mode requires a PostgreSQL DATABASE_URL. "
+            "Continuing as single-node."
+        )
+        return None, None
+
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker as sa_sessionmaker
+
+    from apflow.core.distributed.runtime import DistributedRuntime
+    from apflow.core.execution.task_executor import TaskExecutor
+
+    connection_string = normalize_postgresql_url(db_url, async_mode=False)
+    engine = create_engine(connection_string, echo=False)
+    session_factory = sa_sessionmaker(bind=engine)
+
+    runtime = DistributedRuntime(config, session_factory)
+
+    executor = TaskExecutor()
+    executor.set_distributed_runtime(runtime)
+    logger.info(
+        "Distributed runtime initialized (node_id=%s, role=%s)",
+        config.node_id,
+        config.node_role,
+    )
+    return runtime, session_factory
+
+
+class _DistributedLifespanApp:
+    """ASGI wrapper that starts/stops DistributedRuntime around the inner app."""
+
+    def __init__(self, app: Any, runtime: Any) -> None:
+        self._app = app
+        self._runtime = runtime
+        self._task: asyncio.Task[None] | None = None
+
+    async def __call__(
+        self,
+        scope: dict[str, Any],
+        receive: Any,
+        send: Any,
+    ) -> None:
+        if scope["type"] == "lifespan":
+            while True:
+                message = await receive()
+                if message["type"] == "lifespan.startup":
+                    self._task = asyncio.create_task(self._runtime.start())
+                    await send({"type": "lifespan.startup.complete"})
+                elif message["type"] == "lifespan.shutdown":
+                    await self._runtime.shutdown()
+                    if self._task is not None:
+                        self._task.cancel()
+                        try:
+                            await self._task
+                        except asyncio.CancelledError:
+                            pass
+                    await send({"type": "lifespan.shutdown.complete"})
+                    return
+        else:
+            await self._app(scope, receive, send)
+
+
 def create_runnable_app(**kwargs):
     """
     Create a runnable application based on protocol type
@@ -280,12 +371,27 @@ def create_runnable_app(**kwargs):
         # This allows the server to start even if database is not available
         logger.warning(f"Database initialization skipped: {e}")
 
+    # Initialize distributed runtime (if cluster mode is enabled)
+    try:
+        runtime, _ = _init_distributed_runtime()
+    except Exception as e:
+        logger.warning(
+            f"Distributed runtime initialization failed: {e}. Continuing as single-node."
+        )
+        runtime = None
+
     # Determine protocol (default to A2A for backward compatibility)
     protocol = kwargs.pop("protocol", None) or get_protocol_from_env()
     logger.info(f"Starting API service with protocol: {protocol}")
 
     # Create app based on protocol (pass remaining kwargs)
-    return create_app_by_protocol(protocol=protocol, **kwargs)
+    app = create_app_by_protocol(protocol=protocol, **kwargs)
+
+    # Wrap with distributed lifespan if runtime is active
+    if runtime is not None:
+        app = _DistributedLifespanApp(app, runtime)
+
+    return app
 
 
 def main(**kwargs):

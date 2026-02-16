@@ -64,12 +64,20 @@ class TaskExecutor:
             # Store executor instances for cancellation (task_id -> executor)
             # This allows cancel_task() to access executors created during execution
             self._executor_instances: Dict[str, Any] = {}
+
+            # Distributed cluster support
+            from apflow.core.distributed.config import DistributedConfig
+
+            self.distributed_config = DistributedConfig.from_env()
+            self.distributed_runtime: Optional[Any] = None
+
             TaskExecutor._initialized = True
             logger.info(
                 f"Initialized TaskExecutor "
                 f"(TaskModel: {self.task_model_class.__name__}, "
                 f"pre_hooks: {len(self.pre_hooks)}, "
-                f"post_hooks: {len(self.post_hooks)})"
+                f"post_hooks: {len(self.post_hooks)}, "
+                f"distributed: {self.distributed_config.enabled})"
             )
 
     def refresh_config(self):
@@ -89,6 +97,22 @@ class TaskExecutor:
             f"pre_hooks: {len(self.pre_hooks)}, "
             f"post_hooks: {len(self.post_hooks)})"
         )
+
+    def set_distributed_runtime(self, runtime: Any) -> None:
+        """Attach the DistributedRuntime (called by the API server at startup)."""
+        self.distributed_runtime = runtime
+
+    def _is_leader_or_single_node(self) -> bool:
+        """Return True when this node may accept mutating operations.
+
+        True when distributed mode is disabled (single-node) or when
+        the attached runtime reports this node as the leader.
+        """
+        if not self.distributed_config.enabled:
+            return True
+        if self.distributed_runtime is None:
+            return True
+        return self.distributed_runtime.is_leader
 
     def _mark_tasks_for_reexecution(self, task_tree: TaskTreeNode) -> set[str]:
         """
@@ -182,6 +206,23 @@ class TaskExecutor:
                     use_demo=use_demo,
                     db_session=session,
                 )
+
+        # In distributed mode, only the leader node may execute tasks
+        if not self._is_leader_or_single_node():
+            leader_id = (
+                self.distributed_runtime.current_role if self.distributed_runtime else "unknown"
+            )
+            logger.warning(
+                "Task execution rejected: node is not leader (role=%s)",
+                leader_id,
+            )
+            return {
+                "status": "rejected",
+                "root_task_id": root_task_id,
+                "message": "This node is not the cluster leader. "
+                "Task execution is only allowed on the leader node.",
+                "current_role": leader_id,
+            }
 
         # Check if task tree is already running (prevent concurrent execution of same task tree)
         # This check is done inside execute_task_tree to prevent race conditions

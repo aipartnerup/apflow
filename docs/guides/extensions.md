@@ -14,9 +14,7 @@ apflow also supports custom extensions for executors, hooks, storage backends, a
 
 For how to override executors and other extensions, see the [API Quick Reference](../api/quick-reference.md) and [Python API Reference](../api/python.md).
 
-For more details, see the [Extending Guide](../development/extending.md).
-
-For more details, see the [Extending Guide](../development/extending.md).
+For more details, see the [Custom Tasks Guide](../guides/custom-tasks.md).
 
 ## Best Practices
 - Use `override=True` only when you want to replace an existing command or extension.

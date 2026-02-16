@@ -12,7 +12,7 @@ Type-specific decorators:
 """
 
 from typing import Callable, Optional, Dict, Any, Type, TYPE_CHECKING
-from apflow.core.extensions import get_registry
+from apflow.core.extensions.registry import get_registry
 from apflow.core.extensions.base import Extension
 from apflow.core.extensions.protocol import ExecutorFactory
 from apflow.logger import get_logger

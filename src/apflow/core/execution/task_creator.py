@@ -21,7 +21,7 @@ from apflow.core.types import TaskTreeNode, TaskStatus
 from apflow.core.storage.sqlalchemy.task_repository import TaskRepository
 from apflow.core.storage.sqlalchemy.models import TaskModelType, TaskOriginType
 from apflow.logger import get_logger
-from apflow.core.config import get_task_model_class
+from apflow.core.config.registry import get_task_model_class
 from sqlalchemy_session_proxy import SqlalchemySessionProxy
 from apflow.core.validator import check_tasks_user_ownership
 from apflow.core.validator.dependency_validator import (

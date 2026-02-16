@@ -16,7 +16,7 @@ Prerequisites:
 Run: python ssh_executor_example.py
 """
 
-from apflow import TaskBuilder, execute_tasks
+from apflow import TaskBuilder
 
 
 def basic_command():
@@ -123,8 +123,7 @@ def database_backup():
     print("\n=== Database Backup ===")
 
     backup_command = (
-        "pg_dump -U postgres mydb | "
-        "gzip > /backups/mydb_$(date +%Y%m%d_%H%M%S).sql.gz"
+        "pg_dump -U postgres mydb | " "gzip > /backups/mydb_$(date +%Y%m%d_%H%M%S).sql.gz"
     )
 
     task = (

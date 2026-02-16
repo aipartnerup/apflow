@@ -38,11 +38,16 @@ python -m apflow.api.main
 # MCP Server
 export APFLOW_API_PROTOCOL=mcp
 python -m apflow.api.main
+
+# GraphQL Server
+export APFLOW_API_PROTOCOL=graphql
+python -m apflow.api.main
 ```
 
 **Supported Protocols:**
 - `a2a` (default): A2A Protocol Server for agent-to-agent communication
 - `mcp`: MCP (Model Context Protocol) Server exposing task orchestration as MCP tools and resources
+- `graphql`: GraphQL API with typed schema, subscriptions, and GraphiQL playground (see [GraphQL API Reference](../api/graphql.md))
 
 ### Advanced Options
 
@@ -410,6 +415,48 @@ auth:
   jwt_secret: your-secret-key
 ```
 
+## Distributed Cluster Mode
+
+The API server supports distributed cluster mode for high availability and horizontal scaling. When enabled, a `DistributedRuntime` is automatically initialized during server startup, providing lease-based task assignment, leader election, and multi-node coordination — all through PostgreSQL (no external services required).
+
+### Enabling Cluster Mode
+
+Set `APFLOW_CLUSTER_ENABLED=true` and provide a PostgreSQL `DATABASE_URL`:
+
+```bash
+export APFLOW_CLUSTER_ENABLED=true
+export APFLOW_DATABASE_URL=postgresql+asyncpg://user:pass@db-host/apflow
+export APFLOW_NODE_ROLE=auto    # auto | leader | worker | observer
+export APFLOW_NODE_ID=node-1    # optional, auto-generated if not set
+
+apflow serve --host 0.0.0.0 --port 8000
+```
+
+On startup, `create_runnable_app()` calls `_init_distributed_runtime()` which:
+
+1. Loads `DistributedConfig` from environment variables
+2. Creates a sync SQLAlchemy session factory for distributed coordination
+3. Instantiates `DistributedRuntime` and injects it into `TaskExecutor`
+4. Wraps the ASGI app with a lifespan manager that starts the runtime on server startup and stops it on shutdown
+
+If cluster mode is not enabled, or no PostgreSQL URL is configured, the server continues as a normal single-node instance with no behavioral change.
+
+### Multi-Node Example
+
+```bash
+# Node A — will attempt leader election
+APFLOW_CLUSTER_ENABLED=true APFLOW_NODE_ROLE=auto APFLOW_NODE_ID=node-a \
+  APFLOW_DATABASE_URL=postgresql+asyncpg://user:pass@db-host/apflow \
+  apflow serve --port 8000
+
+# Node B — worker only
+APFLOW_CLUSTER_ENABLED=true APFLOW_NODE_ROLE=worker APFLOW_NODE_ID=node-b \
+  APFLOW_DATABASE_URL=postgresql+asyncpg://user:pass@db-host/apflow \
+  apflow serve --port 8001
+```
+
+For full configuration reference, deployment patterns, and troubleshooting, see the [Distributed Cluster Guide](./distributed-cluster.md).
+
 ## Production Deployment
 
 ### Using Uvicorn Directly
@@ -649,7 +696,9 @@ app = create_app_by_protocol(
 
 ## Next Steps
 
-- See [HTTP API Reference](../api/http.md) for complete endpoint documentation
+- See [HTTP API Reference](../api/http.md) for complete A2A endpoint documentation
+- See [GraphQL API Reference](../api/graphql.md) for GraphQL schema and examples
 - Check [Examples](../examples/basic_task.md) for integration examples
 - See [Custom Tasks Guide](./custom-tasks.md) for MCP executor usage
+- See [Distributed Cluster Guide](./distributed-cluster.md) for multi-node deployment
 

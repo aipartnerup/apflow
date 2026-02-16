@@ -497,8 +497,9 @@ class CustomA2AStarletteApplication(A2AStarletteApplication):
     async def _handle_methods_discovery(self, request: Request) -> JSONResponse:
         """Return all available task methods grouped by category."""
         from apflow.api.capabilities import get_methods_discovery
+        from apflow.api.protocol_types import get_protocol_registry
 
-        return JSONResponse(content=get_methods_discovery())
+        return JSONResponse(content=get_methods_discovery(registry=get_protocol_registry()))
 
     async def _handle_system_requests(self, request: Request) -> JSONResponse:
         """Handle system operations through /system endpoint"""

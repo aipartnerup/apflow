@@ -390,8 +390,8 @@ See [docs/architecture/directory-structure.md](docs/architecture/directory-struc
 **For Contributors:**
 - [Development Setup](docs/development/setup.md)
 - [Contributing Guide](docs/development/contributing.md)
-- [Extension Guide](docs/development/extending.md)
-- [Exception Handling](docs/development/exception.md)
+- [Custom Tasks Guide](docs/guides/custom-tasks.md)
+- [Exception Handling](docs/architecture/exception-handling.md)
 - [Roadmap](docs/development/roadmap.md)
 
 **Examples & Templates:**

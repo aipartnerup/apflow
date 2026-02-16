@@ -2,9 +2,23 @@
 Protocol management for apflow
 
 This module handles protocol selection, dependency checking, and protocol configuration.
+
+Types and the registry class live in ``protocol_types`` to avoid circular
+imports; they are re-exported here for backward compatibility.
 """
 
+from __future__ import annotations
+
 import os
+
+# Re-export shared types so existing callers continue to work.
+from apflow.api.protocol_types import (  # noqa: F401
+    ProtocolAdapter,
+    ProtocolAdapterConfig,
+    ProtocolRegistry,
+    get_protocol_registry,
+    set_registry_factory,
+)
 
 # Protocol dependency mapping: protocol -> (module_path, extra_name, description)
 # This is the single source of truth for protocol configuration
@@ -19,17 +33,11 @@ PROTOCOL_DEPENDENCIES = {
         "a2a",  # MCP uses a2a dependencies (httpx, fastapi, starlette)
         "MCP (Model Context Protocol) Server",
     ),
-    # Future protocols can be added here:
-    # "rest": (
-    #     "apflow.api.rest.server",
-    #     "rest",
-    #     "REST API Server",
-    # ),
-    # "rpc": (
-    #     "apflow.api.rpc.server",
-    #     "rpc",
-    #     "RPC API Server",
-    # ),
+    "graphql": (
+        "apflow.api.graphql.server",
+        "graphql",
+        "GraphQL Protocol Server",
+    ),
 }
 
 # Default protocol
@@ -111,3 +119,39 @@ def check_protocol_dependency(protocol: str) -> None:
                 f"Please install them using: pip install apflow[{extra_name}]"
             ) from e
         raise
+
+
+def _create_default_registry() -> ProtocolRegistry:
+    """Create registry with built-in adapters pre-registered."""
+    import logging
+
+    _logger = logging.getLogger(__name__)
+    registry = ProtocolRegistry()
+
+    try:
+        from apflow.api.a2a.protocol_adapter import A2AProtocolAdapter
+
+        registry.register(A2AProtocolAdapter)
+    except ImportError:
+        _logger.info("A2A adapter not available (missing dependencies)")
+
+    try:
+        from apflow.api.mcp.protocol_adapter import MCPProtocolAdapter
+
+        registry.register(MCPProtocolAdapter)
+    except ImportError:
+        _logger.info("MCP adapter not available (missing dependencies)")
+
+    try:
+        from apflow.api.graphql.server import GraphQLProtocolAdapter
+
+        registry.register(GraphQLProtocolAdapter)
+    except ImportError:
+        _logger.info("GraphQL adapter not available (missing dependencies)")
+
+    return registry
+
+
+# Register the factory so protocol_types.get_protocol_registry() can
+# lazily build the default registry without importing adapters itself.
+set_registry_factory(_create_default_registry)

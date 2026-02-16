@@ -2,7 +2,17 @@
 SQLAlchemy models for task storage
 """
 
-from sqlalchemy import Column, String, Integer, DateTime, JSON, Text, Boolean, Numeric
+from sqlalchemy import (
+    Column,
+    String,
+    Integer,
+    DateTime,
+    JSON,
+    Text,
+    Boolean,
+    Numeric,
+    ForeignKey,
+)
 from sqlalchemy.sql import func
 from sqlalchemy.orm import declarative_base
 from typing import Dict, Any, Optional, TypeVar, Type
@@ -87,7 +97,7 @@ class TaskModel(Base):
     # === Task Basic Information ===
     name = Column(String(100), nullable=False, index=True)  # Task name/method identifier
     status = Column(
-        String(50), default="pending"
+        String(50), default="pending", index=True
     )  # Task status: pending, in_progress, completed, failed, cancelled
 
     # === Task Orchestration (TaskManager) ===
@@ -168,6 +178,14 @@ class TaskModel(Base):
     max_runs = Column(Integer, nullable=True)  # Maximum number of scheduled runs (null = unlimited)
     run_count = Column(Integer, default=0)  # Number of times this scheduled task has been executed
 
+    # === Distributed Execution Fields (nullable, backward compatible) ===
+    lease_id = Column(String(100), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    placement_constraints = Column(JSON, nullable=True)
+    attempt_id = Column(Integer, default=0)
+    idempotency_key = Column(String(255), nullable=True)
+    last_assigned_node = Column(String(100), nullable=True)
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert model to dictionary"""
         return {
@@ -224,6 +242,13 @@ class TaskModel(Base):
             # Execution control
             "max_runs": self.max_runs,
             "run_count": self.run_count,
+            # Distributed execution fields
+            "lease_id": self.lease_id,
+            "lease_expires_at": self.lease_expires_at,
+            "placement_constraints": self.placement_constraints,
+            "attempt_id": self.attempt_id,
+            "idempotency_key": self.idempotency_key,
+            "last_assigned_node": self.last_assigned_node,
         }
 
     def output(self) -> Dict[str, Any]:
@@ -296,6 +321,13 @@ class TaskModel(Base):
             "last_run_at": None,
             "max_runs": None,
             "run_count": 0,
+            # Distributed execution defaults
+            "lease_id": None,
+            "lease_expires_at": None,
+            "placement_constraints": None,
+            "attempt_id": 0,
+            "idempotency_key": None,
+            "last_assigned_node": None,
         }
 
     @classmethod
@@ -368,3 +400,109 @@ class SchemaMigration(Base):
 
     def __repr__(self):
         return f"<SchemaMigration(id='{self.id}', apflow_version='{self.apflow_version}')>"
+
+
+# === Distributed Execution Models ===
+
+
+class DistributedNode(Base):
+    """Registered cluster node with health tracking."""
+
+    __tablename__ = "apflow_distributed_nodes"
+
+    node_id = Column(String(100), primary_key=True)
+    executor_types = Column(JSON, nullable=False)
+    capabilities = Column(JSON, default=dict)
+    status = Column(String(20), nullable=False)  # healthy, stale, dead
+    heartbeat_at = Column(DateTime(timezone=True), nullable=False)
+    registered_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self) -> str:
+        return f"<DistributedNode(node_id='{self.node_id}', status='{self.status}')>"
+
+
+class TaskLease(Base):
+    """Active task lease binding a task to a worker node."""
+
+    __tablename__ = "apflow_task_leases"
+
+    task_id = Column(
+        String(100),
+        ForeignKey(f"{TASK_TABLE_NAME}.id"),
+        primary_key=True,
+    )
+    node_id = Column(
+        String(100),
+        ForeignKey("apflow_distributed_nodes.node_id"),
+        nullable=False,
+    )
+    lease_token = Column(String(100), unique=True, index=True, nullable=False)
+    acquired_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), index=True, nullable=False)
+    attempt_id = Column(Integer, default=0)
+
+    def __repr__(self) -> str:
+        return f"<TaskLease(task_id='{self.task_id}', node_id='{self.node_id}')>"
+
+
+class ExecutionIdempotency(Base):
+    """Idempotency tracking for task execution attempts."""
+
+    __tablename__ = "apflow_execution_idempotency"
+
+    task_id = Column(String(100), primary_key=True)
+    attempt_id = Column(Integer, primary_key=True)
+    idempotency_key = Column(String(255), unique=True, index=True, nullable=False)
+    result = Column(JSON, nullable=True)
+    status = Column(String(20), nullable=False)  # pending, completed, failed
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self) -> str:
+        return f"<ExecutionIdempotency(task_id='{self.task_id}', " f"attempt_id={self.attempt_id})>"
+
+
+class ClusterLeader(Base):
+    """Singleton leader election record."""
+
+    __tablename__ = "apflow_cluster_leader"
+
+    leader_id = Column(String(100), primary_key=True, default="singleton")
+    node_id = Column(
+        String(100),
+        ForeignKey("apflow_distributed_nodes.node_id"),
+        nullable=False,
+    )
+    lease_token = Column(String(100), unique=True, nullable=False)
+    acquired_at = Column(DateTime(timezone=True), server_default=func.now())
+    expires_at = Column(DateTime(timezone=True), index=True, nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<ClusterLeader(leader_id='{self.leader_id}', node_id='{self.node_id}')>"
+
+
+class TaskEvent(Base):
+    """Audit log for task lifecycle events."""
+
+    __tablename__ = "apflow_task_events"
+
+    event_id = Column(
+        String(100),
+        primary_key=True,
+        default=lambda: str(uuid.uuid4()),
+    )
+    task_id = Column(
+        String(100),
+        ForeignKey(f"{TASK_TABLE_NAME}.id"),
+        index=True,
+        nullable=False,
+    )
+    event_type = Column(String(50), nullable=False)
+    node_id = Column(String(100), nullable=True)
+    details = Column(JSON, default=dict)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    def __repr__(self) -> str:
+        return (
+            f"<TaskEvent(event_id='{self.event_id}', "
+            f"task_id='{self.task_id}', event_type='{self.event_type}')>"
+        )

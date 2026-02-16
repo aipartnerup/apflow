@@ -88,6 +88,7 @@ pip install apflow
 - **[Python API](api/python.md)** - Complete Python API reference
 - **[Quick Reference](api/quick-reference.md)** - Cheat sheet with common snippets
 - **[HTTP API](api/http.md)** - A2A Protocol Server HTTP API
+- **[GraphQL API](api/graphql.md)** - GraphQL schema, queries, mutations, subscriptions
 
 **Examples:**
 - **[Basic Examples](examples/basic_task.md)** - Common patterns and use cases
@@ -99,7 +100,6 @@ pip install apflow
 **Development:**
 - **[Development Setup](development/setup.md)** - Set up your development environment
 - **[Contributing](development/contributing.md)** - How to contribute
-- **[Extending](development/extending.md)** - Extend the framework
 - **[Design Documents](development/design/)** - Feature design documents
 
 **Architecture:**
@@ -107,7 +107,8 @@ pip install apflow
 - **[Architecture Diagrams](architecture/diagrams.md)** - Visual diagrams (sequence, flow, state diagrams)
 - **[Directory Structure](architecture/directory-structure.md)** - Code organization
 - **[Extension Registry](architecture/extension-registry-design.md)** - Extension system design
-- **[Naming Conventions](architecture/naming-convention.md)** - Code style guide
+- **[Task Manager](architecture/task-manager.md)** - TaskManager internals
+- **[Exception Handling](architecture/exception-handling.md)** - Error handling standards
 - **[Configuration](architecture/configuration.md)** - Configuration options
 
 ## 🎯 Quick Navigation
@@ -162,6 +163,7 @@ Comprehensive guides for developers:
 - **[FAQ](guides/faq.md)** - Common questions and troubleshooting
 - **[CLI](cli/index.md)** - Command-line interface guide
 - **[API Server](guides/api-server.md)** - API server setup
+- **[Distributed Cluster](guides/distributed-cluster.md)** - Multi-node cluster deployment
 
 ### Examples
 Practical, runnable examples:
@@ -174,6 +176,7 @@ Complete API documentation:
 - **[Python API](api/python.md)** - Core Python library API
 - **[Quick Reference](api/quick-reference.md)** - Cheat sheet
 - **[HTTP API](api/http.md)** - A2A Protocol Server API
+- **[GraphQL API](api/graphql.md)** - GraphQL schema and reference
 
 ### Architecture
 System design and structure:
@@ -181,14 +184,14 @@ System design and structure:
 - **[Architecture Diagrams](architecture/diagrams.md)** - Visual diagrams (sequence, flow, state diagrams)
 - **[Directory Structure](architecture/directory-structure.md)** - Code organization
 - **[Extension Registry](architecture/extension-registry-design.md)** - Extension system
-- **[Naming Conventions](architecture/naming-convention.md)** - Code style
+- **[Task Manager](architecture/task-manager.md)** - TaskManager internals
+- **[Exception Handling](architecture/exception-handling.md)** - Error handling standards
 - **[Configuration](architecture/configuration.md)** - Configuration options
 
 ### Development
 For contributors:
 - **[Development Setup](development/setup.md)** - Development environment
 - **[Contributing](development/contributing.md)** - Contribution guidelines
-- **[Extending](development/extending.md)** - Extend the framework
 - **[Design Documents](development/design/)** - Feature designs
 
 ## 🔗 External Resources
@@ -225,7 +228,7 @@ For contributors:
 1. [Development Setup](development/setup.md) - Set up environment
 2. [Architecture Overview](architecture/overview.md) - Understand design
 3. [Contributing](development/contributing.md) - Learn process
-4. [Extending](development/extending.md) - Extend framework
+4. [Extension Registry Design](architecture/extension-registry-design.md) - Extension system
 
 ## 🎓 Recommended Reading Order
 

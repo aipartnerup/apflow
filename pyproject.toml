@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "apflow"
-version = "0.17.0"
+version = "0.18.0"
 description = "Agent workflow orchestration and execution platform"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -65,6 +65,7 @@ cli = [
 postgres = [
     "asyncpg>=0.29.0",
     "psycopg2-binary>=2.9.9",
+    "greenlet>=3.0.0",
 ]
 
 # CrewAI LLM task support (includes BatchCrewaiExecutor)
@@ -114,6 +115,14 @@ grpc = [
     # "betterproto>=2.0.0rc3",
 ]
 
+# GraphQL Protocol Server (Strawberry GraphQL)
+graphql = [
+    "strawberry-graphql>=0.220.0",
+    "fastapi>=0.115.0",
+    "starlette>=0.27.0",
+    "uvicorn[standard]>=0.29.0",
+]
+
 # MCP (Model Context Protocol) execution
 # Note: MCP executor uses stdio (standard library) and HTTP (httpx from a2a extra)
 # No additional dependencies required for stdio mode
@@ -156,13 +165,14 @@ dev = [
     "twine>=4.0.0",
     "jsonfinder>=0.4.0",
     "pre-commit>=3.0.0",
+    "apdev[dev]>=0.1.2",
     "memory-profiler>=0.61.0",  # Memory profiling for leak detection
     "psutil>=5.9.0",  # System and process utilities for memory monitoring
 ]
 
 # Full installation (all features)
 all = [
-    "apflow[crewai,a2a,cli,postgres,llm-key-config,email,ssh,docker,grpc,mcp,llm,tools,scheduling]",
+    "apflow[crewai,a2a,cli,postgres,llm-key-config,email,ssh,docker,grpc,mcp,graphql,llm,tools,scheduling]",
 ]
 
 [project.scripts]
@@ -193,6 +203,10 @@ python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false
+
+[tool.apdev]
+base_package = "apflow"
+src_dir = "src"
 
 [project.urls]
 Homepage = "https://aipartnerup.com"

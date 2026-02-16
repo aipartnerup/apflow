@@ -16,7 +16,7 @@ Prerequisites:
 Run: python docker_executor_example.py
 """
 
-from apflow import TaskBuilder, execute_tasks
+from apflow import TaskBuilder
 
 
 def simple_container():
