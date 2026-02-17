@@ -1,65 +1,38 @@
 # Quick Start Guide
 
-> **Need more installation options?** See the [Installation Guide](installation.md) for advanced and optional feature setups. This page is for new users to get started quickly.
+> Get started with apflow in 10 minutes. This guide walks you through running tasks, writing custom executors, and setting up task dependencies.
 
-Get started with apflow in 10 minutes. This guide will walk you through creating and executing your first task.
+**Prerequisites:**
 
-## Prerequisites
+- Python 3.10+ (3.12+ recommended)
+- Basic command-line and Python knowledge
 
-- Python 3.10 or higher (3.12+ recommended)
-- Basic command-line knowledge (for CLI usage)
-- Basic Python knowledge (for creating custom executors)
+## Step 0: Install
 
-## Step 0: Installation
+The `standard` extra is recommended for the full experience (CLI, API server, PostgreSQL support):
 
-### Minimal Installation (Core Only)
+```bash
+pip install apflow[standard]
+```
+
+Alternatively, install the minimal core only:
 
 ```bash
 pip install apflow
 ```
 
-This installs the core orchestration framework with no optional dependencies.
+> **Need more options?** See the [Installation Guide](installation.md) for extras like CrewAI, SSH, and A2A Protocol support.
 
-**What you get:**
-- Task orchestration engine (TaskManager)
-- Built-in executors (system_info_executor, command_executor, llm_executor)
-- Storage (DuckDB - no setup needed!)
+## Step 1: Run a Built-in Task via CLI
 
-### Full Installation (All Features)
-
-```bash
-pip install apflow[all]
-```
-
-This includes everything:
-- Core orchestration framework
-- CrewAI support for LLM tasks
-- A2A Protocol Server
-- CLI tools
-- PostgreSQL storage support
-
-**For this tutorial:** 
-- **Step 1 (CLI)**: Minimal installation is enough!
-- **Step 2 (API)**: Install with `[cli]` or `[all]` to get CLI tools for starting the API server
-- **Step 5 (Custom Executors)**: Minimal installation is enough for creating executors
-
-## Step 1: Your First Task (Using CLI)
-
-Let's start with the simplest possible example - using the CLI to execute a built-in executor. No Python code needed!
-
-### What We'll Do
-
-We'll execute a task that gets system information (CPU, memory, disk) using the built-in `system_info_executor` via the command line.
-
-### Execute Your First Task
-
-Open your terminal and run:
+The fastest way to try apflow is through the CLI with a built-in executor. No Python code needed.
 
 ```bash
 apflow run flow system_info_executor --inputs '{"resource": "cpu"}'
 ```
 
-**Expected Output:**
+**Expected output:**
+
 ```json
 {
   "status": "completed",
@@ -69,631 +42,181 @@ apflow run flow system_info_executor --inputs '{"resource": "cpu"}'
   "result": {
     "system": "Darwin",
     "cores": 8,
-    "cpu_count": 8,
-    ...
+    "cpu_count": 8
   }
 }
 ```
 
-### Try Different Resources
-
-You can get different system information by changing the `resource` parameter:
+Try different resource types:
 
 ```bash
-# Get memory information
 apflow run flow system_info_executor --inputs '{"resource": "memory"}'
-
-# Get disk information
 apflow run flow system_info_executor --inputs '{"resource": "disk"}'
-
-# Get all system resources
 apflow run flow system_info_executor --inputs '{"resource": "all"}'
 ```
 
-### What Just Happened?
+**What happened:**
 
-1. **CLI parsed the command**: It identified the executor (`system_info_executor`) and inputs
-2. **Task was created**: A task was automatically created in the database
-3. **Executor was found**: The system automatically found the built-in `system_info_executor`
-4. **Task executed**: The executor ran and collected CPU information
-5. **Result returned**: The result was displayed in JSON format
+1. The CLI parsed the command and identified the executor (`system_info_executor`)
+2. A task was created in the database automatically
+3. The executor ran and collected system information
+4. The result was returned as JSON
 
-**That's it!** You just executed your first task with apflow! 🎉
+## Step 2: Run a Task via Python
 
-### Understanding the Command
-
-Let's break down the command:
-
-```bash
-apflow run flow system_info_executor --inputs '{"resource": "cpu"}'
-```
-
-- `apflow`: The CLI command (short for `apflow`)
-- `run flow`: Execute a task flow
-- `system_info_executor`: The executor ID (built-in executor)
-- `--inputs`: Task input parameters (JSON format)
-- `{"resource": "cpu"}`: Input data - get CPU information
-
-**Note**: This is the "legacy mode" for backward compatibility. For more complex scenarios, you can use the standard mode with task arrays (see Step 4).
-
-## Step 2: Using the API Server
-
-The API server provides an alternative way to execute tasks via HTTP. This is useful for remote access, integration with other systems, or when you prefer HTTP over CLI.
-
-### Start the API Server
-
-In one terminal, start the API server:
-
-```bash
-apflow serve
-```
-
-The server will start on `http://localhost:8000` by default.
-
-### Execute a Task via API
-
-In another terminal (or use the same one), execute a task via HTTP:
-
-```bash
-curl -X POST http://localhost:8000/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tasks.execute",
-    "params": {
-      "tasks": [
-        {
-          "id": "task1",
-          "name": "system_info_executor",
-          "user_id": "user123",
-          "schemas": {
-            "method": "system_info_executor"
-          },
-          "inputs": {
-            "resource": "cpu"
-          }
-        }
-      ]
-    },
-    "id": "request-123"
-  }'
-```
-
-**Expected Response:**
-```json
-{
-  "jsonrpc": "2.0",
-  "id": "request-123",
-  "result": {
-    "status": "completed",
-    "progress": 1.0,
-    "root_task_id": "abc-123-def-456",
-    "task_count": 1,
-    "result": {
-      "system": "Darwin",
-      "cores": 8,
-      ...
-    }
-  }
-}
-```
-
-### Understanding the API Request
-
-The API uses the A2A Protocol (JSON-RPC 2.0 format):
-
-- **method**: `tasks.execute` - Execute a task tree
-- **params.tasks**: Array of task objects
-- **params.tasks[].schemas.method**: Executor ID (must match executor `id`)
-- **params.tasks[].inputs**: Task input parameters
-
-### CLI vs API: When to Use Which?
-
-**Use CLI when:**
-- Local development and testing
-- Quick one-off tasks
-- Scripts and automation
-- No need for remote access
-
-**Use API when:**
-- Remote access needed
-- Integration with other systems
-- Multi-user scenarios
-- Production deployments
-- A2A Protocol integration
-
-**Both share the same database**, so you can:
-- Execute via CLI, query via API
-- Execute via API, query via CLI
-- Mix and match as needed!
-
-### Task Statistics
-You can quickly get an overview of all tasks in the database:
-```bash
-apflow tasks count
-```
-
-## Step 3: Understanding Task Execution
-
-Let's break down what happened in more detail:
-
-### The Components
-
-```
-┌─────────────────────────────────────────────────┐
-│              User Interface                     │
-│  (CLI or API)                                   │
-└─────────────────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────────┐
-│            TaskExecutor                         │
-│  - Creates tasks                                 │
-│  - Manages execution                            │
-│  - Tracks status                                │
-└─────────────────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────────┐
-│         Task (in database)                      │
-│  - name: "system_info_executor"                 │
-│  - inputs: {"resource": "cpu"}                   │
-│  - status: pending → in_progress → completed    │
-└─────────────────────────────────────────────────┘
-                    │
-                    ▼
-┌─────────────────────────────────────────────────┐
-│      Executor (system_info_executor)            │
-│  - Runs the actual code                         │
-│  - Returns the result                           │
-└─────────────────────────────────────────────────┘
-```
-
-### Key Concepts
-
-- **Task**: A unit of work (what you want to do)
-- **Executor**: The code that does the work (how it's done)
-- **TaskExecutor**: Coordinates everything (the conductor)
-- **CLI/API**: User interfaces to interact with the system
-- **Task Tree**: Organizes tasks (even single tasks need a tree)
-
-### Advanced: Direct TaskManager Usage
-
-For advanced use cases, you can use `TaskManager` directly in Python code:
+For programmatic usage, the `TaskBuilder` API provides a fluent interface for creating and executing tasks.
 
 ```python
-from apflow import TaskManager, TaskTreeNode, create_session
+import asyncio
+from apflow.core.builders import TaskBuilder
+from apflow import TaskManager, create_session
 
-db = create_session()
-task_manager = TaskManager(db)
-# ... create and execute tasks
-```
+async def main() -> None:
+    db = create_session()
+    task_manager = TaskManager(db)
 
-**Note**: This is for advanced users. Most use cases work better with CLI or API.
-
-## Step 4: Task Dependencies
-
-Now let's create multiple tasks where one depends on another. This is where apflow really shines!
-
-### Example: Sequential Tasks via CLI
-
-Create a file `tasks.json` with a task array:
-
-```json
-[
-  {
-    "id": "cpu_task",
-    "name": "Get CPU Info",
-    "user_id": "user123",
-    "schemas": {
-      "method": "system_info_executor"
-    },
-    "inputs": {
-      "resource": "cpu"
-    },
-    "priority": 1,
-    "status": "pending"
-  },
-  {
-    "id": "memory_task",
-    "name": "Get Memory Info",
-    "user_id": "user123",
-    "parent_id": "cpu_task",
-    "schemas": {
-      "method": "system_info_executor"
-    },
-    "inputs": {
-      "resource": "memory"
-    },
-    "dependencies": [
-      {
-        "id": "cpu_task",
-        "required": true
-      }
-    ],
-    "priority": 2,
-    "status": "pending"
-  }
-]
-```
-
-Execute via CLI:
-
-```bash
-apflow run flow --tasks-file tasks.json
-```
-
-**What happens:**
-1. `cpu_task` executes first
-2. System waits for `cpu_task` to complete
-3. `memory_task` executes after `cpu_task` completes
-
-### Example: Sequential Tasks via API
-
-Start the API server (if not already running):
-
-```bash
-apflow serve
-```
-
-Execute via API:
-
-```bash
-curl -X POST http://localhost:8000/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tasks.execute",
-    "params": {
-      "tasks": [
-        {
-          "id": "cpu_task",
-          "name": "Get CPU Info",
-          "user_id": "user123",
-          "schemas": {"method": "system_info_executor"},
-          "inputs": {"resource": "cpu"},
-          "priority": 1,
-          "status": "pending"
-        },
-        {
-          "id": "memory_task",
-          "name": "Get Memory Info",
-          "user_id": "user123",
-          "parent_id": "cpu_task",
-          "schemas": {"method": "system_info_executor"},
-          "inputs": {"resource": "memory"},
-          "dependencies": [{"id": "cpu_task", "required": true}],
-          "priority": 2,
-          "status": "pending"
-        }
-      ]
-    },
-    "id": "request-123"
-  }'
-```
-
-### Understanding Dependencies
-
-**Key Point**: `dependencies` control execution order, not `parent_id`!
-
-- **parent_id**: Organizational (like folders) - doesn't affect when tasks run
-- **dependencies**: Execution control - determines when tasks run
-
-In the example above:
-- `memory_task` is a **child** of `cpu_task` (organization via `parent_id`)
-- `memory_task` **depends on** `cpu_task` (execution order via `dependencies`)
-
-### Try It Yourself
-
-Create three tasks in sequence (CPU → Memory → Disk):
-
-**tasks.json:**
-```json
-[
-  {
-    "id": "cpu_task",
-    "name": "Get CPU Info",
-    "user_id": "user123",
-    "schemas": {"method": "system_info_executor"},
-    "inputs": {"resource": "cpu"},
-    "status": "pending"
-  },
-  {
-    "id": "memory_task",
-    "name": "Get Memory Info",
-    "user_id": "user123",
-    "parent_id": "cpu_task",
-    "schemas": {"method": "system_info_executor"},
-    "inputs": {"resource": "memory"},
-    "dependencies": [{"id": "cpu_task", "required": true}],
-    "status": "pending"
-  },
-  {
-    "id": "disk_task",
-    "name": "Get Disk Info",
-    "user_id": "user123",
-    "parent_id": "memory_task",
-    "schemas": {"method": "system_info_executor"},
-    "inputs": {"resource": "disk"},
-    "dependencies": [{"id": "memory_task", "required": true}],
-    "status": "pending"
-  }
-]
-```
-
-Execute:
-```bash
-apflow run flow --tasks-file tasks.json
-```
-
-**Execution Order**: CPU → Memory → Disk (automatic!)
-
-## Step 5: Creating Your Own Executor
-
-Now let's create a custom executor. This is where you add your own business logic!
-
-### Create the Executor
-
-Create a file `my_executor.py`:
-
-```python
-from apflow import BaseTask, executor_register
-from typing import ClassVar, Dict, Any, Literal
-from pydantic import BaseModel, Field
-
-# Define input schema as a Pydantic model
-class GreetingInputSchema(BaseModel):
-    """Input schema for greeting task"""
-    name: str = Field(description="Name of the person to greet")
-    language: Literal["en", "es", "fr", "zh"] = Field(
-        default="en", description="Language for the greeting"
+    result = await (
+        TaskBuilder(task_manager, "system_info_executor")
+        .with_name("get_cpu_info")
+        .with_input("resource", "cpu")
+        .execute()
     )
+    print(result)
+
+asyncio.run(main())
+```
+
+**Key points:**
+
+- `create_session()` returns a database session (DuckDB by default, no setup needed)
+- `TaskBuilder(task_manager, executor_id)` starts the builder chain
+- `.with_name()` sets the task name, `.with_input()` adds input parameters
+- `.execute()` builds the task, runs it, and returns the result
+
+## Step 3: Create a Custom Executor
+
+Create a file `greeting_executor.py` with your own executor:
+
+```python
+from typing import Dict, Any
+
+from apflow.core.base import BaseTask
+from apflow import executor_register
+
 
 @executor_register()
 class GreetingTask(BaseTask):
-    """A simple task that creates personalized greetings"""
+    """A simple task that creates personalized greetings."""
 
-    id = "greeting_task"
+    id = "greeting"
     name = "Greeting Task"
-    description = "Creates a personalized greeting message"
-
-    inputs_schema: ClassVar[type[BaseModel]] = GreetingInputSchema
+    description = "Says hello in multiple languages"
 
     async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        """Execute the task"""
-        name = inputs.get("name", "Guest")
+        name = inputs.get("name", "World")
         language = inputs.get("language", "en")
 
         greetings = {
             "en": f"Hello, {name}!",
-            "es": f"¡Hola, {name}!",
-            "fr": f"Bonjour, {name}!"
+            "es": f"Hola, {name}!",
+            "fr": f"Bonjour, {name}!",
         }
 
-        return {
-            "greeting": greetings.get(language, greetings["en"]),
-            "name": name,
-            "language": language
-        }
+        message = greetings.get(language, greetings["en"])
+        return {"message": message, "language": language}
 ```
 
-### Use Your Custom Executor via CLI
+**How it works:**
 
-To use your custom executor, you need to import it first. Create a simple Python script that imports the executor and then uses CLI:
+- `@executor_register()` automatically registers the executor when the module is imported
+- `BaseTask` provides the base interface; you only need to implement `execute()`
+- `id` is the unique identifier used to reference this executor
 
-**Option A: Import in a wrapper script**
-
-Create `run_greeting.py`:
+**Run it via Python:**
 
 ```python
+import asyncio
+from apflow.core.builders import TaskBuilder
+from apflow import TaskManager, create_session
+
 # Import to register the executor
-from my_executor import GreetingTask
+from greeting_executor import GreetingTask  # noqa: F401
 
-# Now you can use CLI
-import subprocess
-import sys
+async def main() -> None:
+    db = create_session()
+    task_manager = TaskManager(db)
 
-# Run via CLI
-subprocess.run([
-    "apflow", "run", "flow", "greeting_task",
-    "--inputs", '{"name": "Alice", "language": "en"}'
-])
+    result = await (
+        TaskBuilder(task_manager, "greeting")
+        .with_name("greet_alice")
+        .with_input("name", "Alice")
+        .with_input("language", "fr")
+        .execute()
+    )
+    print(result["result"])  # {"message": "Bonjour, Alice!", "language": "fr"}
+
+asyncio.run(main())
 ```
 
-Run it:
-```bash
-python run_greeting.py
-```
-
-**Option B: Direct CLI (after importing in Python session)**
-
-If you're in a Python environment where the executor is already imported:
+**Run it via CLI** (after importing the executor):
 
 ```bash
-apflow run flow greeting_task --inputs '{"name": "Alice", "language": "en"}'
+apflow run flow greeting --inputs '{"name": "Alice", "language": "fr"}'
 ```
 
-**Option C: Use task array format**
+> **Note:** Custom executors must be imported before use. Built-in executors are loaded automatically.
 
-Create `greeting_task.json`:
+## Step 4: Task Dependencies
 
-```json
-[
-  {
-    "id": "greeting1",
-    "name": "Greet Alice",
-    "user_id": "user123",
-    "schemas": {
-      "method": "greeting_task"
-    },
-    "inputs": {
-            "name": "Alice",
-            "language": "en"
-    },
-    "status": "pending"
-  }
-]
-```
-
-Run:
-```bash
-# Make sure executor is imported first (in Python)
-python -c "from my_executor import GreetingTask"
-
-# Then use CLI
-apflow run flow --tasks-file greeting_task.json
-```
-
-### Use Your Custom Executor via API
-
-Start the API server (make sure executor is imported):
-
-```bash
-# In a Python script that imports your executor
-python -c "from my_executor import GreetingTask; import apflow.api.main; apflow.api.main.main()"
-```
-
-Or create `api_server.py`:
+Use `.depends_on()` to chain tasks so one waits for another to finish:
 
 ```python
-from my_executor import GreetingTask  # Import to register
-from apflow.api.main import main
+import asyncio
+from apflow.core.builders import TaskBuilder
+from apflow import TaskManager, create_session
 
-if __name__ == "__main__":
-    main()
+
+async def main() -> None:
+    db = create_session()
+    task_manager = TaskManager(db)
+
+    # Step 1: Build the first task (CPU info)
+    cpu_task = await (
+        TaskBuilder(task_manager, "system_info_executor")
+        .with_name("get_cpu_info")
+        .with_input("resource", "cpu")
+        .build()
+    )
+
+    # Step 2: Build a dependent task (memory info, runs after CPU task)
+    result = await (
+        TaskBuilder(task_manager, "system_info_executor")
+        .with_name("get_memory_info")
+        .with_input("resource", "memory")
+        .depends_on(cpu_task.task.id)
+        .execute()
+    )
+    print(result)
+
+asyncio.run(main())
 ```
 
-Then execute via API:
+**Key points:**
+
+- `.build()` creates the task in the database and returns a `TaskTreeNode` without executing it
+- `.depends_on(*task_ids)` declares that this task must wait for the specified tasks to complete
+- `.execute()` builds and runs the task, respecting all declared dependencies
+
+## Step 5: Start the API Server
+
+apflow includes an A2A Protocol-compatible API server for remote task execution:
 
 ```bash
-curl -X POST http://localhost:8000/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tasks.execute",
-    "params": {
-      "tasks": [
-        {
-          "id": "greeting1",
-          "name": "Greet Alice",
-          "user_id": "user123",
-          "schemas": {"method": "greeting_task"},
-          "inputs": {"name": "Alice", "language": "en"},
-          "status": "pending"
-        }
-      ]
-    },
-    "id": "request-123"
-  }'
+apflow serve --port 8000
 ```
 
-### Understanding Custom Executors
+Execute a task via HTTP:
 
-**What you need to implement:**
-
-1. **id**: Unique identifier (used in `schemas.method` when creating tasks)
-2. **name**: Display name
-3. **description**: What the task does
-4. **execute()**: The actual work (async function)
-5. **get_input_schema()**: Input parameter definition (JSON Schema)
-
-**The `@executor_register()` decorator** automatically registers your executor when imported!
-
-**Important**: The executor must be imported before it can be used. This happens automatically when:
-- You import it in your Python script
-- You import it before starting the API server
-- The extension system loads it (for built-in executors)
-
-## Step 6: Next Steps
-
-Congratulations! You've learned the basics. Here's what to explore next:
-
-### Immediate Next Steps
-
-1. **[Core Concepts](concepts.md)** - Deep dive into the concepts you just used
-2. **[First Steps Tutorial](tutorials/tutorial-01-first-steps.md)** - More detailed beginner tutorial
-3. **[Basic Examples](../examples/basic_task.md)** - Copy-paste ready examples
-
-### Learn More
-
-- **[Task Orchestration Guide](../guides/task-orchestration.md)** - Master task trees and dependencies
-- **[Custom Tasks Guide](../guides/custom-tasks.md)** - Create more complex executors
-- **[Best Practices](../guides/best-practices.md)** - Learn from the experts
-
-### Advanced Topics
-
-- **[Task Trees Tutorial](tutorials/tutorial-02-task-trees.md)** - Build complex workflows
-- **[Dependencies Tutorial](tutorials/tutorial-03-dependencies.md)** - Master dependency management
-
-## Common Patterns
-
-### Pattern 1: Simple Task (No Dependencies)
-
-**Via CLI (Legacy Mode):**
-```bash
-apflow run flow executor_id --inputs '{"key": "value"}'
-```
-
-**Via CLI (Standard Mode - Task Array):**
-```bash
-apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "user_id": "user123", "schemas": {"method": "system_info_executor"}, "inputs": {"resource": "cpu"}, "status": "pending"}]'
-```
-
-**Via API:**
-```bash
-curl -X POST http://localhost:8000/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "tasks.execute",
-    "params": {
-      "tasks": [{
-        "id": "task1",
-        "name": "Task 1",
-        "user_id": "user123",
-        "schemas": {"method": "system_info_executor"},
-        "inputs": {"resource": "cpu"},
-        "status": "pending"
-      }]
-    },
-    "id": "request-123"
-  }'
-```
-
-### Pattern 2: Sequential Tasks (With Dependencies)
-
-**Via CLI (Task Array File):**
-
-Create `tasks.json`:
-```json
-[
-  {
-    "id": "task1",
-    "name": "Get System Info",
-    "user_id": "user123",
-    "schemas": {"method": "system_info_executor"},
-    "inputs": {"resource": "cpu"},
-    "status": "pending"
-  },
-  {
-    "id": "task2",
-    "name": "Process Data",
-    "user_id": "user123",
-    "parent_id": "task1",
-    "schemas": {"method": "command_executor"},
-    "inputs": {"command": "echo 'Processing system info'"},
-    "dependencies": [{"id": "task1", "required": true}],
-    "status": "pending"
-  }
-]
-```
-
-Execute:
-```bash
-apflow run flow --tasks-file tasks.json
-```
-
-**Via API:**
 ```bash
 curl -X POST http://localhost:8000/ \
   -H "Content-Type: application/json" \
@@ -704,20 +227,10 @@ curl -X POST http://localhost:8000/ \
       "tasks": [
         {
           "id": "task1",
-          "name": "Get System Info",
+          "name": "Get CPU Info",
           "user_id": "user123",
           "schemas": {"method": "system_info_executor"},
           "inputs": {"resource": "cpu"},
-          "status": "pending"
-        },
-        {
-          "id": "task2",
-          "name": "Process Data",
-          "user_id": "user123",
-          "parent_id": "task1",
-          "schemas": {"method": "command_executor"},
-          "inputs": {"command": "echo 'Processing system info'"},
-          "dependencies": [{"id": "task1", "required": true}],
           "status": "pending"
         }
       ]
@@ -726,226 +239,104 @@ curl -X POST http://localhost:8000/ \
   }'
 ```
 
-**Execution Order**: Task2 waits for Task1 automatically!
+Check task counts:
 
-### Pattern 3: Parallel Tasks (No Dependencies)
-
-**Via CLI (Task Array File):**
-
-Create `parallel_tasks.json`:
-```json
-[
-  {
-    "id": "task1",
-    "name": "Get CPU Info",
-    "user_id": "user123",
-    "schemas": {"method": "system_info_executor"},
-    "inputs": {"resource": "cpu"},
-    "status": "pending"
-  },
-  {
-    "id": "task2",
-    "name": "Get Memory Info",
-    "user_id": "user123",
-    "schemas": {"method": "system_info_executor"},
-    "inputs": {"resource": "memory"},
-    "status": "pending"
-  }
-]
-```
-
-Execute:
 ```bash
-apflow run flow --tasks-file parallel_tasks.json
+apflow tasks count
 ```
 
-**Note**: Both tasks run in parallel since there are no dependencies between them!
+## Scale to a Distributed Cluster
+
+When you need to scale beyond a single machine, apflow supports distributed cluster mode. Your task code stays the same -- only the runtime configuration changes.
+
+```bash
+# Set PostgreSQL as the shared database
+export APFLOW_DATABASE_URL="postgresql+asyncpg://user:password@localhost/apflow"
+
+# Start the API server (each node runs this)
+apflow serve --port 8000
+```
+
+Multiple nodes share the same database and coordinate task execution automatically.
+
+See the [Distributed Cluster Guide](../guides/distributed-cluster.md) for full setup instructions.
+
+## Next Steps
+
+- **[Core Concepts](concepts.md)** -- Understand tasks, executors, and the orchestration model
+- **[Task Orchestration Guide](../guides/task-orchestration.md)** -- Master task trees and complex workflows
+- **[Executor Selection Guide](../guides/executor-selection.md)** -- Choose the right executor for your use case
+- **[Distributed Cluster Guide](../guides/distributed-cluster.md)** -- Deploy across multiple nodes
+- **[Custom Tasks Guide](../guides/custom-tasks.md)** -- Build advanced executors with schemas and hooks
 
 ## Troubleshooting
 
-### Problem: Task Executor Not Found
+### Executor not found
 
-**Error:** `Task executor not found: executor_id`
+**Error:** `Executor 'my_executor' is not registered as an executor`
 
-**Solutions:**
+**Causes and fixes:**
 
-1. **For built-in executors**: Built-in executors are automatically available. If you get this error:
-   - Make sure you've installed the required extension: `pip install apflow[extension_name]`
-   - Check that the executor ID is correct (e.g., `system_info_executor`, not `system_info`)
+- For built-in executors, verify the executor ID is correct (e.g., `system_info_executor`, not `system_info`).
+- For custom executors, ensure the module is imported before use and the `@executor_register()` decorator is applied.
+- The `schemas.method` field in API requests must match the executor `id` exactly.
 
-2. **For custom executors**: Make sure you:
-   - Used `@executor_register()` decorator
-   - Imported the executor class before using it
-   - The `schemas.method` field matches the executor `id`
-   - For CLI: Import executor in a Python script before running CLI command
-   - For API: Import executor before starting the API server
+### CLI command not found
 
-**Example (Custom Executor):**
-```python
-# my_script.py
-from my_executor import GreetingTask  # Import to register
+**Error:** `command not found: apflow`
 
-# Now you can use CLI or API
-```
-
-### Problem: Task Stays in "pending" Status
-
-**Possible causes:**
-- Dependencies not satisfied (check if dependency tasks are completed)
-- Executor not found (see above)
-- Task not executed (make sure you called the CLI command or API endpoint)
-
-**Solution - Check Task Status:**
-
-**Via CLI:**
-```bash
-# Check status of a specific task
-apflow tasks status <task_id>
-
-# List all running tasks
-apflow tasks list
-
-# Get full task details
-apflow tasks get <task_id>
-```
-
-**Via API:**
-```bash
-# Check task status
-curl http://localhost:8000/api/tasks/<task_id>/status
-
-# Get task details
-curl http://localhost:8000/api/tasks/<task_id>
-```
-
-**Check for errors:**
-- Look at the `error` field in the task result
-- Check CLI output or API response for error messages
-- Review task logs if available
-
-### Problem: CLI Command Not Found
-
-**Error:** `command not found: apflow` or `command not found: apflow`
-
-**Solution:**
 ```bash
 # Install with CLI support
 pip install apflow[cli]
 
-# Or install everything
-pip install apflow[all]
+# Or install the standard bundle
+pip install apflow[standard]
 
-# Verify installation
-apflow --version
-# Or
+# Verify
 apflow --version
 ```
 
-### Problem: API Server Won't Start
+### Task stays in "pending" status
 
-**Error:** Port already in use or server won't start
+- Check that dependency tasks have completed successfully.
+- Verify the executor is registered (see "Executor not found" above).
+- Inspect task details:
 
-**Solutions:**
 ```bash
-# Use a different port
+apflow tasks get <task_id>
+```
+
+### API server won't start
+
+```bash
+# Try a different port
 apflow serve --port 8080
-```
 
-# Check if port is in use
+# Check if the default port is in use
 lsof -i :8000
-
-# Kill process using the port (if needed)
-kill -9 <PID>
 ```
 
-### Problem: Database Error
+### Database connection error
 
-**Error:** Database connection issues
+By default, apflow uses DuckDB with no setup required. The database file is created automatically.
 
-**Solution:**
-- **DuckDB (default)**: No setup needed! It just works. Database file is created automatically at `~/.aipartnerup/data/apflow.duckdb`
-- **PostgreSQL**: Set environment variable:
-  ```bash
-  export DATABASE_URL="postgresql+asyncpg://user:password@localhost/dbname"
-  ```
-- **Check database connection:**
-  ```bash
-  # For DuckDB, check if file exists
-  ls ~/.aipartnerup/data/apflow.duckdb
-  
-  # For PostgreSQL, test connection
-  psql $DATABASE_URL -c "SELECT 1;"
-  ```
+For PostgreSQL, set the connection string:
 
-### Problem: Custom Executor Not Found When Using CLI
-
-**Error:** Custom executor not registered when running CLI command
-
-**Solution:**
-Custom executors must be imported before they can be used. For CLI usage:
-
-**Option 1: Import in a wrapper script**
-```python
-# run_my_task.py
-from my_executor import MyExecutor  # Import to register
-import subprocess
-
-subprocess.run(["apflow", "run", "flow", "my_executor", "--inputs", '{"key": "value"}'])
-```
-
-**Option 2: Use Python to import, then CLI**
 ```bash
-# Import executor first
-python -c "from my_executor import MyExecutor"
-
-# Then use CLI (in same shell session)
-apflow run flow my_executor --inputs '{"key": "value"}'
+export APFLOW_DATABASE_URL="postgresql+asyncpg://user:password@localhost/apflow"
 ```
 
-**Option 3: Use task array with Python wrapper**
-Create a Python script that imports the executor and then calls the CLI with task array format.
-
-### Problem: Import Error
+### Import error
 
 **Error:** `ModuleNotFoundError: No module named 'apflow'`
 
-**Solution:**
 ```bash
 pip install apflow
 
-# Or with specific features
-pip install apflow[cli]
-pip install apflow[all]
+# Or with all features
+pip install apflow[standard]
 ```
-
-## Try It Yourself
-
-### Exercise 1: Multiple System Checks
-
-Create tasks to check CPU, memory, and disk using CLI or API, then view the aggregated results.
-
-**Hint:** Use the `system_info_executor` with different `resource` values, or create a task array with multiple tasks.
-
-### Exercise 2: Custom Greeting in Multiple Languages
-
-Use the `GreetingTask` example to create greetings in different languages via CLI or API, then combine them.
-
-**Hint:** Create multiple tasks with different `language` inputs, or create a task array with sequential dependencies.
-
-### Exercise 3: Sequential Processing
-
-Create a pipeline: fetch data → process data → save results (each step depends on the previous).
-
-**Hint:** Use task dependencies to ensure proper execution order. You can use built-in executors or create custom ones for each step.
-
-## Getting Help
-
-- **Stuck?** Check the [FAQ](../guides/faq.md)
-- **Need examples?** See [Basic Examples](../examples/basic_task.md)
-- **Want to understand concepts?** Read [Core Concepts](concepts.md)
-- **Found a bug?** [Report it on GitHub](https://github.com/aipartnerup/apflow/issues)
-- **Have questions?** [Ask on Discussions](https://github.com/aipartnerup/apflow/discussions)
 
 ---
 
-**Ready for more?** → [Learn Core Concepts →](concepts.md) or [Try the First Steps Tutorial →](tutorials/tutorial-01-first-steps.md)
+**Ready for more?** Continue to [Core Concepts](concepts.md) or explore the [Task Orchestration Guide](../guides/task-orchestration.md).

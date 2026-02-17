@@ -24,15 +24,15 @@ Single process, DuckDB storage, zero configuration. Ideal for development, testi
 from apflow.core.builders import TaskBuilder
 from apflow import TaskManager, create_session
 
-async with create_session() as db:
-    task_manager = TaskManager(db)
-    result = await (
-        TaskBuilder(task_manager, "rest_executor")
-        .with_name("fetch_data")
-        .with_input("url", "https://api.example.com/data")
-        .with_input("method", "GET")
-        .execute()
-    )
+db = create_session()
+task_manager = TaskManager(db)
+result = await (
+    TaskBuilder(task_manager, "rest_executor")
+    .with_name("fetch_data")
+    .with_input("url", "https://api.example.com/data")
+    .with_input("method", "GET")
+    .execute()
+)
 ```
 
 ### Distributed Cluster (Production)
