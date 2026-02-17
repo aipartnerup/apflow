@@ -421,7 +421,7 @@ The API server supports distributed cluster mode for high availability and horiz
 
 ### Enabling Cluster Mode
 
-Set `APFLOW_CLUSTER_ENABLED=true` and provide a PostgreSQL `DATABASE_URL`:
+Set `APFLOW_CLUSTER_ENABLED=true` and provide a PostgreSQL `APFLOW_DATABASE_URL`:
 
 ```bash
 export APFLOW_CLUSTER_ENABLED=true
