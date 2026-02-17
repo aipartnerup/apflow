@@ -46,7 +46,6 @@ nav:
   - Home: index.md
   - Getting Started:
     - Overview: getting-started/index.md
-    - Hello World: getting-started/hello-world.md
     - Quick Start: getting-started/quick-start.md
     - Installation: getting-started/installation.md
     - Core Concepts: getting-started/concepts.md
