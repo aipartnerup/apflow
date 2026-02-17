@@ -4,417 +4,150 @@
   <img src="apflow-logo.svg" alt="apflow Logo" width="128" height="128" />
 </p>
 
+**Distributed Task Orchestration Framework**
 
-**Task Orchestration and Execution Framework**
+apflow is a distributed task orchestration framework that scales from a single process to multi-node clusters. It provides a unified execution interface with 12+ built-in executors, A2A protocol support, and automatic leader election with failover.
 
-## Core Positioning
+Start standalone in 30 seconds. Scale to distributed clusters without code changes.
 
-The core of `apflow` is **task orchestration and execution specifications**. It provides a unified task orchestration framework that supports execution of multiple task types. The core is **pure orchestration** with no LLM dependencies - CrewAI support is optional.
+## Deployment Modes
 
-**Core includes:**
-- Task orchestration specifications (TaskManager)
-- Core interfaces (ExecutableTask, BaseTask, TaskStorage)
-- Storage (DuckDB default, PostgreSQL optional)
-- **NO CrewAI dependency** (available via [crewai] extra)
-
-**Optional features:**
-- **CrewAI Support** [crewai]: LLM-based agent crews via CrewaiExecutor (task executor implementation)
-- **HTTP/REST Executor** [http]: Remote API calls via RestExecutor (task executor implementation)
-- **SSH Executor** [ssh]: Remote command execution via SSH (task executor implementation)
-- **Docker Executor** [docker]: Containerized command execution (task executor implementation)
-- **gRPC Executor** [grpc]: gRPC service calls (task executor implementation)
-- **WebSocket Executor**: Bidirectional WebSocket communication (task executor implementation)
-- **apflow API Executor**: Inter-instance API calls for distributed execution (task executor implementation)
-- **MCP Executor**: Model Context Protocol executor for accessing external tools and data sources (task executor implementation)
-- **MCP Server** [a2a]: MCP (Model Context Protocol) server exposing task orchestration as MCP tools and resources
-- **LLM Executor** [llm]: Direct LLM interaction via LiteLLM (supports OpenAI, Anthropic, Gemini, etc.)
-- **A2A Protocol Server** [a2a]: A2A Protocol Server (A2A Protocol is the standard protocol for agent communication)
-- **CLI Tools** [cli]: Command-line interface
-
-**Note**: CrewaiExecutor and future executors are all implementations of the `ExecutableTask` interface. Each executor handles different types of task execution (LLM, HTTP, etc.).
-
-## Core Features
-
-### Task Orchestration Specifications (Core)
-- **TaskManager**: Task tree orchestration, dependency management, priority scheduling
-- **Unified Execution Specification**: All task types unified through the `ExecutableTask` interface
-
-### Task Execution Types
-
-All task executors implement the `ExecutableTask` interface:
-
-- **Custom Tasks** (core): Users implement `ExecutableTask` for their own task types
-- **CrewaiExecutor** [crewai]: LLM-based task execution via CrewAI (built-in executor)
-- **RestExecutor** [http]: HTTP/REST API calls with authentication and retry (built-in executor)
-- **SshExecutor** [ssh]: Remote command execution via SSH (built-in executor)
-- **DockerExecutor** [docker]: Containerized command execution (built-in executor)
-- **GrpcExecutor** [grpc]: gRPC service calls (built-in executor)
-- **WebSocketExecutor**: Bidirectional WebSocket communication (built-in executor)
-- **ApFlowApiExecutor**: Inter-instance API calls for distributed execution (built-in executor)
-- **McpExecutor**: Model Context Protocol executor for accessing external tools and data sources (built-in executor)
-- **GenerateExecutor**: Generate task tree JSON arrays from natural language requirements using LLM (built-in executor)
-- **LLMExecutor** [llm]: Direct LLM interaction via LiteLLM (supports 100+ providers)
-- **BatchCrewaiExecutor** [crewai]: Batch orchestration container (batches multiple crews)
-
-### Supporting Features
-- **Storage**: Task state persistence (DuckDB default, PostgreSQL optional)
-- **Unified External API**: A2A Protocol Server (HTTP, SSE, WebSocket) [a2a]
-- **Real-time Progress Streaming**: Streaming support via A2A Protocol
-- **CLI Tools**: Command-line interface [cli]
-
-### Protocol Standard
-- **A2A Protocol**: The framework adopts **A2A (Agent-to-Agent) Protocol** as the standard protocol for agent communication. A2A Protocol is a mature, production-ready specification designed specifically for AI Agent systems, providing:
-  - Agent-to-agent standardized communication interface
-  - Streaming task execution support
-  - Agent capability description mechanism (AgentCard, AgentSkill)
-  - Multiple transport methods (HTTP, SSE, WebSocket)
-  - Task management and status tracking
-  - JWT authentication support
-
-## Installation
-
-### Core Library (Minimum - Pure Orchestration Framework)
+### Standalone (Development and Small Workloads)
 
 ```bash
 pip install apflow
 ```
 
-**Includes**: Task orchestration specifications, core interfaces, storage (DuckDB)
-**Excludes**: CrewAI, batch execution, API server, CLI tools
+Single process, DuckDB storage, zero configuration. Ideal for development, testing, and small-scale automation.
 
-### With Optional Features
+```python
+from apflow.core.builders import TaskBuilder
+from apflow import TaskManager, create_session
+
+async with create_session() as db:
+    task_manager = TaskManager(db)
+    result = await (
+        TaskBuilder(task_manager, "rest_executor")
+        .with_name("fetch_data")
+        .with_input("url", "https://api.example.com/data")
+        .with_input("method", "GET")
+        .execute()
+    )
+```
+
+### Distributed Cluster (Production)
 
 ```bash
-# Standard installation (recommended for most use cases)
-# Includes A2A server, CLI tools, CrewAI, and LLM support
 pip install apflow[standard]
-
-# Individual features:
-# CrewAI LLM task support (includes batch)
-pip install apflow[crewai]
-# Includes: CrewaiExecutor for LLM-based agent crews
-#           BatchCrewaiExecutor for atomic batch execution of multiple crews
-
-# A2A Protocol Server (Agent-to-Agent communication protocol)
-pip install apflow[a2a]
-# Run A2A server: python -m apflow.api.main
-# Or: apflow-server (CLI command)
-
-# CLI tools
-pip install apflow[cli]
-# Run CLI: apflow or apflow
-
-# PostgreSQL storage
-pip install apflow[postgres]
-
-# SSH executor (remote command execution)
-pip install apflow[ssh]
-
-# Docker executor (containerized execution)
-pip install apflow[docker]
-
-# gRPC executor (gRPC service calls)
-pip install apflow[grpc]
-
-# LLM support (LiteLLM, supports 100+ providers)
-pip install apflow[llm]
-
-# Everything (includes all extras)
-pip install apflow[all]
 ```
 
-## 🚀 Quick Start
-
-Get started with apflow in minutes!
-
-### Installation
+PostgreSQL-backed, leader/worker topology with automatic leader election, task leasing, and horizontal scaling. Same application code -- only the runtime environment changes.
 
 ```bash
-# Minimal installation (core only)
-pip install apflow
-
-# With all features
-pip install apflow[all]
-```
-
-### As a Library (Pure Core)
-
-**Using Task Orchestration Specifications:**
-
-```python
-from apflow import TaskManager, TaskTreeNode, create_session
-
-# Create database session and task manager (core)
-db = create_session()  # or: db = get_default_session()
-task_manager = TaskManager(db)
-
-# Create task tree (task orchestration)
-# Use task_repository to create tasks
-root_task = await task_manager.task_repository.create_task(
-    name="root_task",
-    user_id="user_123",
-    priority=2
-)
-
-child_task = await task_manager.task_repository.create_task(
-    name="custom_task",  # Task name corresponds to specific executor
-    user_id="user_123",
-    parent_id=root_task.id,
-    dependencies=[],  # Dependency relationships
-    inputs={"url": "https://example.com"}
-)
-
-# Build task tree and execute (task orchestration core)
-task_tree = TaskTreeNode(root_task)
-task_tree.add_child(TaskTreeNode(child_task))
-result = await task_manager.distribute_task_tree(task_tree)
-```
-
-**Creating Custom Tasks (Traditional External Service Calls):**
-
-```python
-from apflow import ExecutableTask
-from typing import Dict, Any
-import aiohttp
-
-class APICallTask(ExecutableTask):
-    """Traditional external API call task"""
-    
-    id = "api_call_task"
-    name = "API Call Task"
-    description = "Call external API service"
-    
-    async def execute(self, inputs: Dict[str, Any]) -> Dict[str, Any]:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(inputs["url"], json=inputs.get("data")) as response:
-                result = await response.json()
-                return {"status": "completed", "result": result}
-    
-    def get_input_schema(self) -> Dict[str, Any]:
-        return {
-            "type": "object",
-            "properties": {
-                "url": {"type": "string", "description": "API endpoint"},
-                "data": {"type": "object", "description": "Request data"}
-            }
-        }
-```
-
-### With Fluent API (TaskBuilder)
-
-**Using TaskBuilder for fluent task creation:**
-
-```python
-from apflow import TaskManager, TaskBuilder, create_session
-
-# Create database session and task manager
-db = create_session()
-task_manager = TaskManager(db)
-
-# Use fluent API to create and execute tasks
-result = await (
-    TaskBuilder(task_manager, "rest_executor")
-    .with_name("fetch_user_data")
-    .with_user("user_123")
-    .with_input("url", "https://api.example.com/users")
-    .with_input("method", "GET")
-    .execute()
-)
-```
-
-### With CrewAI Support [crewai]
-
-**Executing CrewAI (LLM) Tasks:**
-
-```python
-# Requires: pip install apflow[crewai]
-from apflow.extensions.crewai import CrewaiExecutor
-
-# CrewAI task execution
-crew = CrewaiExecutor(
-    name="Analysis Crew",
-    agents=[{"role": "Analyst", "goal": "Analyze data"}],
-    tasks=[{"description": "Analyze input", "agent": "Analyst"}]
-)
-result = await crew.execute(inputs={...})
-```
-
-### With Batch Support [crewai]
-
-**Using BatchCrewaiExecutor to batch multiple crews (atomic operation):**
-
-```python
-# Requires: pip install apflow[crewai]
-from apflow.extensions.crewai import BatchCrewaiExecutor, CrewaiExecutor
-
-# BatchCrewaiExecutor is a batch container - executes multiple crews as atomic operation
-batch = BatchCrewaiExecutor(
-    id="my_batch",
-    name="Batch Analysis",
-    works={
-        "data_collection": {
-            "agents": [{"role": "Collector", "goal": "Collect data"}],
-            "tasks": [{"description": "Collect data", "agent": "Collector"}]
-        },
-        "data_analysis": {
-            "agents": [{"role": "Analyst", "goal": "Analyze data"}],
-            "tasks": [{"description": "Analyze data", "agent": "Analyst"}]
-        }
-    }
-)
-
-# All crews execute sequentially, results are merged
-# If any crew fails, entire batch fails (atomic)
-result = await batch.execute(inputs={...})
-```
-
-### CLI Usage
-
-```bash
-# Run tasks (standard mode - recommended)
-apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"key": "value"}}]'
-
-# Or use the shorthand
-apflow run flow --tasks '[{"id": "task1", "name": "Task 1", "schemas": {"method": "executor_id"}, "inputs": {"key": "value"}}]'
-
-# Or legacy mode (executor ID + inputs)
-apflow run flow executor_id --inputs '{"key": "value"}'
-
-# Start API server
+# Leader node
+APFLOW_CLUSTER_ENABLED=true \
+APFLOW_DATABASE_URL=postgresql+asyncpg://user:pass@db:5432/apflow \
+APFLOW_NODE_ROLE=auto \
 apflow serve --port 8000
 
-# Start daemon mode
-apflow daemon start
-
-# Stop daemon mode
-apflow daemon stop
+# Worker node (on additional machines)
+APFLOW_CLUSTER_ENABLED=true \
+APFLOW_DATABASE_URL=postgresql+asyncpg://user:pass@db:5432/apflow \
+APFLOW_NODE_ROLE=worker \
+apflow serve --port 8001
 ```
 
-### A2A Protocol Server
+Add worker nodes at any time. The cluster auto-discovers them via the shared database.
 
-The `[a2a]` extra provides an **A2A (Agent-to-Agent) Protocol** server built on Starlette/FastAPI.
+## Installation Options
 
-```python
-from apflow.api import create_app
+| Extra | Command | Includes |
+|-------|---------|----------|
+| Core | `pip install apflow` | Task orchestration, DuckDB storage, core executors |
+| Standard | `pip install apflow[standard]` | Core + A2A server + CLI + CrewAI + LLM + tools |
+| A2A Server | `pip install apflow[a2a]` | A2A Protocol server (HTTP/SSE/WebSocket) |
+| CLI | `pip install apflow[cli]` | Command-line interface |
+| PostgreSQL | `pip install apflow[postgres]` | PostgreSQL storage (required for distributed) |
+| CrewAI | `pip install apflow[crewai]` | LLM-based agent crews |
+| LLM | `pip install apflow[llm]` | Direct LLM via LiteLLM (100+ providers) |
+| SSH | `pip install apflow[ssh]` | Remote command execution |
+| Docker | `pip install apflow[docker]` | Containerized execution |
+| gRPC | `pip install apflow[grpc]` | gRPC service calls |
+| Email | `pip install apflow[email]` | Email sending (SMTP) |
+| All | `pip install apflow[all]` | Everything |
 
-# Create A2A protocol server app
-app = create_app()
+## Built-in Executors
 
-# Run with: uvicorn app:app --port 8000
-# Or use the entry point: apflow-server
+| Executor | Purpose | Extra |
+|----------|---------|-------|
+| RestExecutor | HTTP/REST API calls with auth and retry | core |
+| CommandExecutor | Local shell command execution | core |
+| SystemInfoExecutor | System information collection | core |
+| ScrapeExecutor | Web page scraping | core |
+| WebSocketExecutor | Bidirectional WebSocket communication | core |
+| McpExecutor | Model Context Protocol tools and data sources | core |
+| ApFlowApiExecutor | Inter-instance API calls for distributed execution | core |
+| AggregateResultsExecutor | Aggregate results from multiple tasks | core |
+| SshExecutor | Remote command execution via SSH | [ssh] |
+| DockerExecutor | Containerized command execution | [docker] |
+| GrpcExecutor | gRPC service calls | [grpc] |
+| SendEmailExecutor | Send emails via SMTP or Resend API | [email] |
+| CrewaiExecutor | LLM agent crews via CrewAI | [crewai] |
+| BatchCrewaiExecutor | Atomic batch of multiple crews | [crewai] |
+| LLMExecutor | Direct LLM interaction via LiteLLM | [llm] |
+| GenerateExecutor | Natural language to task tree via LLM | [llm] |
+
+## Architecture
+
+```
+                    +--------------------------+
+                    |    Client / CLI / API     |
+                    +------------+-------------+
+                                 |
+              +------------------+------------------+
+              |                  |                   |
+    +---------v--------+ +------v------+ +----------v--------+
+    |   Leader Node     | | Worker Node | |   Worker Node      |
+    |  (auto-elected)   | |             | |                    |
+    |  - Task placement | |  - Execute  | |  - Execute         |
+    |  - Lease mgmt     | |  - Heartbeat| |  - Heartbeat       |
+    |  - Execute        | |             | |                    |
+    +---------+--------+ +------+------+ +----------+--------+
+              |                  |                   |
+              +------------------+------------------+
+                                 |
+                    +------------v-------------+
+                    |  PostgreSQL (shared)      |
+                    |  - Task state             |
+                    |  - Leader lease           |
+                    |  - Node registry          |
+                    +--------------------------+
 ```
 
-**Note**: The current `[a2a]` extra focuses on A2A protocol support. Future versions may
-include additional FastAPI REST API endpoints for direct HTTP access without the A2A protocol.
+*Standalone mode uses the same architecture with a single node and DuckDB storage.*
 
-## Architecture Design
+## Documentation
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│              Unified External API Interface Layer            │
-│  - A2A Protocol Server (HTTP/SSE/WebSocket) [a2a]          │
-│  - CLI Tools [cli]                                          │
-└─────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────┐
-│        Task Orchestration Specification Layer (CORE)         │
-│        - TaskManager: Task tree orchestration, dependency  │
-│          management, priority scheduling                     │
-│        - ExecutableTask: Unified task interface             │
-└─────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    Task Execution Layer                      │
-│  - Custom Tasks [core]: ExecutableTask implementations      │
-│    • Traditional external service calls (API, DB, etc.)     │
-│    • Automated task services (scheduled tasks, workflows)  │
-│  - CrewaiExecutor [crewai]: CrewAI (LLM) task execution        │
-│  - BatchCrewaiExecutor [crewai]: Batch task orchestration           │
-└─────────────────────────────────────────────────────────────┘
-                          ↓
-┌─────────────────────────────────────────────────────────────┐
-│                    Supporting Features Layer                │
-│  - Storage: Task state persistence (DuckDB/PostgreSQL)     │
-│  - Streaming: Real-time progress updates                    │
-└─────────────────────────────────────────────────────────────┘
-```
+- [Getting Started](docs/getting-started/quick-start.md) -- Up and running in 10 minutes
+- [Distributed Cluster Guide](docs/guides/distributed-cluster.md) -- Multi-node deployment
+- [Executor Selection Guide](docs/guides/executor-selection.md) -- Choose the right executor
+- [API Reference](docs/api/python.md) -- Python API documentation
+- [Architecture Overview](docs/architecture/overview.md) -- Design and internals
+- [Protocol Specification](docs/protocol/index.md) -- A2A Protocol spec
 
-## Project Structure
+Full documentation: [flow-docs.aipartnerup.com](https://flow-docs.aipartnerup.com)
 
-See [docs/architecture/directory-structure.md](docs/architecture/directory-structure.md) for detailed directory structure and module descriptions.
+## Contributing
 
-**Installation Strategy**:
-- `pip install apflow`: Core library only (execution, base, storage, utils) - **NO CrewAI**
-- `pip install apflow[standard]`: Core + A2A server + CLI tools + CrewAI + LLM support (recommended)
-- `pip install apflow[crewai]`: Core + CrewAI support (includes BatchCrewaiExecutor)
-- `pip install apflow[a2a]`: Core + A2A Protocol Server
-- `pip install apflow[cli]`: Core + CLI tools
-- `pip install apflow[all]`: Full installation (all features)
+Contributions are welcome. See [Contributing Guide](docs/development/contributing.md) for setup and guidelines.
 
-**Note**: For examples and learning templates, see the test cases in `tests/integration/` and `tests/extensions/`.
-
-## 📚 Documentation
-
-**Quick Links:**
-- **[🚀 Quick Start](docs/getting-started/quick-start.md)** - Get running in 10 minutes
-- **[📝 Guides](docs/guides/)** - Comprehensive guides
-- **[💡 Examples](docs/examples/)** - Practical examples
-- **[🔧 API Reference](docs/api/)** - Complete API documentation
-
-**For New Users:**
-- Start with [Getting Started](docs/getting-started/index.md)
-- Read [Concepts](docs/getting-started/concepts.md)
-- Follow the [Quick Start Guide](docs/getting-started/quick-start.md)
-- Try the [First Steps Tutorial](docs/getting-started/tutorials/tutorial-01-first-steps.md)
-- Explore more [Examples](docs/getting-started/examples.md)
-
-**For Developers:**
-- [Task Orchestration Guide](docs/guides/task-orchestration.md)
-- [Custom Tasks Guide](docs/guides/custom-tasks.md)
-- [Best Practices](docs/guides/best-practices.md)
-- [Library Usage Guide](docs/guides/library-usage.md)
-- [API Server Guide](docs/guides/api-server.md)
-- [CLI Reference](docs/cli/index.md)
-- [Environment Variables](docs/guides/environment-variables.md)
-- [FAQ](docs/guides/faq.md)
-- [Python API Reference](docs/api/python.md)
-- [HTTP API Reference](docs/api/http.md)
-
-**Architecture & Design:**
-- [Architecture Overview](docs/architecture/overview.md)
-- [Directory Structure](docs/architecture/directory-structure.md)
-- [Task Tree Lifecycle](docs/architecture/task-tree-lifecycle.md)
-- [Configuration](docs/architecture/configuration.md)
-- [Extension Registry Design](docs/architecture/extension-registry-design.md)
-
-**For Contributors:**
-- [Development Setup](docs/development/setup.md)
-- [Contributing Guide](docs/development/contributing.md)
-- [Custom Tasks Guide](docs/guides/custom-tasks.md)
-- [Exception Handling](docs/architecture/exception-handling.md)
-- [Roadmap](docs/development/roadmap.md)
-
-**Examples & Templates:**
-- [Basic Task Example](docs/examples/basic_task.md)
-- [Task Tree Example](docs/examples/task-tree.md)
-- [Generate Executor Example](docs/examples/generate-executor.md)
-- [Real-World Examples](docs/examples/real-world.md)
-
-Full documentation is also available at [flow-docs.aipartnerup.com](https://flow-docs.aipartnerup.com).
-
-## 🤝 Contributing
-
-Contributions are welcome! Please see our [Contributing Guide](docs/development/contributing.md) for setup instructions and contribution guidelines.
-
-## 📄 License
+## License
 
 Apache-2.0
 
-## 🔗 Links
+## Links
 
-- **Documentation**: [docs/index.md](docs/README.md) - Complete documentation
+- **Documentation**: [flow-docs.aipartnerup.com](https://flow-docs.aipartnerup.com)
 - **Website**: [aipartnerup.com](https://aipartnerup.com)
 - **GitHub**: [aipartnerup/apflow](https://github.com/aipartnerup/apflow)
 - **PyPI**: [apflow](https://pypi.org/project/apflow/)
-- **Issues**: [GitHub Issues](https://github.com/aipartnerup/apflow/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/aipartnerup/apflow/discussions)
