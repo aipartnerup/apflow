@@ -1,156 +1,107 @@
 # Installation
 
-> **Looking for a step-by-step beginner tutorial?** See the [Quick Start Guide](quick-start.md) for a hands-on introduction. This page lists all installation options and extras.
+> **Looking for a step-by-step beginner tutorial?** See the [Quick Start Guide](quick-start.md) for a hands-on introduction. This page covers all installation options.
 
-apflow can be installed with different feature sets depending on your needs.
+## Choose Your Deployment Mode
 
-## Core Library (Minimum)
+apflow supports two deployment modes. Choose the one that fits your use case:
 
-The core library provides pure task orchestration without any LLM dependencies:
+| Feature | Standalone | Distributed Cluster |
+|---------|-----------|---------------------|
+| Storage | DuckDB (built-in) | PostgreSQL |
+| Nodes | Single process | Multi-node (leader + workers) |
+| Setup | Zero configuration | Requires PostgreSQL + env vars |
+| Install | `pip install apflow` | `pip install apflow[standard]` |
+| Best for | Development, testing, small workloads | Production, scaling, high availability |
+
+## Standalone Installation
+
+Install the core library with no additional setup required:
 
 ```bash
 pip install apflow
 ```
 
-**Includes:**
-- Task orchestration specifications (TaskManager)
-- Core interfaces (ExecutableTask, BaseTask, TaskStorage)
-- Storage (DuckDB default)
-- **NO CrewAI dependency**
+**What's included:**
 
-**Excludes:**
-- CrewAI support
-- Batch execution
-- API server
+- Task orchestration framework (TaskManager, ExecutableTask, BaseTask)
+- DuckDB storage (embedded, zero-configuration)
+- Core interfaces and storage layer (TaskStorage, SQLAlchemy)
+
+This is everything you need to define, run, and track tasks on a single machine. No external databases or services required -- start using apflow immediately after install.
+
+## Distributed Cluster Installation
+
+For production deployments with multiple nodes, install the standard bundle:
+
+```bash
+pip install apflow[standard]
+```
+
+**What's included (on top of core):**
+
+- A2A Protocol Server (agent-to-agent communication)
 - CLI tools
+- CrewAI executor and batch execution
+- LLM execution via LiteLLM
+- Web tools (requests, BeautifulSoup, trafilatura)
+- Task scheduling (cron-like)
 
-## With Optional Features
+**Prerequisites:**
 
-### CrewAI Support
+- A running PostgreSQL database (install the `postgres` extra separately: `pip install apflow[standard,postgres]`)
 
-```bash
-pip install apflow[crewai]
-```
-
-**Includes:**
-- CrewaiExecutor for LLM-based agent crews
-- BatchCrewaiExecutor for atomic batch execution of multiple crews
-
-### A2A Protocol Server
+**Quick setup:**
 
 ```bash
-pip install apflow[a2a]
+# Set required environment variables
+export APFLOW_DATABASE_URL="postgresql://user:pass@host:5432/apflow"
+export APFLOW_NODE_ROLE="leader"   # or "worker"
+
+# Start the server
+apflow serve
 ```
 
-**Includes:**
-- A2A Protocol Server for agent-to-agent communication
-- HTTP, SSE, and WebSocket support
+For complete deployment instructions including leader/worker configuration, networking, and production hardening, see the [Distributed Cluster Guide](../guides/distributed-cluster.md).
 
-**Usage:**
-```bash
-# Run A2A server
-python -m apflow.api.main
+## Optional Extras
 
-# Or use the CLI command
-apflow-server
-```
+Individual extras can be installed separately or combined. For example: `pip install apflow[cli,postgres]`.
 
-### CLI Tools
+| Extra | Install | Description |
+|-------|---------|-------------|
+| `standard` | `pip install apflow[standard]` | Recommended bundle: a2a, cli, crewai, llm, tools, scheduling |
+| `a2a` | `pip install apflow[a2a]` | A2A Protocol Server for agent-to-agent communication (HTTP, SSE, WebSocket) |
+| `cli` | `pip install apflow[cli]` | Command-line interface (`apflow` command) |
+| `crewai` | `pip install apflow[crewai]` | CrewAI executor for LLM-based agent crews, plus batch execution |
+| `postgres` | `pip install apflow[postgres]` | PostgreSQL storage for distributed/production deployments |
+| `llm` | `pip install apflow[llm]` | LLM execution via LiteLLM |
+| `email` | `pip install apflow[email]` | Email executor (Resend API and SMTP) |
+| `ssh` | `pip install apflow[ssh]` | SSH executor for remote command execution |
+| `docker` | `pip install apflow[docker]` | Docker executor for containerized execution |
+| `grpc` | `pip install apflow[grpc]` | gRPC executor for service calls |
+| `mcp` | `pip install apflow[mcp]` | MCP (Model Context Protocol) executor |
+| `graphql` | `pip install apflow[graphql]` | GraphQL API server with Strawberry GraphQL |
+| `scheduling` | `pip install apflow[scheduling]` | Cron-like task scheduling |
+| `tools` | `pip install apflow[tools]` | Web tools (requests, BeautifulSoup, trafilatura) |
+| `all` | `pip install apflow[all]` | Everything: all optional features combined |
 
-```bash
-pip install apflow[cli]
-```
+**CLI commands** (available when the corresponding extra is installed):
 
-**Includes:**
-- Command-line interface tools
-
-**Usage:**
-```bash
-# Run CLI
-apflow
-
-# Or use the shorthand
-apflow
-```
-
-### PostgreSQL Storage
-
-```bash
-pip install apflow[postgres]
-```
-
-**Includes:**
-- PostgreSQL storage support (for enterprise/distributed scenarios)
-
-### SSH Executor
-
-```bash
-pip install apflow[ssh]
-```
-
-**Includes:**
-- SSH executor for remote command execution
-- Execute commands on remote servers via SSH
-
-### Docker Executor
-
-```bash
-pip install apflow[docker]
-```
-
-**Includes:**
-- Docker executor for containerized execution
-- Execute commands in isolated Docker containers
-
-### gRPC Executor
-
-```bash
-pip install apflow[grpc]
-```
-
-**Includes:**
-- gRPC executor for gRPC service calls
-- Call gRPC services and microservices
-
-### Email Executor
-
-```bash
-pip install apflow[email]
-```
-
-**Includes:**
-- Email executor for sending emails via Resend API or SMTP
-- Send transactional and notification emails from task workflows
-
-### GraphQL API
-
-```bash
-pip install apflow[graphql]
-```
-
-**Includes:**
-- GraphQL API server with Strawberry GraphQL
-- Typed schema with queries, mutations, and subscriptions
-- GraphiQL interactive playground
-
-### Everything
-
-```bash
-pip install apflow[all]
-```
-
-**Includes:**
-- All optional features (crewai, a2a, cli, postgres, email, ssh, docker, grpc, graphql)
+| Command | Extra required | Description |
+|---------|---------------|-------------|
+| `apflow` | `cli` | Main command-line interface |
+| `apflow-server` | `a2a` | A2A Protocol Server |
 
 ## Requirements
 
 - **Python**: 3.10 or higher (3.12+ recommended)
 - **DuckDB**: Included by default (no setup required)
-- **PostgreSQL**: Optional, for distributed/production scenarios
+- **PostgreSQL**: Only required for distributed cluster deployments (install with `postgres` extra)
 
 ## Development Installation
 
-For development, install with development dependencies:
+For contributing to apflow or running tests locally:
 
 ```bash
 # Clone the repository
@@ -167,16 +118,15 @@ pip install -e ".[all,dev]"
 
 ## Verification
 
-After installation, verify the installation:
+After installation, verify it works:
 
 ```python
 import apflow
 print(apflow.__version__)
 ```
 
-Or using the CLI (if installed with `[cli]`):
+Or using the CLI (requires `cli` extra):
 
 ```bash
 apflow --version
 ```
-
