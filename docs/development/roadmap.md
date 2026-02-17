@@ -18,17 +18,18 @@ Core orchestration is stable with 800+ tests. Key capabilities:
 
 | Feature | Status | Description |
 |---------|--------|-------------|
-| Distributed Core | Planned | Multi-node orchestration with task leasing |
+| Distributed Core | **Completed** | Multi-node orchestration with task leasing, leader election, automatic failover |
 | Protocol Abstraction | In Progress | Unified adapter interface for all protocols |
 | GraphQL Adapter | Planned | Query interface for complex task trees |
 
-### Distributed Core
+### Distributed Core (Completed)
 
-Enable multi-node deployments with centralized coordination. See [design doc](distributed-orchestration-design.md) for details.
+Multi-node deployments with centralized coordination. See the [Distributed Cluster Guide](../guides/distributed-cluster.md) for usage and the [design doc](distributed-development.md) for implementation details.
 
 - Node registry with health checks
 - Task leasing with automatic expiry
-- Placement constraints (executor type, resources)
+- SQL-based leader election with lease renewal
+- Automatic failover and task reassignment
 - PostgreSQL-based coordination
 
 ### Protocol Abstraction
@@ -98,3 +99,4 @@ These are application-level concerns, not orchestration:
 | Task Model Extensions | v1.x | task_tree_id, origin_type, migrations |
 | Executor Access Control | v1.x | Environment-based filtering |
 | Scheduler | v1.x | Internal scheduler + external gateway integration |
+| Distributed Core | v1.x | Multi-node orchestration with leader election, task leasing, failover |
