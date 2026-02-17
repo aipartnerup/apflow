@@ -50,6 +50,46 @@ flowchart TD
     style SupportLayer fill:#f3e5f5
 ```
 
+## Distributed Architecture
+
+When `APFLOW_CLUSTER_ENABLED=true`, apflow operates as a distributed cluster with automatic leader election and task coordination:
+
+```
+                    +--------------------------+
+                    |    Client / CLI / API     |
+                    +------------+-------------+
+                                 |
+              +------------------+------------------+
+              |                  |                   |
+    +---------v--------+ +------v------+ +----------v--------+
+    |   Leader Node     | | Worker Node | |   Worker Node      |
+    |  (auto-elected)   | |             | |                    |
+    |  - Task placement | |  - Execute  | |  - Execute         |
+    |  - Lease mgmt     | |  - Heartbeat| |  - Heartbeat       |
+    |  - Execute        | |             | |                    |
+    +---------+--------+ +------+------+ +----------+--------+
+              |                  |                   |
+              +------------------+------------------+
+                                 |
+                    +------------v-------------+
+                    |  PostgreSQL (shared)      |
+                    |  - Task state             |
+                    |  - Leader lease           |
+                    |  - Node registry          |
+                    +--------------------------+
+```
+
+### Key Components
+
+- **Leader Election**: SQL-based lease mechanism via PostgreSQL. Any node with `APFLOW_NODE_ROLE=auto` can become leader. The lease is renewed every `APFLOW_LEADER_RENEW` seconds (default: 10s).
+- **Task Leasing**: The leader assigns tasks to workers via leases. Workers renew leases during execution. Expired leases trigger automatic reassignment.
+- **Node Health**: Workers send heartbeats every `APFLOW_HEARTBEAT_INTERVAL` seconds. Nodes missing heartbeats beyond `APFLOW_NODE_DEAD_THRESHOLD` are marked dead and their tasks are reassigned.
+- **Shared State**: All nodes connect to the same PostgreSQL database. Task state, node registry, and leader lease are stored in PostgreSQL.
+
+*Standalone mode uses the same architecture with a single node and DuckDB storage.*
+
+For deployment details, see the [Distributed Cluster Guide](../guides/distributed-cluster.md).
+
 ### Layer Details
 
 **Unified External API Interface Layer**

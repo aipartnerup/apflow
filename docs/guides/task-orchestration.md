@@ -850,9 +850,8 @@ await task_manager.distribute_task_tree_with_streaming(
 
 ### Dependency Resolution
 
-Dependency results are automatically merged into task inputs:
+Dependency results are automatically merged into task inputs.
 
-```python
 #### Copy, Link, and Snapshot Behavior
 
 **from_copy:**
@@ -895,6 +894,9 @@ Dependency results are automatically merged into task inputs:
 **Deduplication:**
 - When copying with children, dependencies are only copied once
 - The copied tree maintains the same structure as the original
+
+#### Troubleshooting
+
 **Problem**: Task never completes
 
 **Solutions**:
@@ -903,16 +905,7 @@ Dependency results are automatically merged into task inputs:
 3. Check for deadlocks in dependencies
 4. Review executor implementation
 
-## Next Steps
-
-- **[Custom Tasks Guide](custom-tasks.md)** - Create your own executors
-- **[Basic Examples](../examples/basic_task.md)** - More practical examples
-- **[Best Practices Guide](best-practices.md)** - Advanced techniques
-- **[API Reference](../api/python.md)** - Complete API documentation
-
----
-
-**Need help?** Check the [FAQ](faq.md) or [Quick Start Guide](../getting-started/quick-start.md)
+<a id="task-data-fields"></a>
 
 ## Task Data Fields: inputs, params, and result
 
@@ -933,3 +926,14 @@ This separation ensures that:
 - Never mix configuration into `inputs` or `result`.
 
 For detailed field definitions and examples, see the [Data Model Protocol documentation](https://flow-docs.aipartnerup.com/protocol/03-data-model/).
+
+## Next Steps
+
+- **[Custom Tasks Guide](custom-tasks.md)** - Create your own executors
+- **[Basic Examples](../examples/basic_task.md)** - More practical examples
+- **[Best Practices Guide](best-practices.md)** - Advanced techniques
+- **[API Reference](../api/python.md)** - Complete API documentation
+
+---
+
+**Need help?** Check the [FAQ](faq.md) or [Quick Start Guide](../getting-started/quick-start.md)
