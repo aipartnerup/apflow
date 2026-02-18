@@ -42,7 +42,7 @@ services:
     container_name: ${APFLOW_CONTAINER_NAME:-apflow}
     build:
       context: .
-      dockerfile: docker/Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "${APFLOW_API_PORT:-8000}:${APFLOW_API_PORT:-8000}"
     env_file:

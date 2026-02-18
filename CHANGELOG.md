@@ -6,7 +6,7 @@
 
 - **Docker Support**
   - Docker Compose configuration (`docker-compose.yml`) for easy deployment
-  - Docker image definition (`docker/Dockerfile`) for containerized apflow
+  - Docker image definition (`Dockerfile`) for containerized apflow
   - `.dockerignore` file for optimized image builds
 
 - **Enhanced GraphQL Testing**
