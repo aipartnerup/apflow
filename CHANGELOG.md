@@ -1,6 +1,42 @@
 # Changelog
 
-## [Unreleased]
+## [0.18.1] 2026-02-18
+
+### Added
+
+- **Docker Support**
+  - Docker Compose configuration (`docker-compose.yml`) for easy deployment
+  - Docker image definition (`docker/Dockerfile`) for containerized apflow
+  - `.dockerignore` file for optimized image builds
+
+- **Enhanced GraphQL Testing**
+  - New `test_loaders.py` for GraphQL DataLoaders testing (task loading by ID and children)
+  - Additional test coverage in `test_mutations.py` for execute_task mutation
+  - Expanded `test_queries.py` with task tree and running tasks queries
+  - Enhanced `test_schema.py` to verify TaskTreeType and TaskProgressEvent in schema
+  - Added task progress subscriptions tests in `test_subscriptions.py`
+  - Improved tests for distributed configuration in `test_distributed_config.py` and `test_leader_election.py`
+  - Enhanced lease management tests with concurrent acquisition and validation
+
+### Changed
+
+- `pyproject.toml`: Updated `apdev[dev]` dependency to version 0.1.6 for improved compatibility
+- Documentation workflow: Updated GitHub Actions versions for consistency
+- Shared `make_task_dict()` helper function in `conftest.py` for consistent task dictionary creation in GraphQL tests
+
+### Fixed
+
+- **PostgreSQL Driver Selection**
+  - Fixed `normalize_postgresql_url()` function to correctly select async/sync driver based on `async_mode` parameter
+  - Ensures proper database connection handling for both sync and async contexts
+
+- **Configuration Management**
+  - Fixed `test_scheduler.py` to properly patch `load_cli_config` in fixtures, preventing local config loading during tests
+  - Enhanced runtime tests to handle cases when no task executor is configured
+
+- **Documentation Workflow**
+  - Added `workflow_dispatch` trigger for manual documentation deployment
+  - Fixed GitHub Actions workflow compatibility for documentation site generation
 
 ## [0.18.0] 2026-02-16
 
