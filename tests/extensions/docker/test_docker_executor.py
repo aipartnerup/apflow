@@ -205,7 +205,7 @@ class TestDockerExecutor:
         """Test handling image not found error"""
         executor = DockerExecutor()
 
-        import docker
+        import docker.errors
 
         mock_client = MagicMock()
         mock_client.containers.create.side_effect = docker.errors.ImageNotFound("Image not found")
