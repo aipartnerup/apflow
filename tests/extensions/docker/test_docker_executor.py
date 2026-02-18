@@ -203,17 +203,17 @@ class TestDockerExecutor:
     @pytest.mark.asyncio
     async def test_execute_image_not_found(self):
         """Test handling image not found error"""
+        from docker.errors import ImageNotFound
+
         executor = DockerExecutor()
 
-        import docker.errors
-
         mock_client = MagicMock()
-        mock_client.containers.create.side_effect = docker.errors.ImageNotFound("Image not found")
+        mock_client.containers.create.side_effect = ImageNotFound("Image not found")
 
         executor._client = mock_client
 
         # ImageNotFound exception should propagate
-        with pytest.raises(docker.errors.ImageNotFound):
+        with pytest.raises(ImageNotFound):
             await executor.execute({"image": "nonexistent:latest", "command": "ls"})
 
     @pytest.mark.skipif(not DOCKER_AVAILABLE, reason="docker not installed")
