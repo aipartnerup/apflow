@@ -11,18 +11,17 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from apflow.core.distributed.config import DistributedConfig, as_utc, utcnow as _utcnow
+from apflow.core.distributed.config import (
+    DistributedConfig,
+    as_utc,
+    is_postgresql,
+    utcnow as _utcnow,
+)
 from apflow.core.distributed.events import emit_task_event
 from apflow.core.storage.sqlalchemy.models import TaskLease, TaskModel
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-def _is_postgresql(session: Session) -> bool:
-    """Check if the session is bound to a PostgreSQL database."""
-    bind = session.get_bind()
-    return bind.dialect.name == "postgresql"
 
 
 class LeaseManager:
@@ -42,7 +41,7 @@ class LeaseManager:
             raise ValueError("task_id and node_id must not be empty")
 
         with self._session_factory() as session:
-            if _is_postgresql(session):
+            if is_postgresql(session):
                 return self._acquire_lease_postgresql(session, task_id, node_id)
             return self._acquire_lease_default(session, task_id, node_id)
 
@@ -100,6 +99,7 @@ class LeaseManager:
         existing = session.get(TaskLease, task_id)
         now = _utcnow()
 
+        # SQLAlchemy Column[DateTime] comparison not recognized by pyright as supporting > operator
         if existing is not None and as_utc(existing.expires_at) > now:  # type: ignore[operator]
             logger.info(
                 "Lease already held for task %s by node %s",

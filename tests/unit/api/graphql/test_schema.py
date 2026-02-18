@@ -45,6 +45,22 @@ class TestSchemaIntrospection:
         type_names = {t["name"] for t in result.data["__schema"]["types"]}
         assert "TaskType" in type_names
 
+    def test_schema_exposes_task_tree_type(self) -> None:
+        """Schema includes TaskTreeType in its type list."""
+        result = schema.execute_sync("{ __schema { types { name } } }")
+        assert result.errors is None
+        assert result.data is not None
+        type_names = {t["name"] for t in result.data["__schema"]["types"]}
+        assert "TaskTreeType" in type_names
+
+    def test_schema_exposes_task_progress_event(self) -> None:
+        """Schema includes TaskProgressEvent in its type list."""
+        result = schema.execute_sync("{ __schema { types { name } } }")
+        assert result.errors is None
+        assert result.data is not None
+        type_names = {t["name"] for t in result.data["__schema"]["types"]}
+        assert "TaskProgressEvent" in type_names
+
     def test_query_has_task_field(self) -> None:
         """Query type exposes task field."""
         query = """
@@ -61,6 +77,36 @@ class TestSchemaIntrospection:
         assert "task" in field_names
         assert "tasks" in field_names
         assert "taskChildren" in field_names
+
+    def test_query_has_task_tree_field(self) -> None:
+        """Query type exposes taskTree field."""
+        query = """
+        {
+            __type(name: "Query") {
+                fields { name }
+            }
+        }
+        """
+        result = schema.execute_sync(query)
+        assert result.errors is None
+        assert result.data is not None
+        field_names = {f["name"] for f in result.data["__type"]["fields"]}
+        assert "taskTree" in field_names
+
+    def test_query_has_running_tasks_field(self) -> None:
+        """Query type exposes runningTasks field."""
+        query = """
+        {
+            __type(name: "Query") {
+                fields { name }
+            }
+        }
+        """
+        result = schema.execute_sync(query)
+        assert result.errors is None
+        assert result.data is not None
+        field_names = {f["name"] for f in result.data["__type"]["fields"]}
+        assert "runningTasks" in field_names
 
     def test_mutation_has_crud_fields(self) -> None:
         """Mutation type exposes CRUD operations."""
@@ -80,6 +126,21 @@ class TestSchemaIntrospection:
         assert "cancelTask" in field_names
         assert "deleteTask" in field_names
 
+    def test_mutation_has_execute_task_field(self) -> None:
+        """Mutation type exposes executeTask field."""
+        query = """
+        {
+            __type(name: "Mutation") {
+                fields { name }
+            }
+        }
+        """
+        result = schema.execute_sync(query)
+        assert result.errors is None
+        assert result.data is not None
+        field_names = {f["name"] for f in result.data["__type"]["fields"]}
+        assert "executeTask" in field_names
+
     def test_subscription_has_status_changed(self) -> None:
         """Subscription type exposes taskStatusChanged."""
         query = """
@@ -94,3 +155,18 @@ class TestSchemaIntrospection:
         assert result.data is not None
         field_names = {f["name"] for f in result.data["__type"]["fields"]}
         assert "taskStatusChanged" in field_names
+
+    def test_subscription_has_task_progress(self) -> None:
+        """Subscription type exposes taskProgress."""
+        query = """
+        {
+            __type(name: "Subscription") {
+                fields { name }
+            }
+        }
+        """
+        result = schema.execute_sync(query)
+        assert result.errors is None
+        assert result.data is not None
+        field_names = {f["name"] for f in result.data["__type"]["fields"]}
+        assert "taskProgress" in field_names

@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from apflow.api.graphql.resolvers.mutations import (
-    resolve_create_task,
-    resolve_update_task,
     resolve_cancel_task,
+    resolve_create_task,
     resolve_delete_task,
+    resolve_execute_task,
+    resolve_update_task,
 )
 from apflow.api.graphql.types import (
     CreateTaskInput,
@@ -18,33 +20,19 @@ from apflow.api.graphql.types import (
     UpdateTaskInput,
 )
 
-
-def _make_task_dict(
-    task_id: str = "task-1",
-    name: str = "Test Task",
-    status: str = "pending",
-) -> dict:
-    return {
-        "id": task_id,
-        "name": name,
-        "status": status,
-        "priority": 5,
-        "progress": 0.0,
-        "result": None,
-        "error": None,
-        "created_at": None,
-        "updated_at": None,
-        "parent_id": None,
-    }
+from .conftest import make_task_dict
 
 
 @pytest.fixture
 def mock_task_routes() -> AsyncMock:
     routes = AsyncMock()
-    routes.handle_task_create.return_value = [_make_task_dict("new-1", "Created Task")]
-    routes.handle_task_update.return_value = _make_task_dict("task-1", "Updated", "in_progress")
+    routes.handle_task_create.return_value = [make_task_dict("new-1", "Created Task")]
+    routes.handle_task_update.return_value = make_task_dict("task-1", "Updated", "in_progress")
     routes.handle_task_cancel.return_value = None
     routes.handle_task_delete.return_value = None
+    routes.handle_task_execute.return_value = make_task_dict(
+        "exec-1", "Executed Task", "in_progress"
+    )
     return routes
 
 
@@ -91,7 +79,7 @@ class TestResolveCreateTask:
     async def test_handles_single_dict_return(
         self, mock_info: MagicMock, mock_task_routes: AsyncMock
     ) -> None:
-        mock_task_routes.handle_task_create.return_value = _make_task_dict("single-1", "Single")
+        mock_task_routes.handle_task_create.return_value = make_task_dict("single-1", "Single")
         inp = CreateTaskInput(name="Single")
         result = await resolve_create_task(info=mock_info, task_input=inp)
         assert result.id == "single-1"
@@ -162,3 +150,32 @@ class TestResolveDeleteTask:
         result = await resolve_delete_task(info=mock_info, task_id="task-1")
         mock_task_routes.handle_task_delete.assert_called_once_with({"task_id": "task-1"}, None, "")
         assert result is True
+
+
+class TestResolveExecuteTask:
+    """Tests for resolve_execute_task mutation."""
+
+    @pytest.mark.asyncio
+    async def test_delegates_to_handle_task_execute(
+        self, mock_info: MagicMock, mock_task_routes: AsyncMock
+    ) -> None:
+        result = await resolve_execute_task(info=mock_info, task_id="exec-1")
+        mock_task_routes.handle_task_execute.assert_called_once_with(
+            {"task_id": "exec-1", "use_streaming": False}, None, ""
+        )
+        assert isinstance(result, TaskType)
+        assert result.id == "exec-1"
+
+    @pytest.mark.asyncio
+    async def test_returns_correct_task_type(self, mock_info: MagicMock) -> None:
+        result = await resolve_execute_task(info=mock_info, task_id="exec-1")
+        assert result.name == "Executed Task"
+        assert result.status == TaskStatusEnum.IN_PROGRESS
+
+    @pytest.mark.asyncio
+    async def test_propagates_error(
+        self, mock_info: MagicMock, mock_task_routes: AsyncMock
+    ) -> None:
+        mock_task_routes.handle_task_execute.side_effect = ValueError("Execution failed")
+        with pytest.raises(ValueError, match="Execution failed"):
+            await resolve_execute_task(info=mock_info, task_id="bad-id")

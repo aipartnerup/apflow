@@ -11,19 +11,18 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
-from apflow.core.distributed.config import DistributedConfig, as_utc, utcnow as _utcnow
+from apflow.core.distributed.config import (
+    DistributedConfig,
+    as_utc,
+    is_postgresql,
+    utcnow as _utcnow,
+)
 from apflow.core.storage.sqlalchemy.models import ClusterLeader
 from apflow.logger import get_logger
 
 logger = get_logger(__name__)
 
 SINGLETON_LEADER_ID = "singleton"
-
-
-def _is_postgresql(session: Session) -> bool:
-    """Check if the session is bound to a PostgreSQL database."""
-    bind = session.get_bind()
-    return bind.dialect.name == "postgresql"
 
 
 class LeaderElection:
@@ -43,7 +42,7 @@ class LeaderElection:
             raise ValueError("node_id must not be empty")
 
         with self._session_factory() as session:
-            if _is_postgresql(session):
+            if is_postgresql(session):
                 return self._try_acquire_postgresql(session, node_id)
             return self._try_acquire_default(session, node_id)
 
@@ -92,6 +91,7 @@ class LeaderElection:
         existing = session.get(ClusterLeader, SINGLETON_LEADER_ID)
         now = _utcnow()
 
+        # SQLAlchemy Column[DateTime] comparison not recognized by pyright as supporting > operator
         if existing is not None and as_utc(existing.expires_at) > now:  # type: ignore[operator]
             logger.info(
                 "Leadership acquisition failed for %s: held by %s",
@@ -222,7 +222,8 @@ class LeaderElection:
                 return None
 
             now = _utcnow()
-            if as_utc(leader.expires_at) <= now:
+            # <= treats exact expiry as expired, consistent with cleanup_stale_leader for safety
+            if as_utc(leader.expires_at) <= now:  # type: ignore[operator]  — Column datetime comparison
                 return None
 
             return leader.node_id

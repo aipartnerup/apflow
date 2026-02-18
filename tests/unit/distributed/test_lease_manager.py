@@ -1,6 +1,9 @@
 """Tests for LeaseManager distributed service."""
 
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
+
+import pytest
 
 from apflow.core.distributed.lease_manager import LeaseManager
 from apflow.core.storage.sqlalchemy.models import (
@@ -125,3 +128,122 @@ class TestLeaseManager:
         session.expire_all()
         remaining = session.get(TaskLease, "task-1")
         assert remaining is None
+
+    def test_concurrent_lease_acquisition_only_one_wins(
+        self, session_factory, config, session, sample_node, sample_task
+    ):
+        """When multiple nodes attempt to acquire the same lease, only one wins."""
+        manager = LeaseManager(session_factory, config)
+        results = []
+        for i in range(5):
+            result = manager.acquire_lease("task-1", "worker-1")
+            results.append(result)
+
+        winners = [r for r in results if r is not None]
+        assert len(winners) == 1
+
+    def test_release_lease_wrong_token_no_effect(
+        self, session_factory, config, session, sample_node, sample_task
+    ):
+        """Release with wrong token does not delete the lease."""
+        manager = LeaseManager(session_factory, config)
+        lease = manager.acquire_lease("task-1", "worker-1")
+        assert lease is not None
+
+        manager.release_lease("task-1", "wrong-token")
+
+        # Lease should still exist - node can still renew
+        success = manager.renew_lease(str(lease.lease_token))
+        assert success is True
+
+
+class TestLeaseManagerORMFallback:
+    """Tests for the ORM-based fallback lease acquisition path."""
+
+    def test_acquire_lease_orm_path(
+        self, session_factory, config, session, sample_node, sample_task
+    ):
+        """ORM path acquires lease when is_postgresql returns False."""
+        manager = LeaseManager(session_factory, config)
+        with patch(
+            "apflow.core.distributed.lease_manager.is_postgresql",
+            return_value=False,
+        ):
+            lease = manager.acquire_lease("task-1", "worker-1")
+        assert lease is not None
+        assert lease.task_id == "task-1"
+        assert lease.node_id == "worker-1"
+        assert len(lease.lease_token) == 32
+
+    def test_acquire_lease_orm_path_existing_active_lease(
+        self, session_factory, config, session, sample_node, sample_task
+    ):
+        """ORM path returns None when active lease exists."""
+        manager = LeaseManager(session_factory, config)
+        with patch(
+            "apflow.core.distributed.lease_manager.is_postgresql",
+            return_value=False,
+        ):
+            lease1 = manager.acquire_lease("task-1", "worker-1")
+            lease2 = manager.acquire_lease("task-1", "worker-1")
+        assert lease1 is not None
+        assert lease2 is None
+
+    def test_acquire_lease_orm_path_expired_lease_replaced(
+        self, session_factory, config, session, sample_node, sample_task
+    ):
+        """ORM path replaces expired lease."""
+        manager = LeaseManager(session_factory, config)
+        with patch(
+            "apflow.core.distributed.lease_manager.is_postgresql",
+            return_value=False,
+        ):
+            lease1 = manager.acquire_lease("task-1", "worker-1")
+            assert lease1 is not None
+
+            # Time-travel past expiry so the lease is expired
+            future = datetime.now(timezone.utc) + timedelta(
+                seconds=config.lease_duration_seconds + 10
+            )
+            with patch(
+                "apflow.core.distributed.lease_manager._utcnow",
+                return_value=future,
+            ):
+                lease2 = manager.acquire_lease("task-1", "worker-1")
+
+        assert lease2 is not None
+        assert lease2.node_id == "worker-1"
+
+
+class TestLeaseManagerValidation:
+    """Tests for input validation guards in LeaseManager."""
+
+    def test_acquire_lease_empty_task_id_raises(self, session_factory, config):
+        """acquire_lease rejects empty task_id."""
+        manager = LeaseManager(session_factory, config)
+        with pytest.raises(ValueError, match="must not be empty"):
+            manager.acquire_lease("", "node-1")
+
+    def test_acquire_lease_empty_node_id_raises(self, session_factory, config):
+        """acquire_lease rejects empty node_id."""
+        manager = LeaseManager(session_factory, config)
+        with pytest.raises(ValueError, match="must not be empty"):
+            manager.acquire_lease("task-1", "")
+
+    def test_renew_lease_empty_token_raises(self, session_factory, config):
+        """renew_lease rejects empty lease_token."""
+        manager = LeaseManager(session_factory, config)
+        with pytest.raises(ValueError, match="must not be empty"):
+            manager.renew_lease("")
+
+    def test_release_lease_empty_task_id_raises(self, session_factory, config):
+        """release_lease rejects empty task_id."""
+        manager = LeaseManager(session_factory, config)
+        with pytest.raises(ValueError, match="must not be empty"):
+            manager.release_lease("", "token")
+
+    def test_release_lease_empty_token_raises(self, session_factory, config):
+        """release_lease rejects empty lease_token."""
+        manager = LeaseManager(session_factory, config)
+        with pytest.raises(ValueError, match="must not be empty"):
+            manager.release_lease("task-1", "")

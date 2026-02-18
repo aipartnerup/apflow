@@ -1,5 +1,8 @@
 """GraphQL protocol adapter for apflow."""
 
-from apflow.api.graphql.server import GraphQLProtocolAdapter
+try:
+    from apflow.api.graphql.server import GraphQLProtocolAdapter
+except ImportError:
+    GraphQLProtocolAdapter = None  # type: ignore[assignment,misc]
 
 __all__ = ["GraphQLProtocolAdapter"]

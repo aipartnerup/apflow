@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import timedelta
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -360,3 +361,36 @@ class TestProperties:
 
         runtime._role = "observer"
         assert runtime.current_role == "observer"
+
+
+@pytest.fixture
+def runtime_no_executor() -> DistributedRuntime:
+    """A DistributedRuntime with no task_executor configured."""
+    runtime = _make_runtime(task_executor=None)
+    runtime._task_executor = None
+    return runtime
+
+
+class TestWorkerRuntimeStart:
+    """Tests for _start_worker_runtime behavior."""
+
+    def test_no_executor_logs_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """_start_worker_runtime logs warning when task_executor is None."""
+        runtime = _make_runtime(task_executor=None)
+        runtime._task_executor = None
+
+        with caplog.at_level(logging.WARNING, logger="apflow.core.distributed.runtime"):
+            runtime._start_worker_runtime()
+
+        assert runtime._worker_runtime is None
+        assert "no task_executor configured" in caplog.text
+
+    def test_start_worker_runtime_without_executor_logs_warning(
+        self, runtime_no_executor: DistributedRuntime, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Worker runtime is not started when no task_executor is configured."""
+        with caplog.at_level(logging.WARNING, logger="apflow.core.distributed.runtime"):
+            runtime_no_executor._start_worker_runtime()
+
+        assert runtime_no_executor._worker_runtime is None
+        assert "no task_executor configured" in caplog.text

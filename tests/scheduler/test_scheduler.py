@@ -981,12 +981,19 @@ class TestSchedulerAPIDetection:
 
     @pytest.fixture(autouse=True)
     def _reset_config(self):
-        """Reset ConfigManager between tests."""
+        """Reset ConfigManager between tests.
+
+        Patches load_cli_config to prevent re-loading from the developer's
+        local config file (.data/config.cli.yaml), which would re-establish
+        a real api_server_url and defeat the purpose of cm.clear().
+        """
+        from unittest.mock import patch
         from apflow.core.config_manager import get_config_manager
 
         cm = get_config_manager()
         cm.clear()
-        yield
+        with patch.object(cm, "load_cli_config"):
+            yield
         cm.clear()
 
     def test_detect_api_mode_true_when_url_configured(self):

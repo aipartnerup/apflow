@@ -150,6 +150,10 @@ class DistributedRuntime:
     def _start_worker_runtime(self) -> None:
         """Start the worker runtime if a task executor is configured."""
         if self._task_executor is None:
+            logger.warning(
+                "Worker node %s has no task_executor configured; " "worker runtime will not start",
+                self._node_id,
+            )
             return
         self._worker_runtime = WorkerRuntime(
             node_id=self._node_id,

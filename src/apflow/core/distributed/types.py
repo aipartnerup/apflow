@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
-TaskExecutorFn = Callable[[Any], Awaitable[dict[str, Any]]]
+if TYPE_CHECKING:
+    from apflow.core.storage.sqlalchemy.models import TaskModel
+
+TaskExecutorFn = Callable[["TaskModel"], Awaitable[dict[str, Any]]]
+
+NodeCapabilities = dict[str, Any]

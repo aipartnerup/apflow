@@ -3,17 +3,29 @@ Test API server fallback to local database when server is unreachable.
 """
 
 import pytest
+from unittest.mock import AsyncMock, patch
 from apflow.cli.api_gateway_helper import should_use_api, reset_api_validation
 from apflow.core.config_manager import get_config_manager
 
 
 @pytest.fixture(autouse=True)
 def _reset_api_state():
-    """Reset API validation state before and after each test."""
+    """Reset API validation state before and after each test.
+
+    Patches load_cli_config to prevent re-loading from the developer's
+    local config file (.data/config.cli.yaml), which would re-establish
+    a real api_server_url and defeat the purpose of cm.clear().
+    Also patches check_api_server_accessible to prevent auto-discovery
+    of a running local server at localhost:8000.
+    """
     reset_api_validation()
     cm = get_config_manager()
     cm.clear()
-    yield
+    with (
+        patch.object(cm, "load_cli_config"),
+        patch.object(cm, "check_api_server_accessible", new=AsyncMock(return_value=False)),
+    ):
+        yield
     reset_api_validation()
     cm.clear()
 

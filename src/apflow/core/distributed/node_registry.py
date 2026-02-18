@@ -4,11 +4,11 @@ Manages registration, heartbeat, and health detection of cluster nodes.
 """
 
 from datetime import timedelta
-from typing import Any
 
 from sqlalchemy.orm import sessionmaker
 
 from apflow.core.distributed.config import DistributedConfig, utcnow as _utcnow
+from apflow.core.distributed.types import NodeCapabilities
 from apflow.core.storage.sqlalchemy.models import DistributedNode
 from apflow.logger import get_logger
 
@@ -30,7 +30,7 @@ class NodeRegistry:
         self,
         node_id: str,
         executor_types: list[str],
-        capabilities: dict[str, Any] | None = None,
+        capabilities: NodeCapabilities | None = None,
     ) -> DistributedNode:
         """Register a new node or update an existing one.
 
@@ -136,7 +136,7 @@ class NodeRegistry:
     def get_healthy_nodes(
         self,
         executor_types: list[str] | None = None,
-        capabilities: dict[str, Any] | None = None,
+        capabilities: NodeCapabilities | None = None,
     ) -> list[DistributedNode]:
         """Query healthy nodes, optionally filtered by executor types and capabilities."""
         with self._session_factory() as session:
@@ -169,7 +169,7 @@ def _filter_by_executor_types(
 
 def _filter_by_capabilities(
     nodes: list[DistributedNode],
-    required_capabilities: dict[str, Any],
+    required_capabilities: NodeCapabilities,
 ) -> list[DistributedNode]:
     """Return nodes whose capabilities match all required key-value pairs."""
     result: list[DistributedNode] = []

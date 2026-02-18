@@ -62,3 +62,15 @@ async def resolve_delete_task(info: Info, task_id: str) -> bool:
     task_routes = info.context["task_routes"]
     await task_routes.handle_task_delete({"task_id": task_id}, None, "")
     return True
+
+
+async def resolve_execute_task(info: Info, task_id: str) -> TaskType:
+    """Execute a task (non-streaming mode only).
+
+    Delegates to handle_task_execute with use_streaming=False.
+    Returns the execution result as a TaskType.
+    """
+    task_routes = info.context["task_routes"]
+    params: dict[str, Any] = {"task_id": task_id, "use_streaming": False}
+    data = await task_routes.handle_task_execute(params, None, "")
+    return task_model_to_graphql(data)

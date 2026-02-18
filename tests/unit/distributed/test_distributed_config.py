@@ -1,7 +1,7 @@
 """Tests for DistributedConfig dataclass."""
 
 import os
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -161,3 +161,23 @@ class TestDistributedConfigRegistry:
 
         config = get_distributed_config()
         assert config.enabled is False
+
+
+class TestIsPostgresql:
+    """Test is_postgresql shared helper function."""
+
+    def test_postgresql_dialect_returns_true(self) -> None:
+        """is_postgresql returns True for postgresql dialect."""
+        from apflow.core.distributed.config import is_postgresql
+
+        session = MagicMock()
+        session.get_bind.return_value.dialect.name = "postgresql"
+        assert is_postgresql(session) is True
+
+    def test_sqlite_dialect_returns_false(self) -> None:
+        """is_postgresql returns False for sqlite dialect."""
+        from apflow.core.distributed.config import is_postgresql
+
+        session = MagicMock()
+        session.get_bind.return_value.dialect.name = "sqlite"
+        assert is_postgresql(session) is False

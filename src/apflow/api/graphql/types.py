@@ -69,6 +69,26 @@ class UpdateTaskInput:
     inputs: Optional[strawberry.scalars.JSON] = None
 
 
+@strawberry.type
+class TaskTreeType:
+    """GraphQL representation of a task tree."""
+
+    root: TaskType
+    total_tasks: int
+    completed_tasks: int
+    failed_tasks: int
+
+
+@strawberry.type
+class TaskProgressEvent:
+    """Progress event for task execution subscriptions."""
+
+    task_id: str
+    progress: float
+    message: Optional[str] = None
+    event_type: str = "progress"
+
+
 def task_model_to_graphql(data: dict[str, Any]) -> TaskType:
     """Convert a TaskModel dict to a TaskType instance."""
     status_str = data.get("status", "pending")

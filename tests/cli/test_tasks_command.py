@@ -476,7 +476,7 @@ class TestTasksCloneCommand:
             assert root_task_id in output
 
     @pytest.mark.asyncio
-    async def test_tasks_copy_with_output_file(self, use_test_db_session, tmp_path):
+    async def test_tasks_copy_with_output_file(self, use_test_db_session, disable_api_for_tests, tmp_path):
         """Test copying a task with output file"""
         task_repository = TaskRepository(
             use_test_db_session, task_model_class=get_task_model_class()
@@ -801,7 +801,7 @@ class TestTasksCopyCommandAdvanced:
         }
 
     @pytest.mark.asyncio
-    async def test_tasks_copy_basic(self, use_test_db_session, task_tree_for_copy):
+    async def test_tasks_copy_basic(self, use_test_db_session, disable_api_for_tests, task_tree_for_copy):
         """Test basic task copy with minimal mode"""
         set_default_session(use_test_db_session)
         try:
@@ -829,7 +829,7 @@ class TestTasksCopyCommandAdvanced:
             reset_default_session()
 
     @pytest.mark.asyncio
-    async def test_tasks_copy_save_false(self, use_test_db_session, task_tree_for_copy):
+    async def test_tasks_copy_save_false(self, use_test_db_session, disable_api_for_tests, task_tree_for_copy):
         """Test task copy with save=False returns task array"""
         set_default_session(use_test_db_session)
         try:
@@ -849,7 +849,7 @@ class TestTasksCopyCommandAdvanced:
             reset_default_session()
 
     @pytest.mark.asyncio
-    async def test_tasks_copy_with_children(self, use_test_db_session, task_tree_for_copy):
+    async def test_tasks_copy_with_children(self, use_test_db_session, disable_api_for_tests, task_tree_for_copy):
         """Test task copy with children=True"""
         set_default_session(use_test_db_session)
         try:
@@ -869,7 +869,7 @@ class TestTasksCopyCommandAdvanced:
             reset_default_session()
 
     @pytest.mark.asyncio
-    async def test_tasks_copy_custom_mode(self, use_test_db_session, task_tree_for_copy):
+    async def test_tasks_copy_custom_mode(self, use_test_db_session, disable_api_for_tests, task_tree_for_copy):
         """Test task copy with custom mode"""
         set_default_session(use_test_db_session)
         try:
@@ -893,7 +893,7 @@ class TestTasksCopyCommandAdvanced:
             reset_default_session()
 
     @pytest.mark.asyncio
-    async def test_tasks_copy_full_mode(self, use_test_db_session, task_tree_for_copy):
+    async def test_tasks_copy_full_mode(self, use_test_db_session, disable_api_for_tests, task_tree_for_copy):
         """Test task copy with full mode"""
         set_default_session(use_test_db_session)
         try:
@@ -915,7 +915,7 @@ class TestTasksCopyCommandAdvanced:
             reset_default_session()
 
     @pytest.mark.asyncio
-    async def test_tasks_copy_with_reset_fields(self, use_test_db_session, task_tree_for_copy):
+    async def test_tasks_copy_with_reset_fields(self, use_test_db_session, disable_api_for_tests, task_tree_for_copy):
         """Test task copy with reset_fields"""
         set_default_session(use_test_db_session)
         try:
@@ -972,7 +972,7 @@ class TestTasksCreateCommand:
     """Test cases for tasks create command"""
 
     @pytest.mark.asyncio
-    async def test_tasks_create_from_file(self, use_test_db_session, tmp_path):
+    async def test_tasks_create_from_file(self, use_test_db_session, disable_api_for_tests, tmp_path):
         """Test creating tasks from JSON file"""
         task_data = {
             "id": "create-test-1",
@@ -1006,7 +1006,7 @@ class TestTasksCreateCommand:
         assert task.name == "Create Test Task"
 
     @pytest.mark.asyncio
-    async def test_tasks_create_from_stdin(self, use_test_db_session, tmp_path):
+    async def test_tasks_create_from_stdin(self, use_test_db_session, disable_api_for_tests, tmp_path):
         """Test creating tasks from stdin (using file as stdin simulation)"""
         # Note: CliRunner doesn't easily support stdin mocking in tests
         # This test verifies the --stdin flag exists and works conceptually

@@ -12,7 +12,7 @@ from typing import Any, cast
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
-from apflow.core.distributed.config import DistributedConfig
+from apflow.core.distributed.config import DistributedConfig, is_postgresql
 from apflow.core.distributed.events import emit_task_event
 from apflow.core.distributed.idempotency import IdempotencyManager
 from apflow.core.distributed.lease_manager import LeaseManager
@@ -100,8 +100,6 @@ class WorkerRuntime:
             try:
                 tasks = self._find_executable_tasks()
                 for task in tasks:
-                    if self._semaphore.locked():
-                        break
                     task_id = cast(str, task.id)
                     exec_task = asyncio.create_task(self._execute_task(task))
                     self._running_tasks[task_id] = exec_task
@@ -140,8 +138,7 @@ class WorkerRuntime:
         """
         with self._session_factory() as session:
             query = session.query(TaskModel).filter(TaskModel.status == "pending")
-            bind = session.get_bind()
-            if bind.dialect.name == "postgresql":
+            if is_postgresql(session):
                 query = query.with_for_update(skip_locked=True)
             query = query.limit(self._config.max_parallel_tasks_per_node)
             tasks = query.all()
@@ -206,17 +203,12 @@ class WorkerRuntime:
                     running.cancel()
                 return
 
-    def _report_completion(self, task_id: str, lease_token: str, result: dict[str, Any]) -> None:
-        """Update task status to completed and release lease atomically.
-
-        Combines the status update and lease deletion in a single
-        transaction to prevent inconsistency if the process crashes
-        between the two operations.
-        """
+    def _finalize_task(self, task_id: str, lease_token: str, new_status: str) -> None:
+        """Update task status and release lease atomically."""
         with self._session_factory() as session:
             task = session.get(TaskModel, task_id)
             if task is not None:
-                task.status = "completed"
+                task.status = new_status
             session.execute(
                 text(
                     "DELETE FROM apflow_task_leases " "WHERE task_id = :tid AND lease_token = :tok"
@@ -225,27 +217,15 @@ class WorkerRuntime:
             )
             session.commit()
 
+    def _report_completion(self, task_id: str, lease_token: str, result: dict[str, Any]) -> None:
+        """Mark task as completed, release lease, and emit event."""
+        self._finalize_task(task_id, lease_token, "completed")
         emit_task_event(self._session_factory, task_id, "task_completed", self._node_id)
         logger.info("Task %s completed", task_id)
 
     def _report_failure(self, task_id: str, attempt_id: int, lease_token: str, error: str) -> None:
-        """Update task status to failed and release lease atomically.
-
-        Combines the status update and lease deletion in a single
-        transaction, then stores the failure in idempotency cache.
-        """
-        with self._session_factory() as session:
-            task = session.get(TaskModel, task_id)
-            if task is not None:
-                task.status = "failed"
-            session.execute(
-                text(
-                    "DELETE FROM apflow_task_leases " "WHERE task_id = :tid AND lease_token = :tok"
-                ),
-                {"tid": task_id, "tok": lease_token},
-            )
-            session.commit()
-
+        """Mark task as failed, release lease, store failure, and emit event."""
+        self._finalize_task(task_id, lease_token, "failed")
         self._idempotency.store_failure(
             task_id,
             attempt_id,

@@ -12,6 +12,8 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
+from sqlalchemy.orm import Session
+
 VALID_NODE_ROLES = ("auto", "leader", "worker", "observer")
 
 
@@ -24,6 +26,9 @@ def _int_env(key: str, default: str) -> int:
         return int(default)
 
 
+# All datetime values in the distributed module use timezone-aware UTC
+# (datetime.now(timezone.utc)). The as_utc() helper normalizes naive datetimes
+# from databases (like SQLite) that strip timezone info on read-back.
 def utcnow() -> datetime:
     """Return current UTC time as a timezone-aware datetime.
 
@@ -44,6 +49,12 @@ def as_utc(dt: datetime) -> datetime:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def is_postgresql(session: Session) -> bool:
+    """Check if the session is bound to a PostgreSQL database."""
+    bind = session.get_bind()
+    return bind.dialect.name == "postgresql"
 
 
 @dataclass

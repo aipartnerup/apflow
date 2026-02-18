@@ -2,43 +2,50 @@
 
 from __future__ import annotations
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from apflow.api.graphql.resolvers.queries import (
+    _count_tree_stats,
+    resolve_running_tasks,
     resolve_task,
-    resolve_tasks,
     resolve_task_children,
+    resolve_task_tree,
+    resolve_tasks,
 )
-from apflow.api.graphql.types import TaskStatusEnum, TaskType
+from apflow.api.graphql.types import TaskStatusEnum, TaskTreeType, TaskType
 
-
-def _make_task_dict(
-    task_id: str = "task-1",
-    name: str = "Test Task",
-    status: str = "pending",
-) -> dict:
-    return {
-        "id": task_id,
-        "name": name,
-        "status": status,
-        "priority": 5,
-        "progress": 0.0,
-        "result": None,
-        "error": None,
-        "created_at": None,
-        "updated_at": None,
-        "parent_id": None,
-    }
+from .conftest import make_task_dict
 
 
 @pytest.fixture
 def mock_task_routes() -> AsyncMock:
     routes = AsyncMock()
-    routes.handle_task_get.return_value = _make_task_dict()
+    routes.handle_task_get.return_value = make_task_dict()
     routes.handle_tasks_list.return_value = [
-        _make_task_dict("t1", "Task 1"),
-        _make_task_dict("t2", "Task 2"),
+        make_task_dict("t1", "Task 1"),
+        make_task_dict("t2", "Task 2"),
+    ]
+    routes.handle_task_children.return_value = [
+        make_task_dict("c1", "Child 1"),
+        make_task_dict("c2", "Child 2"),
+    ]
+    routes.handle_task_tree.return_value = {
+        "task": make_task_dict("root", "Root", "in_progress"),
+        "children": [
+            {
+                "task": make_task_dict("c1", "Child 1", "completed"),
+                "children": [],
+            },
+            {
+                "task": make_task_dict("c2", "Child 2", "failed"),
+                "children": [],
+            },
+        ],
+    }
+    routes.handle_running_tasks_list.return_value = [
+        make_task_dict("r1", "Running 1", "in_progress"),
     ]
     return routes
 
@@ -121,23 +128,104 @@ class TestResolveTaskChildren:
     """Tests for resolve_task_children query."""
 
     @pytest.mark.asyncio
-    async def test_returns_children(
+    async def test_delegates_to_handle_task_children(
         self, mock_info: MagicMock, mock_task_routes: AsyncMock
     ) -> None:
-        child_data = [
-            _make_task_dict("c1", "Child 1"),
-            _make_task_dict("c2", "Child 2"),
-        ]
-        mock_task_routes.handle_tasks_list.return_value = child_data
         result = await resolve_task_children(info=mock_info, parent_id="parent-1")
+        mock_task_routes.handle_task_children.assert_called_once_with(
+            {"parent_id": "parent-1"}, None, ""
+        )
         assert len(result) == 2
         assert result[0].id == "c1"
 
     @pytest.mark.asyncio
-    async def test_passes_parent_id_filter(
+    async def test_returns_empty_for_no_children(
         self, mock_info: MagicMock, mock_task_routes: AsyncMock
     ) -> None:
-        mock_task_routes.handle_tasks_list.return_value = []
-        await resolve_task_children(info=mock_info, parent_id="parent-1")
-        call_args = mock_task_routes.handle_tasks_list.call_args
-        assert call_args[0][0]["parent_id"] == "parent-1"
+        mock_task_routes.handle_task_children.return_value = []
+        result = await resolve_task_children(info=mock_info, parent_id="parent-1")
+        assert result == []
+
+
+class TestResolveTaskTree:
+    """Tests for resolve_task_tree query."""
+
+    @pytest.mark.asyncio
+    async def test_delegates_to_handle_task_tree(
+        self, mock_info: MagicMock, mock_task_routes: AsyncMock
+    ) -> None:
+        result = await resolve_task_tree(info=mock_info, root_id="root")
+        mock_task_routes.handle_task_tree.assert_called_once_with({"root_id": "root"}, None, "")
+        assert isinstance(result, TaskTreeType)
+
+    @pytest.mark.asyncio
+    async def test_returns_correct_tree_stats(self, mock_info: MagicMock) -> None:
+        result = await resolve_task_tree(info=mock_info, root_id="root")
+        assert result.root.id == "root"
+        assert result.total_tasks == 3
+        assert result.completed_tasks == 1
+        assert result.failed_tasks == 1
+
+    @pytest.mark.asyncio
+    async def test_raises_when_tree_not_found(
+        self, mock_info: MagicMock, mock_task_routes: AsyncMock
+    ) -> None:
+        mock_task_routes.handle_task_tree.return_value = None
+        with pytest.raises(ValueError, match="Task tree not found"):
+            await resolve_task_tree(info=mock_info, root_id="missing")
+
+
+class TestResolveRunningTasks:
+    """Tests for resolve_running_tasks query."""
+
+    @pytest.mark.asyncio
+    async def test_delegates_to_handle_running_tasks_list(
+        self, mock_info: MagicMock, mock_task_routes: AsyncMock
+    ) -> None:
+        result = await resolve_running_tasks(info=mock_info)
+        mock_task_routes.handle_running_tasks_list.assert_called_once_with({}, None, "")
+        assert len(result) == 1
+        assert result[0].id == "r1"
+
+    @pytest.mark.asyncio
+    async def test_passes_limit(self, mock_info: MagicMock, mock_task_routes: AsyncMock) -> None:
+        await resolve_running_tasks(info=mock_info, limit=5)
+        call_args = mock_task_routes.handle_running_tasks_list.call_args
+        assert call_args[0][0]["limit"] == 5
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_list(
+        self, mock_info: MagicMock, mock_task_routes: AsyncMock
+    ) -> None:
+        mock_task_routes.handle_running_tasks_list.return_value = []
+        result = await resolve_running_tasks(info=mock_info)
+        assert result == []
+
+
+class TestCountTreeStats:
+    """Tests for _count_tree_stats helper."""
+
+    def test_single_node(self) -> None:
+        tree = {"task": {"status": "completed"}, "children": []}
+        total, completed, failed = _count_tree_stats(tree)
+        assert total == 1
+        assert completed == 1
+        assert failed == 0
+
+    def test_nested_tree(self) -> None:
+        tree = {
+            "task": {"status": "in_progress"},
+            "children": [
+                {"task": {"status": "completed"}, "children": []},
+                {
+                    "task": {"status": "failed"},
+                    "children": [
+                        {"task": {"status": "completed"}, "children": []},
+                    ],
+                },
+            ],
+        }
+        total, completed, failed = _count_tree_stats(tree)
+        assert total == 4
+        assert completed == 2
+        assert failed == 1
